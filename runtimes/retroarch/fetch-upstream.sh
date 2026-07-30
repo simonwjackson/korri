@@ -34,7 +34,7 @@ fi
 
 # upstream/ is a generated worktree. Reset tracked files to the verified pin,
 # but retain ignored Gradle/NDK outputs so incremental builds stay useful.
-git -C "$UPSTREAM_DIR" checkout --quiet --detach "$UPSTREAM_COMMIT"
+git -C "$UPSTREAM_DIR" checkout --quiet --force --detach "$UPSTREAM_COMMIT"
 git -C "$UPSTREAM_DIR" reset --quiet --hard "$UPSTREAM_COMMIT"
 git -C "$UPSTREAM_DIR" clean -qfd
 
@@ -43,11 +43,11 @@ patches=("$PATCH_DIR"/[0-9][0-9][0-9][0-9]-*.patch)
 for patch in "${patches[@]}"; do
   name="$(basename "$patch")"
   echo "Applying $name"
-  if ! git -C "$UPSTREAM_DIR" apply --check --unidiff-zero --whitespace=error-all "$patch"; then
+  if ! git -C "$UPSTREAM_DIR" apply --check --whitespace=error-all "$patch"; then
     echo "Patch failed exact application: $name" >&2
     exit 1
   fi
-  git -C "$UPSTREAM_DIR" apply --unidiff-zero --whitespace=error-all "$patch"
+  git -C "$UPSTREAM_DIR" apply --whitespace=error-all "$patch"
 done
 
 printf 'RetroArch %s ready at %s with %d Korri patch(es)\n' \

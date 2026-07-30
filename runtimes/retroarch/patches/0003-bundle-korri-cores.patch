@@ -2,12 +2,21 @@ diff --git a/pkg/android/phoenix/src/com/retroarch/browser/retroactivity/RetroAc
 index f74c9d1..e03cb9b 100644
 --- a/pkg/android/phoenix/src/com/retroarch/browser/retroactivity/RetroActivityFuture.java
 +++ b/pkg/android/phoenix/src/com/retroarch/browser/retroactivity/RetroActivityFuture.java
-@@ -16,0 +17,4 @@ import com.retroarch.browser.preferences.util.UserPreferences;
+@@ -14,6 +14,10 @@ import android.os.Looper;
+ import android.os.Message;
+ import com.retroarch.browser.preferences.util.ConfigFile;
+ import com.retroarch.browser.preferences.util.UserPreferences;
 +import java.io.File;
 +import java.io.FileOutputStream;
 +import java.io.IOException;
 +import java.io.InputStream;
-@@ -57,0 +62,25 @@ public final class RetroActivityFuture extends RetroActivityCamera {
+ import java.lang.reflect.InvocationTargetException;
+ import java.lang.reflect.Method;
+ 
+@@ -55,8 +59,34 @@ public final class RetroActivityFuture extends RetroActivityCamera {
+     }
+   };
+ 
 +  private void installBundledCore() {
 +    File coreDir = new File(getApplicationInfo().dataDir, "cores");
 +    File target = new File(coreDir, "mgba_libretro_android.so");
@@ -33,5 +42,9 @@ index f74c9d1..e03cb9b 100644
 +    target.setExecutable(true, true);
 +  }
 +
-@@ -59,0 +89 @@ public final class RetroActivityFuture extends RetroActivityCamera {
+   @Override
+   public void onCreate(Bundle savedInstanceState) {
 +    installBundledCore();
+     super.onCreate(savedInstanceState);
+     
+     isRunning = true;

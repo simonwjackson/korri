@@ -2,7 +2,10 @@ diff --git a/pkg/android/phoenix/AndroidManifest.xml b/pkg/android/phoenix/Andro
 index ba4201e..ed6f2b7 100644
 --- a/pkg/android/phoenix/AndroidManifest.xml
 +++ b/pkg/android/phoenix/AndroidManifest.xml
-@@ -30,8 +30 @@
+@@ -27,14 +27,7 @@
+         android:extractNativeLibs="true"
+         android:requestLegacyExternalStorage="true"
+         tools:ignore="UnusedAttribute">
 -        <activity android:name="com.retroarch.browser.mainmenu.MainMenuActivity" android:exported="true" android:launchMode="singleInstance">
 -            <intent-filter>
 -                <action android:name="android.intent.action.MAIN" />
@@ -12,15 +15,27 @@ index ba4201e..ed6f2b7 100644
 -            </intent-filter>
 -        </activity>
 +        <activity android:name="com.retroarch.browser.mainmenu.MainMenuActivity" android:exported="false" android:launchMode="singleInstance" />
+         <activity android:name="com.retroarch.browser.retroactivity.RetroActivityFuture" android:exported="true" android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:launchMode="singleInstance">
+             <meta-data android:name="android.app.lib_name" android:value="retroarch-activity" />
+             <meta-data android:name="android.app.func_name" android:value="ANativeActivity_onCreate" />
 diff --git a/pkg/android/phoenix/build.gradle b/pkg/android/phoenix/build.gradle
 index 6b0660c..558608b 100644
 --- a/pkg/android/phoenix/build.gradle
 +++ b/pkg/android/phoenix/build.gradle
-@@ -54,2 +54,2 @@ android {
+@@ -51,13 +51,13 @@ android {
+       dimension "variant"
+     }
+     aarch64 {
 -      applicationIdSuffix '.aarch64'
 -      resValue "string", "app_name", "RetroArch (AArch64)"
 +      applicationId 'com.korri.retroarch'
 +      resValue "string", "app_name", "Korri RetroArch"
-@@ -60 +60 @@ android {
+       buildConfigField "boolean", "PLAY_STORE_BUILD", "false"
+ 
+       dimension "variant"
+       ndk {
 -        abiFilters 'arm64-v8a', 'x86_64'
 +        abiFilters 'arm64-v8a'
+       }
+     }
+     ra32 {

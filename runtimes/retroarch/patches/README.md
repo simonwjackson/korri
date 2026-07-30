@@ -26,3 +26,8 @@ per `NNNN-description.patch` and record its upstream-facing rationale here.
   the app-private, executable `cores/` directory before native startup. The
   core is built separately from mGBA 0.10.5 and remains at the stable path
   `/data/data/com.korri.retroarch/cores/mgba_libretro_android.so`.
+- `0004-korri-control-channel.patch` — compiles RetroArch's existing command
+  server into Android, enables its established UDP protocol on port 55355, and
+  narrows the bind from all interfaces to `127.0.0.1`, and rejects every
+  command outside an Android allowlist containing only upstream `GET_STATUS`
+  and graceful `QUIT`.
