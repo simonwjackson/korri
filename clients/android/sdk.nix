@@ -5,8 +5,14 @@ let
   ndkVersion = "27.0.12077973";
 
   androidComposition = pkgs.androidenv.composeAndroidPackages {
-    buildToolsVersions = [ buildToolsVersion "34.0.0" ];
-    platformVersions = [ "36" "34" ];
+    buildToolsVersions = [
+      buildToolsVersion
+      "34.0.0"
+    ];
+    platformVersions = [
+      "36"
+      "34"
+    ];
     ndkVersions = [ ndkVersion ];
     includeEmulator = false;
     includeSystemImages = false;

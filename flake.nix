@@ -14,8 +14,16 @@
   # This flake is an index: it wires inputs and composes per-area nix
   # expressions that live next to the code they serve. No derivations or
   # shells are defined inline here.
-  outputs = { self, nixpkgs, flake-utils, rust-overlay, crane }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+      rust-overlay,
+      crane,
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         pkgs = import nixpkgs {
           inherit system;
