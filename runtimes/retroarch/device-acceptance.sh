@@ -29,7 +29,18 @@ stock_before="$("${ADB[@]}" shell pm path "$STOCK_PACKAGE" 2>/dev/null || true)"
   echo 'Korri RetroArch is not installed' >&2
   exit 1
 }
+permission_info="$("${ADB[@]}" shell dumpsys package permissions | \
+  grep -A6 'Permission \[com.korri.retroarch.permission.LAUNCH\]' || true)"
+grep -q 'sourcePackage=com.korri.retroarch' <<<"$permission_info"
+grep -q 'prot=signature' <<<"$permission_info"
 
+# Wipe only fork-private data so this run must extract the APK-bundled core.
+# External ROM/config/save data and stock RetroArch remain untouched.
+"${ADB[@]}" shell pm clear "$FORK_PACKAGE" >/dev/null
+"${ADB[@]}" shell pm grant "$FORK_PACKAGE" android.permission.READ_EXTERNAL_STORAGE \
+  >/dev/null 2>&1 || true
+"${ADB[@]}" shell pm grant "$FORK_PACKAGE" android.permission.WRITE_EXTERNAL_STORAGE \
+  >/dev/null 2>&1 || true
 "${ADB[@]}" shell am force-stop "$FORK_PACKAGE"
 "${ADB[@]}" shell am force-stop "$KORRI_PACKAGE"
 "${ADB[@]}" logcat -c
@@ -52,8 +63,13 @@ done
 }
 "${ADB[@]}" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
 "${ADB[@]}" forward "tcp:$HOST_PORT" "tcp:$port" >/dev/null
+cleanup() {
+  "${ADB[@]}" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
 rpc() {
-  curl --fail --silent \
+  curl --fail --silent --show-error \
+    --connect-timeout 2 --max-time 5 --retry 2 --retry-connrefused \
     -H 'content-type: application/json' \
     -H "authorization: Bearer $capability" \
     -d "$1" "http://127.0.0.1:$HOST_PORT/rpc"
@@ -126,13 +142,27 @@ done
   exit 1
 }
 "${ADB[@]}" shell am force-stop "$FORK_PACKAGE"
+if "${ADB[@]}" logcat -d -s DEBUG:E AndroidRuntime:E 2>/dev/null | \
+    grep -qE 'Fatal signal|FATAL EXCEPTION'; then
+  echo 'runtime emitted a fatal process error during pause acceptance' >&2
+  exit 1
+fi
+"${ADB[@]}" logcat -c
 
-# Relaunch through Korri again; the existing non-empty auto-state is the load source.
+# Relaunch through Korri again; verbose runtime logging proves the non-empty
+# auto-state was loaded successfully rather than merely left on disk.
 "${ADB[@]}" shell am start --display 0 -n "$KORRI_ACTIVITY" >/dev/null
 sleep 2
 "${ADB[@]}" shell input -d 0 keyevent KEYCODE_ENTER
 status_second="$(wait_playing)"
 "${ADB[@]}" shell "test -s '$STATE_FILE'"
+auto_load_log="$("${ADB[@]}" logcat -d 2>/dev/null | \
+  grep -F '[State] Auto-loading save state from' | \
+  grep -F "$STATE_FILE" | grep 'succeeded' | tail -1 || true)"
+[[ -n "$auto_load_log" ]] || {
+  echo 'relaunch did not report a successful auto-state load' >&2
+  exit 1
+}
 
 before_quit_mtime="$("${ADB[@]}" shell stat -c %Y "$STATE_FILE" | tr -d '\r')"
 sleep 1
@@ -143,9 +173,11 @@ after_quit_mtime="$("${ADB[@]}" shell stat -c %Y "$STATE_FILE" | tr -d '\r')"
   echo 'graceful QUIT did not refresh the auto-state' >&2
   exit 1
 }
-resumed="$("${ADB[@]}" shell dumpsys activity activities | grep 'topResumedActivity=' | head -1 || true)"
+display_zero="$("${ADB[@]}" shell dumpsys window displays | \
+  sed -n '/Display: mDisplayId=0/,/Display: mDisplayId=[1-9]/p')"
+resumed="$(grep 'mCurrentFocus=' <<<"$display_zero" | head -1 || true)"
 grep -q "$KORRI_PACKAGE/com.limelight.KorriShellActivity" <<<"$resumed" || {
-  echo "Korri did not resume after graceful quit: $resumed" >&2
+  echo "Korri did not resume on display 0 after graceful quit: $resumed" >&2
   exit 1
 }
 [[ -z "$("${ADB[@]}" shell pidof "$STOCK_PACKAGE" | tr -d '\r')" ]]
@@ -162,6 +194,7 @@ fi
 printf 'First launch: %s\n' "$status_first"
 printf 'Pause state: %s bytes at %s\n' "$state_size" "$after_mtime"
 printf 'Relaunch: %s\n' "$status_second"
+printf 'Auto-load: %s\n' "$auto_load_log"
 printf 'Quit state refreshed at: %s\n' "$after_quit_mtime"
 printf 'Graceful return: %s\n' "$resumed"
 printf 'Stock RetroArch preserved: %s\n' "$stock_after"

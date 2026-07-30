@@ -13,7 +13,7 @@ index f74c9d1..e03cb9b 100644
  import java.lang.reflect.InvocationTargetException;
  import java.lang.reflect.Method;
  
-@@ -55,8 +59,34 @@ public final class RetroActivityFuture extends RetroActivityCamera {
+@@ -55,8 +59,36 @@ public final class RetroActivityFuture extends RetroActivityCamera {
      }
    };
  
@@ -35,7 +35,9 @@ index f74c9d1..e03cb9b 100644
 +    } catch (IOException error) {
 +      throw new IllegalStateException("Cannot install bundled mGBA core", error);
 +    }
-+    if ((target.exists() && !target.delete()) || !temporary.renameTo(target)) {
++    // Android's rename is an atomic same-directory replacement. Do not
++    // delete the last-known-good core before the replacement is durable.
++    if (!temporary.renameTo(target)) {
 +      throw new IllegalStateException("Cannot publish bundled mGBA core");
 +    }
 +    target.setReadable(true, true);

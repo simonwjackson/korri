@@ -47,6 +47,7 @@ quit_on_close_content = "true"
 quit_press_twice = "false"
 config_save_on_exit = "false"
 pause_nonactive = "true"
+log_verbosity = "true"
 
 # persistence
 savestate_auto_save = "true"
@@ -274,6 +275,7 @@ mod tests {
         assert!(config.contains("video_driver = \"gl\""));
         assert!(config.contains("kiosk_mode_enable = \"true\""));
         assert!(config.contains("autosave_interval = \"10\""));
+        assert!(config.contains("log_verbosity = \"true\""));
         assert!(config.contains("quit_press_twice = \"false\""));
         assert!(config.contains(&format!(
             "savefile_directory = \"{}\"",

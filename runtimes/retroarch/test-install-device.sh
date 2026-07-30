@@ -30,6 +30,7 @@ case "$args" in
     printf '    versionName=1.22.2_GIT\n'
     ;;
   *" install "*)
+    if [[ -n "${ADB_INSTALL_SLEEP:-}" ]]; then sleep "$ADB_INSTALL_SLEEP"; fi
     if [[ "${ADB_INSTALL_FAIL:-0}" == 1 ]]; then
       printf 'Failure [INSTALL_FAILED_TEST]\n' >&2
       exit 1
@@ -71,5 +72,13 @@ if ADB_INSTALL_FAIL=1 "$INSTALL" serial-1 >/dev/null 2>&1; then
 fi
 grep -q -- 'settings put global verifier_verify_adb_installs 1' "$ADB_LOG"
 ! grep -q 'uninstall' "$ADB_LOG"
+
+: > "$ADB_LOG"
+if ADB_INSTALL_SLEEP=2 RETROARCH_INSTALL_TIMEOUT_SECONDS=1 \
+    "$INSTALL" serial-1 >/dev/null 2>&1; then
+  echo 'expected timed-out adb install to fail deployment' >&2
+  exit 1
+fi
+grep -q -- 'settings put global verifier_verify_adb_installs 1' "$ADB_LOG"
 
 printf 'RetroArch device install flow tests passed\n'

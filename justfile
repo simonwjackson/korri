@@ -41,15 +41,15 @@ ra-fetch:
 # Build the pinned arm64 mGBA libretro core and stage it into the generated
 # RetroArch source tree.
 ra-core-mgba: ra-fetch
-    cd runtimes/retroarch && nix develop . --command ./cores/mgba/build.sh
+    nix develop .#retroarch --command ./runtimes/retroarch/cores/mgba/build.sh
 
 # Build and validate a fresh patched arm64 Android runtime with its pinned core.
 ra-build:
-    cd runtimes/retroarch && nix develop . --command ./build.sh
+    nix develop .#retroarch --command ./runtimes/retroarch/build.sh
 
 # Build, validate, and install the fork without replacing stock RetroArch.
 ra-deploy serial: ra-build
-    cd runtimes/retroarch && nix develop . --command ./install-device.sh {{serial}}
+    nix develop .#retroarch --command ./runtimes/retroarch/install-device.sh {{serial}}
 
 # Build, deploy beside stock RetroArch, and run the repeatable Wario lifecycle
 # acceptance (authenticated control, pause state, relaunch, graceful return).
@@ -62,4 +62,4 @@ ra-check:
     ./runtimes/retroarch/test-fetch-upstream.sh
     ./runtimes/retroarch/test-build.sh
     ./runtimes/retroarch/test-install-device.sh
-    cd runtimes/retroarch && nix develop . --command ./build.sh
+    nix develop .#retroarch --command ./runtimes/retroarch/build.sh

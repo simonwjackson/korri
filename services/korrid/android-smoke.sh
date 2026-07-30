@@ -9,6 +9,7 @@ APK="$ROOT/clients/android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk"
 PACKAGE="com.simonwjackson.korri.debug"
 HOST_PORT=43118
 UPSTREAMS_CONFIG="${KORRI_ANDROID_UPSTREAMS_CONFIG:-$ROOT/services/korrid/deploy/upstreams.android.json}"
+CURL=(curl --connect-timeout 2 --max-time 5 --retry 2 --retry-connrefused)
 
 # grep must drain the whole listing: with pipefail, `grep -q` exiting at
 # the first match SIGPIPEs unzip and fails the pipeline spuriously.
@@ -19,7 +20,10 @@ fi
 
 adb -s "$DEVICE" shell mkdir -p /sdcard/korri-retro
 adb -s "$DEVICE" push "$UPSTREAMS_CONFIG" /sdcard/korri-retro/upstreams.json >/dev/null
-adb -s "$DEVICE" install -r "$APK"
+if ! timeout 60 adb -s "$DEVICE" install -r "$APK"; then
+  echo 'Android app install failed or timed out after 60s' >&2
+  exit 1
+fi
 adb -s "$DEVICE" logcat -c
 adb -s "$DEVICE" shell am start -S -n "$PACKAGE/com.limelight.KorriShellActivity" >/dev/null
 
@@ -53,10 +57,15 @@ if adb -s "$DEVICE" logcat -d 2>/dev/null | grep -qE 'INFO:CONSOLE.*(blocked|Err
   exit 1
 fi
 
+adb -s "$DEVICE" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
 adb -s "$DEVICE" forward "tcp:$HOST_PORT" "tcp:$port"
+cleanup() {
+  adb -s "$DEVICE" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
 
 # Localhost alone is not authority: an unauthenticated caller must be rejected.
-unauthorized_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+unauthorized_status="$("${CURL[@]}" --silent --output /dev/null --write-out '%{http_code}' \
   -H 'content-type: application/json' \
   -d '{"_tag":"system.health","payload":{}}' \
   "http://127.0.0.1:$HOST_PORT/rpc")"
@@ -65,7 +74,7 @@ if [[ "$unauthorized_status" != "401" ]]; then
   exit 1
 fi
 
-response="$(curl --fail --silent \
+response="$("${CURL[@]}" --fail --silent \
   -H 'content-type: application/json' \
   -H "authorization: Bearer $capability" \
   -d '{"_tag":"app.catalog.snapshot","payload":{}}' \
@@ -81,7 +90,7 @@ fi
 
 # The device-local launcher source is independent of the upstream host and
 # must always expose the hardcoded v1 entry through embedded korrid.
-local_games_response="$(curl --fail --silent \
+local_games_response="$("${CURL[@]}" --fail --silent \
   -H 'content-type: application/json' \
   -H "authorization: Bearer $capability" \
   -d '{"_tag":"app.local-games.list","payload":{}}' \
@@ -97,7 +106,7 @@ fi
 
 # Embedded Android must return a signed, deferred instruction. Rust must not
 # attempt the external-storage write that scoped storage denies.
-local_launch_response="$(curl --fail --silent \
+local_launch_response="$("${CURL[@]}" --fail --silent \
   -H 'content-type: application/json' \
   -H "authorization: Bearer $capability" \
   -d '{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}' \
@@ -112,7 +121,7 @@ done
 # Session status must round-trip through the on-device brain: either a
 # well-formed Ok (with or without an active session) or a tagged Err code
 # — anything else means the proxy or the wire is broken.
-session_response="$(curl --fail --silent \
+session_response="$("${CURL[@]}" --fail --silent \
   -H 'content-type: application/json' \
   -H "authorization: Bearer $capability" \
   -d '{"_tag":"app.session.status","payload":{}}' \

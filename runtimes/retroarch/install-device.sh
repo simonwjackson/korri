@@ -8,6 +8,7 @@ AAPT="${RETROARCH_AAPT:-${ANDROID_HOME:?run inside the RetroArch Nix devshell}/b
 SERIAL="${1:-${ANDROID_SERIAL:-}}"
 STOCK_PACKAGE="com.retroarch.aarch64"
 FORK_PACKAGE="com.korri.retroarch"
+INSTALL_TIMEOUT_SECONDS="${RETROARCH_INSTALL_TIMEOUT_SECONDS:-120}"
 
 if [[ -z "$SERIAL" ]]; then
   echo 'usage: install-device.sh <adb-serial> (or set ANDROID_SERIAL)' >&2
@@ -42,7 +43,10 @@ restore_verifier() {
 trap restore_verifier EXIT
 
 "${ADB[@]}" shell settings put global verifier_verify_adb_installs 0 >/dev/null
-"${ADB[@]}" install -r "$APK"
+if ! timeout "$INSTALL_TIMEOUT_SECONDS" "${ADB[@]}" install -r "$APK"; then
+  echo "fork APK install failed or timed out after ${INSTALL_TIMEOUT_SECONDS}s" >&2
+  exit 1
+fi
 
 fork_path="$("${ADB[@]}" shell pm path "$FORK_PACKAGE" 2>/dev/null || true)"
 [[ "$fork_path" == package:* ]] || {

@@ -24,6 +24,11 @@ grep -q 'Korri runtime must not select Vulkan on Mali/Immortalis' "$CONFIGURATIO
 grep -q 'Korri runtime has no touch overlay' "$CONFIGURATION"
 grep -q 'getAssets().open("cores/mgba_libretro_android.so")' "$ACTIVITY"
 grep -q 'installBundledCore();' "$ACTIVITY"
+if grep -q 'target.exists() && !target.delete()' "$ACTIVITY"; then
+  echo 'bundled core publish deletes the last-known-good core before replacement' >&2
+  exit 1
+fi
+grep -q '!temporary.renameTo(target)' "$ACTIVITY"
 grep -q 'android:name="com.korri.retroarch.permission.LAUNCH"' "$MANIFEST"
 grep -q 'android:protectionLevel="signature"' "$MANIFEST"
 grep -q 'RetroActivityFuture.*android:permission="com.korri.retroarch.permission.LAUNCH"' "$MANIFEST"
