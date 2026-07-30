@@ -45,6 +45,12 @@ export function LaunchablesList({ state }: LaunchablesListProps) {
                       {entry.game.system} · This device
                     </span>
                   )}
+                  {entry.kind === "storage-access" && (
+                    <span className="mt-1 block text-sm font-normal opacity-60">
+                      Korri keeps your settings and plugins in a folder you can
+                      open. Confirm to grant access.
+                    </span>
+                  )}
                 </li>
               )
             })}

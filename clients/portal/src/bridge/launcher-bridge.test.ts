@@ -46,7 +46,9 @@ describe("createKorriNativeLauncherBridge", () => {
     startStream: () => JSON.stringify({ _tag: "StreamStarted" }),
     korridPort: () => 43117,
     korridCapability: () => "test-capability",
-    bridgeVersion: () => 6,
+    storageAccess: () => JSON.stringify({ _tag: "Granted" }),
+    openStorageAccessSettings: () => JSON.stringify({ _tag: "Opened" }),
+    bridgeVersion: () => 7,
     ...overrides,
   })
 

@@ -5,6 +5,7 @@ import type {
   QueryLaunchablesResult,
   QueryStreamAppsResult,
   StartStreamResult,
+  StorageAccessResult,
   StreamApp,
   StreamHost,
 } from "@contracts/bridge/korri-native-bridge"
@@ -30,6 +31,13 @@ import type { Direction } from "../input/types"
  * are one flat, ordered list with a single selection.
  */
 export type PortalEntry =
+  /**
+   * Korri cannot reach its own settings, plugins, or local-game files until
+   * the user grants file access. This is an entry rather than a passive
+   * banner because the portal is controller-first: a message the user cannot
+   * focus and confirm would be unreachable without a touchscreen.
+   */
+  | { readonly kind: "storage-access" }
   | { readonly kind: "now-playing"; readonly session: ActiveSession }
   | { readonly kind: "local-game"; readonly game: LocalGame }
   | { readonly kind: "game"; readonly game: Game }
@@ -105,6 +113,8 @@ const readyFrom = (
 
 export const entryKey = (entry: PortalEntry): string => {
   switch (entry.kind) {
+    case "storage-access":
+      return "storage-access"
     case "now-playing":
       return `now-playing:${entry.session.launchId}`
     case "local-game":
@@ -121,7 +131,9 @@ export const entryKey = (entry: PortalEntry): string => {
 }
 
 export const entryLabel = (entry: PortalEntry): string =>
-  entry.kind === "now-playing"
+  entry.kind === "storage-access"
+    ? "Korri needs file access — open settings"
+    : entry.kind === "now-playing"
     ? (entry.session.title ?? entry.session.gameId ?? "Current session")
     : entry.kind === "local-game" || entry.kind === "game"
       ? entry.game.title
@@ -143,9 +155,17 @@ export const LaunchablesState = {
     hostsError?: string,
     session?: SessionStatusOutcome,
     localGames?: LocalGamesListOutcome,
+    storage?: StorageAccessResult,
   ): LaunchablesState => {
     const entries: PortalEntry[] = []
     const failures: string[] = []
+
+    // Denied file access comes first: without it Korri cannot read its own
+    // settings, so it outranks everything else on screen. An inconclusive
+    // query is not treated as denial — we do not nag on a failed check.
+    if (storage?._tag === "Denied") {
+      entries.push({ kind: "storage-access" })
+    }
 
     // An active host session renders first as a now-playing banner. A
     // status failure degrades silently — no banner, no notice — rather
@@ -205,6 +225,12 @@ export const LaunchablesState = {
       notice: failures.length > 0 ? failures.join(" · ") : null,
     }
   },
+
+  /** Replace the notice on a Ready state, leaving entries and selection alone. */
+  withNotice: (state: ReadyState, notice: string): ReadyState => ({
+    ...state,
+    notice,
+  }),
 
   /** Select one stable Sunshine app, constrained to a game's origin host. */
   korriStreamTarget: (
@@ -381,7 +407,9 @@ export const LaunchablesState = {
       null
     state.entries.forEach((entry, index) => {
       const title =
-        entry.kind === "now-playing"
+        entry.kind === "storage-access"
+          ? "Needs your attention"
+          : entry.kind === "now-playing"
           ? "Now playing"
           : entry.kind === "local-game"
             ? "Local games"

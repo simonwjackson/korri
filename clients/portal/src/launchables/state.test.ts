@@ -527,3 +527,72 @@ describe("LaunchablesState.sections", () => {
     ])
   })
 })
+
+describe("storage access prompt", () => {
+  const denied = { _tag: "Denied" } as const
+
+  it("puts a focusable prompt first when file access is denied", () => {
+    const state = LaunchablesState.fromSources(
+      localOk,
+      [officeApps],
+      gamesOk,
+      undefined,
+      undefined,
+      undefined,
+      denied,
+    )
+    if (state._tag !== "Ready") throw new Error("unreachable")
+    expect(state.entries[0]).toEqual({ kind: "storage-access" })
+    // It must be reachable by controller, so it takes the initial selection.
+    expect(state.selectedIndex).toBe(0)
+    expect(LaunchablesState.sections(state)[0]?.title).toBe("Needs your attention")
+  })
+
+  it("shows nothing when access is granted", () => {
+    const state = LaunchablesState.fromSources(
+      localOk,
+      [officeApps],
+      gamesOk,
+      undefined,
+      undefined,
+      undefined,
+      { _tag: "Granted" },
+    )
+    if (state._tag !== "Ready") throw new Error("unreachable")
+    expect(state.entries.some(entry => entry.kind === "storage-access")).toBe(false)
+  })
+
+  it("shows nothing on a platform where access is not a concept", () => {
+    const state = LaunchablesState.fromSources(
+      localOk,
+      [officeApps],
+      gamesOk,
+      undefined,
+      undefined,
+      undefined,
+      { _tag: "NotRequired" },
+    )
+    if (state._tag !== "Ready") throw new Error("unreachable")
+    expect(state.entries.some(entry => entry.kind === "storage-access")).toBe(false)
+  })
+
+  it("does not nag when the check itself failed", () => {
+    // An inconclusive answer is not a denial: prompting on a failed query
+    // would badger users whose permission is actually fine.
+    const state = LaunchablesState.fromSources(
+      localOk,
+      [officeApps],
+      gamesOk,
+      undefined,
+      undefined,
+      undefined,
+      { _tag: "QueryFailed", message: "boom" },
+    )
+    if (state._tag !== "Ready") throw new Error("unreachable")
+    expect(state.entries.some(entry => entry.kind === "storage-access")).toBe(false)
+  })
+
+  it("keeps a stable key so the prompt does not remount on refresh", () => {
+    expect(entryKey({ kind: "storage-access" })).toBe("storage-access")
+  })
+})

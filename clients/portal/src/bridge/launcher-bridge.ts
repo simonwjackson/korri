@@ -4,10 +4,12 @@ import type {
   Launchable,
   LaunchLocalResult,
   LocalLaunchSpec,
+  OpenStorageSettingsResult,
   QueryLaunchablesResult,
   QueryStreamAppsResult,
   QueryStreamHostsResult,
   StartStreamResult,
+  StorageAccessResult,
   StreamApp,
   StreamHost,
 } from "@contracts/bridge/korri-native-bridge"
@@ -28,6 +30,10 @@ export interface LauncherBridge {
   queryStreamHosts(): Promise<QueryStreamHostsResult>
   queryStreamApps(hostUuid: string): Promise<QueryStreamAppsResult>
   startStream(hostUuid: string, appId: number): Promise<StartStreamResult>
+  /** Whether Korri may use the storage its settings and plugins live in. */
+  storageAccess(): Promise<StorageAccessResult>
+  /** Take the user to the system screen where that access is granted. */
+  openStorageAccessSettings(): Promise<OpenStorageSettingsResult>
 }
 
 export function createKorriNativeLauncherBridge(
@@ -92,6 +98,22 @@ export function createKorriNativeLauncherBridge(
         }
       }
     },
+    async storageAccess() {
+      try {
+        return JSON.parse(surface.storageAccess()) as StorageAccessResult
+      } catch (error) {
+        return { _tag: "QueryFailed", message: describe(error) }
+      }
+    },
+    async openStorageAccessSettings() {
+      try {
+        return JSON.parse(
+          surface.openStorageAccessSettings(),
+        ) as OpenStorageSettingsResult
+      } catch (error) {
+        return { _tag: "Unavailable", message: describe(error) }
+      }
+    },
   }
 }
 
@@ -103,6 +125,8 @@ export interface InMemoryLauncherBridgeConfig {
     | "local-launch-fail"
     | "stream-hosts-fail"
     | "stream-start-fail"
+    | "storage-denied"
+    | "storage-settings-unavailable"
   readonly items?: readonly Launchable[]
   readonly streamHosts?: readonly StreamHost[]
   readonly streamApps?: Readonly<Record<string, readonly StreamApp[]>>
@@ -135,6 +159,8 @@ export function createInMemoryLauncherBridge(
   const streamApps = config.streamApps ?? sampleApps
   const delayMs = config.delayMs ?? 0
   const delay = () => new Promise(resolve => setTimeout(resolve, delayMs))
+  const storageAccessResult: StorageAccessResult =
+    behavior === "storage-denied" ? { _tag: "Denied" } : { _tag: "Granted" }
 
   return {
     async queryLaunchables() {
@@ -198,6 +224,18 @@ export function createInMemoryLauncherBridge(
         }
       }
       return { _tag: "StreamStarted" }
+    },
+    async storageAccess() {
+      await delay()
+      return storageAccessResult
+    },
+    async openStorageAccessSettings() {
+      await delay()
+      // Browser dev has no system settings screen; the portal has to render
+      // that honestly rather than pretend the grant flow started.
+      return behavior === "storage-settings-unavailable"
+        ? { _tag: "Unavailable", message: "no settings screen in browser dev" }
+        : { _tag: "Opened" }
     },
   }
 }

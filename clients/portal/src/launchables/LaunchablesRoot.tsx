@@ -60,13 +60,17 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
     }
     // Overlapping loads: only the latest invocation may write state.
     const seq = ++loadSeq.current
-    const [local, games, localGames, hostsResult, session] = await Promise.all([
-      bridge.queryLaunchables(),
-      korrid.catalogSnapshot(),
-      korrid.localGames(),
-      bridge.queryStreamHosts(),
-      sessionStatusWithTimeout(),
-    ])
+    const [local, games, localGames, hostsResult, session, storage] =
+      await Promise.all([
+        bridge.queryLaunchables(),
+        korrid.catalogSnapshot(),
+        korrid.localGames(),
+        bridge.queryStreamHosts(),
+        sessionStatusWithTimeout(),
+        // Re-read on every load so returning from system settings clears the
+        // prompt without the user restarting Korri.
+        bridge.storageAccess(),
+      ])
     const streams: readonly StreamSource[] =
       hostsResult._tag === "StreamHosts"
         ? await Promise.all(
@@ -87,6 +91,7 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
       hostsResult._tag === "QueryFailed" ? hostsResult.message : undefined,
       session,
       localGames,
+      storage,
     )
     const current = stateRef.current
     if (current._tag === "Stopping") {
@@ -141,7 +146,24 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
       if (selected._tag === "None") return
       const entry = selected.value
       const operation = ++actionSeq.current
-      if (entry.kind === "now-playing") {
+      if (entry.kind === "storage-access") {
+        // The shell can only take the user to the system screen; it cannot
+        // grant anything. Whether they said yes is discovered on resume,
+        // when the sources are re-read.
+        void bridge.openStorageAccessSettings().then(result => {
+          if (!mountedRef.current || operation !== actionSeq.current) return
+          if (result._tag === "Unavailable") {
+            const current = stateRef.current
+            if (current._tag !== "Ready") return
+            const next = LaunchablesState.withNotice(
+              current,
+              `cannot open settings: ${result.message}`,
+            )
+            stateRef.current = next
+            setState(next)
+          }
+        })
+      } else if (entry.kind === "now-playing") {
         // Resume: the host session is already prepared — attach straight
         // to the stable stream app without re-preparing.
         const launching = LaunchablesState.beginLaunching(

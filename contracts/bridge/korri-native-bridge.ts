@@ -23,7 +23,7 @@ import type { LaunchSpec as GeneratedLaunchSpec } from "../generated/korrid"
 // at 1. 4 introduced the session lifecycle; 5 adds the per-server korrid
 // capability required to protect localhost session-control RPCs. 6 adds the
 // launcher-neutral local launch instruction.
-export const BRIDGE_VERSION = 6
+export const BRIDGE_VERSION = 7
 
 // ── Launchables (JS -> Kotlin) ──────────────────────────────────────────
 
@@ -165,9 +165,50 @@ export interface KorriNativeBridgeSurface {
    * portal sends it as a bearer token; it must never be persisted.
    */
   korridCapability(): string
+  /**
+   * Whether Korri may read and write the user-visible storage its settings,
+   * plugins, and local-game files live in. Returns a JSON-encoded
+   * `StorageAccessResult`.
+   *
+   * The portal must treat `Denied` as a normal, recoverable state rather than
+   * an error: it is one toggle in system settings, the user can revoke it at
+   * any time, and without it Korri cannot read its own configuration.
+   */
+  storageAccess(): string
+  /**
+   * Open the system screen where the user grants Korri file access, returning
+   * a JSON-encoded `OpenStorageSettingsResult`.
+   *
+   * The shell cannot grant the permission itself and no result means it was
+   * granted — it only takes the user there. The portal re-checks
+   * `storageAccess()` on `korri-shell-resumed`.
+   */
+  openStorageAccessSettings(): string
   /** Returns `BRIDGE_VERSION` of the shell build. */
   bridgeVersion(): number
 }
+
+// ── User-visible storage access (v7) ─────────────────────────────────
+
+/**
+ * Korri keeps settings, plugins, and local-game files where the user can find
+ * them in a file manager. On Android that requires a permission the user
+ * grants manually and may revoke at any time; on platforms with no such
+ * concept the answer is `NotRequired`.
+ */
+export type StorageAccessResult =
+  | { readonly _tag: "Granted" }
+  | { readonly _tag: "NotRequired" }
+  /** Korri cannot read or write its own files until this is granted. */
+  | { readonly _tag: "Denied" }
+  | { readonly _tag: "QueryFailed"; readonly message: string }
+
+/** Result of asking the shell to open the grant screen. */
+export type OpenStorageSettingsResult =
+  /** The settings screen was opened. The user may still decline. */
+  | { readonly _tag: "Opened" }
+  /** No settings screen exists to open on this platform or device. */
+  | { readonly _tag: "Unavailable"; readonly message: string }
 
 // ── Stream session lifecycle (v4) ────────────────────────────────────
 

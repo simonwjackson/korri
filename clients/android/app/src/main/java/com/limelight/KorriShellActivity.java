@@ -246,7 +246,48 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public int bridgeVersion() {
             // Mirrors BRIDGE_VERSION in contracts/bridge/korri-native-bridge.ts.
-            return 6;
+            return 7;
+        }
+
+        /**
+         * Whether Korri may use the user-visible storage its settings, plugins
+         * and local-game files live in. Below Android 11 the concept does not
+         * exist, so nothing needs granting.
+         */
+        @JavascriptInterface
+        public String storageAccess() {
+            try {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                    return "{\"_tag\":\"NotRequired\"}";
+                }
+                return Environment.isExternalStorageManager()
+                        ? "{\"_tag\":\"Granted\"}"
+                        : "{\"_tag\":\"Denied\"}";
+            } catch (Throwable error) {
+                return "{\"_tag\":\"QueryFailed\",\"message\":"
+                        + JSONObject.quote(String.valueOf(error.getMessage())) + "}";
+            }
+        }
+
+        /**
+         * Take the user to the system screen where file access is granted. The
+         * shell cannot grant it; returning `Opened` means only that the screen
+         * was shown.
+         */
+        @JavascriptInterface
+        public String openStorageAccessSettings() {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                return "{\"_tag\":\"Unavailable\",\"message\":"
+                        + JSONObject.quote("This version of Android grants file access at install time")
+                        + "}";
+            }
+            try {
+                requestAllFilesAccess();
+                return "{\"_tag\":\"Opened\"}";
+            } catch (Exception error) {
+                return "{\"_tag\":\"Unavailable\",\"message\":"
+                        + JSONObject.quote(String.valueOf(error.getMessage())) + "}";
+            }
         }
 
         /** Port of the embedded korrid server, or -1 when it is not running. */
