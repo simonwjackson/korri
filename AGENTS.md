@@ -71,8 +71,9 @@ content — shape for federation, build no more than the cases demand.
   implementation mirrors it by hand and cites it.
 - `flake.nix` is an index: inputs + per-area composition only. Toolchains
   live in `<area>/devshell.nix`. No inline derivations or shells.
-- The `justfile` owns cross-area glue (e.g. bundling the portal into APK
-  assets); per-area commands stay inside their area.
+- Nix apps are the scripted task surface; run `nix run .#help` to discover
+  them. Definitions and cross-area glue live in `nix/tasks.nix`; per-area
+  behavior stays in scripts beside the code it serves.
 - Services are Rust. Wire types live in Rust and are exported through
   Typeshare into `contracts/generated/` — those files are read-only;
   regenerate them via `services/korrid/check.sh`, never edit by hand.

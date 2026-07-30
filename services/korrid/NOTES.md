@@ -96,6 +96,6 @@ Those can be earned by a concrete need.
 ## Command
 
 ```sh
-just korrid-rust-spike          # host + TS + Android compile
-just korrid-rust-spike-device   # same, then install and call RPC on tablet
+nix run .#korrid-check         # host + TS + Android compile
+nix run .#korrid-check-device  # same, then install and call RPC on tablet
 ```

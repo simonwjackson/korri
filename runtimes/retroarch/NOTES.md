@@ -47,11 +47,11 @@ Artifact: `upstream/pkg/android/phoenix/build/outputs/apk/aarch64/release/phoeni
 From the repository root:
 
 ```sh
-nix run nixpkgs#just -- ra-fetch
-nix run nixpkgs#just -- ra-build
-nix run nixpkgs#just -- ra-check
-nix run nixpkgs#just -- ra-deploy <adb-serial>
-nix run nixpkgs#just -- ra-accept <adb-serial>
+nix run .#ra-fetch
+nix run .#ra-build
+nix run .#ra-check
+nix run .#ra-deploy -- <adb-serial>
+nix run .#ra-accept -- <adb-serial>
 ```
 
 `ra-accept` additionally launches Wario through the Korri portal, verifies the

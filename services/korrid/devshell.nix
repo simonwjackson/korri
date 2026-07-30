@@ -20,7 +20,6 @@ pkgs.mkShell {
     curl
     git
     jq
-    just
     openssh
     unzip
   ];

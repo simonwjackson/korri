@@ -138,7 +138,7 @@ public class KorriShellActivity extends AppCompatActivity {
     }
 
     /**
-     * The portal ships as bundled assets (built by `just portal-bundle`).
+     * The portal ships as bundled assets (built by `nix run .#portal-bundle`).
      * Debug builds may override with -PkorriPortalUrl=http://<ip>:5173 for
      * a live Vite dev-server loop on the device.
      */

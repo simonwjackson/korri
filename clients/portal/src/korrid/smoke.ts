@@ -1,4 +1,4 @@
-/** CLI smoke entry for `just korrid-check`; never imported by the app. */
+/** CLI smoke entry for `nix run .#korrid-check`; never imported by the app. */
 import { smokeKorrid } from "./client"
 
 const result = await smokeKorrid(
