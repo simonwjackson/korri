@@ -68,6 +68,22 @@ response="$(curl --fail --silent \
   -d '{"_tag":"app.catalog.snapshot","payload":{}}' \
   "http://127.0.0.1:$HOST_PORT/rpc")"
 
+# The device-local launcher source is independent of the upstream host and
+# must always expose the hardcoded v1 entry through embedded korrid.
+local_games_response="$(curl --fail --silent \
+  -H 'content-type: application/json' \
+  -H "authorization: Bearer $capability" \
+  -d '{"_tag":"app.local-games.list","payload":{}}' \
+  "http://127.0.0.1:$HOST_PORT/rpc")"
+if ! printf '%s' "$local_games_response" | grep -q '"id":"wl4"'; then
+  echo "Local-games probe is missing Wario Land 4: $local_games_response" >&2
+  exit 1
+fi
+if ! printf '%s' "$local_games_response" | grep -q '"title":"Wario Land 4"'; then
+  echo "Local-games probe returned an unexpected title: $local_games_response" >&2
+  exit 1
+fi
+
 # Session status must round-trip through the on-device brain: either a
 # well-formed Ok (with or without an active session) or a tagged Err code
 # — anything else means the proxy or the wire is broken.
@@ -87,5 +103,6 @@ fi
 
 printf 'Android portal: %s\n' "$portal_ready"
 printf 'Android Rust RPC: %s\n' "$response"
+printf 'Android local games: %s\n' "$local_games_response"
 printf 'Android session status: %s\n' "$session_response"
 printf 'Android Rust library: %s\n' "$(adb -s "$DEVICE" shell dumpsys package "$PACKAGE" | grep versionName | head -1 | xargs)"
