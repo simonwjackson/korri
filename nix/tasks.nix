@@ -71,6 +71,18 @@ let
     source "$KORRI_ROOT/clients/android/sdk-env.sh"
   '';
 
+  adbPreflight = taskName: ''
+    serial="''${1:?usage: ${taskName} <adb-serial>}"
+    shift
+    if [[ "$serial" == *:* ]]; then
+      adb connect "$serial" >/dev/null || true
+    fi
+    if ! timeout 15 adb -s "$serial" wait-for-device; then
+      echo "Android target is not reachable: $serial" >&2
+      exit 1
+    fi
+  '';
+
   definitions = {
     android-apk = {
       description = "Build the debug Android APK.";
@@ -102,6 +114,54 @@ let
       runtimeInputs = [ pkgs.nix ];
       script = ''
         exec "$KORRI_ROOT/services/korrid/check.sh" "$@"
+      '';
+    };
+
+    korrid-check-device = {
+      description = "Run the full korrid check, then install and smoke-test it on Android.";
+      runtimeInputs = [
+        pkgs.android-tools
+        pkgs.coreutils
+        pkgs.nix
+      ];
+      script = ''
+        device="''${KORRI_ANDROID_DEVICE:-100.65.66.40:39991}"
+        if [[ "$device" == *:* ]]; then
+          adb connect "$device" >/dev/null || true
+        fi
+        if ! timeout 15 adb -s "$device" wait-for-device; then
+          echo "Android target is not reachable: $device" >&2
+          exit 1
+        fi
+        export KORRI_ANDROID_DEVICE="$device"
+        exec "$KORRI_ROOT/services/korrid/check.sh" --device
+      '';
+    };
+
+    korrid-script-device = {
+      description = "Run the example TypeScript plugin on an Android device.";
+      runtimeInputs = [
+        rustToolchain
+        pkgs.android-tools
+        pkgs.cargo-ndk
+        pkgs.clang
+        pkgs.coreutils
+        pkgs.gnugrep
+        pkgs.llvmPackages.libclang
+      ];
+      env = {
+        ANDROID_NDK_HOME = android.ndkRoot;
+        ANDROID_NDK_ROOT = android.ndkRoot;
+        BINDGEN_EXTRA_CLANG_ARGS = "--target=aarch64-linux-android21 --sysroot=${android.ndkRoot}/toolchains/llvm/prebuilt/linux-x86_64/sysroot";
+        CC_x86_64_unknown_linux_gnu = "${pkgs.clang}/bin/clang";
+        HOST_CC = "${pkgs.clang}/bin/clang";
+        LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+      };
+      takesArgs = true;
+      script = ''
+        ${adbPreflight "korrid-script-device"}
+        export CARGO_TARGET_DIR="$KORRI_ROOT/.cache/korrid-target"
+        exec "$KORRI_ROOT/services/korrid/script-device-check.sh" "$serial" "$@"
       '';
     };
 
@@ -153,6 +213,24 @@ let
       '';
     };
 
+    ra-accept = {
+      description = "Build, deploy, and run RetroArch acceptance on Android.";
+      runtimeInputs = [
+        pkgs.android-tools
+        pkgs.coreutils
+        pkgs.curl
+        pkgs.gnugrep
+        pkgs.gnused
+      ];
+      takesArgs = true;
+      script = ''
+        serial="''${1:?usage: ra-accept <adb-serial>}"
+        shift
+        ${packages.ra-deploy}/bin/ra-deploy "$serial"
+        exec "$KORRI_ROOT/runtimes/retroarch/device-acceptance.sh" "$serial" "$@"
+      '';
+    };
+
     ra-build = {
       description = "Build and validate the patched arm64 RetroArch runtime.";
       runtimeInputs = retroarchInputs;
@@ -187,6 +265,19 @@ let
         ${packages.ra-fetch}/bin/ra-fetch
         ${retroarchSetup}
         exec "$KORRI_ROOT/runtimes/retroarch/cores/mgba/build.sh" "$@"
+      '';
+    };
+
+    ra-deploy = {
+      description = "Build, validate, and install the RetroArch fork on Android.";
+      runtimeInputs = retroarchInputs ++ [ pkgs.android-tools ];
+      env = retroarchEnv;
+      takesArgs = true;
+      script = ''
+        ${adbPreflight "ra-deploy"}
+        ${packages.ra-build}/bin/ra-build
+        ${retroarchSetup}
+        exec "$KORRI_ROOT/runtimes/retroarch/install-device.sh" "$serial" "$@"
       '';
     };
 
