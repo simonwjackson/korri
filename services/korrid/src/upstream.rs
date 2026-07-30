@@ -11,6 +11,7 @@
 //! can orchestrate today's TS daemon on the host. When the host daemon is
 //! rewritten, this module is replaced by the Rust-owned treaty.
 
+use crate::upstreams::UpstreamError;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -29,18 +30,6 @@ impl UpstreamConfig {
                 .unwrap_or_else(|_| "http://192.168.1.117:3001".into()),
         }
     }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum UpstreamError {
-    #[error("upstream unreachable: {0}")]
-    Unreachable(String),
-    #[error("upstream returned HTTP {0}")]
-    Http(u16),
-    #[error("upstream wire error: {0}")]
-    Wire(String),
-    #[error("upstream call failed: {0}")]
-    Failure(String),
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -68,6 +57,8 @@ pub struct UpstreamPrepared {
 #[serde(rename_all = "camelCase")]
 pub struct UpstreamActiveSession {
     pub launch_id: String,
+    #[serde(default)]
+    pub host: Option<String>,
     #[serde(default)]
     pub game_id: Option<String>,
     #[serde(default)]

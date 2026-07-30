@@ -25,9 +25,9 @@ contracts/         treaties between deployables; imports nothing outside
                    contracts/; when sides disagree, the contract file wins.
                    contracts/bridge/ is hand-written; contracts/generated/ is
                    Typeshare output from Rust (read-only)
-services/korrid/   Rust brain. Ships two ways: a standalone binary (dev/host)
-                   and a cdylib embedded in the Android app, both serving RPC
-                   on localhost
+services/korrid/   Rust brain. Ships as a standalone binary with a configured
+                   dev/host bind, and as a cdylib embedded in Android serving
+                   capability-bound RPC on localhost
 ```
 
 One shared model of how Korri behaves; each platform meets it as well as it
@@ -50,6 +50,6 @@ can, and the gap is absorbed at the edge — never leaked into the core or UI.
 - The portal's brain is always korrid at `http://127.0.0.1:<port>`; the
   portal never talks to host daemons or any other backend directly. On
   Android the shell embeds korrid as a cdylib and injects the port.
-- The Effect-RPC envelope client in `services/korrid/src/upstream.rs` is
-  scaffolding for talking to the legacy host daemon; it dies with the
-  host-side Rust rewrite. Do not grow abstractions around it.
+- Rust hosts speak korrid's native tagged `/rpc` wire. The Effect-RPC
+  envelope client in `services/korrid/src/upstream.rs` exists only for aka
+  until host parity; it dies at switchover. Do not grow abstractions around it.

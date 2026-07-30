@@ -27,12 +27,24 @@ pub struct CatalogSnapshotRequest {}
 pub struct Game {
     pub id: String,
     pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct CatalogHostFailure {
+    pub host: String,
+    pub code: String,
+    pub message: String,
 }
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CatalogSnapshot {
     pub games: Vec<Game>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failures: Option<Vec<CatalogHostFailure>>,
 }
 
 #[typeshare]
@@ -40,6 +52,8 @@ pub struct CatalogSnapshot {
 #[serde(rename_all = "camelCase")]
 pub struct SessionPrepareRequest {
     pub game_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
 }
 
 #[typeshare]
@@ -58,6 +72,8 @@ pub struct SessionStatusRequest {}
 #[serde(rename_all = "camelCase")]
 pub struct ActiveSession {
     pub launch_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -225,12 +241,23 @@ pub enum RpcResponse {
 }
 
 #[derive(Clone)]
-struct AppState {
-    upstream: upstream::UpstreamClient,
-    rpc_capability: String,
+struct BrainRuntime {
+    upstream: upstreams::UpstreamRegistry,
     local_storage_root: PathBuf,
     local_file_provision: launcher::FileProvisionMode,
     local_launch_signing_key: Vec<u8>,
+}
+
+#[derive(Clone)]
+enum ServerMode {
+    Brain(BrainRuntime),
+    Host(host::HostRuntime),
+}
+
+#[derive(Clone)]
+struct AppState {
+    mode: ServerMode,
+    rpc_capability: Option<String>,
 }
 
 fn local_launch_failure(error: launcher::LaunchError) -> RpcFailure {
@@ -246,28 +273,23 @@ fn local_launch_failure(error: launcher::LaunchError) -> RpcFailure {
     }
 }
 
-fn upstream_failure(error: upstream::UpstreamError) -> RpcFailure {
-    let code = match &error {
-        upstream::UpstreamError::Unreachable(_) => "UpstreamUnreachable",
-        upstream::UpstreamError::Http(_) => "UpstreamHttp",
-        upstream::UpstreamError::Wire(_) => "UpstreamWire",
-        upstream::UpstreamError::Failure(_) => "UpstreamFailure",
-    };
+fn upstream_failure(error: upstreams::UpstreamError) -> RpcFailure {
     RpcFailure {
-        code: code.into(),
+        code: error.code().into(),
         message: error.to_string(),
     }
 }
 
 /// Pure mapping from the legacy status union to the korrid-shaped outcome.
 fn session_status_outcome(
-    result: Result<upstream::UpstreamSessionStatus, upstream::UpstreamError>,
+    result: Result<upstream::UpstreamSessionStatus, upstreams::UpstreamError>,
 ) -> SessionStatusOutcome {
     match result {
         Ok(upstream::UpstreamSessionStatus::SessionStatus { active }) => {
             SessionStatusOutcome::Ok(SessionStatus {
                 active: active.map(|active| ActiveSession {
                     launch_id: active.launch_id,
+                    host: active.host,
                     game_id: active.game_id,
                     title: active.title,
                     phase: active.phase,
@@ -292,7 +314,7 @@ fn session_status_outcome(
 
 /// Pure mapping from the legacy stop union to the korrid-shaped outcome.
 fn session_stop_outcome(
-    result: Result<upstream::UpstreamSessionStop, upstream::UpstreamError>,
+    result: Result<upstream::UpstreamSessionStop, upstreams::UpstreamError>,
 ) -> SessionStopOutcome {
     match result {
         Ok(upstream::UpstreamSessionStop::Stopped { .. }) => {
@@ -335,56 +357,90 @@ fn session_stop_outcome(
 async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
     match request {
         RpcRequest::CatalogSnapshot(_) => {
-            let outcome = match state.upstream.catalog_snapshot().await {
-                Ok(catalog) => CatalogSnapshotOutcome::Ok(CatalogSnapshot {
-                    games: catalog
-                        .entries
-                        .into_iter()
-                        .filter(|entry| entry.launchable)
-                        .map(|entry| Game {
-                            title: entry.title.clone().unwrap_or_else(|| entry.id.clone()),
-                            id: entry.id,
-                        })
-                        .collect(),
-                }),
-                Err(error) => CatalogSnapshotOutcome::Err(upstream_failure(error)),
+            let outcome = match &state.mode {
+                ServerMode::Brain(brain) => brain
+                    .upstream
+                    .catalog_snapshot()
+                    .await
+                    .map(CatalogSnapshotOutcome::Ok)
+                    .unwrap_or_else(|error| CatalogSnapshotOutcome::Err(upstream_failure(error))),
+                ServerMode::Host(host) => host
+                    .catalog_snapshot()
+                    .map(CatalogSnapshotOutcome::Ok)
+                    .unwrap_or_else(CatalogSnapshotOutcome::Err),
             };
             RpcResponse::CatalogSnapshot(outcome)
         }
         RpcRequest::SessionPrepare(request) => {
-            let outcome = match state.upstream.prepare_stream(&request.game_id).await {
-                Ok(prepared) => SessionPrepareOutcome::Ok(SessionPrepared {
-                    game_id: prepared.game_id,
-                }),
-                Err(error) => SessionPrepareOutcome::Err(upstream_failure(error)),
+            let outcome = match &state.mode {
+                ServerMode::Brain(brain) => brain
+                    .upstream
+                    .prepare_stream(&request.game_id, request.host.as_deref())
+                    .await
+                    .map(SessionPrepareOutcome::Ok)
+                    .unwrap_or_else(|error| SessionPrepareOutcome::Err(upstream_failure(error))),
+                ServerMode::Host(host) => host
+                    .prepare(&request.game_id)
+                    .map(SessionPrepareOutcome::Ok)
+                    .unwrap_or_else(SessionPrepareOutcome::Err),
             };
             RpcResponse::SessionPrepare(outcome)
         }
-        RpcRequest::SessionStatus(_) => RpcResponse::SessionStatus(session_status_outcome(
-            state.upstream.session_status().await,
-        )),
-        RpcRequest::SessionStop(request) => RpcResponse::SessionStop(session_stop_outcome(
-            state
-                .upstream
-                .session_stop(request.force.unwrap_or(false))
-                .await,
-        )),
-        RpcRequest::LocalGamesList(_) => {
-            RpcResponse::LocalGamesList(LocalGamesListOutcome::Ok(LocalGames {
-                games: launcher::local_games(),
-            }))
-        }
-        RpcRequest::LocalGameLaunch(request) => {
-            let outcome = launcher::launch_game(
-                &state.local_storage_root,
-                &request.game_id,
-                state.local_file_provision,
-            )
-            .map(|spec| spec.sign(&state.local_launch_signing_key))
-            .map(LocalGameLaunchOutcome::Ok)
-            .unwrap_or_else(|error| LocalGameLaunchOutcome::Err(local_launch_failure(error)));
-            RpcResponse::LocalGameLaunch(outcome)
-        }
+        RpcRequest::SessionStatus(_) => match &state.mode {
+            ServerMode::Brain(brain) => RpcResponse::SessionStatus(session_status_outcome(
+                brain.upstream.session_status().await,
+            )),
+            ServerMode::Host(_) => {
+                RpcResponse::SessionStatus(SessionStatusOutcome::Err(RpcFailure {
+                    code: "SessionStatusUnsupported".into(),
+                    message: "host session status is not implemented".into(),
+                }))
+            }
+        },
+        RpcRequest::SessionStop(request) => match &state.mode {
+            ServerMode::Brain(brain) => RpcResponse::SessionStop(session_stop_outcome(
+                brain
+                    .upstream
+                    .session_stop(request.force.unwrap_or(false))
+                    .await,
+            )),
+            ServerMode::Host(_) => RpcResponse::SessionStop(SessionStopOutcome::Err(RpcFailure {
+                code: "SessionStopUnsupported".into(),
+                message: "host session stop is not implemented".into(),
+            })),
+        },
+        RpcRequest::LocalGamesList(_) => match &state.mode {
+            ServerMode::Brain(_) => {
+                RpcResponse::LocalGamesList(LocalGamesListOutcome::Ok(LocalGames {
+                    games: launcher::local_games(),
+                }))
+            }
+            ServerMode::Host(_) => {
+                RpcResponse::LocalGamesList(LocalGamesListOutcome::Err(RpcFailure {
+                    code: "OperationUnsupported".into(),
+                    message: "local games are available only from the Android brain".into(),
+                }))
+            }
+        },
+        RpcRequest::LocalGameLaunch(request) => match &state.mode {
+            ServerMode::Brain(brain) => {
+                let outcome = launcher::launch_game(
+                    &brain.local_storage_root,
+                    &request.game_id,
+                    brain.local_file_provision,
+                )
+                .map(|spec| spec.sign(&brain.local_launch_signing_key))
+                .map(LocalGameLaunchOutcome::Ok)
+                .unwrap_or_else(|error| LocalGameLaunchOutcome::Err(local_launch_failure(error)));
+                RpcResponse::LocalGameLaunch(outcome)
+            }
+            ServerMode::Host(_) => {
+                RpcResponse::LocalGameLaunch(LocalGameLaunchOutcome::Err(RpcFailure {
+                    code: "OperationUnsupported".into(),
+                    message: "local game launch is available only from the Android brain".into(),
+                }))
+            }
+        },
         RpcRequest::Health(_) => RpcResponse::Health(HealthOutcome::Ok(Health {
             version: VERSION.into(),
         })),
@@ -396,13 +452,15 @@ async fn rpc(
     headers: HeaderMap,
     Json(request): Json<RpcRequest>,
 ) -> Result<Json<RpcResponse>, StatusCode> {
-    let expected = format!("Bearer {}", state.rpc_capability);
-    if headers
-        .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        != Some(expected.as_str())
-    {
-        return Err(StatusCode::UNAUTHORIZED);
+    if let Some(capability) = &state.rpc_capability {
+        let expected = format!("Bearer {capability}");
+        if headers
+            .get(header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            != Some(expected.as_str())
+        {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
     }
     Ok(Json(dispatch(&state, request).await))
 }
@@ -444,12 +502,17 @@ fn router_with_capability_local_root_and_provision(
     local_file_provision: launcher::FileProvisionMode,
     local_launch_signing_key: Vec<u8>,
 ) -> Router {
+    let local_storage_root = local_storage_root.as_ref().to_owned();
     let state = AppState {
-        upstream: upstream::UpstreamClient::new(upstream::UpstreamConfig::from_env()),
-        rpc_capability: rpc_capability.into(),
-        local_storage_root: local_storage_root.as_ref().to_owned(),
-        local_file_provision,
-        local_launch_signing_key,
+        mode: ServerMode::Brain(BrainRuntime {
+            upstream: upstreams::UpstreamRegistry::from_env_or_file(
+                &local_storage_root.join("upstreams.json"),
+            ),
+            local_storage_root,
+            local_file_provision,
+            local_launch_signing_key,
+        }),
+        rpc_capability: Some(rpc_capability.into()),
     };
     let origin: HeaderValue = allowed_origin
         .parse()
@@ -462,6 +525,16 @@ fn router_with_capability_local_root_and_provision(
         .route("/rpc", post(rpc))
         .layer(cors)
         .with_state(state)
+}
+
+/// Build the LAN-facing native host router. Host RPC is intentionally open
+/// for this trusted-network slice; the brain router remains capability-bound.
+pub fn host_router(config_path: impl AsRef<Path>) -> Router {
+    let state = AppState {
+        mode: ServerMode::Host(host::HostRuntime::from_path(config_path.as_ref())),
+        rpc_capability: None,
+    };
+    Router::new().route("/rpc", post(rpc)).with_state(state)
 }
 
 /// Generate an unguessable capability for one server lifetime.
@@ -616,8 +689,11 @@ pub fn verify_local_launch_spec(spec_json: &str) -> bool {
         .is_some_and(|server| spec.verify(&server.launch_signing_key))
 }
 
+pub mod host;
 pub mod launcher;
 pub mod upstream;
+pub mod upstream_native;
+pub mod upstreams;
 
 #[cfg(target_os = "android")]
 mod android;
@@ -636,6 +712,7 @@ mod tests {
         let outcome = session_status_outcome(Ok(upstream::UpstreamSessionStatus::SessionStatus {
             active: Some(upstream::UpstreamActiveSession {
                 launch_id: "l1".into(),
+                host: Some("aka".into()),
                 game_id: Some("g1".into()),
                 title: Some("Skate 3".into()),
                 phase: Some("running".into()),
@@ -645,6 +722,7 @@ mod tests {
             panic!("expected Ok");
         };
         let active = status.active.expect("active session");
+        assert_eq!(active.host.as_deref(), Some("aka"));
         assert_eq!(active.game_id.as_deref(), Some("g1"));
         assert_eq!(active.title.as_deref(), Some("Skate 3"));
         assert_eq!(active.phase.as_deref(), Some("running"));
@@ -670,6 +748,7 @@ mod tests {
         assert_eq!(
             serde_json::to_value(ActiveSession {
                 launch_id: "l1".into(),
+                host: None,
                 game_id: None,
                 title: None,
                 phase: None,
@@ -681,6 +760,167 @@ mod tests {
             serde_json::to_value(SessionStopRequest { force: None }).unwrap(),
             serde_json::json!({})
         );
+    }
+
+    async fn rpc_body(app: Router, body: &'static str) -> serde_json::Value {
+        rpc_body_authorized(app, body, None).await
+    }
+
+    async fn rpc_body_authorized(
+        app: Router,
+        body: &'static str,
+        capability: Option<&str>,
+    ) -> serde_json::Value {
+        let mut request = Request::builder()
+            .method("POST")
+            .uri("/rpc")
+            .header(header::CONTENT_TYPE, "application/json");
+        if let Some(capability) = capability {
+            request = request.header(header::AUTHORIZATION, format!("Bearer {capability}"));
+        }
+        let response = app
+            .oneshot(request.body(Body::from(body)).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        serde_json::from_slice(&body).unwrap()
+    }
+
+    #[tokio::test]
+    async fn host_catalog_serves_configured_games_with_the_host_label() {
+        let root = tempfile::tempdir().unwrap();
+        let config = root.path().join("host.toml");
+        std::fs::write(
+            &config,
+            r#"
+label = "zao"
+
+[[games]]
+id = "neverball"
+title = "Neverball"
+command = ["neverball"]
+"#,
+        )
+        .unwrap();
+
+        let body = rpc_body(
+            host_router(&config),
+            r#"{"_tag":"app.catalog.snapshot","payload":{}}"#,
+        )
+        .await;
+        assert_eq!(body["outcome"]["_tag"], "Ok");
+        assert_eq!(body["outcome"]["payload"]["games"][0]["id"], "neverball");
+        assert_eq!(body["outcome"]["payload"]["games"][0]["host"], "zao");
+    }
+
+    #[tokio::test]
+    async fn host_catalog_keeps_serving_a_tagged_error_for_an_invalid_config() {
+        let root = tempfile::tempdir().unwrap();
+        let config = root.path().join("missing.toml");
+        let app = host_router(&config);
+
+        for _ in 0..2 {
+            let body = rpc_body(
+                app.clone(),
+                r#"{"_tag":"app.catalog.snapshot","payload":{}}"#,
+            )
+            .await;
+            assert_eq!(body["outcome"]["_tag"], "Err");
+            assert_eq!(body["outcome"]["payload"]["code"], "HostConfigInvalid");
+            assert!(body["outcome"]["payload"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("missing.toml"));
+        }
+    }
+
+    #[tokio::test]
+    async fn host_catalog_accepts_an_empty_games_list() {
+        let root = tempfile::tempdir().unwrap();
+        let config = root.path().join("host.toml");
+        std::fs::write(&config, "label = \"zao\"\n").unwrap();
+
+        let body = rpc_body(
+            host_router(&config),
+            r#"{"_tag":"app.catalog.snapshot","payload":{}}"#,
+        )
+        .await;
+        assert_eq!(body["outcome"]["_tag"], "Ok");
+        assert_eq!(body["outcome"]["payload"]["games"], serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn brain_router_loads_and_routes_the_storage_root_upstream_config() {
+        let root = tempfile::tempdir().unwrap();
+        let host_config = root.path().join("host.toml");
+        std::fs::write(
+            &host_config,
+            r#"
+label = "zao"
+[[games]]
+id = "neverball"
+title = "Neverball"
+command = ["sh", "-c", "sleep 1"]
+"#,
+        )
+        .unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let host = host_router(&host_config);
+        tokio::spawn(async move { axum::serve(listener, host).await.unwrap() });
+        std::fs::write(
+            root.path().join("upstreams.json"),
+            format!(r#"[{{"label":"zao","kind":"native","baseUrl":"http://{address}"}}]"#),
+        )
+        .unwrap();
+        let brain = router_with_capability_and_local_root(
+            "right-token",
+            "https://portal.example",
+            root.path(),
+        );
+
+        let catalog = rpc_body_authorized(
+            brain.clone(),
+            r#"{"_tag":"app.catalog.snapshot","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(catalog["outcome"]["payload"]["games"][0]["host"], "zao");
+        let prepared = rpc_body_authorized(
+            brain,
+            r#"{"_tag":"app.session.prepare","payload":{"gameId":"neverball","host":"zao"}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(prepared["outcome"]["_tag"], "Ok");
+    }
+
+    #[tokio::test]
+    async fn host_router_rejects_brain_and_unmanaged_session_operations() {
+        let root = tempfile::tempdir().unwrap();
+        let config = root.path().join("host.toml");
+        std::fs::write(&config, "label = \"zao\"\n").unwrap();
+        let app = host_router(&config);
+
+        for (request, code) in [
+            (
+                r#"{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}"#,
+                "OperationUnsupported",
+            ),
+            (
+                r#"{"_tag":"app.session.status","payload":{}}"#,
+                "SessionStatusUnsupported",
+            ),
+            (
+                r#"{"_tag":"app.session.stop","payload":{}}"#,
+                "SessionStopUnsupported",
+            ),
+        ] {
+            let body = rpc_body(app.clone(), request).await;
+            assert_eq!(body["outcome"]["_tag"], "Err");
+            assert_eq!(body["outcome"]["payload"]["code"], code);
+        }
     }
 
     #[tokio::test]

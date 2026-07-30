@@ -4,6 +4,7 @@
 
 export interface ActiveSession {
 	launchId: string;
+	host?: string;
 	gameId?: string;
 	title?: string;
 	phase?: string;
@@ -14,13 +15,21 @@ export interface AndroidComponent {
 	className: string;
 }
 
+export interface CatalogHostFailure {
+	host: string;
+	code: string;
+	message: string;
+}
+
 export interface Game {
 	id: string;
 	title: string;
+	host?: string;
 }
 
 export interface CatalogSnapshot {
 	games: Game[];
+	failures?: CatalogHostFailure[];
 }
 
 export interface CatalogSnapshotRequest {
@@ -72,6 +81,7 @@ export interface RpcFailure {
 
 export interface SessionPrepareRequest {
 	gameId: string;
+	host?: string;
 }
 
 export interface SessionPrepared {
