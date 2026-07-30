@@ -35,6 +35,7 @@ describe("createKorriNativeLauncherBridge", () => {
     queryLaunchables: () =>
       JSON.stringify({ _tag: "Launchables", items: [{ packageName: "x", label: "X" }] }),
     launchApp: () => JSON.stringify({ _tag: "Launched" }),
+    launchLocal: () => JSON.stringify({ _tag: "Launched" }),
     queryStreamHosts: () =>
       JSON.stringify({
         _tag: "StreamHosts",
@@ -45,7 +46,7 @@ describe("createKorriNativeLauncherBridge", () => {
     startStream: () => JSON.stringify({ _tag: "StreamStarted" }),
     korridPort: () => 43117,
     korridCapability: () => "test-capability",
-    bridgeVersion: () => 5,
+    bridgeVersion: () => 6,
     ...overrides,
   })
 
@@ -56,6 +57,25 @@ describe("createKorriNativeLauncherBridge", () => {
       items: [{ packageName: "x", label: "X" }],
     })
     expect(await bridge.launchApp("x")).toEqual({ _tag: "Launched" })
+  })
+
+  it("serializes a launcher-neutral local spec to the native surface", async () => {
+    let received = ""
+    const bridge = createKorriNativeLauncherBridge(
+      surface({
+        launchLocal: specJson => {
+          received = specJson
+          return JSON.stringify({ _tag: "Launched" })
+        },
+      }),
+    )
+    const spec = {
+      launcherId: "retroarch",
+      component: { packageName: "pkg", className: "Activity" },
+      extras: { ROM: "/rom" },
+    }
+    expect(await bridge.launchLocal(spec)).toEqual({ _tag: "Launched" })
+    expect(JSON.parse(received)).toEqual(spec)
   })
 
   it("decodes stream results from the native surface", async () => {

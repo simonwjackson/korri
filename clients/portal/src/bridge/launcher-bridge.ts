@@ -2,6 +2,8 @@ import type {
   KorriNativeBridgeSurface,
   LaunchAppResult,
   Launchable,
+  LaunchLocalResult,
+  LocalLaunchSpec,
   QueryLaunchablesResult,
   QueryStreamAppsResult,
   QueryStreamHostsResult,
@@ -22,6 +24,7 @@ import type {
 export interface LauncherBridge {
   queryLaunchables(): Promise<QueryLaunchablesResult>
   launchApp(packageName: string): Promise<LaunchAppResult>
+  launchLocal(spec: LocalLaunchSpec): Promise<LaunchLocalResult>
   queryStreamHosts(): Promise<QueryStreamHostsResult>
   queryStreamApps(hostUuid: string): Promise<QueryStreamAppsResult>
   startStream(hostUuid: string, appId: number): Promise<StartStreamResult>
@@ -41,6 +44,17 @@ export function createKorriNativeLauncherBridge(
     async launchApp(packageName) {
       try {
         return JSON.parse(surface.launchApp(packageName)) as LaunchAppResult
+      } catch (error) {
+        return {
+          _tag: "LaunchFailed",
+          reason: "StartFailed",
+          message: describe(error),
+        }
+      }
+    },
+    async launchLocal(spec) {
+      try {
+        return JSON.parse(surface.launchLocal(JSON.stringify(spec))) as LaunchLocalResult
       } catch (error) {
         return {
           _tag: "LaunchFailed",
@@ -86,6 +100,7 @@ export interface InMemoryLauncherBridgeConfig {
     | "ok"
     | "query-fail"
     | "launch-fail"
+    | "local-launch-fail"
     | "stream-hosts-fail"
     | "stream-start-fail"
   readonly items?: readonly Launchable[]
@@ -139,6 +154,17 @@ export function createInMemoryLauncherBridge(
           _tag: "LaunchFailed",
           reason: "NotFound",
           message: `no launchable ${packageName}`,
+        }
+      }
+      return { _tag: "Launched" }
+    },
+    async launchLocal(spec) {
+      await delay()
+      if (behavior === "local-launch-fail") {
+        return {
+          _tag: "LaunchFailed",
+          reason: "NotInstalled",
+          message: `no local launcher ${spec.launcherId}`,
         }
       }
       return { _tag: "Launched" }

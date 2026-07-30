@@ -81,9 +81,10 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
     }
     // Overlapping loads: only the latest invocation may write state.
     const seq = ++loadSeq.current
-    const [local, games, hostsResult, session] = await Promise.all([
+    const [local, games, localGames, hostsResult, session] = await Promise.all([
       bridge.queryLaunchables(),
       korrid.catalogSnapshot(),
+      korrid.localGames(),
       bridge.queryStreamHosts(),
       sessionStatusWithTimeout(),
     ])
@@ -106,6 +107,7 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
       games,
       hostsResult._tag === "QueryFailed" ? hostsResult.message : undefined,
       session,
+      localGames,
     )
     const current = stateRef.current
     if (current._tag === "Stopping") {
@@ -189,6 +191,33 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
         void bridge.startStream(target.hostUuid, target.appId).then(result => {
           if (!mountedRef.current || operation !== actionSeq.current) return
           const next = LaunchablesState.withStartStreamResult(launching, result)
+          stateRef.current = next
+          setState(next)
+        })
+      } else if (entry.kind === "local-game") {
+        const launching = LaunchablesState.beginLaunching(
+          current,
+          entryLabel(entry),
+        )
+        stateRef.current = launching
+        setState(launching)
+        void korrid.localGameLaunch(entry.game.id).then(async outcome => {
+          if (!mountedRef.current || operation !== actionSeq.current) return
+          if (outcome._tag !== "Ok") {
+            const failed = LaunchablesState.withLocalLaunchOutcome(
+              launching,
+              outcome,
+            )
+            stateRef.current = failed
+            setState(failed)
+            return
+          }
+          const result = await bridge.launchLocal(outcome.payload)
+          if (!mountedRef.current || operation !== actionSeq.current) return
+          const next = LaunchablesState.withLocalLaunchResult(
+            launching,
+            result,
+          )
           stateRef.current = next
           setState(next)
         })

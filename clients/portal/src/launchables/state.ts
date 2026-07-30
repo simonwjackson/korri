@@ -1,6 +1,7 @@
 import type {
   LaunchAppResult,
   Launchable,
+  LaunchLocalResult,
   QueryLaunchablesResult,
   QueryStreamAppsResult,
   StartStreamResult,
@@ -11,6 +12,9 @@ import type {
   ActiveSession,
   CatalogSnapshotOutcome,
   Game,
+  LocalGame,
+  LocalGameLaunchOutcome,
+  LocalGamesListOutcome,
   SessionPrepareOutcome,
   SessionStatusOutcome,
   SessionStopOutcome,
@@ -27,6 +31,7 @@ import type { Direction } from "../input/types"
  */
 export type PortalEntry =
   | { readonly kind: "now-playing"; readonly session: ActiveSession }
+  | { readonly kind: "local-game"; readonly game: LocalGame }
   | { readonly kind: "game"; readonly game: Game }
   | { readonly kind: "local"; readonly launchable: Launchable }
   | {
@@ -94,16 +99,18 @@ const readyFrom = (
 export const entryKey = (entry: PortalEntry): string =>
   entry.kind === "now-playing"
     ? `now-playing:${entry.session.launchId}`
-    : entry.kind === "game"
-      ? `game:${entry.game.id}`
-      : entry.kind === "local"
+    : entry.kind === "local-game"
+      ? `local-game:${entry.game.id}`
+      : entry.kind === "game"
+        ? `game:${entry.game.id}`
+        : entry.kind === "local"
         ? `local:${entry.launchable.packageName}`
         : `stream:${entry.hostUuid}:${entry.app.id}`
 
 export const entryLabel = (entry: PortalEntry): string =>
   entry.kind === "now-playing"
     ? (entry.session.title ?? entry.session.gameId ?? "Current session")
-    : entry.kind === "game"
+    : entry.kind === "local-game" || entry.kind === "game"
       ? entry.game.title
       : entry.kind === "local"
         ? entry.launchable.label
@@ -122,6 +129,7 @@ export const LaunchablesState = {
     korrid: CatalogSnapshotOutcome,
     hostsError?: string,
     session?: SessionStatusOutcome,
+    localGames?: LocalGamesListOutcome,
   ): LaunchablesState => {
     const entries: PortalEntry[] = []
     const failures: string[] = []
@@ -132,6 +140,14 @@ export const LaunchablesState = {
     // korrid builds that emitted Option::None as explicit null.
     if (session?._tag === "Ok" && session.payload.active != null) {
       entries.push({ kind: "now-playing", session: session.payload.active })
+    }
+
+    if (localGames?._tag === "Ok") {
+      for (const game of localGames.payload.games) {
+        entries.push({ kind: "local-game", game })
+      }
+    } else if (localGames?._tag === "Err") {
+      failures.push(`local games: ${localGames.payload.code}`)
     }
 
     if (korrid._tag === "Ok") {
@@ -206,6 +222,29 @@ export const LaunchablesState = {
     return entry === undefined
       ? { _tag: "None" }
       : { _tag: "Some", value: entry }
+  },
+
+  withLocalLaunchOutcome: (
+    state: LaunchablesState,
+    outcome: LocalGameLaunchOutcome,
+  ): LaunchablesState => {
+    if (state._tag !== "Launching") return state
+    return outcome._tag === "Ok"
+      ? state
+      : readyFrom(
+          state,
+          `${outcome.payload.code}: ${outcome.payload.message}`,
+        )
+  },
+
+  withLocalLaunchResult: (
+    state: LaunchablesState,
+    result: LaunchLocalResult,
+  ): LaunchablesState => {
+    if (state._tag !== "Launching") return state
+    return result._tag === "Launched"
+      ? state
+      : readyFrom(state, `${result.reason}: ${result.message}`)
   },
 
   withLaunchResult: (
@@ -306,9 +345,11 @@ export const LaunchablesState = {
       const title =
         entry.kind === "now-playing"
           ? "Now playing"
-          : entry.kind === "game"
-            ? "Games"
-            : entry.kind === "local"
+          : entry.kind === "local-game"
+            ? "Local games"
+            : entry.kind === "game"
+              ? "Games"
+              : entry.kind === "local"
               ? "This device"
               : entry.hostName
       if (current === null || current.title !== title) {

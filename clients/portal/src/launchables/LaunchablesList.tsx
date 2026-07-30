@@ -40,6 +40,11 @@ export function LaunchablesList({ state }: LaunchablesListProps) {
                       Confirm resumes · Select stops
                     </span>
                   )}
+                  {entry.kind === "local-game" && (
+                    <span className="mt-1 block text-sm font-normal opacity-60">
+                      {entry.game.system} · This device
+                    </span>
+                  )}
                 </li>
               )
             })}

@@ -10,6 +10,9 @@ import type {
   CatalogSnapshotOutcome,
   Game,
   HealthOutcome,
+  LocalGame,
+  LocalGameLaunchOutcome,
+  LocalGamesListOutcome,
   RpcRequest,
   RpcResponse,
   SessionPrepareOutcome,
@@ -26,6 +29,8 @@ export type RpcResponseFor<Request extends RpcRequest> = Extract<
 export interface KorridClient {
   health(): Promise<HealthOutcome>
   catalogSnapshot(): Promise<CatalogSnapshotOutcome>
+  localGames(): Promise<LocalGamesListOutcome>
+  localGameLaunch(gameId: string): Promise<LocalGameLaunchOutcome>
   sessionPrepare(gameId: string): Promise<SessionPrepareOutcome>
   sessionStatus(): Promise<SessionStatusOutcome>
   sessionStop(): Promise<SessionStopOutcome>
@@ -83,6 +88,28 @@ export function createHttpKorridClient(
         return unreachable(error)
       }
     },
+    async localGames() {
+      try {
+        const response = await callKorrid(baseUrl, capability, {
+          _tag: "app.local-games.list",
+          payload: {},
+        })
+        return response.outcome
+      } catch (error) {
+        return unreachable(error)
+      }
+    },
+    async localGameLaunch(gameId) {
+      try {
+        const response = await callKorrid(baseUrl, capability, {
+          _tag: "app.local-games.launch",
+          payload: { gameId },
+        })
+        return response.outcome
+      } catch (error) {
+        return unreachable(error)
+      }
+    },
     async sessionPrepare(gameId) {
       try {
         const response = await callKorrid(baseUrl, capability, {
@@ -124,9 +151,12 @@ export interface InMemoryKorridClientConfig {
     | "ok"
     | "catalog-fail"
     | "prepare-fail"
+    | "local-list-fail"
+    | "local-launch-fail"
     | "status-fail"
     | "stop-fail"
   readonly games?: readonly Game[]
+  readonly localGames?: readonly LocalGame[]
   /** Seed an active host session for now-playing flows. */
   readonly activeSession?: ActiveSession
 }
@@ -136,11 +166,16 @@ const sampleGames: readonly Game[] = [
   { id: "neverball", title: "Neverball" },
 ]
 
+const sampleLocalGames: readonly LocalGame[] = [
+  { id: "wl4", title: "Wario Land 4", system: "Game Boy Advance" },
+]
+
 export function createInMemoryKorridClient(
   config: InMemoryKorridClientConfig = {},
 ): KorridClient {
   const behavior = config.behavior ?? "ok"
   const games = config.games ?? sampleGames
+  const localGames = config.localGames ?? sampleLocalGames
   let activeSession = config.activeSession
   return {
     async health() {
@@ -154,6 +189,46 @@ export function createInMemoryKorridClient(
         }
       }
       return { _tag: "Ok", payload: { games: [...games] } }
+    },
+    async localGames() {
+      if (behavior === "local-list-fail") {
+        return {
+          _tag: "Err",
+          payload: {
+            code: "LocalStorageUnavailable",
+            message: "configured to fail",
+          },
+        }
+      }
+      return { _tag: "Ok", payload: { games: [...localGames] } }
+    },
+    async localGameLaunch(gameId) {
+      if (
+        behavior === "local-launch-fail" ||
+        !localGames.some(game => game.id === gameId)
+      ) {
+        return {
+          _tag: "Err",
+          payload: { code: "LocalRomMissing", message: `cannot launch ${gameId}` },
+        }
+      }
+      return {
+        _tag: "Ok",
+        payload: {
+          launcherId: "retroarch",
+          component: {
+            packageName: "com.retroarch.aarch64",
+            className:
+              "com.retroarch.browser.retroactivity.RetroActivityFuture",
+          },
+          extras: {
+            ROM: "/browser-dev/korri-retro/roms/wl4.gba",
+            LIBRETRO:
+              "/data/data/com.retroarch.aarch64/cores/mgba_libretro_android.so",
+            CONFIGFILE: "/browser-dev/korri-retro/retroarch.cfg",
+          },
+        },
+      }
     },
     async sessionPrepare(gameId) {
       if (behavior === "prepare-fail" || !games.some(game => game.id === gameId)) {

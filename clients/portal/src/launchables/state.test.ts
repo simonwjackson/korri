@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import type {
   CatalogSnapshotOutcome,
+  LocalGamesListOutcome,
   SessionStatusOutcome,
   SessionStopOutcome,
 } from "@contracts/generated/korrid"
@@ -43,9 +44,41 @@ const gamesErr: CatalogSnapshotOutcome = {
   payload: { code: "UpstreamUnreachable", message: "host offline" },
 }
 
+const localGamesOk: LocalGamesListOutcome = {
+  _tag: "Ok",
+  payload: {
+    games: [{ id: "wl4", title: "Wario Land 4", system: "Game Boy Advance" }],
+  },
+}
+
 const ready = LaunchablesState.fromSources(localOk, [officeApps], gamesOk)
 
 describe("LaunchablesState.fromSources", () => {
+  it("folds the local game beside stream catalog entries", () => {
+    const state = LaunchablesState.fromSources(
+      localOk,
+      [officeApps],
+      gamesOk,
+      undefined,
+      undefined,
+      localGamesOk,
+    )
+    if (state._tag !== "Ready") throw new Error("unreachable")
+    expect(state.entries.map(entry => entry.kind)).toEqual([
+      "local-game",
+      "game",
+      "game",
+      "local",
+      "local",
+      "stream",
+      "stream",
+    ])
+    expect(state.entries[0]).toMatchObject({
+      kind: "local-game",
+      game: { id: "wl4", title: "Wario Land 4" },
+    })
+  })
+
   it("folds korrid games, local apps, and stream apps into one ordered list", () => {
     expect(ready._tag).toBe("Ready")
     if (ready._tag !== "Ready") throw new Error("unreachable")
@@ -58,6 +91,24 @@ describe("LaunchablesState.fromSources", () => {
       "stream",
     ])
     expect(ready.notice).toBeNull()
+  })
+
+  it("degrades a failed local-game source to a notice while entries remain", () => {
+    const state = LaunchablesState.fromSources(
+      localOk,
+      [officeApps],
+      gamesOk,
+      undefined,
+      undefined,
+      {
+        _tag: "Err",
+        payload: { code: "LocalStorageUnavailable", message: "storage denied" },
+      },
+    )
+    expect(state).toMatchObject({
+      _tag: "Ready",
+      notice: "local games: LocalStorageUnavailable",
+    })
   })
 
   it("degrades a failed korrid catalog to a notice while entries remain", () => {
@@ -135,6 +186,26 @@ describe("LaunchablesState selection", () => {
 })
 
 describe("LaunchablesState action results", () => {
+  it("surfaces local brain and native launch failures as notices", () => {
+    const launching = LaunchablesState.beginLaunching(ready, "Wario Land 4")
+    expect(
+      LaunchablesState.withLocalLaunchOutcome(launching, {
+        _tag: "Err",
+        payload: { code: "LocalRomMissing", message: "ROM absent" },
+      }),
+    ).toMatchObject({ _tag: "Ready", notice: "LocalRomMissing: ROM absent" })
+    expect(
+      LaunchablesState.withLocalLaunchResult(launching, {
+        _tag: "LaunchFailed",
+        reason: "NotInstalled",
+        message: "RetroArch absent",
+      }),
+    ).toMatchObject({
+      _tag: "Ready",
+      notice: "NotInstalled: RetroArch absent",
+    })
+  })
+
   it("surfaces launch, stream, and prepare failures as notices", () => {
     const launchFailed = LaunchablesState.withLaunchResult(
       LaunchablesState.beginLaunching(ready, "A"),
