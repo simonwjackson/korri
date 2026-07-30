@@ -1,0 +1,48 @@
+diff --git a/config.def.h b/config.def.h
+index a2f36da..4ffbb01 100644
+--- a/config.def.h
++++ b/config.def.h
+@@ -573,0 +574,3 @@
++#if defined(ANDROID)
++#define DEFAULT_CONFIG_SAVE_ON_EXIT false
++#else
+@@ -574,0 +578 @@
++#endif
+@@ -778,0 +783,3 @@
++#if defined(ANDROID)
++#define DEFAULT_KIOSK_MODE_ENABLE true
++#else
+@@ -779,0 +787 @@
++#endif
+@@ -796,0 +805,3 @@
++#if defined(ANDROID)
++#define DEFAULT_QUIT_ON_CLOSE_CONTENT QUIT_ON_CLOSE_CONTENT_ENABLED
++#else
+@@ -797,0 +809 @@
++#endif
+@@ -949 +961 @@
+-#if defined(ANDROID) || defined(IOS)
++#if defined(IOS)
+@@ -1420,0 +1433,4 @@
++#if defined(ANDROID)
++#define DEFAULT_SAVESTATE_AUTO_SAVE true
++#define DEFAULT_SAVESTATE_AUTO_LOAD true
++#else
+@@ -1422,0 +1439 @@
++#endif
+diff --git a/configuration.c b/configuration.c
+index 0ec2ee4..168cca8 100644
+--- a/configuration.c
++++ b/configuration.c
+@@ -417 +417,4 @@ const struct input_bind_map input_config_bind_map[RARCH_BIND_LIST_END_NULL] = {
+-#if defined(HAVE_METAL)
++#if defined(ANDROID)
++/* Korri runtime must not select Vulkan on Mali/Immortalis at first boot. */
++static const enum video_driver_enum VIDEO_DEFAULT_DRIVER = VIDEO_GL;
++#elif defined(HAVE_METAL)
+@@ -1531 +1534,4 @@ bool config_overlay_enable_default(void)
+-#if defined(RARCH_MOBILE) && !TARGET_OS_TV
++#if defined(ANDROID)
++   /* Korri runtime has no touch overlay; input belongs to the device shell. */
++   return false;
++#elif defined(RARCH_MOBILE) && !TARGET_OS_TV

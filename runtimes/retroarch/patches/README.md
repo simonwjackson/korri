@@ -18,3 +18,7 @@ per `NNNN-description.patch` and record its upstream-facing rationale here.
   `com.korri.retroarch` application id and “Korri RetroArch” label, removes all
   launcher categories while retaining the exported explicit gameplay activity,
   and limits the flavor to the one supported arm64 ABI.
+- `0002-korri-default-config.patch` — makes Android first boot safe and invisible
+  without an external config: GL instead of Vulkan, kiosk mode, no touch
+  overlay, deterministic config ownership, close-content quit, and automatic
+  save-state load/save defaults. External Korri config can still override them.
