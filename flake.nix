@@ -28,6 +28,7 @@
         };
       in
       {
+        apps = import ./nix/tasks.nix { inherit pkgs; };
         devShells.android = import ./clients/android/devshell.nix { inherit pkgs; };
         devShells.portal = import ./clients/portal/devshell.nix { inherit pkgs; };
         devShells.korrid = import ./services/korrid/devshell.nix { inherit pkgs; };
