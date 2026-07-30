@@ -32,6 +32,7 @@ import com.limelight.nvstream.http.NvHTTP;
 import com.limelight.nvstream.http.PairingManager;
 import com.limelight.utils.CacheHelper;
 import com.limelight.utils.ServerHelper;
+import com.simonwjackson.korri.korrid.KorriBrainService;
 import com.simonwjackson.korri.korrid.KorridServer;
 
 import org.json.JSONArray;
@@ -93,7 +94,8 @@ public class KorriShellActivity extends AppCompatActivity {
         // Embedded korrid: only this exact portal origin may present the
         // per-server capability to the localhost brain.
         final String portalUrl = portalUrl();
-        korridPort = KorridServer.startAndLog(portalOrigin(portalUrl), localStorageRoot());
+        korridPort = KorriBrainService.ensureRunning(
+                this, portalOrigin(portalUrl), localStorageRoot());
         korridCapability = KorridServer.capability();
         if (BuildConfig.DEBUG) {
             // Device smoke needs to probe the protected endpoint. Release
@@ -215,7 +217,9 @@ public class KorriShellActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        KorridServer.stop();
+        // korrid deliberately outlives this screen: launching a game destroys
+        // the activity, and the brain must keep serving while the game runs.
+        // KorriBrainService owns the shutdown now.
         super.onDestroy();
         if (managerBinder != null) {
             unbindService(serviceConnection);

@@ -5,6 +5,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Keeps korrid running while a game is on screen. specialUse, not
+         dataSync: Android 15+ caps dataSync services at six hours a day. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.REORDER_TASKS" />
     <uses-permission android:name="com.korri.retroarch.permission.LAUNCH" />
     <uses-permission
@@ -194,6 +198,14 @@
                 android:resource="@xml/provider_file_paths" />
         </provider>
 
+        <service
+            android:name="com.simonwjackson.korri.korrid.KorriBrainService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Hosts the local game brain so games keep running when Korri is off screen." />
+        </service>
     </application>
 
 </manifest>
