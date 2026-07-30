@@ -53,6 +53,11 @@ fork_path="$("${ADB[@]}" shell pm path "$FORK_PACKAGE" 2>/dev/null || true)"
   echo "installed APK did not register $FORK_PACKAGE" >&2
   exit 1
 }
+for permission in \
+    android.permission.READ_EXTERNAL_STORAGE \
+    android.permission.WRITE_EXTERNAL_STORAGE; do
+  "${ADB[@]}" shell pm grant "$FORK_PACKAGE" "$permission" >/dev/null
+done
 package_dump="$("${ADB[@]}" shell dumpsys package "$FORK_PACKAGE")"
 installed_version_code="$(sed -n 's/.*versionCode=\([^[:space:]]*\).*/\1/p' <<<"$package_dump" | head -n1)"
 installed_version_name="$(sed -n 's/.*versionName=\(.*\)$/\1/p' <<<"$package_dump" | head -n1 | tr -d '\r')"
@@ -64,6 +69,14 @@ installed_version_name="$(sed -n 's/.*versionName=\(.*\)$/\1/p' <<<"$package_dum
   echo "installed fork versionName mismatch: expected $expected_version_name, got $installed_version_name" >&2
   exit 1
 }
+for permission in \
+    android.permission.READ_EXTERNAL_STORAGE \
+    android.permission.WRITE_EXTERNAL_STORAGE; do
+  grep -q "$permission: granted=true" <<<"$package_dump" || {
+    echo "installed fork is missing runtime grant: $permission" >&2
+    exit 1
+  }
+done
 stock_after="$("${ADB[@]}" shell pm path "$STOCK_PACKAGE" 2>/dev/null || true)"
 [[ "$stock_after" == "$stock_before" ]] || {
   echo "stock RetroArch package changed during fork deployment" >&2

@@ -28,6 +28,8 @@ case "$args" in
   *" dumpsys package com.korri.retroarch "*)
     printf '    versionCode=%s minSdk=21 targetSdk=28\n' "${ADB_VERSION_CODE:-42}"
     printf '    versionName=1.22.2_GIT\n'
+    printf '      android.permission.READ_EXTERNAL_STORAGE: granted=true\n'
+    printf '      android.permission.WRITE_EXTERNAL_STORAGE: granted=true\n'
     ;;
   *" install "*)
     if [[ -n "${ADB_INSTALL_SLEEP:-}" ]]; then sleep "$ADB_INSTALL_SLEEP"; fi
@@ -56,6 +58,8 @@ grep -q -- 'settings put global verifier_verify_adb_installs 1' "$ADB_LOG"
 [[ "$(grep -c 'pm path com.retroarch.aarch64' "$ADB_LOG")" == 2 ]]
 grep -q 'pm path com.korri.retroarch' "$ADB_LOG"
 grep -q 'dumpsys package com.korri.retroarch' "$ADB_LOG"
+grep -q 'pm grant com.korri.retroarch android.permission.READ_EXTERNAL_STORAGE' "$ADB_LOG"
+grep -q 'pm grant com.korri.retroarch android.permission.WRITE_EXTERNAL_STORAGE' "$ADB_LOG"
 ! grep -q 'uninstall' "$ADB_LOG"
 
 : > "$ADB_LOG"
