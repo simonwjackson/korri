@@ -2,7 +2,138 @@
 # same definitions so the command surface cannot drift from its documentation.
 { pkgs }:
 let
+  android = import ../clients/android/sdk.nix { inherit pkgs; };
+
+  rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+    targets = [ "aarch64-linux-android" ];
+  };
+
+  retroarchBuildToolsVersion = "30.0.3";
+  retroarchNdkVersion = "22.0.7026061";
+  retroarchComposition = pkgs.androidenv.composeAndroidPackages {
+    buildToolsVersions = [ retroarchBuildToolsVersion ];
+    platformVersions = [ "30" ];
+    ndkVersions = [ retroarchNdkVersion ];
+    includeEmulator = false;
+    includeSystemImages = false;
+    includeSources = false;
+    includeNDK = true;
+    extraLicenses = [
+      "android-sdk-license"
+      "android-sdk-preview-license"
+    ];
+  };
+  retroarchSdk = retroarchComposition.androidsdk;
+  retroarchSdkRoot = "${retroarchSdk}/libexec/android-sdk";
+  retroarchJdk = pkgs.jdk11;
+
+  androidInputs = [
+    android.jdk
+    android.androidSdk
+    pkgs.coreutils
+    pkgs.file
+    pkgs.git
+    pkgs.gnumake
+    pkgs.unzip
+    pkgs.which
+  ];
+  androidEnv = {
+    JAVA_HOME = "${android.jdk}";
+    GRADLE_OPTS = "-Dorg.gradle.daemon=false -Dorg.gradle.project.android.aapt2FromMavenOverride=${android.sdkRoot}/build-tools/${android.buildToolsVersion}/aapt2";
+    KORRI_NIX_SDK = android.sdkRoot;
+    KORRI_NDK_VERSION = android.ndkVersion;
+  };
+  androidSetup = ''
+    # shellcheck source=/dev/null
+    source "$KORRI_ROOT/clients/android/sdk-env.sh"
+  '';
+
+  retroarchInputs = [
+    retroarchJdk
+    retroarchSdk
+    pkgs.cmake
+    pkgs.coreutils
+    pkgs.file
+    pkgs.git
+    pkgs.gnumake
+    pkgs.ninja
+    pkgs.unzip
+    pkgs.which
+  ];
+  retroarchEnv = {
+    JAVA_HOME = "${retroarchJdk}";
+    GRADLE_OPTS = "-Dorg.gradle.daemon=false -Dorg.gradle.project.android.aapt2FromMavenOverride=${retroarchSdkRoot}/build-tools/${retroarchBuildToolsVersion}/aapt2";
+    KORRI_NIX_SDK = retroarchSdkRoot;
+    KORRI_NDK_VERSION = retroarchNdkVersion;
+  };
+  retroarchSetup = ''
+    # shellcheck source=/dev/null
+    source "$KORRI_ROOT/clients/android/sdk-env.sh"
+  '';
+
   definitions = {
+    android-apk = {
+      description = "Build the debug Android APK.";
+      runtimeInputs = androidInputs;
+      env = androidEnv;
+      script = ''
+        ${androidSetup}
+        cd "$KORRI_ROOT/clients/android"
+        exec ./gradlew assembleDebug "$@"
+      '';
+    };
+
+    android-apk-dev = {
+      description = "Build the debug APK against a live portal URL.";
+      runtimeInputs = androidInputs;
+      env = androidEnv;
+      takesArgs = true;
+      script = ''
+        url="''${1:?usage: android-apk-dev <portal-url>}"
+        shift
+        ${androidSetup}
+        cd "$KORRI_ROOT/clients/android"
+        exec ./gradlew assembleDebug "-PkorriPortalUrl=$url" "$@"
+      '';
+    };
+
+    korrid-check = {
+      description = "Run the full host, contracts, portal, and Android check.";
+      runtimeInputs = [ pkgs.nix ];
+      script = ''
+        exec "$KORRI_ROOT/services/korrid/check.sh" "$@"
+      '';
+    };
+
+    korrid-test = {
+      description = "Run the korrid host test suite.";
+      runtimeInputs = [
+        rustToolchain
+        pkgs.clang
+        pkgs.llvmPackages.libclang
+      ];
+      env.LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+      script = ''
+        export CARGO_TARGET_DIR="$KORRI_ROOT/.cache/korrid-target"
+        cd "$KORRI_ROOT/services/korrid"
+        exec cargo test "$@"
+      '';
+    };
+
+    portal-bundle = {
+      description = "Build the portal into the Android app assets.";
+      runtimeInputs = [
+        pkgs.bun
+        pkgs.coreutils
+      ];
+      script = ''
+        cd "$KORRI_ROOT/clients/portal"
+        bun run build
+        rm -rf "$KORRI_ROOT/clients/android/app/src/main/assets/portal"
+        cp -r dist "$KORRI_ROOT/clients/android/app/src/main/assets/portal"
+      '';
+    };
+
     portal-check = {
       description = "Run portal unit tests and typecheck.";
       runtimeInputs = [ pkgs.bun ];
@@ -12,17 +143,74 @@ let
         bun run typecheck
       '';
     };
+
+    portal-dev = {
+      description = "Serve the portal on the local network.";
+      runtimeInputs = [ pkgs.bun ];
+      script = ''
+        cd "$KORRI_ROOT/clients/portal"
+        exec bun run dev "$@"
+      '';
+    };
+
+    ra-build = {
+      description = "Build and validate the patched arm64 RetroArch runtime.";
+      runtimeInputs = retroarchInputs;
+      env = retroarchEnv;
+      script = ''
+        ${retroarchSetup}
+        exec "$KORRI_ROOT/runtimes/retroarch/build.sh" "$@"
+      '';
+    };
+
+    ra-check = {
+      description = "Test the RetroArch lifecycle and build a fresh APK.";
+      runtimeInputs = [
+        pkgs.coreutils
+        pkgs.git
+        pkgs.gnugrep
+        pkgs.gnused
+      ];
+      script = ''
+        "$KORRI_ROOT/runtimes/retroarch/test-fetch-upstream.sh"
+        "$KORRI_ROOT/runtimes/retroarch/test-build.sh"
+        "$KORRI_ROOT/runtimes/retroarch/test-install-device.sh"
+        exec ${packages.ra-build}/bin/ra-build
+      '';
+    };
+
+    ra-core-mgba = {
+      description = "Build and stage the pinned arm64 mGBA libretro core.";
+      runtimeInputs = retroarchInputs;
+      env = retroarchEnv;
+      script = ''
+        ${packages.ra-fetch}/bin/ra-fetch
+        ${retroarchSetup}
+        exec "$KORRI_ROOT/runtimes/retroarch/cores/mgba/build.sh" "$@"
+      '';
+    };
+
+    ra-fetch = {
+      description = "Recreate the pinned, patched RetroArch source tree.";
+      runtimeInputs = [
+        pkgs.coreutils
+        pkgs.git
+      ];
+      script = ''
+        exec "$KORRI_ROOT/runtimes/retroarch/fetch-upstream.sh" "$@"
+      '';
+    };
   };
 
   exports = pkgs.lib.mapAttrs (
-    _:
-    task:
+    _: task:
     pkgs.lib.concatStringsSep "\n" (
       pkgs.lib.mapAttrsToList (name: value: ''export ${name}="${value}"'') (task.env or { })
     )
   ) definitions;
 
-  makeTask = name: task:
+  makeTask =
+    name: task:
     pkgs.writeShellApplication {
       inherit name;
       runtimeInputs = [ pkgs.git ] ++ task.runtimeInputs;
@@ -38,9 +226,10 @@ let
 
   helpText = pkgs.lib.concatStringsSep "\n" (
     pkgs.lib.mapAttrsToList (
-      name:
-      task:
-      "  nix run .#${name}${pkgs.lib.optionalString (task ? takesArgs) " -- <args>"}\n      ${task.description}"
+      name: task:
+      "  nix run .#${name}${
+          pkgs.lib.optionalString (task ? takesArgs) " -- <args>"
+        }\n      ${task.description}"
     ) definitions
   );
 

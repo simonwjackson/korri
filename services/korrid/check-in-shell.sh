@@ -71,9 +71,9 @@ cd "$ROOT/clients/portal"
 bun src/korrid/smoke.ts
 
 # The installed proof is the whole app, not only its hidden RPC. Use the
-# canonical cross-area recipe so Gradle cannot silently package no portal.
+# canonical cross-area task so Gradle cannot silently package no portal.
 cd "$ROOT"
-just portal-bundle
+nix run "$ROOT#portal-bundle"
 test -f "$ROOT/clients/android/app/src/main/assets/portal/index.html"
 
 cd "$CRATE"
