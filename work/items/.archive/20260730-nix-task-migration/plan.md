@@ -1,7 +1,7 @@
 ---
 title: "refactor: declare Korri tasks in Nix, retire just"
 type: refactor
-status: active
+status: completed
 date: 2026-07-30
 verify_command: "nix run .#korrid-check"
 ---
