@@ -23,7 +23,8 @@ Artifact: `upstream/pkg/android/phoenix/build/outputs/apk/aarch64/release/phoeni
 - `fetch-upstream.sh` shallow-fetches and verifies this exact commit into the
   gitignored, generated `upstream/` worktree, resets tracked files to the pin,
   and applies `patches/NNNN-*.patch` in lexical order with exact `git apply`
-  checks. Ignored build outputs survive reset for incremental builds.
+  checks. `build.sh` deletes the prior APK and core outputs before rebuilding,
+  so a failed invocation cannot leave a stale artifact eligible for deployment.
 
 ## Toolchain facts (why devshell.nix looks like this)
 
@@ -46,11 +47,21 @@ Artifact: `upstream/pkg/android/phoenix/build/outputs/apk/aarch64/release/phoeni
 From the repository root:
 
 ```sh
-just ra-fetch  # verify the pin and apply the series
-just ra-build              # fetch/apply, then build the arm64 release APK
-just ra-check              # failure tests + build + artifact contracts
-just ra-deploy <adb-serial> # build, validate, install, preserve stock RA
+nix run nixpkgs#just -- ra-fetch
+nix run nixpkgs#just -- ra-build
+nix run nixpkgs#just -- ra-check
+nix run nixpkgs#just -- ra-deploy <adb-serial>
+nix run nixpkgs#just -- ra-accept <adb-serial>
 ```
+
+`ra-accept` additionally launches Wario through the Korri portal, verifies the
+signed per-server `GET_STATUS`/`QUIT` token, rejects missing/stale tokens and
+extra verbs, proves HOME synchronously refreshes a non-empty auto-state,
+relaunches, quits gracefully, and checks that stock RetroArch stayed installed
+and stopped. On device `100.65.66.40:39991`, the gate reported
+`GET_STATUS PLAYING mGBA,wl4,crc32=d6141609`, wrote a non-empty pause state,
+relaunched successfully, refreshed the state again on graceful `QUIT`, returned
+to Korri, and preserved `com.retroarch.aarch64`.
 
 The source pin and published patch series are the corresponding-source form of
 Korri's GPL-3.0 distribution. Do not edit `upstream/` directly; changes belong

@@ -39,8 +39,6 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.OutputStream;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -459,9 +457,7 @@ public class KorriShellActivity extends AppCompatActivity {
             if (parent == null || (!parent.isDirectory() && !parent.mkdirs())) {
                 throw new IllegalStateException("cannot create provisioned file directory");
             }
-            try (OutputStream output = new FileOutputStream(target, false)) {
-                output.write(content.getBytes(StandardCharsets.UTF_8));
-            }
+            KorriAtomicFile.write(target, content.getBytes(StandardCharsets.UTF_8));
         }
 
         private String launchFailed(String reason, String message) {

@@ -25,6 +25,11 @@ if grep -q 'android.intent.category.LAUNCHER' <<<"$manifest"; then
   echo "fork APK unexpectedly exposes a launcher activity" >&2
   exit 1
 fi
-grep -q 'com.retroarch.browser.retroactivity.RetroActivityFuture' <<<"$manifest"
+future_activity="$(grep -A5 'com.retroarch.browser.retroactivity.RetroActivityFuture' <<<"$manifest")"
+grep -q 'com.korri.retroarch.permission.LAUNCH' <<<"$future_activity"
+grep -q 'android:exported.*0xffffffff' <<<"$future_activity"
+grep -q 'android:launchMode.*0x0' <<<"$future_activity"
+core_sideload_activity="$(grep -A2 'CoreSideloadActivity' <<<"$manifest")"
+grep -q 'android:exported.*0x0' <<<"$core_sideload_activity"
 
 printf 'RetroArch APK identity contract passed\n'

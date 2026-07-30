@@ -4,6 +4,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APK="${RETROARCH_APK:-$HERE/upstream/pkg/android/phoenix/build/outputs/apk/aarch64/release/phoenix-aarch64-release.apk}"
 VERIFY="${RETROARCH_APK_VERIFY:-$HERE/test-apk-contract.sh}"
+AAPT="${RETROARCH_AAPT:-${ANDROID_HOME:?run inside the RetroArch Nix devshell}/build-tools/30.0.3/aapt}"
 SERIAL="${1:-${ANDROID_SERIAL:-}}"
 STOCK_PACKAGE="com.retroarch.aarch64"
 FORK_PACKAGE="com.korri.retroarch"
@@ -14,6 +15,13 @@ if [[ -z "$SERIAL" ]]; then
 fi
 [[ -f "$APK" ]] || { echo "RetroArch APK missing: $APK" >&2; exit 1; }
 "$VERIFY" "$APK"
+badging="$("$AAPT" dump badging "$APK")"
+expected_version_code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<<"$badging" | head -n1)"
+expected_version_name="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<<"$badging" | head -n1)"
+[[ -n "$expected_version_code" && -n "$expected_version_name" ]] || {
+  echo 'unable to read fork APK version identity' >&2
+  exit 1
+}
 
 ADB=(adb -s "$SERIAL")
 [[ "$("${ADB[@]}" get-state)" == device ]] || {
@@ -39,6 +47,17 @@ trap restore_verifier EXIT
 fork_path="$("${ADB[@]}" shell pm path "$FORK_PACKAGE" 2>/dev/null || true)"
 [[ "$fork_path" == package:* ]] || {
   echo "installed APK did not register $FORK_PACKAGE" >&2
+  exit 1
+}
+package_dump="$("${ADB[@]}" shell dumpsys package "$FORK_PACKAGE")"
+installed_version_code="$(sed -n 's/.*versionCode=\([^[:space:]]*\).*/\1/p' <<<"$package_dump" | head -n1)"
+installed_version_name="$(sed -n 's/.*versionName=\(.*\)$/\1/p' <<<"$package_dump" | head -n1 | tr -d '\r')"
+[[ "$installed_version_code" == "$expected_version_code" ]] || {
+  echo "installed fork versionCode mismatch: expected $expected_version_code, got $installed_version_code" >&2
+  exit 1
+}
+[[ "$installed_version_name" == "$expected_version_name" ]] || {
+  echo "installed fork versionName mismatch: expected $expected_version_name, got $installed_version_name" >&2
   exit 1
 }
 stock_after="$("${ADB[@]}" shell pm path "$STOCK_PACKAGE" 2>/dev/null || true)"

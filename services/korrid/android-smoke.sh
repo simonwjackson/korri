@@ -102,7 +102,7 @@ local_launch_response="$(curl --fail --silent \
   -H "authorization: Bearer $capability" \
   -d '{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}' \
   "http://127.0.0.1:$HOST_PORT/rpc")"
-for expected in '"launcherId":"retroarch"' '"directories":[' '"files":[' '"integrity":"'; do
+for expected in '"launcherId":"retroarch"' '"KORRI_CONTROL_TOKEN":"' '"directories":[' '"files":[' '"integrity":"'; do
   if ! printf '%s' "$local_launch_response" | grep -F "$expected" >/dev/null; then
     echo "Deferred local launch is missing $expected: $local_launch_response" >&2
     exit 1

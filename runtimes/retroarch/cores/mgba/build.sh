@@ -14,6 +14,9 @@ BUNDLED_CORES="$RUNTIME_ROOT/upstream/pkg/android/phoenix/assets/cores"
 
 : "${ANDROID_NDK_ROOT:?run inside the RetroArch Nix devshell}"
 
+rm -rf "$BUILD"
+rm -f "$OUT/mgba_libretro_android.so" "$BUNDLED_CORES/mgba_libretro_android.so"
+
 if [[ -e "$SOURCE" && ! -d "$SOURCE/.git" ]]; then
   echo "refusing to replace non-git mGBA source: $SOURCE" >&2
   exit 1
@@ -50,6 +53,6 @@ cmake -S "$SOURCE" -B "$BUILD" -G Ninja \
 cmake --build "$BUILD" --target mgba_libretro
 
 mkdir -p "$OUT" "$BUNDLED_CORES"
-cp "$BUILD/mgba_libretro.so" "$OUT/mgba_libretro_android.so"
-cp "$OUT/mgba_libretro_android.so" "$BUNDLED_CORES/mgba_libretro_android.so"
+install -m 0644 "$BUILD/mgba_libretro.so" "$OUT/mgba_libretro_android.so"
+install -m 0644 "$OUT/mgba_libretro_android.so" "$BUNDLED_CORES/mgba_libretro_android.so"
 sha256sum "$OUT/mgba_libretro_android.so"

@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use typeshare::typeshare;
 
 type HmacSha256 = Hmac<Sha256>;
+const RETROARCH_CONTROL_TOKEN: &str = "KORRI_CONTROL_TOKEN";
+const RETROARCH_CONTROL_CONTEXT: &[u8] = b"korri-retroarch-control-v1";
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -73,6 +75,15 @@ impl LaunchSpec {
     }
 
     pub(crate) fn sign(mut self, key: &[u8]) -> Self {
+        if self.launcher_id == "retroarch" {
+            let mut control_mac =
+                HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
+            control_mac.update(RETROARCH_CONTROL_CONTEXT);
+            self.extras.insert(
+                RETROARCH_CONTROL_TOKEN.into(),
+                hex::encode(control_mac.finalize().into_bytes()),
+            );
+        }
         let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
         mac.update(&self.signing_bytes());
         self.integrity = hex::encode(mac.finalize().into_bytes());
@@ -121,6 +132,19 @@ mod tests {
         let key = b"private per-server key";
         let signed = spec().sign(key);
         assert!(signed.verify(key));
+        let control_token = signed
+            .extras
+            .get("KORRI_CONTROL_TOKEN")
+            .expect("signed RetroArch spec has a control token");
+        assert_eq!(control_token.len(), 64);
+        assert_ne!(
+            control_token,
+            spec()
+                .sign(b"another server key")
+                .extras
+                .get("KORRI_CONTROL_TOKEN")
+                .unwrap()
+        );
 
         let mut tampered_content = signed.clone();
         tampered_content.files[0].content = "kiosk_mode_enable = false".into();

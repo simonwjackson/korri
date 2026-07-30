@@ -43,21 +43,23 @@ ra-fetch:
 ra-core-mgba: ra-fetch
     cd runtimes/retroarch && nix develop . --command ./cores/mgba/build.sh
 
-# Build the patched arm64 Android runtime with its pinned core.
-ra-build: ra-fetch
-    cd runtimes/retroarch && nix develop . --command bash -c './cores/mgba/build.sh && cd upstream/pkg/android/phoenix && ./gradlew assembleAarch64Release'
+# Build and validate a fresh patched arm64 Android runtime with its pinned core.
+ra-build:
+    cd runtimes/retroarch && nix develop . --command ./build.sh
 
 # Build, validate, and install the fork without replacing stock RetroArch.
 ra-deploy serial: ra-build
     cd runtimes/retroarch && nix develop . --command ./install-device.sh {{serial}}
 
-# Validate the fetch and install failure modes, rebuild the exact patch series,
-# and require the fork APK artifact.
+# Build, deploy beside stock RetroArch, and run the repeatable Wario lifecycle
+# acceptance (authenticated control, pause state, relaunch, graceful return).
+ra-accept serial: (ra-deploy serial)
+    ./runtimes/retroarch/device-acceptance.sh {{serial}}
+
+# Validate failure modes, rebuild the exact patch series, and accept only the
+# APK produced by this invocation.
 ra-check:
     ./runtimes/retroarch/test-fetch-upstream.sh
+    ./runtimes/retroarch/test-build.sh
     ./runtimes/retroarch/test-install-device.sh
-    ./runtimes/retroarch/fetch-upstream.sh
-    ./runtimes/retroarch/test-source-contract.sh
-    cd runtimes/retroarch && nix develop . --command bash -c './cores/mgba/build.sh && cd upstream/pkg/android/phoenix && ./gradlew assembleAarch64Release'
-    test -f runtimes/retroarch/upstream/pkg/android/phoenix/build/outputs/apk/aarch64/release/phoenix-aarch64-release.apk
-    cd runtimes/retroarch && nix develop . --command ./test-apk-contract.sh
+    cd runtimes/retroarch && nix develop . --command ./build.sh

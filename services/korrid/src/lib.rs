@@ -1015,6 +1015,13 @@ command = ["sh", "-c", "sleep 1"]
         assert_eq!(spec["files"].as_array().unwrap().len(), 1);
         assert_eq!(spec["directories"].as_array().unwrap().len(), 4);
         assert!(!spec["integrity"].as_str().unwrap().is_empty());
+        assert_eq!(
+            spec["extras"]["KORRI_CONTROL_TOKEN"]
+                .as_str()
+                .unwrap()
+                .len(),
+            64
+        );
         assert!(!root.path().join("retroarch.cfg").exists());
         assert!(!root.path().join("saves").exists());
     }

@@ -1,5 +1,10 @@
 use super::{AndroidComponent, FileProvisionMode, LaunchSpec, LocalGame, ProvisionedFile};
-use std::{collections::HashMap, fs, path::Path};
+use std::{
+    collections::HashMap,
+    fs::{self, OpenOptions},
+    io::Write,
+    path::Path,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LaunchError {
@@ -65,6 +70,34 @@ video_driver = "gl"
     )
 }
 
+fn write_atomically(path: &Path, content: &[u8]) -> std::io::Result<()> {
+    let parent = path.parent().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "config has no parent")
+    })?;
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid config name")
+        })?;
+    let temporary = parent.join(format!(".{file_name}.{:016x}.tmp", rand::random::<u64>()));
+    let result = (|| {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        file.write_all(content)?;
+        file.sync_all()?;
+        fs::rename(&temporary, path)?;
+        fs::File::open(parent)?.sync_all()?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
 pub fn launch_game(
     root: &Path,
     game_id: &str,
@@ -92,7 +125,8 @@ pub fn launch_game(
                 fs::create_dir_all(root.join(directory))
                     .map_err(|error| LaunchError::Config(error.to_string()))?;
             }
-            fs::write(&config, &content).map_err(|error| LaunchError::Config(error.to_string()))?;
+            write_atomically(&config, content.as_bytes())
+                .map_err(|error| LaunchError::Config(error.to_string()))?;
             (Vec::new(), Vec::new())
         }
         FileProvisionMode::Deferred => (
@@ -207,6 +241,25 @@ mod tests {
         assert!(spec.files[0].content.contains("video_driver = \"gl\""));
         assert!(spec.files[0]
             .content
+            .contains("kiosk_mode_enable = \"true\""));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn direct_provisioning_atomically_replaces_a_config_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let root = root_with_rom();
+        let outside = root.path().join("outside-user-file");
+        std::fs::write(&outside, b"do not replace").unwrap();
+        symlink(&outside, root.path().join("retroarch.cfg")).unwrap();
+
+        launch_game(root.path(), "wl4", FileProvisionMode::Direct).expect("launch spec");
+
+        assert_eq!(std::fs::read(&outside).unwrap(), b"do not replace");
+        assert!(!root.path().join("retroarch.cfg").is_symlink());
+        assert!(std::fs::read_to_string(root.path().join("retroarch.cfg"))
+            .unwrap()
             .contains("kiosk_mode_enable = \"true\""));
     }
 

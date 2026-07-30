@@ -8,7 +8,11 @@ trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin"
 touch "$TMP/fork.apk"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$TMP/verify"
-chmod +x "$TMP/verify"
+cat > "$TMP/aapt" <<'AAPT'
+#!/usr/bin/env bash
+printf "package: name='com.korri.retroarch' versionCode='42' versionName='1.22.2_GIT'\n"
+AAPT
+chmod +x "$TMP/verify" "$TMP/aapt"
 
 cat > "$TMP/bin/adb" <<'ADB'
 #!/usr/bin/env bash
@@ -21,6 +25,10 @@ case "$args" in
   *" settings get global verifier_verify_adb_installs "*) printf '1\n' ;;
   *" pm path com.retroarch.aarch64 "*) printf 'package:/data/app/stock/base.apk\n' ;;
   *" pm path com.korri.retroarch "*) printf 'package:/data/app/fork/base.apk\n' ;;
+  *" dumpsys package com.korri.retroarch "*)
+    printf '    versionCode=%s minSdk=21 targetSdk=28\n' "${ADB_VERSION_CODE:-42}"
+    printf '    versionName=1.22.2_GIT\n'
+    ;;
   *" install "*)
     if [[ "${ADB_INSTALL_FAIL:-0}" == 1 ]]; then
       printf 'Failure [INSTALL_FAILED_TEST]\n' >&2
@@ -36,6 +44,7 @@ export PATH="$TMP/bin:$PATH"
 export ADB_LOG="$TMP/adb.log"
 export RETROARCH_APK="$TMP/fork.apk"
 export RETROARCH_APK_VERIFY="$TMP/verify"
+export RETROARCH_AAPT="$TMP/aapt"
 
 "$INSTALL" serial-1
 
@@ -45,7 +54,15 @@ grep -q -- 'settings put global verifier_verify_adb_installs 0' "$ADB_LOG"
 grep -q -- 'settings put global verifier_verify_adb_installs 1' "$ADB_LOG"
 [[ "$(grep -c 'pm path com.retroarch.aarch64' "$ADB_LOG")" == 2 ]]
 grep -q 'pm path com.korri.retroarch' "$ADB_LOG"
+grep -q 'dumpsys package com.korri.retroarch' "$ADB_LOG"
 ! grep -q 'uninstall' "$ADB_LOG"
+
+: > "$ADB_LOG"
+if ADB_VERSION_CODE=41 "$INSTALL" serial-1 >/dev/null 2>&1; then
+  echo 'expected installed version mismatch to fail deployment' >&2
+  exit 1
+fi
+grep -q -- 'settings put global verifier_verify_adb_installs 1' "$ADB_LOG"
 
 : > "$ADB_LOG"
 if ADB_INSTALL_FAIL=1 "$INSTALL" serial-1 >/dev/null 2>&1; then
