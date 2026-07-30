@@ -20,11 +20,19 @@ pub struct AndroidComponent {
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ProvisionedFile {
+    pub path: String,
+    pub content: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LaunchSpec {
     pub launcher_id: String,
     pub component: AndroidComponent,
     pub extras: HashMap<String, String>,
+    pub files: Vec<ProvisionedFile>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -103,8 +111,17 @@ pub fn launch_game(root: &Path, game_id: &str) -> Result<LaunchSpec, LaunchError
             .map_err(|error| LaunchError::Config(error.to_string()))?;
     }
     let config = root.join("retroarch.cfg");
-    fs::write(&config, config_content(root))
-        .map_err(|error| LaunchError::Config(error.to_string()))?;
+    let content = config_content(root);
+    let files = match fs::write(&config, &content) {
+        Ok(()) => Vec::new(),
+        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+            vec![ProvisionedFile {
+                path: config.display().to_string(),
+                content,
+            }]
+        }
+        Err(error) => return Err(LaunchError::Config(error.to_string())),
+    };
 
     Ok(LaunchSpec {
         launcher_id: "retroarch".into(),
@@ -120,6 +137,7 @@ pub fn launch_game(root: &Path, game_id: &str) -> Result<LaunchSpec, LaunchError
             ),
             ("CONFIGFILE".into(), config.display().to_string()),
         ]),
+        files,
     })
 }
 
@@ -166,6 +184,27 @@ mod tests {
             Some(root.path().join("retroarch.cfg").to_str().unwrap())
         );
         assert!(!spec.extras.contains_key("QUITFOCUS"));
+        assert!(spec.files.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn returns_config_bytes_for_the_android_edge_when_direct_write_is_denied() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("roms")).unwrap();
+        std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
+        let config = root.path().join("retroarch.cfg");
+        std::fs::write(&config, b"owned elsewhere").unwrap();
+        std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o400)).unwrap();
+
+        let spec = launch_game(root.path(), "wl4").expect("fallback spec");
+
+        assert_eq!(spec.files.len(), 1);
+        assert_eq!(spec.files[0].path, config.display().to_string());
+        assert!(spec.files[0].content.contains("video_driver = \"gl\""));
+        std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o600)).unwrap();
     }
 
     #[test]

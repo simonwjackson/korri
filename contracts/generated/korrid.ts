@@ -33,10 +33,16 @@ export interface Health {
 export interface HealthRequest {
 }
 
+export interface ProvisionedFile {
+	path: string;
+	content: string;
+}
+
 export interface LaunchSpec {
 	launcherId: string;
 	component: AndroidComponent;
 	extras: Record<string, string>;
+	files: ProvisionedFile[];
 }
 
 export interface LocalGame {

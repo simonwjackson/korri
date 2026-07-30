@@ -227,6 +227,7 @@ export function createInMemoryKorridClient(
               "/data/data/com.retroarch.aarch64/cores/mgba_libretro_android.so",
             CONFIGFILE: "/browser-dev/korri-retro/retroarch.cfg",
           },
+          files: [],
         },
       }
     },

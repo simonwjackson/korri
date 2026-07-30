@@ -56,10 +56,17 @@ export interface LocalLaunchComponent {
  * launcher id/component pair and copies opaque string extras into an explicit
  * Android intent; launcher-specific paths and keys never originate here.
  */
+export interface LocalProvisionedFile {
+  readonly path: string
+  readonly content: string
+}
+
 export interface LocalLaunchSpec {
   readonly launcherId: string
   readonly component: LocalLaunchComponent
   readonly extras: Readonly<Record<string, string>>
+  /** Generic files korrid generated but the Android storage edge must write. */
+  readonly files: readonly LocalProvisionedFile[]
 }
 
 /** Result of `KorriNative.launchLocal(specJson)`. */
@@ -71,6 +78,7 @@ export type LaunchLocalResult =
         | "UnsupportedLauncher"
         | "InvalidSpec"
         | "NotInstalled"
+        | "ProvisionFailed"
         | "StartFailed"
       readonly message: string
     }

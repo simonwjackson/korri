@@ -37,7 +37,10 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
 import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -317,6 +320,7 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public String launchLocal(String specJson) {
             final Intent intent;
+            final JSONArray files;
             try {
                 JSONObject spec = new JSONObject(specJson);
                 String launcherId = spec.getString("launcherId");
@@ -350,9 +354,22 @@ public class KorriShellActivity extends AppCompatActivity {
                     }
                     intent.putExtra(key, (String) value);
                 }
+                files = spec.getJSONArray("files");
             } catch (Exception error) {
                 return launchFailed("InvalidSpec",
                         error.getMessage() != null ? error.getMessage() : "invalid launch spec");
+            }
+
+            try {
+                for (int index = 0; index < files.length(); index++) {
+                    JSONObject file = files.getJSONObject(index);
+                    provisionFile(file.getString("path"), file.getString("content"));
+                }
+            } catch (Exception error) {
+                return launchFailed("ProvisionFailed",
+                        error.getMessage() != null
+                                ? error.getMessage()
+                                : "local file provisioning failed");
             }
 
             try {
@@ -386,6 +403,27 @@ public class KorriShellActivity extends AppCompatActivity {
                         error.getMessage() != null ? error.getMessage() : "start failed");
             }
             return "{\"_tag\":\"Launched\"}";
+        }
+
+        /** Write a korrid-provided file at the Android storage edge. */
+        private void provisionFile(String targetPath, String content) throws Exception {
+            if (!Environment.isExternalStorageManager()) {
+                throw new SecurityException(
+                        "allow Korri all files access to provision local game config");
+            }
+            File korriRoot = new File(localStorageRoot()).getCanonicalFile();
+            File target = new File(targetPath).getCanonicalFile();
+            String rootPrefix = korriRoot.getPath() + File.separator;
+            if (!target.getPath().startsWith(rootPrefix)) {
+                throw new IllegalArgumentException("provision path is outside Korri storage");
+            }
+            File parent = target.getParentFile();
+            if (parent == null || (!parent.isDirectory() && !parent.mkdirs())) {
+                throw new IllegalStateException("cannot create provisioned file directory");
+            }
+            try (OutputStream output = new FileOutputStream(target, false)) {
+                output.write(content.getBytes(StandardCharsets.UTF_8));
+            }
         }
 
         private String launchFailed(String reason, String message) {

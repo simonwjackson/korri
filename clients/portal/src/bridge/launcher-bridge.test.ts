@@ -73,6 +73,7 @@ describe("createKorriNativeLauncherBridge", () => {
       launcherId: "retroarch",
       component: { packageName: "pkg", className: "Activity" },
       extras: { ROM: "/rom" },
+      files: [],
     }
     expect(await bridge.launchLocal(spec)).toEqual({ _tag: "Launched" })
     expect(JSON.parse(received)).toEqual(spec)
