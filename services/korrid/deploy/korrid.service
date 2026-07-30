@@ -1,0 +1,15 @@
+[Unit]
+Description=Korri native host daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Environment=KORRID_MODE=host
+Environment=KORRID_ADDRESS=0.0.0.0:43117
+Environment=KORRID_HOST_CONFIG=%h/.config/korrid/host.toml
+ExecStart=%h/.local/state/korrid/current/bin/korrid
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+WantedBy=default.target

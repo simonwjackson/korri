@@ -1,0 +1,12 @@
+[
+  {
+    "label": "aka",
+    "kind": "legacy",
+    "baseUrl": "http://192.168.1.117:3001"
+  },
+  {
+    "label": "zao",
+    "kind": "native",
+    "baseUrl": "http://100.114.19.92:43117"
+  }
+]

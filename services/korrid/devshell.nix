@@ -14,8 +14,10 @@ pkgs.mkShell {
     typeshare
     bun
     curl
+    git
     jq
     just
+    openssh
     unzip
   ];
 

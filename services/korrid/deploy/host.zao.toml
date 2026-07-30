@@ -1,0 +1,9 @@
+label = "zao"
+
+[environment]
+DISPLAY = ":0"
+
+[[games]]
+id = "neverball"
+title = "Neverball (zao)"
+command = ["/home/simonwjackson/.nix-profile/bin/neverball"]

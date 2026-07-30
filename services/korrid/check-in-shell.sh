@@ -21,19 +21,36 @@ bun run typecheck
 
 cd "$CRATE"
 cargo build --release --bin korrid
+export KORRID_MODE="brain"
 export KORRID_RPC_CAPABILITY="check-capability"
+export KORRID_ADDRESS="127.0.0.1:49117"
+export KORRID_SPIKE_URL="http://$KORRID_ADDRESS"
 "$CARGO_TARGET_DIR/release/korrid" &
 server_pid=$!
 trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+smoke_ready=false
 for _ in $(seq 1 20); do
-  if curl --fail --silent http://127.0.0.1:43117/rpc \
+  if curl --fail --silent "$KORRID_SPIKE_URL/rpc" \
       -H 'content-type: application/json' \
       -H "authorization: Bearer $KORRID_RPC_CAPABILITY" \
       -d '{"_tag":"system.health","payload":{}}' >/dev/null; then
+    smoke_ready=true
     break
   fi
   sleep 0.25
 done
+if [[ "$smoke_ready" != true ]]; then
+  echo "korrid smoke server did not become ready" >&2
+  exit 1
+fi
+local_games="$(curl --fail --silent "$KORRID_SPIKE_URL/rpc" \
+  -H 'content-type: application/json' \
+  -H "authorization: Bearer $KORRID_RPC_CAPABILITY" \
+  -d '{"_tag":"app.local-games.list","payload":{}}')"
+if [[ "$local_games" != *'"id":"wl4"'* ]]; then
+  echo "korrid smoke did not exercise brain-only local games" >&2
+  exit 1
+fi
 
 cd "$ROOT/clients/portal"
 bun src/korrid/smoke.ts

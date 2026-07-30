@@ -1,5 +1,5 @@
 #!/usr/bin/env nix-shell
-#! nix-shell -i bash -p bash curl gnugrep gnused android-tools unzip
+#! nix-shell -i bash -p bash curl gnugrep gnused android-tools unzip jq
 # Install the built APK and call Rust Axum over adb forward.
 set -euo pipefail
 
@@ -8,6 +8,7 @@ DEVICE="${KORRI_ANDROID_DEVICE:-100.65.66.40:39991}"
 APK="$ROOT/clients/android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk"
 PACKAGE="com.simonwjackson.korri.debug"
 HOST_PORT=43118
+UPSTREAMS_CONFIG="${KORRI_ANDROID_UPSTREAMS_CONFIG:-$ROOT/services/korrid/deploy/upstreams.android.json}"
 
 # grep must drain the whole listing: with pipefail, `grep -q` exiting at
 # the first match SIGPIPEs unzip and fails the pipeline spuriously.
@@ -16,6 +17,8 @@ if ! unzip -l "$APK" | grep 'assets/portal/index.html' >/dev/null; then
   exit 1
 fi
 
+adb -s "$DEVICE" shell mkdir -p /sdcard/korri-retro
+adb -s "$DEVICE" push "$UPSTREAMS_CONFIG" /sdcard/korri-retro/upstreams.json >/dev/null
 adb -s "$DEVICE" install -r "$APK"
 adb -s "$DEVICE" logcat -c
 adb -s "$DEVICE" shell am start -S -n "$PACKAGE/com.limelight.KorriShellActivity" >/dev/null
@@ -67,6 +70,14 @@ response="$(curl --fail --silent \
   -H "authorization: Bearer $capability" \
   -d '{"_tag":"app.catalog.snapshot","payload":{}}' \
   "http://127.0.0.1:$HOST_PORT/rpc")"
+if ! jq -e '
+  .outcome._tag == "Ok"
+  and any(.outcome.payload.games[]; .id == "neverball" and .host == "zao")
+  and any(.outcome.payload.games[]; .host == "aka")
+' <<<"$response" >/dev/null; then
+  echo "Android catalog is missing the configured aka + zao hosts: $response" >&2
+  exit 1
+fi
 
 # The device-local launcher source is independent of the upstream host and
 # must always expose the hardcoded v1 entry through embedded korrid.
