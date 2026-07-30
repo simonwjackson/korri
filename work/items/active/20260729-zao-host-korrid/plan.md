@@ -1,7 +1,7 @@
 ---
 title: "feat: zao host korrid — smallest Rust host slice"
 type: feat
-status: active
+status: completed
 date: 2026-07-29
 verify_command: "just korrid-check"
 ---
@@ -283,7 +283,7 @@ The host side of Korri still runs the legacy bun daemon on aka, reached through 
 
 - **Interaction graph:** the Android brain's upstream seam becomes a registry (first structural step toward multi-host); host mode adds a second personality to the korrid binary; portal attach becomes host-aware
 - **Error propagation:** per-host catalog failures degrade to partial snapshots + notices (new behavior — previously one upstream meant all-or-nothing); host prepare failures reuse the existing tagged vocabulary end-to-end
-- **State lifecycle risks:** spawned game processes are fire-and-forget this slice (no reaping/ownership) — accepted, recorded; profile-installed binary can drift from repo HEAD — the deploy record tracks the installed rev
+- **State lifecycle risks:** spawned games are tracked only for repeat-prepare idempotence and child reaping; no zao session status/stop contract is claimed. The deploy record tracks profile-installed revision drift.
 - **API surface parity:** `Game.host` is additive; legacy-wire shapes untouched; no treaty change
 - **Integration coverage:** wrong-host attach is only provable on device with both hosts paired — explicitly in the U6 journey
 - **Unchanged invariants:** aka's daemon, wire, and flows; the portal's non-game sources; the Android brain's loopback posture on device
