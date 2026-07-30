@@ -1,0 +1,46 @@
+diff --git a/clients/android/app/src/main/java/com/limelight/KorriLocalLaunchSpec.java b/clients/android/app/src/main/java/com/limelight/KorriLocalLaunchSpec.java
+index 138ef051..9ea2996e 100644
+--- a/clients/android/app/src/main/java/com/limelight/KorriLocalLaunchSpec.java
++++ b/clients/android/app/src/main/java/com/limelight/KorriLocalLaunchSpec.java
+@@ -41,6 +41,8 @@ final class KorriLocalLaunchSpec {
+     }
+ 
+     static final class Parsed {
++        // SPIKE: separate-task launching, under evaluation. Not a decision.
++        final boolean ownTask;
+         final ComponentName component;
+         final Map<String, String> extras;
+         final List<String> directories;
+@@ -50,7 +52,9 @@ final class KorriLocalLaunchSpec {
+                 ComponentName component,
+                 Map<String, String> extras,
+                 List<String> directories,
+-                List<FileSpec> files) {
++                List<FileSpec> files,
++                boolean ownTask) {
++            this.ownTask = ownTask;
+             this.component = component;
+             this.extras = Collections.unmodifiableMap(extras);
+             this.directories = Collections.unmodifiableList(directories);
+@@ -59,6 +63,12 @@ final class KorriLocalLaunchSpec {
+ 
+         Intent intent() {
+             Intent intent = new Intent().setComponent(component);
++            if (ownTask) {
++                // What a launcher normally does: the game gets its own task, so
++                // switching away retains it instead of destroying it.
++                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
++                        | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
++            }
+             for (Map.Entry<String, String> extra : extras.entrySet()) {
+                 intent.putExtra(extra.getKey(), extra.getValue());
+             }
+@@ -147,7 +157,7 @@ final class KorriLocalLaunchSpec {
+                 throw new Invalid("InvalidSpec",
+                         "android-app launches carry no extras and provision nothing");
+             }
+-            return new Parsed(component, extras, directories, files);
++            return new Parsed(component, extras, directories, files, isAndroidApp);
+         } catch (Invalid error) {
+             throw error;
+         } catch (Exception error) {
