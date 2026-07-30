@@ -12,6 +12,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CRATE="$ROOT/services/korrid"
 PLUGIN="$CRATE/examples/catalog.plugin.ts"
 SERIAL="${1:?usage: script-device-check.sh <adb-serial>}"
+ADB_BIN="$(command -v adb)"
+adb() {
+  if ! timeout 15 "$ADB_BIN" "$@"; then
+    echo "adb command failed or timed out: $*" >&2
+    return 1
+  fi
+}
 ADB=(adb -s "$SERIAL")
 
 ensure_device() {

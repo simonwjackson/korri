@@ -9,6 +9,13 @@ FORK_PACKAGE="com.korri.retroarch"
 STOCK_PACKAGE="com.retroarch.aarch64"
 STATE_FILE="/storage/emulated/0/korri-retro/states/mGBA/wl4.state.auto"
 HOST_PORT="${KORRI_ACCEPTANCE_HOST_PORT:-43119}"
+ADB_BIN="$(command -v adb)"
+adb() {
+  if ! timeout 15 "$ADB_BIN" "$@"; then
+    echo "adb command failed or timed out: $*" >&2
+    return 1
+  fi
+}
 
 if [[ -z "$SERIAL" ]]; then
   echo 'usage: device-acceptance.sh <adb-serial> (or set ANDROID_SERIAL)' >&2
@@ -163,8 +170,8 @@ done
   exit 1
 }
 "${ADB[@]}" shell am force-stop "$FORK_PACKAGE"
-if "${ADB[@]}" logcat -d -s DEBUG:E AndroidRuntime:E 2>/dev/null | \
-    grep -qE 'Fatal signal|FATAL EXCEPTION'; then
+pause_error_logs="$("${ADB[@]}" logcat -d -s DEBUG:E AndroidRuntime:E)"
+if grep -qE 'Fatal signal|FATAL EXCEPTION' <<<"$pause_error_logs"; then
   echo 'runtime emitted a fatal process error during pause acceptance' >&2
   exit 1
 fi
@@ -209,7 +216,8 @@ stock_after="$("${ADB[@]}" shell pm path "$STOCK_PACKAGE" 2>/dev/null || true)"
   echo 'stock RetroArch package path changed during acceptance' >&2
   exit 1
 }
-if "${ADB[@]}" logcat -d -s DEBUG:E AndroidRuntime:E 2>/dev/null | grep -qE 'Fatal signal|FATAL EXCEPTION'; then
+acceptance_error_logs="$("${ADB[@]}" logcat -d -s DEBUG:E AndroidRuntime:E)"
+if grep -qE 'Fatal signal|FATAL EXCEPTION' <<<"$acceptance_error_logs"; then
   echo 'runtime emitted a fatal process error during acceptance' >&2
   exit 1
 fi

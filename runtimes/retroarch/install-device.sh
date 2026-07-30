@@ -9,6 +9,13 @@ SERIAL="${1:-${ANDROID_SERIAL:-}}"
 STOCK_PACKAGE="com.retroarch.aarch64"
 FORK_PACKAGE="com.korri.retroarch"
 INSTALL_TIMEOUT_SECONDS="${RETROARCH_INSTALL_TIMEOUT_SECONDS:-120}"
+ADB_BIN="$(command -v adb)"
+adb() {
+  if ! timeout 15 "$ADB_BIN" "$@"; then
+    echo "adb command failed or timed out: $*" >&2
+    return 1
+  fi
+}
 
 if [[ -z "$SERIAL" ]]; then
   echo 'usage: install-device.sh <adb-serial> (or set ANDROID_SERIAL)' >&2
