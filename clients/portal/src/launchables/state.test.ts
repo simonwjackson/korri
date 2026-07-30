@@ -6,7 +6,7 @@ import type {
   SessionStopOutcome,
 } from "@contracts/generated/korrid"
 import { SessionStopPhase } from "@contracts/generated/korrid"
-import { LaunchablesState } from "./state"
+import { entryKey, LaunchablesState } from "./state"
 
 const localOk = {
   _tag: "Launchables",
@@ -119,6 +119,26 @@ describe("LaunchablesState.fromSources", () => {
     })
   })
 
+  it("surfaces partial host catalog failures while keeping healthy games", () => {
+    const state = LaunchablesState.fromSources(localOk, [officeApps], {
+      _tag: "Ok",
+      payload: {
+        games: [{ id: "legacy", title: "Legacy game", host: "aka" }],
+        failures: [
+          {
+            host: "zao",
+            code: "UpstreamUnreachable",
+            message: "connection refused",
+          },
+        ],
+      },
+    })
+    expect(state).toMatchObject({
+      _tag: "Ready",
+      notice: "zao: UpstreamUnreachable",
+    })
+  })
+
   it("degrades failed sources to a notice while entries remain", () => {
     const state = LaunchablesState.fromSources(
       { _tag: "QueryFailed", message: "pm broke" },
@@ -154,6 +174,62 @@ describe("LaunchablesState.fromSources", () => {
       _tag: "LoadError",
       message:
         "games: UpstreamUnreachable · this device: pm broke · Office PC: no cache",
+    })
+  })
+})
+
+describe("hosted game identity", () => {
+  it("qualifies duplicate game ids by host", () => {
+    expect(
+      [
+        entryKey({
+          kind: "game",
+          game: { id: "shared", title: "Shared", host: "aka" },
+        }),
+        entryKey({
+          kind: "game",
+          game: { id: "shared", title: "Shared", host: "zao" },
+        }),
+      ],
+    ).toEqual(["game:aka:shared", "game:zao:shared"])
+  })
+})
+
+describe("LaunchablesState stream targets", () => {
+  const streamSources = [
+    {
+      host: { uuid: "aka-uuid", name: "aka", paired: true },
+      apps: {
+        _tag: "StreamApps" as const,
+        items: [{ id: 10, name: "Korri Stream" }],
+      },
+    },
+    {
+      host: { uuid: "zao-uuid", name: "zao", paired: true },
+      apps: {
+        _tag: "StreamApps" as const,
+        items: [{ id: 20, name: "Korri Stream" }],
+      },
+    },
+  ]
+
+  it("selects the paired stream host named by the game", () => {
+    expect(LaunchablesState.korriStreamTarget(streamSources, "zao")).toEqual({
+      _tag: "Some",
+      value: { hostUuid: "zao-uuid", appId: 20 },
+    })
+  })
+
+  it("preserves first-match behavior for games without a host", () => {
+    expect(LaunchablesState.korriStreamTarget(streamSources)).toEqual({
+      _tag: "Some",
+      value: { hostUuid: "aka-uuid", appId: 10 },
+    })
+  })
+
+  it("does not attach to another machine when the named host is absent", () => {
+    expect(LaunchablesState.korriStreamTarget(streamSources, "sobo")).toEqual({
+      _tag: "None",
     })
   })
 })

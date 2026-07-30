@@ -1,18 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { SHELL_RESUMED_EVENT } from "@contracts/bridge/korri-native-bridge"
-import type { SessionStatusOutcome } from "@contracts/generated/korrid"
 import type { LauncherBridge } from "../bridge/launcher-bridge"
 import type { KorridClient } from "../korrid/client"
 import type { InputBus } from "../input/bus"
 import { LaunchablesList } from "./LaunchablesList"
-import { entryLabel, LaunchablesState, type StreamSource } from "./state"
-
-/**
- * The stable Sunshine app every prepared game streams through. korrid's
- * prepare step arms the host so that attaching to this app runs the
- * selected game; per-game Sunshine entries are legacy scaffolding.
- */
-const KORRI_STREAM_APP = "Korri Stream"
+import {
+  entryLabel,
+  KORRI_STREAM_APP,
+  LaunchablesState,
+  type StreamSource,
+} from "./state"
 
 /**
  * The now-playing banner is garnish, not core content: a slow or hung
@@ -45,28 +42,10 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
   const stopPollSeq = useRef(0)
   const mountedRef = useRef(true)
 
-  const sessionStatusWithTimeout =
-    useCallback(async (): Promise<SessionStatusOutcome> => {
-      let timer: ReturnType<typeof setTimeout> | undefined
-      const timeout = new Promise<SessionStatusOutcome>(resolve => {
-        timer = setTimeout(
-          () =>
-            resolve({
-              _tag: "Err",
-              payload: {
-                code: "StatusTimeout",
-                message: "session status timed out",
-              },
-            }),
-          SESSION_STATUS_TIMEOUT_MS,
-        )
-      })
-      try {
-        return await Promise.race([korrid.sessionStatus(), timeout])
-      } finally {
-        clearTimeout(timer)
-      }
-    }, [korrid])
+  const sessionStatusWithTimeout = useCallback(
+    () => korrid.sessionStatus(SESSION_STATUS_TIMEOUT_MS),
+    [korrid],
+  )
 
   const load = useCallback(async () => {
     const preservingStop = stateRef.current._tag === "Stopping"
@@ -141,15 +120,9 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
     return () => window.removeEventListener(SHELL_RESUMED_EVENT, onResumed)
   }, [load])
 
-  /** Locate the stable stream app among the loaded Sunshine sources. */
-  const findKorriStreamTarget = () => {
-    for (const source of streamsRef.current) {
-      if (source.apps._tag !== "StreamApps") continue
-      const app = source.apps.items.find(app => app.name === KORRI_STREAM_APP)
-      if (app) return { hostUuid: source.host.uuid, appId: app.id }
-    }
-    return null
-  }
+  /** Locate the stable app, constrained to the prepared game's host. */
+  const findKorriStreamTarget = (hostName?: string) =>
+    LaunchablesState.korriStreamTarget(streamsRef.current, hostName)
 
   useEffect(() => {
     const offDirection = bus.onAction("direction", action => {
@@ -177,8 +150,8 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
         )
         stateRef.current = launching
         setState(launching)
-        const target = findKorriStreamTarget()
-        if (target === null) {
+        const target = findKorriStreamTarget(entry.session.host)
+        if (target._tag === "None") {
           const failed = LaunchablesState.withStartStreamResult(launching, {
             _tag: "StreamFailed",
             reason: "AppNotFound",
@@ -188,12 +161,17 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
           setState(failed)
           return
         }
-        void bridge.startStream(target.hostUuid, target.appId).then(result => {
-          if (!mountedRef.current || operation !== actionSeq.current) return
-          const next = LaunchablesState.withStartStreamResult(launching, result)
-          stateRef.current = next
-          setState(next)
-        })
+        void bridge
+          .startStream(target.value.hostUuid, target.value.appId)
+          .then(result => {
+            if (!mountedRef.current || operation !== actionSeq.current) return
+            const next = LaunchablesState.withStartStreamResult(
+              launching,
+              result,
+            )
+            stateRef.current = next
+            setState(next)
+          })
       } else if (entry.kind === "local-game") {
         const launching = LaunchablesState.beginLaunching(
           current,
@@ -248,6 +226,28 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
           setState(next)
         })
       } else {
+        // Never arm a host unless the shell can attach to that exact host.
+        // Otherwise prepare would leave an unmanaged game running unseen.
+        const target = findKorriStreamTarget(entry.game.host)
+        if (target._tag === "None") {
+          const preparing = LaunchablesState.beginPreparing(
+            current,
+            entry.game.title,
+          )
+          const failed = LaunchablesState.withPrepareOutcome(preparing, {
+            _tag: "Err",
+            payload: {
+              code: "NoStreamTarget",
+              message:
+                entry.game.host === undefined
+                  ? `no "${KORRI_STREAM_APP}" app on a paired host`
+                  : `no "${KORRI_STREAM_APP}" app on paired host ${entry.game.host}`,
+            },
+          })
+          stateRef.current = failed
+          setState(failed)
+          return
+        }
         // The Korri launch model: brain prepares the game, then the shell
         // attaches to the stable stream app that now embodies it. Preparing
         // is visible immediately so there is no dead gap before the swap.
@@ -260,36 +260,31 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
         // input-locked Preparing case.
         stateRef.current = preparing
         setState(preparing)
-        void korrid.sessionPrepare(entry.game.id).then(async outcome => {
-          if (!mountedRef.current || operation !== actionSeq.current) return
-          if (outcome._tag !== "Ok") {
-            const failed = LaunchablesState.withPrepareOutcome(
-              preparing,
-              outcome,
+        void korrid
+          .sessionPrepare(entry.game.id, entry.game.host)
+          .then(async outcome => {
+            if (!mountedRef.current || operation !== actionSeq.current) return
+            if (outcome._tag !== "Ok") {
+              const failed = LaunchablesState.withPrepareOutcome(
+                preparing,
+                outcome,
+              )
+              stateRef.current = failed
+              setState(failed)
+              return
+            }
+            const result = await bridge.startStream(
+              target.value.hostUuid,
+              target.value.appId,
             )
-            stateRef.current = failed
-            setState(failed)
-            return
-          }
-          const target = findKorriStreamTarget()
-          if (target === null) {
-            const failed = LaunchablesState.withPrepareOutcome(preparing, {
-              _tag: "Err",
-              payload: {
-                code: "NoStreamTarget",
-                message: `no "${KORRI_STREAM_APP}" app on a paired host`,
-              },
-            })
-            stateRef.current = failed
-            setState(failed)
-            return
-          }
-          const result = await bridge.startStream(target.hostUuid, target.appId)
-          if (!mountedRef.current || operation !== actionSeq.current) return
-          const next = LaunchablesState.withStartStreamResult(preparing, result)
-          stateRef.current = next
-          setState(next)
-        })
+            if (!mountedRef.current || operation !== actionSeq.current) return
+            const next = LaunchablesState.withStartStreamResult(
+              preparing,
+              result,
+            )
+            stateRef.current = next
+            setState(next)
+          })
       }
     })
     // Stop lives on the existing semantic vocabulary: "options" on the

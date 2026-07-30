@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { callKorrid, createInMemoryKorridClient } from "./client"
+import {
+  callKorrid,
+  createHttpKorridClient,
+  createInMemoryKorridClient,
+} from "./client"
 
 const originalFetch = globalThis.fetch
 
@@ -31,6 +35,72 @@ describe("callKorrid", () => {
       throw new Error(`unexpected authorization header: ${authorization}`)
     }
     expect(response._tag).toBe("system.health")
+  })
+
+  it("serializes the host-qualified prepare payload", async () => {
+    let body: unknown
+    globalThis.fetch = (async (_input, init) => {
+      body = JSON.parse(String(init?.body))
+      return new Response(
+        JSON.stringify({
+          _tag: "app.session.prepare",
+          outcome: { _tag: "Ok", payload: { gameId: "neverball" } },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    }) as typeof fetch
+
+    await createHttpKorridClient(
+      "http://127.0.0.1:43117",
+      "capability",
+    ).sessionPrepare("neverball", "zao")
+
+    expect(body).toEqual({
+      _tag: "app.session.prepare",
+      payload: { gameId: "neverball", host: "zao" },
+    })
+  })
+
+  it("aborts session status at its UI deadline", async () => {
+    globalThis.fetch = ((_input, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason))
+      })) as typeof fetch
+
+    const outcome = await createHttpKorridClient(
+      "http://127.0.0.1:43117",
+      "capability",
+    ).sessionStatus(1)
+
+    expect(outcome).toEqual({
+      _tag: "Err",
+      payload: {
+        code: "StatusTimeout",
+        message: "session status timed out",
+      },
+    })
+  })
+
+  it("aborts a stalled RPC at its deadline", async () => {
+    globalThis.fetch = ((_input, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason))
+      })) as typeof fetch
+
+    let error: unknown
+    try {
+      await callKorrid(
+        "http://127.0.0.1:43117",
+        "capability",
+        { _tag: "system.health", payload: {} },
+        1,
+      )
+    } catch (caught) {
+      error = caught
+    }
+
+    expect(error).toBeInstanceOf(DOMException)
+    expect((error as DOMException).name).toBe("TimeoutError")
   })
 })
 

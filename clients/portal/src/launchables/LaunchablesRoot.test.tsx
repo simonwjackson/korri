@@ -118,6 +118,132 @@ describe("LaunchablesRoot local launch flow", () => {
     await view.cleanup()
   })
 
+  it("prepares and attaches a hosted game on its matching paired host", async () => {
+    let prepared: { gameId: string; host?: string } | undefined
+    let started: { hostUuid: string; appId: number } | undefined
+    const baseKorrid = createInMemoryKorridClient({
+      games: [{ id: "neverball", title: "Neverball", host: "zao" }],
+      localGames: [],
+    })
+    const korrid = {
+      ...baseKorrid,
+      async sessionPrepare(gameId: string, host?: string) {
+        prepared = { gameId, host }
+        return baseKorrid.sessionPrepare(gameId, host)
+      },
+    }
+    const baseBridge = createInMemoryLauncherBridge({
+      items: [],
+      streamHosts: [
+        { uuid: "aka-uuid", name: "aka", paired: true },
+        { uuid: "zao-uuid", name: "zao", paired: true },
+      ],
+      streamApps: {
+        "aka-uuid": [{ id: 10, name: "Korri Stream" }],
+        "zao-uuid": [{ id: 20, name: "Korri Stream" }],
+      },
+    })
+    const bridge = {
+      ...baseBridge,
+      async startStream(hostUuid: string, appId: number) {
+        started = { hostUuid, appId }
+        return baseBridge.startStream(hostUuid, appId)
+      },
+    }
+    const view = await renderRoot(korrid, bridge)
+
+    await act(async () => {
+      view.bus.emit({ type: "confirm", source: "keyboard" })
+      await flush()
+    })
+
+    expect(prepared).toEqual({ gameId: "neverball", host: "zao" })
+    expect(started).toEqual({ hostUuid: "zao-uuid", appId: 20 })
+    await view.cleanup()
+  })
+
+  it("does not prepare a hosted game when its stream host is absent", async () => {
+    let prepareCalls = 0
+    let streamCalls = 0
+    const baseKorrid = createInMemoryKorridClient({
+      games: [{ id: "neverball", title: "Neverball", host: "zao" }],
+      localGames: [],
+    })
+    const korrid = {
+      ...baseKorrid,
+      async sessionPrepare(gameId: string, host?: string) {
+        prepareCalls += 1
+        return baseKorrid.sessionPrepare(gameId, host)
+      },
+    }
+    const baseBridge = createInMemoryLauncherBridge({
+      items: [],
+      streamHosts: [{ uuid: "aka-uuid", name: "aka", paired: true }],
+      streamApps: {
+        "aka-uuid": [{ id: 10, name: "Korri Stream" }],
+      },
+    })
+    const bridge = {
+      ...baseBridge,
+      async startStream(hostUuid: string, appId: number) {
+        streamCalls += 1
+        return baseBridge.startStream(hostUuid, appId)
+      },
+    }
+    const view = await renderRoot(korrid, bridge)
+
+    await act(async () => {
+      view.bus.emit({ type: "confirm", source: "keyboard" })
+      await flush()
+    })
+
+    expect(prepareCalls).toBe(0)
+    expect(streamCalls).toBe(0)
+    expect(view.container.textContent).toContain("NoStreamTarget")
+    expect(view.container.textContent).toContain("zao")
+    await view.cleanup()
+  })
+
+  it("resumes now-playing on the session's host", async () => {
+    let started: { hostUuid: string; appId: number } | undefined
+    const korrid = createInMemoryKorridClient({
+      games: [],
+      localGames: [],
+      activeSession: {
+        launchId: "aka-session",
+        title: "Skate 3",
+        host: "aka",
+      },
+    })
+    const baseBridge = createInMemoryLauncherBridge({
+      items: [],
+      streamHosts: [
+        { uuid: "zao-uuid", name: "zao", paired: true },
+        { uuid: "aka-uuid", name: "aka", paired: true },
+      ],
+      streamApps: {
+        "zao-uuid": [{ id: 20, name: "Korri Stream" }],
+        "aka-uuid": [{ id: 10, name: "Korri Stream" }],
+      },
+    })
+    const bridge = {
+      ...baseBridge,
+      async startStream(hostUuid: string, appId: number) {
+        started = { hostUuid, appId }
+        return baseBridge.startStream(hostUuid, appId)
+      },
+    }
+    const view = await renderRoot(korrid, bridge)
+
+    await act(async () => {
+      view.bus.emit({ type: "confirm", source: "keyboard" })
+      await flush()
+    })
+
+    expect(started).toEqual({ hostUuid: "aka-uuid", appId: 10 })
+    await view.cleanup()
+  })
+
   it("still confirms an existing stream entry", async () => {
     let streamCalls = 0
     const korrid = createInMemoryKorridClient({ games: [], localGames: [] })

@@ -86,6 +86,13 @@ export interface Section {
   readonly entries: readonly PortalEntry[]
 }
 
+export const KORRI_STREAM_APP = "Korri Stream"
+
+interface StreamTarget {
+  readonly hostUuid: string
+  readonly appId: number
+}
+
 const readyFrom = (
   state: LaunchablesContent,
   notice: string | null,
@@ -96,16 +103,22 @@ const readyFrom = (
   notice,
 })
 
-export const entryKey = (entry: PortalEntry): string =>
-  entry.kind === "now-playing"
-    ? `now-playing:${entry.session.launchId}`
-    : entry.kind === "local-game"
-      ? `local-game:${entry.game.id}`
-      : entry.kind === "game"
+export const entryKey = (entry: PortalEntry): string => {
+  switch (entry.kind) {
+    case "now-playing":
+      return `now-playing:${entry.session.launchId}`
+    case "local-game":
+      return `local-game:${entry.game.id}`
+    case "game":
+      return entry.game.host === undefined
         ? `game:${entry.game.id}`
-        : entry.kind === "local"
-        ? `local:${entry.launchable.packageName}`
-        : `stream:${entry.hostUuid}:${entry.app.id}`
+        : `game:${entry.game.host}:${entry.game.id}`
+    case "local":
+      return `local:${entry.launchable.packageName}`
+    case "stream":
+      return `stream:${entry.hostUuid}:${entry.app.id}`
+  }
+}
 
 export const entryLabel = (entry: PortalEntry): string =>
   entry.kind === "now-playing"
@@ -152,6 +165,9 @@ export const LaunchablesState = {
 
     if (korrid._tag === "Ok") {
       for (const game of korrid.payload.games) entries.push({ kind: "game", game })
+      for (const failure of korrid.payload.failures ?? []) {
+        failures.push(`${failure.host}: ${failure.code}`)
+      }
     } else {
       failures.push(`games: ${korrid.payload.code}`)
     }
@@ -188,6 +204,28 @@ export const LaunchablesState = {
       selectedIndex: 0,
       notice: failures.length > 0 ? failures.join(" · ") : null,
     }
+  },
+
+  /** Select one stable Sunshine app, constrained to a game's origin host. */
+  korriStreamTarget: (
+    streams: readonly StreamSource[],
+    hostName?: string,
+  ): Maybe<StreamTarget> => {
+    const candidates =
+      hostName === undefined
+        ? streams
+        : streams.filter(source => source.host.name === hostName)
+    for (const source of candidates) {
+      if (source.apps._tag !== "StreamApps") continue
+      const app = source.apps.items.find(app => app.name === KORRI_STREAM_APP)
+      if (app !== undefined) {
+        return {
+          _tag: "Some",
+          value: { hostUuid: source.host.uuid, appId: app.id },
+        }
+      }
+    }
+    return { _tag: "None" }
   },
 
   /** Confirm on a game: enter an input-locked case until activity swap. */

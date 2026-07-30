@@ -31,15 +31,18 @@ export interface KorridClient {
   catalogSnapshot(): Promise<CatalogSnapshotOutcome>
   localGames(): Promise<LocalGamesListOutcome>
   localGameLaunch(gameId: string): Promise<LocalGameLaunchOutcome>
-  sessionPrepare(gameId: string): Promise<SessionPrepareOutcome>
-  sessionStatus(): Promise<SessionStatusOutcome>
+  sessionPrepare(gameId: string, host?: string): Promise<SessionPrepareOutcome>
+  sessionStatus(timeoutMs?: number): Promise<SessionStatusOutcome>
   sessionStop(): Promise<SessionStopOutcome>
 }
+
+const RPC_TIMEOUT_MS = 25_000
 
 export async function callKorrid<Request extends RpcRequest>(
   baseUrl: string,
   capability: string,
   request: Request,
+  timeoutMs = RPC_TIMEOUT_MS,
 ): Promise<RpcResponseFor<Request>> {
   const response = await fetch(`${baseUrl}/rpc`, {
     method: "POST",
@@ -48,6 +51,7 @@ export async function callKorrid<Request extends RpcRequest>(
       authorization: `Bearer ${capability}`,
     },
     body: JSON.stringify(request),
+    signal: AbortSignal.timeout(timeoutMs),
   })
   if (!response.ok) throw new Error(`korrid returned HTTP ${response.status}`)
   return (await response.json()) as RpcResponseFor<Request>
@@ -60,6 +64,17 @@ const unreachable = (error: unknown) => ({
     message: error instanceof Error ? error.message : String(error),
   },
 })
+
+const statusUnavailable = (error: unknown): SessionStatusOutcome =>
+  error instanceof DOMException && error.name === "TimeoutError"
+    ? {
+        _tag: "Err",
+        payload: {
+          code: "StatusTimeout",
+          message: "session status timed out",
+        },
+      }
+    : unreachable(error)
 
 export function createHttpKorridClient(
   baseUrl: string,
@@ -110,26 +125,31 @@ export function createHttpKorridClient(
         return unreachable(error)
       }
     },
-    async sessionPrepare(gameId) {
+    async sessionPrepare(gameId, host) {
       try {
         const response = await callKorrid(baseUrl, capability, {
           _tag: "app.session.prepare",
-          payload: { gameId },
+          payload: host === undefined ? { gameId } : { gameId, host },
         })
         return response.outcome
       } catch (error) {
         return unreachable(error)
       }
     },
-    async sessionStatus() {
+    async sessionStatus(timeoutMs) {
       try {
-        const response = await callKorrid(baseUrl, capability, {
-          _tag: "app.session.status",
-          payload: {},
-        })
+        const response = await callKorrid(
+          baseUrl,
+          capability,
+          {
+            _tag: "app.session.status",
+            payload: {},
+          },
+          timeoutMs,
+        )
         return response.outcome
       } catch (error) {
-        return unreachable(error)
+        return statusUnavailable(error)
       }
     },
     async sessionStop() {
@@ -233,8 +253,15 @@ export function createInMemoryKorridClient(
         },
       }
     },
-    async sessionPrepare(gameId) {
-      if (behavior === "prepare-fail" || !games.some(game => game.id === gameId)) {
+    async sessionPrepare(gameId, host) {
+      if (
+        behavior === "prepare-fail" ||
+        !games.some(
+          game =>
+            game.id === gameId &&
+            (host === undefined || game.host === host),
+        )
+      ) {
         return {
           _tag: "Err",
           payload: { code: "UpstreamFailure", message: `cannot prepare ${gameId}` },
