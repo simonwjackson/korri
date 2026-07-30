@@ -120,4 +120,3 @@ index e4ffe0f..c94f07c 100644
           (*env)->NewStringUTF(env, "CONFIGFILE"));
 -- 
 2.53.0
-
