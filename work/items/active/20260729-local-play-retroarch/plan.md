@@ -1,7 +1,7 @@
 ---
 title: "feat: Local play v1 — one game via stock RetroArch"
 type: feat
-status: active
+status: completed
 date: 2026-07-29
 verify_command: "just korrid-check"
 ---
