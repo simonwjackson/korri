@@ -17,6 +17,7 @@ import java.util.Map;
 /** Runtime validator for the launcher-neutral v6 local launch instruction. */
 final class KorriLocalLaunchSpec {
     private static final String RETROARCH = "retroarch";
+    private static final String ANDROID_APP = "android-app";
     private static final ComponentName RETROARCH_COMPONENT = new ComponentName(
             "com.korri.retroarch",
             "com.retroarch.browser.retroactivity.RetroActivityFuture");
@@ -81,7 +82,9 @@ final class KorriLocalLaunchSpec {
         try {
             JSONObject spec = new JSONObject(specJson);
             String launcherId = spec.getString("launcherId");
-            if (!RETROARCH.equals(launcherId)) {
+            boolean isRetroarch = RETROARCH.equals(launcherId);
+            boolean isAndroidApp = ANDROID_APP.equals(launcherId);
+            if (!isRetroarch && !isAndroidApp) {
                 throw new Invalid("UnsupportedLauncher",
                         "unsupported local launcher: " + launcherId);
             }
@@ -90,7 +93,11 @@ final class KorriLocalLaunchSpec {
             ComponentName component = new ComponentName(
                     componentJson.getString("packageName"),
                     componentJson.getString("className"));
-            if (!RETROARCH_COMPONENT.equals(component)) {
+            // RetroArch is pinned to its exact component: it is the runtime Korri
+            // ships and patches. An installed game is any package, so what is
+            // constrained instead is the shape of its instruction below — it may
+            // carry no extras and provision nothing.
+            if (isRetroarch && !RETROARCH_COMPONENT.equals(component)) {
                 throw new Invalid("InvalidSpec",
                         "component does not match launcher " + launcherId);
             }
@@ -131,6 +138,14 @@ final class KorriLocalLaunchSpec {
                     throw new Invalid("InvalidSpec", "provisioned file content is empty");
                 }
                 files.add(new FileSpec(path, content));
+            }
+            // An installed game runs itself: nothing to hand it, nothing to
+            // provision. Enforcing that here means a forged android-app
+            // instruction cannot smuggle file writes past the validator.
+            if (isAndroidApp && (!extras.isEmpty() || !directories.isEmpty()
+                    || !files.isEmpty())) {
+                throw new Invalid("InvalidSpec",
+                        "android-app launches carry no extras and provision nothing");
             }
             return new Parsed(component, extras, directories, files);
         } catch (Invalid error) {
