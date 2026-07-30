@@ -3,8 +3,19 @@ set -euo pipefail
 
 root="$(git rev-parse --show-toplevel)"
 started="$(date +%s)"
-package="$(nix build "path:$root#korrid" --no-link --print-out-paths)"
+package_paths=(flake.nix flake.lock services/korrid)
+untracked_package="$(git -C "$root" ls-files --others --exclude-standard -- "${package_paths[@]}")"
 revision="$(git -C "$root" describe --always --dirty)"
+flake_ref="path:$root"
+if git -C "$root" diff --quiet -- "${package_paths[@]}" && \
+  git -C "$root" diff --cached --quiet -- "${package_paths[@]}" && \
+  [[ -z "$untracked_package" ]]; then
+  revision="$(git -C "$root" rev-parse HEAD)"
+  flake_ref="git+file://$root?rev=$revision"
+elif [[ -n "$untracked_package" && "$revision" != *-dirty ]]; then
+  revision="$revision-dirty"
+fi
+package="$(nix build "$flake_ref#korrid" --no-link --print-out-paths)"
 ssh_options=(
   -o BatchMode=yes
   -o ConnectTimeout=5
