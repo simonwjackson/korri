@@ -25,22 +25,37 @@ export KORRID_MODE="brain"
 export KORRID_RPC_CAPABILITY="check-capability"
 export KORRID_ADDRESS="127.0.0.1:49117"
 export KORRID_SPIKE_URL="http://$KORRID_ADDRESS"
+if (exec 9<>/dev/tcp/127.0.0.1/49117) 2>/dev/null; then
+  echo 'korrid check port 49117 is already occupied' >&2
+  exit 1
+fi
 "$CARGO_TARGET_DIR/release/korrid" &
 server_pid=$!
 trap 'kill "$server_pid" 2>/dev/null || true' EXIT
-smoke_ready=false
+server_ready=false
 for _ in $(seq 1 20); do
+  if ! kill -0 "$server_pid" 2>/dev/null; then
+    wait "$server_pid" || true
+    echo 'fresh korrid check server exited before becoming ready' >&2
+    exit 1
+  fi
   if curl --fail --silent "$KORRID_SPIKE_URL/rpc" \
       -H 'content-type: application/json' \
       -H "authorization: Bearer $KORRID_RPC_CAPABILITY" \
       -d '{"_tag":"system.health","payload":{}}' >/dev/null; then
-    smoke_ready=true
+    sleep 0.05
+    if ! kill -0 "$server_pid" 2>/dev/null; then
+      wait "$server_pid" || true
+      echo 'fresh korrid check server exited after readiness probe' >&2
+      exit 1
+    fi
+    server_ready=true
     break
   fi
   sleep 0.25
 done
-if [[ "$smoke_ready" != true ]]; then
-  echo "korrid smoke server did not become ready" >&2
+if [[ "$server_ready" != true ]]; then
+  echo 'fresh korrid check server did not become ready' >&2
   exit 1
 fi
 local_games="$(curl --fail --silent "$KORRID_SPIKE_URL/rpc" \
