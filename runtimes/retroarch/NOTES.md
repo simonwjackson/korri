@@ -47,8 +47,9 @@ From the repository root:
 
 ```sh
 just ra-fetch  # verify the pin and apply the series
-just ra-build  # fetch/apply, then build the arm64 release APK
-just ra-check  # pipeline failure tests + complete build + artifact check
+just ra-build              # fetch/apply, then build the arm64 release APK
+just ra-check              # failure tests + build + artifact contracts
+just ra-deploy <adb-serial> # build, validate, install, preserve stock RA
 ```
 
 The source pin and published patch series are the corresponding-source form of

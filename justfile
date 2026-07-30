@@ -47,10 +47,15 @@ ra-core-mgba: ra-fetch
 ra-build: ra-fetch
     cd runtimes/retroarch && nix develop . --command bash -c './cores/mgba/build.sh && cd upstream/pkg/android/phoenix && ./gradlew assembleAarch64Release'
 
-# Validate the fetch failure modes, rebuild the exact patch series, and require
-# the fork APK artifact.
+# Build, validate, and install the fork without replacing stock RetroArch.
+ra-deploy serial: ra-build
+    cd runtimes/retroarch && nix develop . --command ./install-device.sh {{serial}}
+
+# Validate the fetch and install failure modes, rebuild the exact patch series,
+# and require the fork APK artifact.
 ra-check:
     ./runtimes/retroarch/test-fetch-upstream.sh
+    ./runtimes/retroarch/test-install-device.sh
     ./runtimes/retroarch/fetch-upstream.sh
     ./runtimes/retroarch/test-source-contract.sh
     cd runtimes/retroarch && nix develop . --command bash -c './cores/mgba/build.sh && cd upstream/pkg/android/phoenix && ./gradlew assembleAarch64Release'
