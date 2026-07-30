@@ -16,12 +16,12 @@ public final class KorridServer {
     private KorridServer() {}
 
     private static native String version();
-    private static native int start(String allowedOrigin);
+    private static native int start(String allowedOrigin, String localStorageRoot);
     public static native String capability();
     public static native void stop();
 
-    public static int startAndLog(String allowedOrigin) {
-        int port = start(allowedOrigin);
+    public static int startAndLog(String allowedOrigin, String localStorageRoot) {
+        int port = start(allowedOrigin, localStorageRoot);
         Log.i("KorridServer", version() + " listening on 127.0.0.1:" + port);
         return port;
     }

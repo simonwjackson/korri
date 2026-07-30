@@ -28,6 +28,7 @@ pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_start(
     mut env: JNIEnv,
     _class: JClass,
     allowed_origin: JString,
+    local_storage_root: JString,
 ) -> jint {
     let allowed_origin: String = match env.get_string(&allowed_origin) {
         Ok(value) => value.into(),
@@ -36,7 +37,14 @@ pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_start(
             return -1;
         }
     };
-    match start_local_server(&allowed_origin) {
+    let local_storage_root: String = match env.get_string(&local_storage_root) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error.to_string());
+            return -1;
+        }
+    };
+    match start_local_server(&allowed_origin, &local_storage_root) {
         Ok(port) => port.into(),
         Err(error) => {
             let _ = env.throw_new("java/lang/IllegalStateException", error.to_string());

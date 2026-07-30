@@ -472,7 +472,10 @@ pub fn korrid_version() -> String {
 }
 
 /// Starts the exact same Axum router used by the Linux binary on localhost.
-pub fn start_local_server(allowed_origin: &str) -> Result<u16, ServerError> {
+pub fn start_local_server(
+    allowed_origin: &str,
+    local_storage_root: &str,
+) -> Result<u16, ServerError> {
     let mut slot = server_slot().lock().expect("server mutex poisoned");
     if slot.is_some() {
         return Err(ServerError::AlreadyRunning);
@@ -498,6 +501,7 @@ pub fn start_local_server(allowed_origin: &str) -> Result<u16, ServerError> {
     let rpc_capability = generate_rpc_capability();
     let server_capability = rpc_capability.clone();
     let allowed_origin = allowed_origin.to_owned();
+    let local_storage_root = local_storage_root.to_owned();
     let (stop, stopped) = oneshot::channel();
     let thread = std::thread::Builder::new()
         .name("korrid".into())
@@ -508,7 +512,11 @@ pub fn start_local_server(allowed_origin: &str) -> Result<u16, ServerError> {
                     .expect("convert localhost listener");
                 axum::serve(
                     listener,
-                    router_with_capability(&server_capability, &allowed_origin),
+                    router_with_capability_and_local_root(
+                        &server_capability,
+                        &allowed_origin,
+                        &local_storage_root,
+                    ),
                 )
                 .with_graceful_shutdown(async {
                     let _ = stopped.await;

@@ -19,8 +19,9 @@
 
 // 2 and 3 are skipped: the shipped shell reported 3 while this file lagged
 // at 1. 4 introduced the session lifecycle; 5 adds the per-server korrid
-// capability required to protect localhost session-control RPCs.
-export const BRIDGE_VERSION = 5
+// capability required to protect localhost session-control RPCs. 6 adds the
+// launcher-neutral local launch instruction.
+export const BRIDGE_VERSION = 6
 
 // ── Launchables (JS -> Kotlin) ──────────────────────────────────────────
 
@@ -41,6 +42,36 @@ export type LaunchAppResult =
   | {
       readonly _tag: "LaunchFailed"
       readonly reason: "NotFound" | "NoLaunchIntent" | "StartFailed"
+      readonly message: string
+    }
+
+/** Android component supplied by a korrid launcher instruction. */
+export interface LocalLaunchComponent {
+  readonly packageName: string
+  readonly className: string
+}
+
+/**
+ * Launcher-neutral instruction produced by korrid. The shell validates the
+ * launcher id/component pair and copies opaque string extras into an explicit
+ * Android intent; launcher-specific paths and keys never originate here.
+ */
+export interface LocalLaunchSpec {
+  readonly launcherId: string
+  readonly component: LocalLaunchComponent
+  readonly extras: Readonly<Record<string, string>>
+}
+
+/** Result of `KorriNative.launchLocal(specJson)`. */
+export type LaunchLocalResult =
+  | { readonly _tag: "Launched" }
+  | {
+      readonly _tag: "LaunchFailed"
+      readonly reason:
+        | "UnsupportedLauncher"
+        | "InvalidSpec"
+        | "NotInstalled"
+        | "StartFailed"
       readonly message: string
     }
 
@@ -118,6 +149,8 @@ export interface KorriNativeBridgeSurface {
   queryLaunchables(): string
   /** Returns JSON-encoded `LaunchAppResult`. */
   launchApp(packageName: string): string
+  /** Returns JSON-encoded `LaunchLocalResult`. */
+  launchLocal(specJson: string): string
   /** Returns JSON-encoded `QueryStreamHostsResult`. */
   queryStreamHosts(): string
   /** Returns JSON-encoded `QueryStreamAppsResult`. */

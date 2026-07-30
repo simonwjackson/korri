@@ -9,6 +9,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.IBinder;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -35,10 +36,13 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
+import java.io.File;
 import java.io.StringReader;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -86,7 +90,7 @@ public class KorriShellActivity extends AppCompatActivity {
         // Embedded korrid: only this exact portal origin may present the
         // per-server capability to the localhost brain.
         final String portalUrl = portalUrl();
-        korridPort = KorridServer.startAndLog(portalOrigin(portalUrl));
+        korridPort = KorridServer.startAndLog(portalOrigin(portalUrl), localStorageRoot());
         korridCapability = KorridServer.capability();
         if (BuildConfig.DEBUG) {
             // Device smoke needs to probe the protected endpoint. Release
@@ -149,6 +153,12 @@ public class KorriShellActivity extends AppCompatActivity {
             throw new IllegalArgumentException("portal URL has no origin: " + url);
         }
         return uri.getScheme() + "://" + uri.getEncodedAuthority();
+    }
+
+    /** Android supplies storage location; korrid owns everything beneath it. */
+    private static String localStorageRoot() {
+        return new File(Environment.getExternalStorageDirectory(), "korri-retro")
+                .getAbsolutePath();
     }
 
     /**
@@ -233,7 +243,7 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public int bridgeVersion() {
             // Mirrors BRIDGE_VERSION in contracts/bridge/korri-native-bridge.ts.
-            return 5;
+            return 6;
         }
 
         /** Port of the embedded korrid server, or -1 when it is not running. */
@@ -301,6 +311,81 @@ public class KorriShellActivity extends AppCompatActivity {
                 return launchFailed("StartFailed",
                         e.getMessage() != null ? e.getMessage() : "start failed");
             }
+        }
+
+        /** JSON-encoded LaunchLocalResult. */
+        @JavascriptInterface
+        public String launchLocal(String specJson) {
+            final Intent intent;
+            try {
+                JSONObject spec = new JSONObject(specJson);
+                String launcherId = spec.getString("launcherId");
+                if (!"retroarch".equals(launcherId)) {
+                    return launchFailed("UnsupportedLauncher",
+                            "unsupported local launcher: " + launcherId);
+                }
+
+                JSONObject componentJson = spec.getJSONObject("component");
+                ComponentName component = new ComponentName(
+                        componentJson.getString("packageName"),
+                        componentJson.getString("className"));
+                ComponentName expected = new ComponentName(
+                        "com.retroarch.aarch64",
+                        "com.retroarch.browser.retroactivity.RetroActivityFuture");
+                if (!expected.equals(component)) {
+                    return launchFailed("InvalidSpec",
+                            "component does not match launcher " + launcherId);
+                }
+
+                JSONObject extras = spec.getJSONObject("extras");
+                intent = new Intent().setComponent(component)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                Iterator<String> keys = extras.keys();
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    Object value = extras.get(key);
+                    if (!(value instanceof String)) {
+                        return launchFailed("InvalidSpec",
+                                "local launch extras must be strings");
+                    }
+                    intent.putExtra(key, (String) value);
+                }
+            } catch (Exception error) {
+                return launchFailed("InvalidSpec",
+                        error.getMessage() != null ? error.getMessage() : "invalid launch spec");
+            }
+
+            try {
+                getPackageManager().getActivityInfo(intent.getComponent(), 0);
+            } catch (PackageManager.NameNotFoundException error) {
+                return launchFailed("NotInstalled", "local launcher is not installed");
+            }
+
+            CountDownLatch started = new CountDownLatch(1);
+            AtomicReference<Exception> startError = new AtomicReference<>();
+            runOnUiThread(() -> {
+                try {
+                    startActivity(intent);
+                } catch (Exception error) {
+                    startError.set(error);
+                } finally {
+                    started.countDown();
+                }
+            });
+            try {
+                if (!started.await(5, TimeUnit.SECONDS)) {
+                    return launchFailed("StartFailed", "local launcher start timed out");
+                }
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                return launchFailed("StartFailed", "local launcher start interrupted");
+            }
+            Exception error = startError.get();
+            if (error != null) {
+                return launchFailed("StartFailed",
+                        error.getMessage() != null ? error.getMessage() : "start failed");
+            }
+            return "{\"_tag\":\"Launched\"}";
         }
 
         private String launchFailed(String reason, String message) {
