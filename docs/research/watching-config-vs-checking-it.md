@@ -115,3 +115,44 @@ Not measured, and both could move these numbers:
 - **Cold reads on FUSE.** These are warm-cache figures where parsing dominates.
   The first rebuild after boot pays Android's FUSE cost per file, which could
   invert the balance between I/O and parsing.
+
+## On device: FUSE costs about twenty times internal storage
+
+Measured on usu (SM-F966U1, arm64), same binary against both filesystems.
+
+| fragments | internal | shared storage (FUSE) | penalty |
+|---|---|---|---|
+| 10 | 0.46 ms | 3.7 ms | 8× |
+| 50 | 1.01 ms | 19.7 ms | 19× |
+| 200 | 3.64 ms | 64 ms | 18× |
+| 1000 | 17.4 ms | 365 ms | 21× |
+| 2000 | 37 ms | 760 ms | 21× |
+
+Internal storage tracks the x86 figures within 1.2×, so this is not the phone's
+CPU — it is FUSE. Every file operation on shared storage crosses a userspace
+daemon, and a rebuild is thousands of them.
+
+Watcher idle cost on FUSE held up: 50 files at 1 s costs 0.083% of a core, and
+2000 files 1.333%, which scales to roughly 5.3% at the 250 ms rate the library
+spike measured at 6.9%. Two separately built harnesses landing in the same
+place is worth more than either number alone.
+
+### The tension this exposes
+
+User-visible storage was chosen deliberately: config lives where a file manager
+can see it, because config the user cannot find is config the user cannot own.
+That same location is the slow one.
+
+- **Config-sized trees stay free.** Tens of fragments rebuild in 4–20 ms. Full
+  refresh on an internal trigger remains the right shape, and incremental
+  remains not worth building.
+- **Library-sized trees do not.** At two thousand fragments a full rebuild from
+  shared storage is 760 ms — a visible stall, not a pause between actions.
+
+So the boundary worth drawing is not watcher versus no watcher. It is **what
+belongs in FUSE-backed YAML at all**: hand-editable config does, and
+library-scale records — thousands of games, play history — need either a
+compiled form cached on internal storage or an incremental path after all.
+
+Deciding that is out of scope here; it belongs with whoever imports proseQL
+against a real consumer.
