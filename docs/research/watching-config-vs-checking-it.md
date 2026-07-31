@@ -78,3 +78,40 @@ signal-dir watcher; Android's equivalent is a broadcast receiver, not polling.
 
 `/tmp/config-watch-bench` (`poll_cost`, `stat_cost`). Not run on-device yet:
 these are x86/ext4 numbers, and Android's FUSE layer makes every stat dearer.
+
+## Cost of the chosen route: full refresh on internal trigger
+
+Deferring the persistent scanner means korrid reloads only when it already
+knows something changed — a download finished, a setting was changed in the
+app. So the question becomes whether a whole-tree rebuild is cheap enough to be
+the only reload path.
+
+Read every fragment, parse it, merge into the tree. Warm cache, x86_64:
+
+| fragments | full rebuild | one fragment | ratio |
+|---|---|---|---|
+| 10 | 0.15 ms | 0.013 ms | 11× |
+| 50 | 0.73 ms | 0.013 ms | 55× |
+| 200 | 2.84 ms | 0.014 ms | 201× |
+| 1000 | 14.1 ms | 0.026 ms | 549× |
+| 2000 | 29.9 ms | 0.024 ms | 1263× |
+
+**Full refresh wins, and incremental is not worth building.** At realistic
+scale a rebuild is under 3 ms; at two thousand fragments it is 30 ms, spent
+immediately after a download or a settings change, when nothing is animating.
+Incremental is up to 1263× faster in ratio terms and saves 30 ms in absolute
+ones — a thousand-fold speedup on something already invisible.
+
+Phone cores are roughly 3–4× slower for CPU-bound parsing, putting 200
+fragments near 10 ms and 2000 near 100 ms on device. Still inside
+"just after a download".
+
+Not measured, and both could move these numbers:
+
+- **proseQL's graph build sits on top.** This is read, parse and merge with
+  serde_yaml; validation, id derivation, relationships and the cascade are
+  extra. The term that scales with file count is the one measured, and it is
+  small, but the constant factor is unknown until the import happens.
+- **Cold reads on FUSE.** These are warm-cache figures where parsing dominates.
+  The first rebuild after boot pays Android's FUSE cost per file, which could
+  invert the balance between I/O and parsing.
