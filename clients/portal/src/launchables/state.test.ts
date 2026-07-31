@@ -6,7 +6,8 @@ import type {
   SessionStopOutcome,
 } from "@contracts/generated/korrid"
 import { SessionStopPhase } from "@contracts/generated/korrid"
-import { entryKey, LaunchablesState } from "./state"
+import type { BackgroundNoticeResult } from "@contracts/bridge/korri-native-bridge"
+import { entryKey, entryLabel, LaunchablesState } from "./state"
 
 const localOk = {
   _tag: "Launchables",
@@ -71,6 +72,7 @@ describe("LaunchablesState.fromSources", () => {
       "stream",
       "stream",
       "pairing",
+      "background-notice",
     ])
     expect(state.entries[0]).toMatchObject({
       kind: "local-game",
@@ -88,6 +90,7 @@ describe("LaunchablesState.fromSources", () => {
       "stream",
       // Pairing closes every list: it is how a device joins at all.
       "pairing",
+      "background-notice",
     ])
     expect(ready.notice).toBeNull()
   })
@@ -173,7 +176,10 @@ describe("LaunchablesState.fromSources", () => {
     // matters most. The list stays usable instead of collapsing into an
     // error screen the user cannot act on.
     if (state._tag !== "Ready") throw new Error("unreachable")
-    expect(state.entries.map(entry => entry.kind)).toEqual(["pairing"])
+    expect(state.entries.map(entry => entry.kind)).toEqual([
+      "pairing",
+      "background-notice",
+    ])
     expect(state.notice).toBe(
       "games: UpstreamUnreachable · Office PC: no cache",
     )
@@ -526,6 +532,9 @@ describe("LaunchablesState.sections", () => {
       ["Games", 0, 2],
       ["Office PC", 2, 2],
       ["Devices", 4, 1],
+      // The setting closes the list, in its own section rather than among
+      // the things you can play.
+      ["Settings", 5, 1],
     ])
   })
 })
@@ -620,5 +629,43 @@ describe("LaunchablesState.selectIndex", () => {
     const next = LaunchablesState.selectIndex(withNotice, 2)
     if (next._tag !== "Ready") throw new Error("unreachable")
     expect(next.notice).toBeNull()
+  })
+})
+
+describe("background notice setting", () => {
+  const build = (notice?: BackgroundNoticeResult) =>
+    LaunchablesState.fromSources(
+      { _tag: "Launchables", items: [] },
+      [],
+      { _tag: "Ok", payload: { games: [] } },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      notice,
+    )
+
+  it("is always offered, so the user can always find the switch", () => {
+    const state = build({ _tag: "Visible" })
+    if (state._tag !== "Ready") throw new Error("unreachable")
+    expect(state.entries.map(e => e.kind)).toContain("background-notice")
+  })
+
+  it("says which way it is set rather than what to do about it", () => {
+    const on = build({ _tag: "Visible" })
+    const off = build({ _tag: "Hidden" })
+    if (on._tag !== "Ready" || off._tag !== "Ready") throw new Error("unreachable")
+    expect(entryLabel(on.entries.at(-1)!)).toContain("on")
+    expect(entryLabel(off.entries.at(-1)!)).toContain("off")
+  })
+
+  it("reads as off when the shell is too old to answer", () => {
+    // An unanswered question is not a promise that the user can see anything.
+    const state = build(undefined)
+    if (state._tag !== "Ready") throw new Error("unreachable")
+    expect(state.entries.at(-1)).toMatchObject({
+      kind: "background-notice",
+      visible: false,
+    })
   })
 })

@@ -23,7 +23,7 @@ import type { LaunchSpec as GeneratedLaunchSpec } from "../generated/korrid"
 // at 1. 4 introduced the session lifecycle; 5 adds the per-server korrid
 // capability required to protect localhost session-control RPCs. 6 adds the
 // launcher-neutral local launch instruction.
-export const BRIDGE_VERSION = 8
+export const BRIDGE_VERSION = 9
 
 // ── Launchables (JS -> Kotlin) ──────────────────────────────────────────
 
@@ -193,9 +193,60 @@ export interface KorriNativeBridgeSurface {
    * portal's way to reach it, not to replace it.
    */
   openPairing(): string
+  /**
+   * Whether the user can see that Korri is running in the background.
+   * Returns a JSON-encoded `BackgroundNoticeResult`.
+   *
+   * Korri keeps its brain alive while games run, and Android's bargain for
+   * that is a notice the user can see and act on. The notice may be hidden
+   * without stopping the brain, so this reports what the user can actually
+   * see rather than whether the service is running.
+   */
+  backgroundNotice(): string
+  /**
+   * Ask Android to let Korri show the notice, returning a JSON-encoded
+   * `RequestBackgroundNoticeResult`.
+   *
+   * Only ever prompts. Android refuses to prompt again once the user has
+   * declined twice, so `Unprompted` is a normal answer and the portal should
+   * fall back to `openNotificationSettings()`.
+   */
+  requestBackgroundNotice(): string
+  /**
+   * Open the system screen where the user shows or hides Korri's notice,
+   * returning a JSON-encoded `OpenNotificationSettingsResult`.
+   *
+   * The shell cannot hide its own background notice — Android reserves that
+   * for the user — so turning it off always means going here.
+   */
+  openNotificationSettings(): string
   /** Returns `BRIDGE_VERSION` of the shell build. */
   bridgeVersion(): number
 }
+
+// ── Background notice (v9) ───────────────────────────────────────────
+
+/**
+ * What the user can see of Korri running in the background.
+ *
+ * `Hidden` is not a failure: the brain still runs, the user simply has no
+ * visible sign of it and no quick way to stop it.
+ */
+export type BackgroundNoticeResult =
+  | { readonly _tag: "Visible" }
+  | { readonly _tag: "Hidden" }
+
+/** Outcome of asking Android for permission to show the notice. */
+export type RequestBackgroundNoticeResult =
+  | { readonly _tag: "Granted" }
+  | { readonly _tag: "Denied" }
+  /** Android declined to prompt; only system settings can change it now. */
+  | { readonly _tag: "Unprompted" }
+
+/** Outcome of sending the user to the system notification screen. */
+export type OpenNotificationSettingsResult =
+  | { readonly _tag: "Opened" }
+  | { readonly _tag: "Unavailable"; readonly reason: string }
 
 // ── User-visible storage access (v7) ─────────────────────────────────
 

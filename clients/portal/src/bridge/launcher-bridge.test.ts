@@ -49,6 +49,9 @@ describe("createKorriNativeLauncherBridge", () => {
     storageAccess: () => JSON.stringify({ _tag: "Granted" }),
     openStorageAccessSettings: () => JSON.stringify({ _tag: "Opened" }),
     openPairing: () => JSON.stringify({ _tag: "Opened" }),
+    backgroundNotice: () => JSON.stringify({ _tag: "Visible" }),
+    requestBackgroundNotice: () => JSON.stringify({ _tag: "Granted" }),
+    openNotificationSettings: () => JSON.stringify({ _tag: "Opened" }),
     bridgeVersion: () => 8,
     ...overrides,
   })

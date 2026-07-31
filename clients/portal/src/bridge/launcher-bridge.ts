@@ -4,6 +4,9 @@ import type {
   Launchable,
   LaunchLocalResult,
   LocalLaunchSpec,
+  OpenNotificationSettingsResult,
+  BackgroundNoticeResult,
+  RequestBackgroundNoticeResult,
   OpenPairingResult,
   OpenStorageSettingsResult,
   QueryLaunchablesResult,
@@ -35,6 +38,12 @@ export interface LauncherBridge {
   storageAccess(): Promise<StorageAccessResult>
   /** Take the user to the system screen where that access is granted. */
   openStorageAccessSettings(): Promise<OpenStorageSettingsResult>
+  /** Whether the user can see that Korri is running in the background. */
+  backgroundNotice(): Promise<BackgroundNoticeResult>
+  /** Ask Android for permission to show that notice. */
+  requestBackgroundNotice(): Promise<RequestBackgroundNoticeResult>
+  /** Take the user to the system screen where the notice is shown or hidden. */
+  openNotificationSettings(): Promise<OpenNotificationSettingsResult>
   /** Take the user to the native pairing screen. */
   openPairing(): Promise<OpenPairingResult>
 }
@@ -115,6 +124,32 @@ export function createKorriNativeLauncherBridge(
         ) as OpenStorageSettingsResult
       } catch (error) {
         return { _tag: "Unavailable", message: describe(error) }
+      }
+    },
+    async backgroundNotice() {
+      try {
+        return JSON.parse(surface.backgroundNotice()) as BackgroundNoticeResult
+      } catch {
+        // A shell too old to answer is not hiding anything.
+        return { _tag: "Hidden" } as BackgroundNoticeResult
+      }
+    },
+    async requestBackgroundNotice() {
+      try {
+        return JSON.parse(
+          surface.requestBackgroundNotice(),
+        ) as RequestBackgroundNoticeResult
+      } catch {
+        return { _tag: "Unprompted" } as RequestBackgroundNoticeResult
+      }
+    },
+    async openNotificationSettings() {
+      try {
+        return JSON.parse(
+          surface.openNotificationSettings(),
+        ) as OpenNotificationSettingsResult
+      } catch (error) {
+        return { _tag: "Unavailable", reason: describe(error) }
       }
     },
     async openPairing() {
@@ -252,6 +287,21 @@ export function createInMemoryLauncherBridge(
       // Browser dev has no native pairing screen to reach.
       return behavior === "storage-settings-unavailable"
         ? { _tag: "Unavailable", message: "no pairing screen in browser dev" }
+        : { _tag: "Opened" }
+    },
+    async backgroundNotice() {
+      await delay()
+      // A browser tab keeps nothing alive, so there is nothing to notice.
+      return { _tag: "Hidden" }
+    },
+    async requestBackgroundNotice() {
+      await delay()
+      return { _tag: "Unprompted" }
+    },
+    async openNotificationSettings() {
+      await delay()
+      return behavior === "storage-settings-unavailable"
+        ? { _tag: "Unavailable", reason: "no settings screen in browser dev" }
         : { _tag: "Opened" }
     },
   }

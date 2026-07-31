@@ -66,6 +66,8 @@ import okhttp3.Response;
 public class KorriShellActivity extends AppCompatActivity {
     private WebView webView;
     private int korridPort = -1;
+    /** Android only shows the notification dialog once; after that only settings can change it. */
+    private boolean notificationPermissionAsked = false;
     private String korridCapability = "";
     private ComputerManagerService.ComputerManagerBinder managerBinder;
     private final CountDownLatch binderReady = new CountDownLatch(1);
@@ -144,6 +146,11 @@ public class KorriShellActivity extends AppCompatActivity {
      * Debug builds may override with -PkorriPortalUrl=http://<ip>:5173 for
      * a live Vite dev-server loop on the device.
      */
+    /** True when the user can actually see Korri's background notice. */
+    private boolean notificationsAllowed() {
+        return androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled();
+    }
+
     private String portalUrl() {
         String devUrl = BuildConfig.PORTAL_DEV_URL;
         if (BuildConfig.DEBUG && devUrl != null && !devUrl.isEmpty()) {
@@ -250,7 +257,66 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public int bridgeVersion() {
             // Mirrors BRIDGE_VERSION in contracts/bridge/korri-native-bridge.ts.
-            return 8;
+            return 9;
+        }
+
+        /**
+         * Whether the user can see Korri running in the background. Reports
+         * what is visible, not whether the brain is up: Android lets the
+         * notice be hidden while the service keeps running.
+         */
+        @JavascriptInterface
+        public String backgroundNotice() {
+            return notificationsAllowed()
+                    ? "{\"_tag\":\"Visible\"}"
+                    : "{\"_tag\":\"Hidden\"}";
+        }
+
+        /**
+         * Ask Android for permission to show the notice. Android stops
+         * prompting once the user has declined twice, so a refusal to prompt
+         * is reported plainly rather than as a denial.
+         */
+        @JavascriptInterface
+        public String requestBackgroundNotice() {
+            if (Build.VERSION.SDK_INT < 33) {
+                // Older Android grants this at install time.
+                return "{\"_tag\":\"Granted\"}";
+            }
+            if (notificationsAllowed()) {
+                return "{\"_tag\":\"Granted\"}";
+            }
+            if (!shouldShowRequestPermissionRationale(
+                    android.Manifest.permission.POST_NOTIFICATIONS)
+                    && notificationPermissionAsked) {
+                // Asked before and Android will no longer show the dialog.
+                return "{\"_tag\":\"Unprompted\"}";
+            }
+            notificationPermissionAsked = true;
+            requestPermissions(
+                    new String[] {android.Manifest.permission.POST_NOTIFICATIONS}, 91);
+            // The dialog is asynchronous; the portal re-reads backgroundNotice()
+            // on korri-shell-resumed, exactly as it does for file access.
+            return "{\"_tag\":\"Denied\"}";
+        }
+
+        /**
+         * Take the user to the system screen. Hiding the notice is the user's
+         * to do -- an app may not hide its own -- so turning it off always
+         * ends up here.
+         */
+        @JavascriptInterface
+        public String openNotificationSettings() {
+            try {
+                Intent intent = new Intent(
+                        android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                intent.putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName());
+                startActivity(intent);
+                return "{\"_tag\":\"Opened\"}";
+            } catch (Exception error) {
+                return "{\"_tag\":\"Unavailable\",\"reason\":"
+                        + JSONObject.quote(String.valueOf(error.getMessage())) + "}";
+            }
         }
 
         /**

@@ -60,7 +60,7 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
     }
     // Overlapping loads: only the latest invocation may write state.
     const seq = ++loadSeq.current
-    const [local, games, localGames, hostsResult, session, storage] =
+    const [local, games, localGames, hostsResult, session, storage, notice] =
       await Promise.all([
         bridge.queryLaunchables(),
         korrid.catalogSnapshot(),
@@ -70,6 +70,9 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
         // Re-read on every load so returning from system settings clears the
         // prompt without the user restarting Korri.
         bridge.storageAccess(),
+        // Same reason: returning from the notification screen should be
+        // reflected without a restart.
+        bridge.backgroundNotice(),
       ])
     const streams: readonly StreamSource[] =
       hostsResult._tag === "StreamHosts"
@@ -92,6 +95,7 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
       session,
       localGames,
       storage,
+      notice,
     )
     const current = stateRef.current
     if (current._tag === "Stopping") {
@@ -165,6 +169,32 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
             const next = LaunchablesState.withNotice(
               now,
               `cannot open pairing: ${result.message}`,
+            )
+            stateRef.current = next
+            setState(next)
+          }
+        })
+      } else if (entry.kind === "background-notice") {
+        // Turning it on is a prompt Korri may show; turning it off is not
+        // Korri's to do — Android reserves hiding a background notice for
+        // the user — so that direction can only open settings. Either way
+        // the result is discovered on resume, not from the call.
+        void (
+          entry.visible
+            ? bridge.openNotificationSettings()
+            : bridge.requestBackgroundNotice().then(outcome =>
+                outcome._tag === "Granted"
+                  ? { _tag: "Opened" as const }
+                  : bridge.openNotificationSettings(),
+              )
+        ).then(result => {
+          if (!mountedRef.current || operation !== actionSeq.current) return
+          if (result._tag === "Unavailable") {
+            const now = stateRef.current
+            if (now._tag !== "Ready") return
+            const next = LaunchablesState.withNotice(
+              now,
+              `cannot open notification settings: ${result.reason}`,
             )
             stateRef.current = next
             setState(next)

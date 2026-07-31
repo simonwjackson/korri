@@ -1,4 +1,5 @@
 import type {
+  BackgroundNoticeResult,
   LaunchAppResult,
   Launchable,
   LaunchLocalResult,
@@ -38,6 +39,12 @@ export type PortalEntry =
    * focus and confirm would be unreachable without a touchscreen.
    */
   | { readonly kind: "storage-access" }
+  /**
+   * Whether the user can see Korri running in the background. A setting
+   * rather than a warning: the brain running on is what makes leaving a
+   * game safe, so this exists to be seen and switched, not fixed.
+   */
+  | { readonly kind: "background-notice"; readonly visible: boolean }
   /**
    * Reaching the native pairing screen. Always present: pairing is how a
    * device joins the federation at all, so it must not be hidden behind
@@ -119,6 +126,8 @@ const readyFrom = (
 
 export const entryKey = (entry: PortalEntry): string => {
   switch (entry.kind) {
+    case "background-notice":
+      return "background-notice"
     case "storage-access":
       return "storage-access"
     case "pairing":
@@ -139,6 +148,11 @@ export const entryKey = (entry: PortalEntry): string => {
 }
 
 export const entryLabel = (entry: PortalEntry): string =>
+  entry.kind === "background-notice"
+    ? entry.visible
+      ? "Background notice: on — tap to hide it"
+      : "Background notice: off — tap to show it"
+    :
   entry.kind === "storage-access"
     ? "Korri needs file access — open settings"
     : entry.kind === "pairing"
@@ -166,6 +180,7 @@ export const LaunchablesState = {
     session?: SessionStatusOutcome,
     localGames?: LocalGamesListOutcome,
     storage?: StorageAccessResult,
+    notice?: BackgroundNoticeResult,
   ): LaunchablesState => {
     const entries: PortalEntry[] = []
     const failures: string[] = []
@@ -223,6 +238,11 @@ export const LaunchablesState = {
     // Pairing is always reachable. It is how a device joins at all, so
     // it cannot be conditional on already having something to show.
     entries.push({ kind: "pairing" })
+
+    // Korri keeps its brain running after you leave, and the user is
+    // entitled to see that and switch it off. Always present, and last:
+    // it is a setting, not something to play.
+    entries.push({ kind: "background-notice", visible: notice?._tag === "Visible" })
 
     if (entries.length === 0 && failures.length > 0) {
       return { _tag: "LoadError", message: failures.join(" · ") }
@@ -431,6 +451,8 @@ export const LaunchablesState = {
       const title =
         entry.kind === "storage-access"
           ? "Needs your attention"
+          : entry.kind === "background-notice"
+          ? "Settings"
           : entry.kind === "pairing"
           ? "Devices"
           : entry.kind === "now-playing"
