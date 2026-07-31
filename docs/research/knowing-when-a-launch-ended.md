@@ -69,3 +69,41 @@ there is none:
 did not need testing to matter: any record keyed on pid should also carry the
 package name and the launch time, so a recycled pid cannot resurrect a finished
 launch.
+
+---
+
+## Correction — the finding above is wrong
+
+The table showing a process alive twenty seconds after Back was measuring a
+mislabelled step. TMNT very likely never quit in that run: the two Back presses
+moved around inside the game's menus, and the row called
+"quit with Back" was a game still legitimately running.
+
+Re-measured with a quit that actually took:
+
+| step | in memory | 
+|---|---|
+| playing | yes (31026) |
+| pressed HOME | yes |
+| **pressed BACK (quit)** | **gone** |
+| 15 s later | gone |
+
+**When the game genuinely ends, its process disappears immediately.** Watching
+for that absence is enough to close a launch record, and needs no cleverness.
+
+So the alarming conclusion — that korrid would show *Now Playing* for a game
+the player had left — was a measurement error, not a property of Android. The
+`Away` state it argued for may still be worth having for "not looking at it
+right now", but it is not forced by an inability to detect endings.
+
+Two more signals from the re-run are junk and must not be used: an
+`ActivityRecord` count reported 1 while nothing was running at all, and the
+recents count sat at 8 in every state.
+
+Residual uncertainty worth keeping: Android *can* park a finished app in memory
+when it is not short of space. It did not here. Absence therefore proves an
+ending; presence is weaker evidence.
+
+The lesson is the same one this project keeps relearning, and this time it cost
+a wrong document: a test that produces a confident number is not the same as a
+test that did what its label claims.
