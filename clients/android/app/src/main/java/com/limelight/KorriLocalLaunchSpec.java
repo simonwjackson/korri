@@ -41,16 +41,19 @@ final class KorriLocalLaunchSpec {
     }
 
     static final class Parsed {
+        final boolean isAndroidApp;
         final ComponentName component;
         final Map<String, String> extras;
         final List<String> directories;
         final List<FileSpec> files;
 
         Parsed(
+                boolean isAndroidApp,
                 ComponentName component,
                 Map<String, String> extras,
                 List<String> directories,
                 List<FileSpec> files) {
+            this.isAndroidApp = isAndroidApp;
             this.component = component;
             this.extras = Collections.unmodifiableMap(extras);
             this.directories = Collections.unmodifiableList(directories);
@@ -76,6 +79,12 @@ final class KorriLocalLaunchSpec {
         return (!spec.directories.isEmpty() || !spec.files.isEmpty())
                 && sdkInt >= 30
                 && !hasAllFilesAccess;
+    }
+
+    static void applyTaskPolicy(Parsed spec, Intent intent) {
+        if (!spec.isAndroidApp) return;
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
     }
 
     static Parsed parse(String specJson, File storageRoot) throws Invalid {
@@ -147,7 +156,7 @@ final class KorriLocalLaunchSpec {
                 throw new Invalid("InvalidSpec",
                         "android-app launches carry no extras and provision nothing");
             }
-            return new Parsed(component, extras, directories, files);
+            return new Parsed(isAndroidApp, component, extras, directories, files);
         } catch (Invalid error) {
             throw error;
         } catch (Exception error) {

@@ -9,12 +9,13 @@ import type { InputAdapter } from "./types"
  * The contract being honoured is "the app never sees raw device events", not
  * "every event must cross the bridge".
  *
- * Elements opt in by tagging themselves with their entry index. The adapter
- * emits `activate`, never a bare `confirm`, because a tap carries *which*
- * thing was chosen — see the note on `activate` in `types.ts`.
+ * Elements opt in by tagging themselves with their entry index and stable key.
+ * The adapter emits `activate`, never a bare `confirm`, because a tap carries
+ * *which* thing was chosen — see the note on `activate` in `types.ts`.
  */
 
 export const ENTRY_INDEX_ATTRIBUTE = "data-entry-index"
+export const ENTRY_KEY_ATTRIBUTE = "data-entry-key"
 
 export interface PointerAdapterOptions {
   /** Defaults to `document`. */
@@ -42,11 +43,13 @@ export function createPointerAdapter(
         if (tapped === null) return
 
         const raw = tapped.getAttribute(ENTRY_INDEX_ATTRIBUTE)
-        if (raw === null) return
-        const index = Number.parseInt(raw, 10)
-        if (!Number.isInteger(index) || index < 0) return
+        const key = tapped.getAttribute(ENTRY_KEY_ATTRIBUTE)
+        if (raw === null || key === null || key === "") return
+        if (!/^(0|[1-9]\d*)$/.test(raw)) return
+        const index = Number(raw)
+        if (!Number.isSafeInteger(index)) return
 
-        emit({ type: "activate", index, source: "pointer" })
+        emit({ type: "activate", index, key, source: "pointer" })
       }
 
       // `click` rather than `touchstart`: Android's WebView fires both, and

@@ -1,7 +1,5 @@
 import type {
   KorriNativeBridgeSurface,
-  LaunchAppResult,
-  Launchable,
   LaunchLocalResult,
   LocalLaunchSpec,
   OpenNotificationSettingsResult,
@@ -9,7 +7,6 @@ import type {
   RequestBackgroundNoticeResult,
   OpenPairingResult,
   OpenStorageSettingsResult,
-  QueryLaunchablesResult,
   QueryStreamAppsResult,
   QueryStreamHostsResult,
   StartStreamResult,
@@ -28,8 +25,6 @@ import type {
  * mechanical.
  */
 export interface LauncherBridge {
-  queryLaunchables(): Promise<QueryLaunchablesResult>
-  launchApp(packageName: string): Promise<LaunchAppResult>
   launchLocal(spec: LocalLaunchSpec): Promise<LaunchLocalResult>
   queryStreamHosts(): Promise<QueryStreamHostsResult>
   queryStreamApps(hostUuid: string): Promise<QueryStreamAppsResult>
@@ -52,24 +47,6 @@ export function createKorriNativeLauncherBridge(
   surface: KorriNativeBridgeSurface,
 ): LauncherBridge {
   return {
-    async queryLaunchables() {
-      try {
-        return JSON.parse(surface.queryLaunchables()) as QueryLaunchablesResult
-      } catch (error) {
-        return { _tag: "QueryFailed", message: describe(error) }
-      }
-    },
-    async launchApp(packageName) {
-      try {
-        return JSON.parse(surface.launchApp(packageName)) as LaunchAppResult
-      } catch (error) {
-        return {
-          _tag: "LaunchFailed",
-          reason: "StartFailed",
-          message: describe(error),
-        }
-      }
-    },
     async launchLocal(spec) {
       try {
         return JSON.parse(surface.launchLocal(JSON.stringify(spec))) as LaunchLocalResult
@@ -112,49 +89,49 @@ export function createKorriNativeLauncherBridge(
     },
     async storageAccess() {
       try {
-        return JSON.parse(surface.storageAccess()) as StorageAccessResult
+        return decodeStorageAccess(JSON.parse(surface.storageAccess()))
       } catch (error) {
         return { _tag: "QueryFailed", message: describe(error) }
       }
     },
     async openStorageAccessSettings() {
       try {
-        return JSON.parse(
-          surface.openStorageAccessSettings(),
-        ) as OpenStorageSettingsResult
+        return decodeOpenStorageSettings(
+          JSON.parse(surface.openStorageAccessSettings()),
+        )
       } catch (error) {
         return { _tag: "Unavailable", message: describe(error) }
       }
     },
     async backgroundNotice() {
       try {
-        return JSON.parse(surface.backgroundNotice()) as BackgroundNoticeResult
+        return decodeBackgroundNotice(JSON.parse(surface.backgroundNotice()))
       } catch {
         // A shell too old to answer is not hiding anything.
-        return { _tag: "Hidden" } as BackgroundNoticeResult
+        return { _tag: "Hidden" }
       }
     },
     async requestBackgroundNotice() {
       try {
-        return JSON.parse(
-          surface.requestBackgroundNotice(),
-        ) as RequestBackgroundNoticeResult
+        return decodeRequestBackgroundNotice(
+          JSON.parse(surface.requestBackgroundNotice()),
+        )
       } catch {
-        return { _tag: "Unprompted" } as RequestBackgroundNoticeResult
+        return { _tag: "Unprompted" }
       }
     },
     async openNotificationSettings() {
       try {
-        return JSON.parse(
-          surface.openNotificationSettings(),
-        ) as OpenNotificationSettingsResult
+        return decodeOpenNotificationSettings(
+          JSON.parse(surface.openNotificationSettings()),
+        )
       } catch (error) {
-        return { _tag: "Unavailable", reason: describe(error) }
+        return { _tag: "Unavailable", message: describe(error) }
       }
     },
     async openPairing() {
       try {
-        return JSON.parse(surface.openPairing()) as OpenPairingResult
+        return decodeOpenPairing(JSON.parse(surface.openPairing()))
       } catch (error) {
         return { _tag: "Unavailable", message: describe(error) }
       }
@@ -165,24 +142,15 @@ export function createKorriNativeLauncherBridge(
 export interface InMemoryLauncherBridgeConfig {
   readonly behavior?:
     | "ok"
-    | "query-fail"
-    | "launch-fail"
     | "local-launch-fail"
     | "stream-hosts-fail"
     | "stream-start-fail"
     | "storage-denied"
     | "storage-settings-unavailable"
-  readonly items?: readonly Launchable[]
   readonly streamHosts?: readonly StreamHost[]
   readonly streamApps?: Readonly<Record<string, readonly StreamApp[]>>
   readonly delayMs?: number
 }
-
-const sampleItems: readonly Launchable[] = [
-  { packageName: "com.korri.retroarch", label: "Korri RetroArch" },
-  { packageName: "org.ppsspp.ppsspp", label: "PPSSPP" },
-  { packageName: "com.android.settings", label: "Settings" },
-]
 
 const sampleHosts: readonly StreamHost[] = [
   { uuid: "host-1", name: "Office PC", paired: true },
@@ -199,7 +167,6 @@ export function createInMemoryLauncherBridge(
   config: InMemoryLauncherBridgeConfig = {},
 ): LauncherBridge {
   const behavior = config.behavior ?? "ok"
-  const items = config.items ?? sampleItems
   const streamHosts = config.streamHosts ?? sampleHosts
   const streamApps = config.streamApps ?? sampleApps
   const delayMs = config.delayMs ?? 0
@@ -208,27 +175,6 @@ export function createInMemoryLauncherBridge(
     behavior === "storage-denied" ? { _tag: "Denied" } : { _tag: "Granted" }
 
   return {
-    async queryLaunchables() {
-      await delay()
-      if (behavior === "query-fail") {
-        return { _tag: "QueryFailed", message: "configured to fail" }
-      }
-      return { _tag: "Launchables", items }
-    },
-    async launchApp(packageName) {
-      await delay()
-      if (
-        behavior === "launch-fail" ||
-        !items.some(item => item.packageName === packageName)
-      ) {
-        return {
-          _tag: "LaunchFailed",
-          reason: "NotFound",
-          message: `no launchable ${packageName}`,
-        }
-      }
-      return { _tag: "Launched" }
-    },
     async launchLocal(spec) {
       await delay()
       if (behavior === "local-launch-fail") {
@@ -301,10 +247,106 @@ export function createInMemoryLauncherBridge(
     async openNotificationSettings() {
       await delay()
       return behavior === "storage-settings-unavailable"
-        ? { _tag: "Unavailable", reason: "no settings screen in browser dev" }
+        ? { _tag: "Unavailable", message: "no settings screen in browser dev" }
         : { _tag: "Opened" }
     },
   }
+}
+
+function decodeStorageAccess(value: unknown): StorageAccessResult {
+  const payload = record(value, "StorageAccessResult")
+  switch (payload._tag) {
+    case "Granted":
+    case "NotRequired":
+    case "Denied":
+      return { _tag: payload._tag }
+    case "QueryFailed":
+      return { _tag: payload._tag, message: stringField(payload, "message") }
+    default:
+      throw new Error("malformed StorageAccessResult")
+  }
+}
+
+function decodeOpenStorageSettings(
+  value: unknown,
+): OpenStorageSettingsResult {
+  const payload = record(value, "OpenStorageSettingsResult")
+  switch (payload._tag) {
+    case "Opened":
+      return { _tag: payload._tag }
+    case "Unavailable":
+      return { _tag: payload._tag, message: stringField(payload, "message") }
+    default:
+      throw new Error("malformed OpenStorageSettingsResult")
+  }
+}
+
+function decodeBackgroundNotice(value: unknown): BackgroundNoticeResult {
+  const payload = record(value, "BackgroundNoticeResult")
+  switch (payload._tag) {
+    case "Visible":
+    case "Hidden":
+      return { _tag: payload._tag }
+    default:
+      throw new Error("malformed BackgroundNoticeResult")
+  }
+}
+
+function decodeRequestBackgroundNotice(
+  value: unknown,
+): RequestBackgroundNoticeResult {
+  const payload = record(value, "RequestBackgroundNoticeResult")
+  switch (payload._tag) {
+    case "Granted":
+    case "Denied":
+    case "Prompted":
+    case "Unprompted":
+      return { _tag: payload._tag }
+    default:
+      throw new Error("malformed RequestBackgroundNoticeResult")
+  }
+}
+
+function decodeOpenNotificationSettings(
+  value: unknown,
+): OpenNotificationSettingsResult {
+  const payload = record(value, "OpenNotificationSettingsResult")
+  switch (payload._tag) {
+    case "Opened":
+      return { _tag: payload._tag }
+    case "Unavailable":
+      return { _tag: payload._tag, message: stringField(payload, "message") }
+    default:
+      throw new Error("malformed OpenNotificationSettingsResult")
+  }
+}
+
+function decodeOpenPairing(value: unknown): OpenPairingResult {
+  const payload = record(value, "OpenPairingResult")
+  switch (payload._tag) {
+    case "Opened":
+      return { _tag: payload._tag }
+    case "Unavailable":
+      return { _tag: payload._tag, message: stringField(payload, "message") }
+    default:
+      throw new Error("malformed OpenPairingResult")
+  }
+}
+
+function record(value: unknown, name: string): Record<string, unknown> {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  throw new Error(`malformed ${name}`)
+}
+
+function stringField(
+  payload: Record<string, unknown>,
+  field: string,
+): string {
+  const value = payload[field]
+  if (typeof value === "string") return value
+  throw new Error(`malformed ${field}`)
 }
 
 function describe(error: unknown): string {

@@ -6,11 +6,16 @@
 # the game must actually be on screen afterwards. Checking only the pid is a
 # trap: Android keeps recently-used processes cached, so a dead activity can
 # leave a live process behind and make a failure look like a success.
+#
+# Requires granted storage access and no active host banner: TMNT must be the
+# first local-game entry.
 set -euo pipefail
 
 SERIAL="${1:?usage: journey-resume.sh <adb-serial> [package] [tap-x tap-y]}"
 GAME="${2:-com.playdigious.tmnt}"
+# shellcheck disable=SC2034 # Backward-compatible positional args; launch is D-pad based now.
 TAP_X="${3:-539}"
+# shellcheck disable=SC2034 # Backward-compatible positional args; launch is D-pad based now.
 TAP_Y="${4:-882}"
 KORRI=com.simonwjackson.korri.debug
 SHOTS="${SHOTS:-/tmp/korri-journey}"
@@ -47,10 +52,8 @@ echo "== cold start"
 step "1-korri-home" 7
 
 # Orientation-independent: a landscape game leaves the device rotated, so
-# fixed tap points miss. Selection resets to the top on each load, and the
-# game sits one row below the now-playing banner.
-"${ADB[@]}" shell "input keyevent KEYCODE_DPAD_DOWN"
-sleep 2
+# fixed tap points miss. With granted storage and no active host banner, TMNT
+# is the first local-game entry, so confirming the initial selection opens it.
 "${ADB[@]}" shell "input keyevent KEYCODE_DPAD_CENTER"
 step "2-game-first" 20
 FIRST="$(pid_of)"
@@ -62,10 +65,8 @@ fi
 step "3-back-to-korri" 6
 
 # Orientation-independent: a landscape game leaves the device rotated, so
-# fixed tap points miss. Selection resets to the top on each load, and the
-# game sits one row below the now-playing banner.
-"${ADB[@]}" shell "input keyevent KEYCODE_DPAD_DOWN"
-sleep 2
+# fixed tap points miss. With granted storage and no active host banner, TMNT
+# is the first local-game entry, so confirming the initial selection opens it.
 "${ADB[@]}" shell "input keyevent KEYCODE_DPAD_CENTER"
 step "4-game-second" 20
 SECOND="$(pid_of)"

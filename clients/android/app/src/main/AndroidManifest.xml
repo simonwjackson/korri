@@ -46,8 +46,8 @@
         <package android:name="com.korri.retroarch" />
         <!-- Korri is a launcher: it must see the apps it can launch.
              Without this, Android 11+ package visibility hides installed
-             games and a direct component lookup reports them as not
-             installed. Narrower than QUERY_ALL_PACKAGES: only apps that
+             games and PackageManager cannot resolve their launcher intents.
+             Narrower than QUERY_ALL_PACKAGES: only apps that
              present a launcher entry become visible. -->
         <intent>
             <action android:name="android.intent.action.MAIN" />

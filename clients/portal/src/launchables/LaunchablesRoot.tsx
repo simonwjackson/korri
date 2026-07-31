@@ -61,9 +61,8 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
     }
     // Overlapping loads: only the latest invocation may write state.
     const seq = ++loadSeq.current
-    const [local, games, localGames, hostsResult, session, storage, notice] =
+    const [games, localGames, hostsResult, session, storage, notice] =
       await Promise.all([
-        bridge.queryLaunchables(),
         korrid.catalogSnapshot(),
         korrid.localGames(),
         bridge.queryStreamHosts(),
@@ -90,7 +89,6 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
     streamsRef.current = streams
     const current = stateRef.current
     const loaded = LaunchablesState.fromSources(
-      local,
       streams,
       games,
       hostsResult._tag === "QueryFailed" ? hostsResult.message : undefined,
@@ -152,7 +150,11 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
     // ordinary confirm path — the bus dispatches synchronously, so the
     // confirm listener below reads the selection this just set.
     const offActivate = bus.onAction("activate", action => {
-      const next = LaunchablesState.selectIndex(stateRef.current, action.index)
+      const current = stateRef.current
+      if (current._tag !== "Ready") return
+      const entry = current.entries[action.index]
+      if (entry === undefined || entryKey(entry) !== action.key) return
+      const next = LaunchablesState.selectIndex(current, action.index)
       stateRef.current = next
       setState(next)
       bus.emit({ type: "confirm", source: action.source })
@@ -186,13 +188,15 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
         // the user — so that direction can only open settings. Either way
         // the result is discovered on resume, not from the call.
         void (
-          entry.visible
-            ? bridge.openNotificationSettings()
-            : bridge.requestBackgroundNotice().then(outcome =>
-                outcome._tag === "Granted"
-                  ? { _tag: "Opened" as const }
-                  : bridge.openNotificationSettings(),
-              )
+          (async () => {
+            if (entry.visible) {
+              return bridge.openNotificationSettings()
+            }
+            const outcome = await bridge.requestBackgroundNotice()
+            return outcome._tag === "Unprompted"
+              ? bridge.openNotificationSettings()
+              : { _tag: "Opened" as const }
+          })()
         ).then(result => {
           if (!mountedRef.current || operation !== actionSeq.current) return
           if (result._tag === "Unavailable") {
@@ -200,7 +204,7 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
             if (now._tag !== "Ready") return
             const next = LaunchablesState.withNotice(
               now,
-              `cannot open notification settings: ${result.reason}`,
+              `cannot open notification settings: ${result.message}`,
             )
             stateRef.current = next
             setState(next)
@@ -278,19 +282,6 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
             launching,
             result,
           )
-          stateRef.current = next
-          setState(next)
-        })
-      } else if (entry.kind === "local") {
-        const launching = LaunchablesState.beginLaunching(
-          current,
-          entryLabel(entry),
-        )
-        stateRef.current = launching
-        setState(launching)
-        void bridge.launchApp(entry.launchable.packageName).then(result => {
-          if (!mountedRef.current || operation !== actionSeq.current) return
-          const next = LaunchablesState.withLaunchResult(launching, result)
           stateRef.current = next
           setState(next)
         })
@@ -469,14 +460,6 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
     <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 text-zinc-100">
       {state._tag === "Loading" && (
         <p className="text-lg text-zinc-400">Loading launchables…</p>
-      )}
-      {state._tag === "LoadError" && (
-        <div className="space-y-2 text-center">
-          <p className="text-xl font-semibold text-red-400">
-            Couldn't load launchables
-          </p>
-          <p className="text-zinc-400">{state.message}</p>
-        </div>
       )}
       {state._tag === "Preparing" && (
         <div className="space-y-2 text-center">

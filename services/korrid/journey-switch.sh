@@ -4,6 +4,9 @@
 #
 # Whichever launch model is installed, this asks: after opening the game and
 # then opening Korri, what is on screen — the portal, or the game?
+#
+# Requires granted storage access and no active host banner: TMNT must be the
+# first local-game entry.
 set -euo pipefail
 
 SERIAL="${1:?usage: journey-switch.sh <adb-serial>}"
@@ -31,7 +34,7 @@ echo "######## $LABEL"
 open_korri; sleep 7
 say "korri home"
 
-"${ADB[@]}" shell "input keyevent KEYCODE_DPAD_DOWN"; sleep 2
+# TMNT is the first local-game entry under the script preconditions.
 "${ADB[@]}" shell "input keyevent KEYCODE_DPAD_CENTER"; sleep 18
 say "game open"
 FIRST="$(pid_of)"

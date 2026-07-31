@@ -9,14 +9,6 @@ import { SessionStopPhase } from "@contracts/generated/korrid"
 import type { BackgroundNoticeResult } from "@contracts/bridge/korri-native-bridge"
 import { entryKey, entryLabel, LaunchablesState } from "./state"
 
-const localOk = {
-  _tag: "Launchables",
-  items: [
-    { packageName: "a", label: "A" },
-    { packageName: "b", label: "B" },
-  ],
-} as const
-
 const officeHost = { uuid: "h1", name: "Office PC", paired: true } as const
 
 const officeApps = {
@@ -52,12 +44,11 @@ const localGamesOk: LocalGamesListOutcome = {
   },
 }
 
-const ready = LaunchablesState.fromSources(localOk, [officeApps], gamesOk)
+const ready = LaunchablesState.fromSources([officeApps], gamesOk)
 
 describe("LaunchablesState.fromSources", () => {
   it("folds the local game beside stream catalog entries", () => {
     const state = LaunchablesState.fromSources(
-      localOk,
       [officeApps],
       gamesOk,
       undefined,
@@ -80,7 +71,7 @@ describe("LaunchablesState.fromSources", () => {
     })
   })
 
-  it("folds korrid games, local apps, and stream apps into one ordered list", () => {
+  it("folds korrid games and stream apps into one ordered list", () => {
     expect(ready._tag).toBe("Ready")
     if (ready._tag !== "Ready") throw new Error("unreachable")
     expect(ready.entries.map(e => e.kind)).toEqual([
@@ -97,7 +88,6 @@ describe("LaunchablesState.fromSources", () => {
 
   it("degrades a failed local-game source to a notice while entries remain", () => {
     const state = LaunchablesState.fromSources(
-      localOk,
       [officeApps],
       gamesOk,
       undefined,
@@ -114,7 +104,7 @@ describe("LaunchablesState.fromSources", () => {
   })
 
   it("degrades a failed korrid catalog to a notice while entries remain", () => {
-    const state = LaunchablesState.fromSources(localOk, [officeApps], gamesErr)
+    const state = LaunchablesState.fromSources([officeApps], gamesErr)
     expect(state).toMatchObject({
       _tag: "Ready",
       notice: "games: UpstreamUnreachable",
@@ -122,7 +112,7 @@ describe("LaunchablesState.fromSources", () => {
   })
 
   it("surfaces partial host catalog failures while keeping healthy games", () => {
-    const state = LaunchablesState.fromSources(localOk, [officeApps], {
+    const state = LaunchablesState.fromSources([officeApps], {
       _tag: "Ok",
       payload: {
         games: [{ id: "legacy", title: "Legacy game", host: "aka" }],
@@ -143,7 +133,6 @@ describe("LaunchablesState.fromSources", () => {
 
   it("degrades a failed stream source to a notice while entries remain", () => {
     const state = LaunchablesState.fromSources(
-      localOk,
       [{ host: officeHost, apps: { _tag: "QueryFailed", message: "no cache" } }],
       gamesOk,
     )
@@ -154,16 +143,15 @@ describe("LaunchablesState.fromSources", () => {
   })
 
   it("reports a hosts-query error in the notice", () => {
-    const state = LaunchablesState.fromSources(localOk, [], gamesOk, "db locked")
+    const state = LaunchablesState.fromSources([], gamesOk, "db locked")
     expect(state).toMatchObject({
       _tag: "Ready",
       notice: "stream hosts: db locked",
     })
   })
 
-  it("is a LoadError only when every source failed", () => {
+  it("keeps pairing reachable when every source failed", () => {
     const state = LaunchablesState.fromSources(
-      { _tag: "QueryFailed", message: "pm broke" },
       [
         {
           host: officeHost,
@@ -290,17 +278,7 @@ describe("LaunchablesState action results", () => {
     })
   })
 
-  it("surfaces launch, stream, and prepare failures as notices", () => {
-    const launchFailed = LaunchablesState.withLaunchResult(
-      LaunchablesState.beginLaunching(ready, "A"),
-      {
-      _tag: "LaunchFailed",
-      reason: "NotFound",
-      message: "gone",
-      },
-    )
-    expect(launchFailed).toMatchObject({ notice: "NotFound: gone" })
-
+  it("surfaces stream and prepare failures as notices", () => {
     const streamFailed = LaunchablesState.withStartStreamResult(
       LaunchablesState.beginLaunching(ready, "Desktop"),
       {
@@ -368,7 +346,6 @@ const sessionErr: SessionStatusOutcome = {
 describe("LaunchablesState now playing", () => {
   it("renders an active session as a selectable banner entry first", () => {
     const state = LaunchablesState.fromSources(
-      localOk,
       [officeApps],
       gamesOk,
       undefined,
@@ -391,7 +368,6 @@ describe("LaunchablesState now playing", () => {
 
   it("shows no banner when nothing is playing", () => {
     const state = LaunchablesState.fromSources(
-      localOk,
       [officeApps],
       gamesOk,
       undefined,
@@ -403,7 +379,6 @@ describe("LaunchablesState now playing", () => {
 
   it("degrades a status failure silently: no banner, no notice", () => {
     const state = LaunchablesState.fromSources(
-      localOk,
       [officeApps],
       gamesOk,
       undefined,
@@ -416,7 +391,6 @@ describe("LaunchablesState now playing", () => {
 
   it("stop Ok enters an input-locked stopping case until status is idle", () => {
     const withBanner = LaunchablesState.fromSources(
-      localOk,
       [officeApps],
       gamesOk,
       undefined,
@@ -463,7 +437,6 @@ describe("LaunchablesState now playing", () => {
 
   it("returns to the list with a truthful notice when pending stop times out", () => {
     const withBanner = LaunchablesState.fromSources(
-      localOk,
       [officeApps],
       gamesOk,
       undefined,
@@ -544,7 +517,6 @@ describe("storage access prompt", () => {
 
   it("puts a focusable prompt first when file access is denied", () => {
     const state = LaunchablesState.fromSources(
-      localOk,
       [officeApps],
       gamesOk,
       undefined,
@@ -561,7 +533,6 @@ describe("storage access prompt", () => {
 
   it("shows nothing when access is granted", () => {
     const state = LaunchablesState.fromSources(
-      localOk,
       [officeApps],
       gamesOk,
       undefined,
@@ -575,7 +546,6 @@ describe("storage access prompt", () => {
 
   it("shows nothing on a platform where access is not a concept", () => {
     const state = LaunchablesState.fromSources(
-      localOk,
       [officeApps],
       gamesOk,
       undefined,
@@ -591,7 +561,6 @@ describe("storage access prompt", () => {
     // An inconclusive answer is not a denial: prompting on a failed query
     // would badger users whose permission is actually fine.
     const state = LaunchablesState.fromSources(
-      localOk,
       [officeApps],
       gamesOk,
       undefined,
@@ -635,7 +604,6 @@ describe("LaunchablesState.selectIndex", () => {
 describe("background notice setting", () => {
   const build = (notice?: BackgroundNoticeResult) =>
     LaunchablesState.fromSources(
-      { _tag: "Launchables", items: [] },
       [],
       { _tag: "Ok", payload: { games: [] } },
       undefined,
@@ -673,7 +641,6 @@ describe("background notice setting", () => {
 describe("selection across reloads", () => {
   const load = (keep?: string) =>
     LaunchablesState.fromSources(
-      { _tag: "Launchables", items: [] },
       [],
       {
         _tag: "Ok",

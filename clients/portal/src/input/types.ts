@@ -44,6 +44,7 @@ export type InputAction =
   | {
       readonly type: "activate"
       readonly index: number
+      readonly key: string
       readonly source?: InputSource
     }
   | { readonly type: "back"; readonly source?: InputSource }

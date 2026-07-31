@@ -22,30 +22,11 @@ import type { LaunchSpec as GeneratedLaunchSpec } from "../generated/korrid"
 // 2 and 3 are skipped: the shipped shell reported 3 while this file lagged
 // at 1. 4 introduced the session lifecycle; 5 adds the per-server korrid
 // capability required to protect localhost session-control RPCs. 6 adds the
-// launcher-neutral local launch instruction.
-export const BRIDGE_VERSION = 9
+// launcher-neutral local launch instruction. 10 removes direct Android app
+// enumeration/launch and makes notification prompt semantics explicit.
+export const BRIDGE_VERSION = 10
 
-// ── Launchables (JS -> Kotlin) ──────────────────────────────────────────
-
-/** An app on the device that the launcher can start. */
-export interface Launchable {
-  readonly packageName: string
-  readonly label: string
-}
-
-/** Result of `KorriNative.queryLaunchables()`. */
-export type QueryLaunchablesResult =
-  | { readonly _tag: "Launchables"; readonly items: readonly Launchable[] }
-  | { readonly _tag: "QueryFailed"; readonly message: string }
-
-/** Result of `KorriNative.launchApp(packageName)`. */
-export type LaunchAppResult =
-  | { readonly _tag: "Launched" }
-  | {
-      readonly _tag: "LaunchFailed"
-      readonly reason: "NotFound" | "NoLaunchIntent" | "StartFailed"
-      readonly message: string
-    }
+// ── Local launches (JS -> Kotlin) ───────────────────────────────────────
 
 /**
  * Launcher-neutral instruction produced by korrid. Its Rust/Typeshare shape is
@@ -137,10 +118,6 @@ export type BridgeInputEvent =
  * the treaty yet; they join it when a slice formalizes them.
  */
 export interface KorriNativeBridgeSurface {
-  /** Returns JSON-encoded `QueryLaunchablesResult`. */
-  queryLaunchables(): string
-  /** Returns JSON-encoded `LaunchAppResult`. */
-  launchApp(packageName: string): string
   /** Returns JSON-encoded `LaunchLocalResult`. */
   launchLocal(specJson: string): string
   /** Returns JSON-encoded `QueryStreamHostsResult`. */
@@ -224,7 +201,7 @@ export interface KorriNativeBridgeSurface {
   bridgeVersion(): number
 }
 
-// ── Background notice (v9) ───────────────────────────────────────────
+// ── Background notice (v10) ──────────────────────────────────────────
 
 /**
  * What the user can see of Korri running in the background.
@@ -240,13 +217,15 @@ export type BackgroundNoticeResult =
 export type RequestBackgroundNoticeResult =
   | { readonly _tag: "Granted" }
   | { readonly _tag: "Denied" }
+  /** Android launched the asynchronous permission dialog; re-read on resume. */
+  | { readonly _tag: "Prompted" }
   /** Android declined to prompt; only system settings can change it now. */
   | { readonly _tag: "Unprompted" }
 
 /** Outcome of sending the user to the system notification screen. */
 export type OpenNotificationSettingsResult =
   | { readonly _tag: "Opened" }
-  | { readonly _tag: "Unavailable"; readonly reason: string }
+  | { readonly _tag: "Unavailable"; readonly message: string }
 
 // ── User-visible storage access (v7) ─────────────────────────────────
 

@@ -43,6 +43,18 @@ public class KorriLocalLaunchSpecTest {
                 .put("integrity", "verified by Rust before parsing");
     }
 
+    private static JSONObject androidAppSpec() throws Exception {
+        return new JSONObject()
+                .put("launcherId", "android-app")
+                .put("component", new JSONObject()
+                        .put("packageName", "org.example.game")
+                        .put("className", ""))
+                .put("extras", new JSONObject())
+                .put("directories", new JSONArray())
+                .put("files", new JSONArray())
+                .put("integrity", "verified by Rust before parsing");
+    }
+
     @Test
     public void acceptsTheGeneratedLauncherTemplate() throws Exception {
         KorriLocalLaunchSpec.Parsed parsed =
@@ -56,6 +68,59 @@ public class KorriLocalLaunchSpecTest {
         assertTrue(KorriLocalLaunchSpec.supportsStorageProvisioning(30));
         assertTrue(KorriLocalLaunchSpec.requiresStorageGrant(parsed, 30, false));
         assertFalse(KorriLocalLaunchSpec.requiresStorageGrant(parsed, 30, true));
+    }
+
+    @Test
+    public void acceptsAndroidAppLaunchesWithoutProvisioning() throws Exception {
+        KorriLocalLaunchSpec.Parsed parsed =
+                KorriLocalLaunchSpec.parse(androidAppSpec().toString(), ROOT);
+        assertTrue(parsed.isAndroidApp);
+        assertEquals("org.example.game", parsed.component.getPackageName());
+        // For android-app launches the class is intentionally unused: the
+        // shell resolves the current launcher intent from PackageManager.
+        assertEquals("", parsed.component.getClassName());
+        assertTrue(parsed.extras.isEmpty());
+        assertTrue(parsed.directories.isEmpty());
+        assertTrue(parsed.files.isEmpty());
+        assertEquals(parsed.component, parsed.intent().getComponent());
+    }
+
+    @Test
+    public void appliesSeparateTaskPolicyOnlyToAndroidApps() throws Exception {
+        KorriLocalLaunchSpec.Parsed androidApp =
+                KorriLocalLaunchSpec.parse(androidAppSpec().toString(), ROOT);
+        Intent androidIntent = new Intent();
+        KorriLocalLaunchSpec.applyTaskPolicy(androidApp, androidIntent);
+        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED,
+                androidIntent.getFlags()
+                        & (Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
+
+        KorriLocalLaunchSpec.Parsed retroarch =
+                KorriLocalLaunchSpec.parse(validSpec().toString(), ROOT);
+        Intent retroarchIntent = retroarch.intent();
+        KorriLocalLaunchSpec.applyTaskPolicy(retroarch, retroarchIntent);
+        assertEquals(0, retroarchIntent.getFlags()
+                & (Intent.FLAG_ACTIVITY_NEW_TASK
+                | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
+    }
+
+    @Test
+    public void rejectsAndroidAppLaunchesWithExtrasOrProvisioning() throws Exception {
+        JSONObject withExtras = androidAppSpec();
+        withExtras.getJSONObject("extras").put("ROM", "wl4.gba");
+        assertInvalid(withExtras, "InvalidSpec");
+
+        JSONObject withDirectories = androidAppSpec();
+        withDirectories.getJSONArray("directories")
+                .put("/storage/emulated/0/korri-retro/saves");
+        assertInvalid(withDirectories, "InvalidSpec");
+
+        JSONObject withFiles = androidAppSpec();
+        withFiles.getJSONArray("files").put(new JSONObject()
+                .put("path", "/storage/emulated/0/korri-retro/config.ini")
+                .put("content", "setting=true"));
+        assertInvalid(withFiles, "InvalidSpec");
     }
 
     @Test

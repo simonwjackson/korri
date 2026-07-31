@@ -1,9 +1,6 @@
 import type {
   BackgroundNoticeResult,
-  LaunchAppResult,
-  Launchable,
   LaunchLocalResult,
-  QueryLaunchablesResult,
   QueryStreamAppsResult,
   StartStreamResult,
   StorageAccessResult,
@@ -27,7 +24,7 @@ import type { Direction } from "../input/types"
  * Launchables screen state. Raw bridge results are converted into this ADT
  * at the seam; components never inspect bridge payloads directly.
  *
- * Entries come from three sources — korrid's game catalog, apps on this
+ * Entries come from korrid's game catalog, local games on this
  * device, and streamable apps on paired hosts — but once converted they
  * are one flat, ordered list with a single selection.
  */
@@ -54,7 +51,6 @@ export type PortalEntry =
   | { readonly kind: "now-playing"; readonly session: ActiveSession }
   | { readonly kind: "local-game"; readonly game: LocalGame }
   | { readonly kind: "game"; readonly game: Game }
-  | { readonly kind: "local"; readonly launchable: Launchable }
   | {
       readonly kind: "stream"
       readonly hostUuid: string
@@ -90,7 +86,6 @@ type StoppingState = {
 
 export type LaunchablesState =
   | { readonly _tag: "Loading" }
-  | { readonly _tag: "LoadError"; readonly message: string }
   | ReadyState
   | PreparingState
   | LaunchingState
@@ -140,8 +135,6 @@ export const entryKey = (entry: PortalEntry): string => {
       return entry.game.host === undefined
         ? `game:${entry.game.id}`
         : `game:${entry.game.host}:${entry.game.id}`
-    case "local":
-      return `local:${entry.launchable.packageName}`
     case "stream":
       return `stream:${entry.hostUuid}:${entry.app.id}`
   }
@@ -161,19 +154,17 @@ export const entryLabel = (entry: PortalEntry): string =>
     ? (entry.session.title ?? entry.session.gameId ?? "Current session")
     : entry.kind === "local-game" || entry.kind === "game"
       ? entry.game.title
-      : entry.kind === "local"
-        ? entry.launchable.label
-        : entry.app.name
+      : entry.app.name
 
 export const LaunchablesState = {
   loading: (): LaunchablesState => ({ _tag: "Loading" }),
 
   /**
    * Fold all sources into one state. Failed sources degrade to a notice;
-   * only a total failure (no entries, at least one error) is a LoadError.
+   * pairing and the background notice keep the screen actionable even when
+   * every content source fails.
    */
   fromSources: (
-    local: QueryLaunchablesResult,
     streams: readonly StreamSource[],
     korrid: CatalogSnapshotOutcome,
     hostsError?: string,
@@ -246,9 +237,6 @@ export const LaunchablesState = {
     // it is a setting, not something to play.
     entries.push({ kind: "background-notice", visible: notice?._tag === "Visible" })
 
-    if (entries.length === 0 && failures.length > 0) {
-      return { _tag: "LoadError", message: failures.join(" · ") }
-    }
     // Keep the cursor on whatever the user had chosen. The list reloads in
     // the background -- on resume, on a poll -- and resetting to the top
     // mid-navigation makes Confirm activate whatever now sits at index 0.
@@ -367,16 +355,6 @@ export const LaunchablesState = {
       : readyFrom(state, `${result.reason}: ${result.message}`)
   },
 
-  withLaunchResult: (
-    state: LaunchablesState,
-    result: LaunchAppResult,
-  ): LaunchablesState => {
-    if (state._tag !== "Launching") return state
-    return result._tag === "Launched"
-      ? { ...state, notice: null }
-      : readyFrom(state, `${result.reason}: ${result.message}`)
-  },
-
   withStartStreamResult: (
     state: LaunchablesState,
     result: StartStreamResult,
@@ -475,8 +453,6 @@ export const LaunchablesState = {
             ? "Local games"
             : entry.kind === "game"
               ? "Games"
-              : entry.kind === "local"
-              ? "This device"
               : entry.hostName
       if (current === null || current.title !== title) {
         current = { title, startIndex: index, entries: [] }

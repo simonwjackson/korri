@@ -59,6 +59,9 @@ mod tests {
         let root = tempdir().unwrap();
         let error = launch_game(root.path(), "wl4", FileProvisionMode::Deferred)
             .expect_err("rom is absent");
-        assert!(matches!(error, LaunchError::RomMissing(_)), "got: {error:?}");
+        assert!(
+            matches!(error, LaunchError::RomMissing(_)),
+            "got: {error:?}"
+        );
     }
 }

@@ -42,6 +42,7 @@ export function LaunchablesList({ state }: LaunchablesListProps) {
                   // never what a tap should do.
                   ref={index === state.selectedIndex ? selectedRef : null}
                   data-entry-index={index}
+                  data-entry-key={entryKey(entry)}
                   className={
                     index === state.selectedIndex
                       ? "rounded-xl bg-zinc-100 px-5 py-4 text-lg font-semibold text-zinc-950"

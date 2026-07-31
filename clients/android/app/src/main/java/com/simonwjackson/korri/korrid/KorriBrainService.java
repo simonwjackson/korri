@@ -26,6 +26,8 @@ public final class KorriBrainService extends Service {
     private static final String TAG = "KorriBrain";
     private static final String CHANNEL = "korri-brain";
     private static final int NOTIFICATION_ID = 1;
+    private static final String EXTRA_ALLOWED_ORIGIN = "allowedOrigin";
+    private static final String EXTRA_LOCAL_STORAGE_ROOT = "localStorageRoot";
 
     /**
      * Guards double-starts: the activity and the service both want a running
@@ -41,11 +43,10 @@ public final class KorriBrainService extends Service {
      */
     public static synchronized int ensureRunning(
             Context context, String allowedOrigin, String localStorageRoot) {
-        if (!started) {
-            port = KorridServer.startAndLog(allowedOrigin, localStorageRoot);
-            started = true;
-        }
-        Intent intent = new Intent(context.getApplicationContext(), KorriBrainService.class);
+        startBrainIfNeeded(allowedOrigin, localStorageRoot);
+        Intent intent = new Intent(context.getApplicationContext(), KorriBrainService.class)
+                .putExtra(EXTRA_ALLOWED_ORIGIN, allowedOrigin)
+                .putExtra(EXTRA_LOCAL_STORAGE_ROOT, localStorageRoot);
         if (Build.VERSION.SDK_INT >= 26) {
             context.getApplicationContext().startForegroundService(intent);
         } else {
@@ -60,21 +61,57 @@ public final class KorriBrainService extends Service {
                 .stopService(new Intent(context.getApplicationContext(), KorriBrainService.class));
     }
 
+    private static synchronized void startBrainIfNeeded(
+            String allowedOrigin, String localStorageRoot) {
+        if (started) {
+            return;
+        }
+        int startedPort = KorridServer.startAndLog(allowedOrigin, localStorageRoot);
+        port = startedPort;
+        started = true;
+    }
+
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         startForeground(NOTIFICATION_ID, buildNotification());
+        if (!started) {
+            if (intent == null) {
+                Log.e(TAG, "brain service restarted without launch parameters; stopping");
+                return stopWithoutRestart(startId);
+            }
+            String allowedOrigin = intent.getStringExtra(EXTRA_ALLOWED_ORIGIN);
+            String localStorageRoot = intent.getStringExtra(EXTRA_LOCAL_STORAGE_ROOT);
+            if (allowedOrigin == null || localStorageRoot == null) {
+                Log.e(TAG, "brain service launch parameters missing; stopping");
+                return stopWithoutRestart(startId);
+            }
+            try {
+                synchronized (KorriBrainService.class) {
+                    startBrainIfNeeded(allowedOrigin, localStorageRoot);
+                }
+            } catch (RuntimeException error) {
+                Log.e(TAG, "brain service failed to start korrid; stopping", error);
+                return stopWithoutRestart(startId);
+            }
+        }
         Log.i(TAG, "brain service up, korrid on 127.0.0.1:" + port);
-        // Android should bring this back if it ever has to reclaim the process.
-        return START_STICKY;
+        // If Android kills the process, redeliver the intent so the service
+        // can restart the Rust brain with the same portal origin and storage root.
+        return START_REDELIVER_INTENT;
     }
 
     @Override
     public void onDestroy() {
         Log.i(TAG, "brain service stopping, korrid going down with it");
-        KorridServer.stop();
         synchronized (KorriBrainService.class) {
-            started = false;
-            port = 0;
+            try {
+                if (started) {
+                    KorridServer.stop();
+                }
+            } finally {
+                started = false;
+                port = 0;
+            }
         }
         super.onDestroy();
     }
@@ -82,6 +119,21 @@ public final class KorriBrainService extends Service {
     @Override
     public IBinder onBind(Intent intent) {
         return null;
+    }
+
+    private int stopWithoutRestart(int startId) {
+        removeForegroundState();
+        stopSelf(startId);
+        return START_NOT_STICKY;
+    }
+
+    @SuppressWarnings("deprecation")
+    private void removeForegroundState() {
+        if (Build.VERSION.SDK_INT >= 24) {
+            stopForeground(STOP_FOREGROUND_REMOVE);
+        } else {
+            stopForeground(true);
+        }
     }
 
     private Notification buildNotification() {

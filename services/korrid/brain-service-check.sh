@@ -9,14 +9,20 @@ set -euo pipefail
 SERIAL="${1:?usage: brain-service-check.sh <adb-serial>}"
 KORRI=com.simonwjackson.korri.debug
 ADB=(adb -s "$SERIAL")
+FAILED=0
 
 [[ "$SERIAL" == *:* ]] && { adb connect "$SERIAL" >/dev/null 2>&1 || true; }
 "${ADB[@]}" wait-for-device
 
 report() { printf '  %-34s %s\n' "$1" "$2"; }
+fail() { echo "  FAILED: $1"; FAILED=1; }
 # grep -c exits non-zero on zero matches, which under set -e would end the run
 # at exactly the moment something interesting happened.
 count() { "${ADB[@]}" shell "$1" 2>/dev/null | tr -d '\r\n' || true; }
+is_positive_count() {
+  local value="$1"
+  [[ "$value" =~ ^[0-9]+$ ]] && (( value > 0 ))
+}
 
 alive() {
   # Asks korrid to do real work rather than reading Android's process list: a
@@ -31,6 +37,30 @@ alive() {
   [[ "$code" == "200" ]] && echo "yes (200)" || echo "NO (http ${code:-none})"
 }
 
+require_alive() {
+  local label="$1" observed
+  observed="$(alive "$PORT")"
+  report "$label" "$observed"
+  [[ "$observed" == yes\ * ]] || fail "$label was not a 200 health RPC"
+}
+
+require_same_pid() {
+  local label="$1" observed="$2"
+  report "$label" "$observed"
+  if [[ -z "$observed" ]]; then
+    fail "$label was empty"
+  elif [[ -n "$STARTPID" && "$observed" != "$STARTPID" ]]; then
+    fail "$label changed from $STARTPID to $observed"
+  fi
+}
+
+require_foreground() {
+  local label="$1" observed
+  observed="$(count "dumpsys activity services $KORRI | grep -c 'isForeground=true'")"
+  report "$label" "$observed"
+  is_positive_count "$observed" || fail "$label was not foreground"
+}
+
 echo "== fresh start"
 "${ADB[@]}" logcat -c
 "${ADB[@]}" shell "am force-stop $KORRI; input keyevent KEYCODE_WAKEUP"
@@ -43,33 +73,47 @@ CAPABILITY="$("${ADB[@]}" logcat -d -s KorridServer | grep -oE 'debug capability
 STARTPID="$(count "pidof $KORRI")"
 
 report "korrid port" "$PORT"
-report "pid holding the brain" "$STARTPID"
-report "service is foreground" "$(count "dumpsys activity services $KORRI | grep -c 'isForeground=true'")"
-report "works while on screen" "$(alive "$PORT")"
+require_same_pid "pid holding the brain" "$STARTPID"
+require_foreground "service is foreground"
+require_alive "works while on screen"
 
 echo
 echo "== screen goes away (HOME), which used to kill it"
 "${ADB[@]}" shell "input keyevent KEYCODE_HOME"
 sleep 5
-report "works with Korri off screen" "$(alive "$PORT")"
+require_alive "works with Korri off screen"
+require_foreground "service is foreground after HOME"
+HOMEPID="$(count "pidof $KORRI")"
+require_same_pid "pid after HOME" "$HOMEPID"
 
 echo
 echo "== background kill sweep"
 "${ADB[@]}" shell "am kill-all" >/dev/null 2>&1
 sleep 4
-report "works after kill sweep" "$(alive "$PORT")"
+require_alive "works after kill sweep"
+require_foreground "service is foreground after kill sweep"
+KILLPID="$(count "pidof $KORRI")"
+require_same_pid "pid after kill sweep" "$KILLPID"
 
 echo
 echo "== survived, or quietly restarted?"
 # One start means it survived. More means Android restarted the service, which
 # is a fresh brain wearing survival's clothes: any session state is gone.
-report "times the brain started" "$(count "logcat -d -s KorriBrain | grep -c 'brain service up'")"
+STARTS="$(count "logcat -d -s KorriBrain | grep -c 'brain service up'")"
+report "times the brain started" "$STARTS"
+[[ "$STARTS" == "1" ]] || fail "brain service started $STARTS times"
 NOWPID="$(count "pidof $KORRI")"
-report "pid now" "$NOWPID"
-[[ "$STARTPID" == "$NOWPID" ]] && report "same process throughout" "yes" \
-  || report "same process throughout" "NO -- it restarted"
+require_same_pid "pid now" "$NOWPID"
+if [[ -n "$STARTPID" && "$STARTPID" == "$HOMEPID" && "$STARTPID" == "$KILLPID" && "$STARTPID" == "$NOWPID" ]]; then
+  report "same process throughout" "yes"
+else
+  report "same process throughout" "NO -- it restarted"
+  fail "process did not stay the same throughout"
+fi
 
 echo
 echo "== can the user see it running?"
 report "'Ready to play' notifications" "$(count "dumpsys notification --noredact | grep -c 'Ready to play'")"
 report "notification permission" "$(count "dumpsys package $KORRI | grep -m1 'POST_NOTIFICATIONS: granted'")"
+
+exit "$FAILED"

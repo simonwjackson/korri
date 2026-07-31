@@ -17,8 +17,6 @@ struct InstalledGame {
     title: &'static str,
     system: &'static str,
     package_name: &'static str,
-    /// Resolved from the device: the activity its launcher icon starts.
-    class_name: &'static str,
 }
 
 const GAMES: &[InstalledGame] = &[InstalledGame {
@@ -26,7 +24,6 @@ const GAMES: &[InstalledGame] = &[InstalledGame {
     title: "TMNT: Shredder's Revenge",
     system: "Android",
     package_name: "com.playdigious.tmnt",
-    class_name: "crc64ce797c93931d6e91.MainActivity",
 }];
 
 pub fn local_games() -> Vec<LocalGame> {
@@ -49,7 +46,10 @@ pub fn launch_game(game_id: &str) -> Option<LaunchSpec> {
         launcher_id: "android-app".into(),
         component: AndroidComponent {
             package_name: game.package_name.into(),
-            class_name: game.class_name.into(),
+            // Intentionally unused for android-app: Android package updates can
+            // rename the launcher Activity, so the shell resolves the current
+            // launcher intent with PackageManager at the moment of launch.
+            class_name: String::new(),
         },
         // Nothing to hand the app and nothing to provision: it owns its own
         // saves and settings.
@@ -77,7 +77,7 @@ mod tests {
         let spec = launch_game("tmnt-shredders-revenge").expect("should own this id");
         assert_eq!(spec.launcher_id, "android-app");
         assert_eq!(spec.component.package_name, "com.playdigious.tmnt");
-        assert!(spec.component.class_name.ends_with("MainActivity"));
+        assert!(spec.component.class_name.is_empty());
     }
 
     #[test]

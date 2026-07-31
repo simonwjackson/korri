@@ -16,7 +16,6 @@ const flush = () => new Promise(resolve => setTimeout(resolve, 25))
 async function renderRoot(
   korrid = createInMemoryKorridClient({ games: [] }),
   bridge = createInMemoryLauncherBridge({
-    items: [],
     streamHosts: [],
   }),
 ) {
@@ -41,6 +40,305 @@ async function renderRoot(
   }
 }
 
+describe("LaunchablesRoot shell action entries", () => {
+  it("opens native pairing and renders Unavailable as a notice", async () => {
+    let calls = 0
+    const baseBridge = createInMemoryLauncherBridge({
+      streamHosts: [],
+    })
+    const bridge = {
+      ...baseBridge,
+      async openPairing() {
+        calls += 1
+        return { _tag: "Unavailable" as const, message: "no pairing screen" }
+      },
+    }
+    const view = await renderRoot(
+      createInMemoryKorridClient({ games: [], localGames: [] }),
+      bridge,
+    )
+
+    await act(async () => {
+      view.bus.emit({ type: "confirm", source: "keyboard" })
+      await flush()
+    })
+
+    expect(calls).toBe(1)
+    expect(view.container.textContent).toContain(
+      "cannot open pairing: no pairing screen",
+    )
+    await view.cleanup()
+  })
+
+  it("opens storage access settings and renders Unavailable as a notice", async () => {
+    let calls = 0
+    const baseBridge = createInMemoryLauncherBridge({
+      streamHosts: [],
+    })
+    const bridge = {
+      ...baseBridge,
+      async storageAccess() {
+        return { _tag: "Denied" as const }
+      },
+      async openStorageAccessSettings() {
+        calls += 1
+        return { _tag: "Unavailable" as const, message: "no storage settings" }
+      },
+    }
+    const view = await renderRoot(
+      createInMemoryKorridClient({ games: [], localGames: [] }),
+      bridge,
+    )
+    expect(view.container.textContent).toContain("Korri needs file access")
+
+    await act(async () => {
+      view.bus.emit({ type: "confirm", source: "keyboard" })
+      await flush()
+    })
+
+    expect(calls).toBe(1)
+    expect(view.container.textContent).toContain(
+      "cannot open settings: no storage settings",
+    )
+    await view.cleanup()
+  })
+
+  it("requests background notice visibility and renders Unavailable settings", async () => {
+    let requests = 0
+    let settings = 0
+    const baseBridge = createInMemoryLauncherBridge({
+      streamHosts: [],
+    })
+    const bridge = {
+      ...baseBridge,
+      async backgroundNotice() {
+        return { _tag: "Hidden" as const }
+      },
+      async requestBackgroundNotice() {
+        requests += 1
+        return { _tag: "Unprompted" as const }
+      },
+      async openNotificationSettings() {
+        settings += 1
+        return {
+          _tag: "Unavailable" as const,
+          message: "no notification settings",
+        }
+      },
+    }
+    const view = await renderRoot(
+      createInMemoryKorridClient({ games: [], localGames: [] }),
+      bridge,
+    )
+
+    await act(async () => {
+      view.bus.emit({
+        type: "direction",
+        direction: "down",
+        source: "keyboard",
+      })
+      view.bus.emit({ type: "confirm", source: "keyboard" })
+      await flush()
+    })
+
+    expect(requests).toBe(1)
+    expect(settings).toBe(1)
+    expect(view.container.textContent).toContain(
+      "cannot open notification settings: no notification settings",
+    )
+    await view.cleanup()
+  })
+
+  it("opens notification settings directly when the background notice is visible", async () => {
+    let requests = 0
+    let settings = 0
+    const baseBridge = createInMemoryLauncherBridge({
+      streamHosts: [],
+    })
+    const bridge = {
+      ...baseBridge,
+      async backgroundNotice() {
+        return { _tag: "Visible" as const }
+      },
+      async requestBackgroundNotice() {
+        requests += 1
+        return { _tag: "Granted" as const }
+      },
+      async openNotificationSettings() {
+        settings += 1
+        return { _tag: "Opened" as const }
+      },
+    }
+    const view = await renderRoot(
+      createInMemoryKorridClient({ games: [], localGames: [] }),
+      bridge,
+    )
+
+    await act(async () => {
+      view.bus.emit({
+        type: "direction",
+        direction: "down",
+        source: "keyboard",
+      })
+      view.bus.emit({ type: "confirm", source: "keyboard" })
+      await flush()
+    })
+
+    expect(requests).toBe(0)
+    expect(settings).toBe(1)
+    await view.cleanup()
+  })
+
+  for (const outcome of ["Granted", "Prompted", "Denied"] as const) {
+    it(`does not open notification settings after the hidden background notice returns ${outcome}`, async () => {
+      let requests = 0
+      let settings = 0
+      const baseBridge = createInMemoryLauncherBridge({
+        streamHosts: [],
+      })
+      const bridge = {
+        ...baseBridge,
+        async backgroundNotice() {
+          return { _tag: "Hidden" as const }
+        },
+        async requestBackgroundNotice() {
+          requests += 1
+          return { _tag: outcome }
+        },
+        async openNotificationSettings() {
+          settings += 1
+          return { _tag: "Opened" as const }
+        },
+      }
+      const view = await renderRoot(
+        createInMemoryKorridClient({ games: [], localGames: [] }),
+        bridge,
+      )
+
+      await act(async () => {
+        view.bus.emit({
+          type: "direction",
+          direction: "down",
+          source: "keyboard",
+        })
+        view.bus.emit({ type: "confirm", source: "keyboard" })
+        await flush()
+      })
+
+      expect(requests).toBe(1)
+      expect(settings).toBe(0)
+      await view.cleanup()
+    })
+  }
+})
+
+describe("LaunchablesRoot pointer activation", () => {
+  it("ignores stale activate actions whose key does not match the indexed entry", async () => {
+    let pairings = 0
+    let launches = 0
+    const baseBridge = createInMemoryLauncherBridge({ streamHosts: [] })
+    const bridge = {
+      ...baseBridge,
+      async openPairing() {
+        pairings += 1
+        return { _tag: "Opened" as const }
+      },
+      async launchLocal(spec: Parameters<typeof baseBridge.launchLocal>[0]) {
+        launches += 1
+        return baseBridge.launchLocal(spec)
+      },
+    }
+    const view = await renderRoot(createInMemoryKorridClient({ games: [] }), bridge)
+
+    await act(async () => {
+      view.bus.emit({
+        type: "activate",
+        index: 0,
+        key: "pairing",
+        source: "pointer",
+      })
+      await flush()
+    })
+
+    expect(pairings).toBe(0)
+    expect(launches).toBe(0)
+    expect(view.container.textContent).toContain("Wario Land 4")
+    await view.cleanup()
+  })
+
+  it("ignores out-of-range activate actions", async () => {
+    let launches = 0
+    const baseBridge = createInMemoryLauncherBridge({ streamHosts: [] })
+    const bridge = {
+      ...baseBridge,
+      async launchLocal(spec: Parameters<typeof baseBridge.launchLocal>[0]) {
+        launches += 1
+        return baseBridge.launchLocal(spec)
+      },
+    }
+    const view = await renderRoot(createInMemoryKorridClient({ games: [] }), bridge)
+
+    await act(async () => {
+      view.bus.emit({
+        type: "activate",
+        index: 99,
+        key: "local-game:wl4",
+        source: "pointer",
+      })
+      await flush()
+    })
+
+    expect(launches).toBe(0)
+    expect(view.container.textContent).toContain("Wario Land 4")
+    await view.cleanup()
+  })
+
+  it("ignores activate actions from a list reordered since the tap target was rendered", async () => {
+    let storageDenied = false
+    let pairings = 0
+    let launches = 0
+    const baseBridge = createInMemoryLauncherBridge({ streamHosts: [] })
+    const bridge = {
+      ...baseBridge,
+      async storageAccess() {
+        return storageDenied ? { _tag: "Denied" as const } : { _tag: "Granted" as const }
+      },
+      async openPairing() {
+        pairings += 1
+        return { _tag: "Opened" as const }
+      },
+      async launchLocal(spec: Parameters<typeof baseBridge.launchLocal>[0]) {
+        launches += 1
+        return baseBridge.launchLocal(spec)
+      },
+    }
+    const view = await renderRoot(createInMemoryKorridClient({ games: [] }), bridge)
+    expect(view.container.textContent).toContain("Wario Land 4")
+
+    await act(async () => {
+      storageDenied = true
+      window.dispatchEvent(new Event(SHELL_RESUMED_EVENT))
+      await flush()
+    })
+    expect(view.container.textContent).toContain("Korri needs file access")
+
+    await act(async () => {
+      view.bus.emit({
+        type: "activate",
+        index: 1,
+        key: "pairing",
+        source: "pointer",
+      })
+      await flush()
+    })
+
+    expect(pairings).toBe(0)
+    expect(launches).toBe(0)
+    expect(view.container.textContent).toContain("Korri needs file access")
+    await view.cleanup()
+  })
+})
+
 describe("LaunchablesRoot local launch flow", () => {
   it("confirms Wario through korrid then the launcher-neutral bridge", async () => {
     let requestedGame = ""
@@ -59,7 +357,6 @@ describe("LaunchablesRoot local launch flow", () => {
       },
     }
     const baseBridge = createInMemoryLauncherBridge({
-      items: [],
       streamHosts: [],
     })
     const bridge = {
@@ -95,7 +392,6 @@ describe("LaunchablesRoot local launch flow", () => {
       behavior: "local-launch-fail",
     })
     const baseBridge = createInMemoryLauncherBridge({
-      items: [],
       streamHosts: [],
     })
     const bridge = {
@@ -133,7 +429,6 @@ describe("LaunchablesRoot local launch flow", () => {
       },
     }
     const baseBridge = createInMemoryLauncherBridge({
-      items: [],
       streamHosts: [
         { uuid: "aka-uuid", name: "aka", paired: true },
         { uuid: "zao-uuid", name: "zao", paired: true },
@@ -177,7 +472,6 @@ describe("LaunchablesRoot local launch flow", () => {
       },
     }
     const baseBridge = createInMemoryLauncherBridge({
-      items: [],
       streamHosts: [{ uuid: "aka-uuid", name: "aka", paired: true }],
       streamApps: {
         "aka-uuid": [{ id: 10, name: "Korri Stream" }],
@@ -216,7 +510,6 @@ describe("LaunchablesRoot local launch flow", () => {
       },
     })
     const baseBridge = createInMemoryLauncherBridge({
-      items: [],
       streamHosts: [
         { uuid: "zao-uuid", name: "zao", paired: true },
         { uuid: "aka-uuid", name: "aka", paired: true },
@@ -248,7 +541,6 @@ describe("LaunchablesRoot local launch flow", () => {
     let streamCalls = 0
     const korrid = createInMemoryKorridClient({ games: [], localGames: [] })
     const baseBridge = createInMemoryLauncherBridge({
-      items: [],
       streamHosts: [{ uuid: "host", name: "Aka", paired: true }],
       streamApps: { host: [{ id: 7, name: "Desktop" }] },
     })

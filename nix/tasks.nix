@@ -69,6 +69,23 @@ let
     fi
   '';
 
+  deviceScript =
+    name: file: task:
+    task
+    // {
+      usageSuffix = task.usageSuffix or " -- <adb-serial>";
+      runtimeInputs = [
+        pkgs.android-tools
+        pkgs.coreutils
+      ] ++ (task.runtimeInputs or [ ]);
+      script = ''
+        serial="''${1:?usage: ${name} <adb-serial>}"
+        ${adbPreflight}
+        ${task.setup or ""}
+        exec "$KORRI_ROOT/services/korrid/${file}" "$@"
+      '';
+    };
+
   definitions = {
     android-apk = {
       description = "Build the debug Android APK (run portal-bundle first for bundled assets).";
@@ -144,6 +161,76 @@ let
         export CARGO_TARGET_DIR="$KORRI_ROOT/.cache/korrid-target"
         exec "$KORRI_ROOT/services/korrid/script-device-check.sh" "$@"
       '';
+    };
+
+    brain-service-check = deviceScript "brain-service-check" "brain-service-check.sh" {
+      description = "Check on a device that the embedded korrid brain survives after the portal screen leaves foreground.";
+      runtimeInputs = [ pkgs.gnugrep ];
+    };
+
+    storage-notice-check = deviceScript "storage-notice-check" "storage-notice-check.sh" {
+      description = "Build, install, and verify on a device that denied storage access shows a reachable portal prompt.";
+      runtimeInputs = androidInputs ++ [
+        rustToolchain
+        pkgs.android-tools
+        pkgs.cargo-ndk
+        pkgs.clang
+        pkgs.gnugrep
+        pkgs.nix
+        pkgs.llvmPackages.libclang
+      ];
+      env = androidEnv // {
+        ANDROID_NDK_HOME = android.ndkRoot;
+        ANDROID_NDK_ROOT = android.ndkRoot;
+        BINDGEN_EXTRA_CLANG_ARGS = "--target=aarch64-linux-android21 --sysroot=${android.ndkRoot}/toolchains/llvm/prebuilt/linux-x86_64/sysroot";
+        CC_x86_64_unknown_linux_gnu = "${pkgs.clang}/bin/clang";
+        HOST_CC = "${pkgs.clang}/bin/clang";
+        LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+      };
+      setup = ''
+        ${androidSetup}
+        export CARGO_TARGET_DIR="$KORRI_ROOT/.cache/korrid-target"
+      '';
+    };
+
+    storage-notice-shots = deviceScript "storage-notice-shots" "storage-notice-shots.sh" {
+      description = "Capture device screenshots of the portal with storage access denied and after confirming the prompt.";
+      usageSuffix = " -- <adb-serial> [output-dir]";
+      runtimeInputs = [ pkgs.gnugrep ];
+    };
+
+    journey-compare = deviceScript "journey-compare" "journey-compare.sh" {
+      description = "Compare the Android game journey after leaving with Back versus Home, reporting resume/restart evidence.";
+      runtimeInputs = [
+        pkgs.gnugrep
+        pkgs.gnused
+      ];
+    };
+
+    journey-resume = deviceScript "journey-resume" "journey-resume.sh" {
+      description = "Verify on a device that leaving an Android game with Back and relaunching resumes the same process on screen.";
+      usageSuffix = " -- <adb-serial> [package] [tap-x tap-y]";
+      runtimeInputs = [
+        pkgs.gnugrep
+        pkgs.gnused
+      ];
+    };
+
+    journey-switch = deviceScript "journey-switch" "journey-switch.sh" {
+      description = "Report what appears when the user opens Korri again after switching away from an Android game with Home.";
+      usageSuffix = " -- <adb-serial> [label]";
+      runtimeInputs = [
+        pkgs.gnugrep
+        pkgs.gnused
+      ];
+    };
+
+    launch-liveness-check = deviceScript "launch-liveness-check" "launch-liveness-check.sh" {
+      description = "Measure whether pid, process state, and Android tasks truthfully identify an Android game launch as alive.";
+      runtimeInputs = [
+        pkgs.gawk
+        pkgs.gnugrep
+      ];
     };
 
     korrid-test = {

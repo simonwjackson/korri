@@ -6,35 +6,41 @@ import {
 } from "./launcher-bridge"
 
 describe("createInMemoryLauncherBridge", () => {
-  it("returns configured items", async () => {
-    const bridge = createInMemoryLauncherBridge({
-      items: [{ packageName: "a", label: "A" }],
-    })
-    expect(await bridge.queryLaunchables()).toEqual({
-      _tag: "Launchables",
-      items: [{ packageName: "a", label: "A" }],
-    })
-    expect(await bridge.launchApp("a")).toEqual({ _tag: "Launched" })
+  it("launches local specs through the configured in-memory bridge", async () => {
+    const bridge = createInMemoryLauncherBridge()
+    const spec = {
+      launcherId: "retroarch",
+      component: { packageName: "pkg", className: "Activity" },
+      extras: {},
+      directories: [],
+      files: [],
+      integrity: "opaque-signature",
+    }
+
+    expect(await bridge.launchLocal(spec)).toEqual({ _tag: "Launched" })
   })
 
-  it("fails queries when configured to", async () => {
-    const bridge = createInMemoryLauncherBridge({ behavior: "query-fail" })
-    const result = await bridge.queryLaunchables()
-    expect(result._tag).toBe("QueryFailed")
-  })
-
-  it("fails launches for unknown packages", async () => {
-    const bridge = createInMemoryLauncherBridge({ items: [] })
-    const result = await bridge.launchApp("ghost")
-    expect(result).toMatchObject({ _tag: "LaunchFailed", reason: "NotFound" })
+  it("fails local launches when configured to", async () => {
+    const bridge = createInMemoryLauncherBridge({ behavior: "local-launch-fail" })
+    const result = await bridge.launchLocal({
+      launcherId: "retroarch",
+      component: { packageName: "pkg", className: "Activity" },
+      extras: {},
+      directories: [],
+      files: [],
+      integrity: "opaque-signature",
+    })
+    expect(result).toMatchObject({
+      _tag: "LaunchFailed",
+      reason: "NotInstalled",
+    })
   })
 })
 
 describe("createKorriNativeLauncherBridge", () => {
-  const surface = (overrides: Partial<KorriNativeBridgeSurface>): KorriNativeBridgeSurface => ({
-    queryLaunchables: () =>
-      JSON.stringify({ _tag: "Launchables", items: [{ packageName: "x", label: "X" }] }),
-    launchApp: () => JSON.stringify({ _tag: "Launched" }),
+  const surface = (
+    overrides: Partial<KorriNativeBridgeSurface>,
+  ): KorriNativeBridgeSurface => ({
     launchLocal: () => JSON.stringify({ _tag: "Launched" }),
     queryStreamHosts: () =>
       JSON.stringify({
@@ -42,7 +48,10 @@ describe("createKorriNativeLauncherBridge", () => {
         items: [{ uuid: "h1", name: "Office", paired: true }],
       }),
     queryStreamApps: () =>
-      JSON.stringify({ _tag: "StreamApps", items: [{ id: 7, name: "Desktop" }] }),
+      JSON.stringify({
+        _tag: "StreamApps",
+        items: [{ id: 7, name: "Desktop" }],
+      }),
     startStream: () => JSON.stringify({ _tag: "StreamStarted" }),
     korridPort: () => 43117,
     korridCapability: () => "test-capability",
@@ -52,17 +61,8 @@ describe("createKorriNativeLauncherBridge", () => {
     backgroundNotice: () => JSON.stringify({ _tag: "Visible" }),
     requestBackgroundNotice: () => JSON.stringify({ _tag: "Granted" }),
     openNotificationSettings: () => JSON.stringify({ _tag: "Opened" }),
-    bridgeVersion: () => 8,
+    bridgeVersion: () => 10,
     ...overrides,
-  })
-
-  it("decodes results from the native surface", async () => {
-    const bridge = createKorriNativeLauncherBridge(surface({}))
-    expect(await bridge.queryLaunchables()).toEqual({
-      _tag: "Launchables",
-      items: [{ packageName: "x", label: "X" }],
-    })
-    expect(await bridge.launchApp("x")).toEqual({ _tag: "Launched" })
   })
 
   it("serializes a launcher-neutral local spec to the native surface", async () => {
@@ -97,7 +97,72 @@ describe("createKorriNativeLauncherBridge", () => {
       _tag: "StreamApps",
       items: [{ id: 7, name: "Desktop" }],
     })
-    expect(await bridge.startStream("h1", 7)).toEqual({ _tag: "StreamStarted" })
+    expect(await bridge.startStream("h1", 7)).toEqual({
+      _tag: "StreamStarted",
+    })
+  })
+
+  it("round-trips valid shell-state bridge payloads", async () => {
+    for (const expected of [
+      { _tag: "Granted" },
+      { _tag: "NotRequired" },
+      { _tag: "Denied" },
+      { _tag: "QueryFailed", message: "storage probe failed" },
+    ] as const) {
+      const bridge = createKorriNativeLauncherBridge(
+        surface({ storageAccess: () => JSON.stringify(expected) }),
+      )
+      expect(await bridge.storageAccess()).toEqual(expected)
+    }
+
+    for (const expected of [
+      { _tag: "Opened" },
+      { _tag: "Unavailable", message: "no storage settings" },
+    ] as const) {
+      const bridge = createKorriNativeLauncherBridge(
+        surface({ openStorageAccessSettings: () => JSON.stringify(expected) }),
+      )
+      expect(await bridge.openStorageAccessSettings()).toEqual(expected)
+    }
+
+    for (const expected of [{ _tag: "Visible" }, { _tag: "Hidden" }] as const) {
+      const bridge = createKorriNativeLauncherBridge(
+        surface({ backgroundNotice: () => JSON.stringify(expected) }),
+      )
+      expect(await bridge.backgroundNotice()).toEqual(expected)
+    }
+
+    for (const expected of [
+      { _tag: "Granted" },
+      { _tag: "Denied" },
+      { _tag: "Prompted" },
+      { _tag: "Unprompted" },
+    ] as const) {
+      const bridge = createKorriNativeLauncherBridge(
+        surface({ requestBackgroundNotice: () => JSON.stringify(expected) }),
+      )
+      expect(await bridge.requestBackgroundNotice()).toEqual(expected)
+    }
+
+    for (const expected of [
+      { _tag: "Opened" },
+      { _tag: "Unavailable", message: "no notification settings" },
+    ] as const) {
+      const bridge = createKorriNativeLauncherBridge(
+        surface({ openNotificationSettings: () => JSON.stringify(expected) }),
+      )
+      expect(await bridge.openNotificationSettings()).toEqual(expected)
+    }
+
+    for (const expected of [
+      { _tag: "Opened" },
+      { _tag: "Unavailable", message: "no pairing screen" },
+    ] as const) {
+      const bridge = createKorriNativeLauncherBridge(
+        surface({ openPairing: () => JSON.stringify(expected) }),
+      )
+      expect(await bridge.openPairing()).toEqual(expected)
+    }
   })
 
   it("converts stream bridge explosions into tagged failures", async () => {
@@ -114,20 +179,75 @@ describe("createKorriNativeLauncherBridge", () => {
     })
   })
 
-  it("converts malformed native payloads into tagged failures", async () => {
+  it("converts malformed local launch native payloads into tagged failures", async () => {
     const bridge = createKorriNativeLauncherBridge(
       surface({
-        queryLaunchables: () => "not json",
-        launchApp: () => {
+        launchLocal: () => {
           throw new Error("bridge exploded")
         },
       }),
     )
-    expect((await bridge.queryLaunchables())._tag).toBe("QueryFailed")
-    expect(await bridge.launchApp("x")).toMatchObject({
+    expect(
+      await bridge.launchLocal({
+        launcherId: "retroarch",
+        component: { packageName: "pkg", className: "Activity" },
+        extras: {},
+        directories: [],
+        files: [],
+        integrity: "opaque-signature",
+      }),
+    ).toMatchObject({
       _tag: "LaunchFailed",
       reason: "StartFailed",
       message: "bridge exploded",
     })
+  })
+
+  it("rejects wrong tags in shell-state bridge payloads", async () => {
+    const bridge = createKorriNativeLauncherBridge(
+      surface({
+        storageAccess: () => JSON.stringify({ _tag: "Opened" }),
+        openStorageAccessSettings: () => JSON.stringify({ _tag: "Granted" }),
+        backgroundNotice: () => JSON.stringify({ _tag: "Granted" }),
+        requestBackgroundNotice: () => JSON.stringify({ _tag: "Visible" }),
+        openNotificationSettings: () => JSON.stringify({ _tag: "Denied" }),
+        openPairing: () => JSON.stringify({ _tag: "Denied" }),
+      }),
+    )
+
+    expect((await bridge.storageAccess())._tag).toBe("QueryFailed")
+    expect(await bridge.openStorageAccessSettings()).toMatchObject({
+      _tag: "Unavailable",
+    })
+    expect(await bridge.backgroundNotice()).toEqual({ _tag: "Hidden" })
+    expect(await bridge.requestBackgroundNotice()).toEqual({
+      _tag: "Unprompted",
+    })
+    expect(await bridge.openNotificationSettings()).toMatchObject({
+      _tag: "Unavailable",
+    })
+    expect(await bridge.openPairing()).toMatchObject({ _tag: "Unavailable" })
+  })
+
+  it("rejects missing fields in shell-state bridge payloads", async () => {
+    const bridge = createKorriNativeLauncherBridge(
+      surface({
+        storageAccess: () => JSON.stringify({ _tag: "QueryFailed" }),
+        openStorageAccessSettings: () =>
+          JSON.stringify({ _tag: "Unavailable" }),
+        openNotificationSettings: () =>
+          JSON.stringify({ _tag: "Unavailable" }),
+        openPairing: () => JSON.stringify({ _tag: "Unavailable" }),
+      }),
+    )
+
+    expect((await bridge.storageAccess())._tag).toBe("QueryFailed")
+    expect(await bridge.openStorageAccessSettings()).toMatchObject({
+      _tag: "Unavailable",
+    })
+    expect(await bridge.openNotificationSettings()).toMatchObject({
+      _tag: "Unavailable",
+    })
+    expect(await bridge.openPairing()).toMatchObject({ _tag: "Unavailable" })
   })
 })

@@ -3,7 +3,8 @@
 # leaving the game with BACK and once with HOME, and reports whether the game
 # resumed or restarted, and where the user ended up.
 #
-# Decides nothing. Prints what happens.
+# Requires granted storage access and no active host banner: TMNT must be the
+# first local-game entry. Decides nothing. Prints what happens.
 set -euo pipefail
 
 SERIAL="${1:?usage: journey-compare.sh <adb-serial>}"
@@ -23,8 +24,6 @@ top_of() {
     | sed 's/.*u0 //; s|/.*||' | tr -d '\r\n'
 }
 open_game() {
-  "${ADB[@]}" shell "input keyevent KEYCODE_DPAD_DOWN"
-  sleep 2
   "${ADB[@]}" shell "input keyevent KEYCODE_DPAD_CENTER"
   sleep 18
 }

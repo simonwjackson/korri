@@ -4,14 +4,14 @@ import android.annotation.SuppressLint;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.content.pm.ApplicationInfo;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.IBinder;
+import android.os.Looper;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -43,7 +43,6 @@ import java.io.File;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -64,10 +63,11 @@ import okhttp3.Response;
  * icon: the streaming Activity is an implementation detail of one app.
  */
 public class KorriShellActivity extends AppCompatActivity {
+    private static final String NOTIFICATION_PREFS = "korri-notifications";
+    private static final String PREF_NOTIFICATION_PERMISSION_ASKED = "notification-permission-asked";
+
     private WebView webView;
     private int korridPort = -1;
-    /** Android only shows the notification dialog once; after that only settings can change it. */
-    private boolean notificationPermissionAsked = false;
     private String korridCapability = "";
     private ComputerManagerService.ComputerManagerBinder managerBinder;
     private final CountDownLatch binderReady = new CountDownLatch(1);
@@ -149,6 +149,21 @@ public class KorriShellActivity extends AppCompatActivity {
     /** True when the user can actually see Korri's background notice. */
     private boolean notificationsAllowed() {
         return androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled();
+    }
+
+    private boolean notificationPermissionAsked() {
+        return notificationPreferences().getBoolean(PREF_NOTIFICATION_PERMISSION_ASKED, false);
+    }
+
+    private void markNotificationPermissionAsked() {
+        notificationPreferences()
+                .edit()
+                .putBoolean(PREF_NOTIFICATION_PERMISSION_ASKED, true)
+                .apply();
+    }
+
+    private SharedPreferences notificationPreferences() {
+        return getSharedPreferences(NOTIFICATION_PREFS, MODE_PRIVATE);
     }
 
     private String portalUrl() {
@@ -243,6 +258,10 @@ public class KorriShellActivity extends AppCompatActivity {
         }
     }
 
+    private interface ActivityStart {
+        void run() throws Exception;
+    }
+
     /**
      * Narrow spike contract between the Korri web surface and the Android
      * runtime. Deals in Korri-shaped concepts (hosts, apps, launch requests),
@@ -257,7 +276,7 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public int bridgeVersion() {
             // Mirrors BRIDGE_VERSION in contracts/bridge/korri-native-bridge.ts.
-            return 9;
+            return 10;
         }
 
         /**
@@ -286,18 +305,25 @@ public class KorriShellActivity extends AppCompatActivity {
             if (notificationsAllowed()) {
                 return "{\"_tag\":\"Granted\"}";
             }
-            if (!shouldShowRequestPermissionRationale(
-                    android.Manifest.permission.POST_NOTIFICATIONS)
-                    && notificationPermissionAsked) {
-                // Asked before and Android will no longer show the dialog.
+            boolean rationale = shouldShowRequestPermissionRationale(
+                    android.Manifest.permission.POST_NOTIFICATIONS);
+            if (KorriNotificationPermissionPrompt.decision(
+                    notificationPermissionAsked(), rationale)
+                    == KorriNotificationPermissionPrompt.Decision.UNPROMPTED) {
                 return "{\"_tag\":\"Unprompted\"}";
             }
-            notificationPermissionAsked = true;
-            requestPermissions(
-                    new String[] {android.Manifest.permission.POST_NOTIFICATIONS}, 91);
+            try {
+                startActivityOnUiThread(
+                        () -> requestPermissions(
+                                new String[] {android.Manifest.permission.POST_NOTIFICATIONS}, 91),
+                        "notification permission request timed out");
+                markNotificationPermissionAsked();
+            } catch (Exception error) {
+                return "{\"_tag\":\"Unprompted\"}";
+            }
             // The dialog is asynchronous; the portal re-reads backgroundNotice()
             // on korri-shell-resumed, exactly as it does for file access.
-            return "{\"_tag\":\"Denied\"}";
+            return "{\"_tag\":\"Prompted\"}";
         }
 
         /**
@@ -311,10 +337,10 @@ public class KorriShellActivity extends AppCompatActivity {
                 Intent intent = new Intent(
                         android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS);
                 intent.putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName());
-                startActivity(intent);
+                startActivityOnUiThread(intent, "notification settings start timed out");
                 return "{\"_tag\":\"Opened\"}";
             } catch (Exception error) {
-                return "{\"_tag\":\"Unavailable\",\"reason\":"
+                return "{\"_tag\":\"Unavailable\",\"message\":"
                         + JSONObject.quote(String.valueOf(error.getMessage())) + "}";
             }
         }
@@ -327,10 +353,11 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public String openPairing() {
             try {
-                runOnUiThread(() -> startActivity(
-                        new Intent(KorriShellActivity.this, PcView.class)));
+                startActivityOnUiThread(
+                        new Intent(KorriShellActivity.this, PcView.class),
+                        "pairing screen start timed out");
                 return "{\"_tag\":\"Opened\"}";
-            } catch (Throwable error) {
+            } catch (Exception error) {
                 return "{\"_tag\":\"Unavailable\",\"message\":"
                         + JSONObject.quote(String.valueOf(error.getMessage())) + "}";
             }
@@ -389,61 +416,6 @@ public class KorriShellActivity extends AppCompatActivity {
             return korridCapability;
         }
 
-        /** JSON-encoded QueryLaunchablesResult. */
-        @JavascriptInterface
-        public String queryLaunchables() {
-            try {
-                PackageManager pm = getPackageManager();
-                Intent main = new Intent(Intent.ACTION_MAIN)
-                        .addCategory(Intent.CATEGORY_LAUNCHER);
-                List<ResolveInfo> resolved = pm.queryIntentActivities(main, 0);
-
-                JSONArray items = new JSONArray();
-                for (ResolveInfo info : resolved) {
-                    ApplicationInfo app = info.activityInfo.applicationInfo;
-                    if (getPackageName().equals(app.packageName)) continue;
-                    JSONObject item = new JSONObject();
-                    item.put("packageName", app.packageName);
-                    item.put("label", String.valueOf(pm.getApplicationLabel(app)));
-                    items.put(item);
-                }
-
-                JSONObject ok = new JSONObject();
-                ok.put("_tag", "Launchables");
-                ok.put("items", items);
-                return ok.toString();
-            } catch (Exception e) {
-                try {
-                    JSONObject failed = new JSONObject();
-                    failed.put("_tag", "QueryFailed");
-                    failed.put("message",
-                            e.getMessage() != null ? e.getMessage() : "query failed");
-                    return failed.toString();
-                } catch (Exception inner) {
-                    return "{\"_tag\":\"QueryFailed\",\"message\":\"query failed\"}";
-                }
-            }
-        }
-
-        /** JSON-encoded LaunchAppResult. */
-        @JavascriptInterface
-        public String launchApp(String packageName) {
-            try {
-                Intent launch = getPackageManager()
-                        .getLaunchIntentForPackage(packageName);
-                if (launch == null) {
-                    return launchFailed("NoLaunchIntent",
-                            "no launcher activity for " + packageName);
-                }
-                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                runOnUiThread(() -> startActivity(launch));
-                return "{\"_tag\":\"Launched\"}";
-            } catch (Exception e) {
-                return launchFailed("StartFailed",
-                        e.getMessage() != null ? e.getMessage() : "start failed");
-            }
-        }
-
         /** JSON-encoded LaunchLocalResult. */
         @JavascriptInterface
         public String launchLocal(String specJson) {
@@ -458,15 +430,23 @@ public class KorriShellActivity extends AppCompatActivity {
                 return launchFailed(error.reason, error.getMessage());
             }
 
-            // Keep local gameplay in the shell's task. The fork uses a
-            // standard activity, so graceful exit reveals and resumes Korri.
-            final Intent intent = spec.intent();
-
             // Validate package availability before any external-storage write.
-            try {
-                getPackageManager().getActivityInfo(intent.getComponent(), 0);
-            } catch (PackageManager.NameNotFoundException error) {
-                return launchFailed("NotInstalled", "local launcher is not installed");
+            final Intent intent;
+            if (spec.isAndroidApp) {
+                Intent launch = getPackageManager()
+                        .getLaunchIntentForPackage(spec.component.getPackageName());
+                if (launch == null) {
+                    return launchFailed("NotInstalled", "local launcher is not installed");
+                }
+                KorriLocalLaunchSpec.applyTaskPolicy(spec, launch);
+                intent = launch;
+            } else {
+                intent = spec.intent();
+                try {
+                    getPackageManager().getActivityInfo(intent.getComponent(), 0);
+                } catch (PackageManager.NameNotFoundException error) {
+                    return launchFailed("NotInstalled", "local launcher is not installed");
+                }
             }
 
             boolean hasProvisioning = !spec.directories.isEmpty() || !spec.files.isEmpty();
@@ -535,34 +515,51 @@ public class KorriShellActivity extends AppCompatActivity {
         }
 
         private void requestAllFilesAccess() throws Exception {
-            CountDownLatch opened = new CountDownLatch(1);
-            AtomicReference<Exception> settingsError = new AtomicReference<>();
-            runOnUiThread(() -> {
+            startActivityOnUiThread(() -> {
                 try {
                     startActivity(new Intent(
                             Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
                             Uri.parse("package:" + getPackageName())));
                 } catch (Exception appSettingsError) {
-                    try {
-                        startActivity(new Intent(
-                                Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
-                    } catch (Exception globalSettingsError) {
-                        settingsError.set(globalSettingsError);
-                    }
+                    startActivity(new Intent(
+                            Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+                }
+            }, "all files access settings timed out");
+        }
+
+        private void startActivityOnUiThread(Intent intent, String timeoutMessage)
+                throws Exception {
+            startActivityOnUiThread(() -> startActivity(intent), timeoutMessage);
+        }
+
+        private void startActivityOnUiThread(ActivityStart start, String timeoutMessage)
+                throws Exception {
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                start.run();
+                return;
+            }
+
+            CountDownLatch opened = new CountDownLatch(1);
+            AtomicReference<Exception> startError = new AtomicReference<>();
+            runOnUiThread(() -> {
+                try {
+                    start.run();
+                } catch (Exception error) {
+                    startError.set(error);
                 } finally {
                     opened.countDown();
                 }
             });
             try {
                 if (!opened.await(5, TimeUnit.SECONDS)) {
-                    throw new IllegalStateException("all files access settings timed out");
+                    throw new IllegalStateException(timeoutMessage);
                 }
             } catch (InterruptedException error) {
                 Thread.currentThread().interrupt();
                 throw error;
             }
-            if (settingsError.get() != null) {
-                throw settingsError.get();
+            if (startError.get() != null) {
+                throw startError.get();
             }
         }
 
