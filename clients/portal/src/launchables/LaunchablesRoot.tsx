@@ -5,6 +5,7 @@ import type { KorridClient } from "../korrid/client"
 import type { InputBus } from "../input/bus"
 import { LaunchablesList } from "./LaunchablesList"
 import {
+  entryKey,
   entryLabel,
   KORRI_STREAM_APP,
   LaunchablesState,
@@ -87,6 +88,7 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
         : []
     if (!mountedRef.current || seq !== loadSeq.current) return
     streamsRef.current = streams
+    const current = stateRef.current
     const loaded = LaunchablesState.fromSources(
       local,
       streams,
@@ -96,8 +98,12 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
       localGames,
       storage,
       notice,
+      // A background reload must not move the cursor out from under the
+      // user mid-press.
+      current._tag === "Ready"
+        ? entryKey(current.entries[current.selectedIndex]!)
+        : undefined,
     )
-    const current = stateRef.current
     if (current._tag === "Stopping") {
       const active = session._tag === "Ok" ? session.payload.active : undefined
       // Preserve Stopping while the same launch remains active (or status

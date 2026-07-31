@@ -669,3 +669,43 @@ describe("background notice setting", () => {
     })
   })
 })
+
+describe("selection across reloads", () => {
+  const load = (keep?: string) =>
+    LaunchablesState.fromSources(
+      { _tag: "Launchables", items: [] },
+      [],
+      {
+        _tag: "Ok",
+        payload: {
+          games: [
+            { id: "a", title: "A" },
+            { id: "b", title: "B" },
+          ],
+        },
+      } as CatalogSnapshotOutcome,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      keep,
+    )
+
+  it("keeps the cursor where the user left it when the list reloads", () => {
+    const first = load()
+    if (first._tag !== "Ready") throw new Error("unreachable")
+    const chosen = entryKey(first.entries[1]!)
+    const again = load(chosen)
+    if (again._tag !== "Ready") throw new Error("unreachable")
+    // Without this, a background refresh mid-navigation drops the cursor to
+    // index 0 and Confirm fires on whatever now sits at the top.
+    expect(entryKey(again.entries[again.selectedIndex]!)).toBe(chosen)
+  })
+
+  it("falls back to the top when the selected entry is gone", () => {
+    const again = load("game:vanished")
+    if (again._tag !== "Ready") throw new Error("unreachable")
+    expect(again.selectedIndex).toBe(0)
+  })
+})

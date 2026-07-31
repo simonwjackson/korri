@@ -181,6 +181,8 @@ export const LaunchablesState = {
     localGames?: LocalGamesListOutcome,
     storage?: StorageAccessResult,
     notice?: BackgroundNoticeResult,
+    /** Key of the entry the user had selected, so a reload does not steal it. */
+    keepSelection?: string,
   ): LaunchablesState => {
     const entries: PortalEntry[] = []
     const failures: string[] = []
@@ -247,10 +249,22 @@ export const LaunchablesState = {
     if (entries.length === 0 && failures.length > 0) {
       return { _tag: "LoadError", message: failures.join(" · ") }
     }
+    // Keep the cursor on whatever the user had chosen. The list reloads in
+    // the background -- on resume, on a poll -- and resetting to the top
+    // mid-navigation makes Confirm activate whatever now sits at index 0.
+    // Matched by identity, not position: entries appear and disappear, and
+    // an index that survives a reshuffle points at the wrong thing.
+    const keptIndex =
+      keepSelection === undefined
+        ? 0
+        : Math.max(
+            0,
+            entries.findIndex(entry => entryKey(entry) === keepSelection),
+          )
     return {
       _tag: "Ready",
       entries,
-      selectedIndex: 0,
+      selectedIndex: keptIndex,
       notice: failures.length > 0 ? failures.join(" · ") : null,
     }
   },

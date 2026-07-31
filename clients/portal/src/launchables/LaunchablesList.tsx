@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react"
 import { entryKey, entryLabel, LaunchablesState } from "./state"
 import type { LaunchablesState as State } from "./state"
 
@@ -8,6 +9,14 @@ interface LaunchablesListProps {
 /** Pure view of the Ready case. Selection arrives via the state ADT. */
 export function LaunchablesList({ state }: LaunchablesListProps) {
   const sections = LaunchablesState.sections(state)
+  const selectedRef = useRef<HTMLLIElement>(null)
+
+  // A selection the user cannot see is worse than no selection: with more
+  // entries than fit the screen, pressing down moves an invisible cursor and
+  // Confirm activates something off-screen.
+  useEffect(() => {
+    selectedRef.current?.scrollIntoView({ block: "nearest" })
+  }, [state.selectedIndex])
 
   return (
     <div className="w-full max-w-xl space-y-6 p-8">
@@ -31,6 +40,7 @@ export function LaunchablesList({ state }: LaunchablesListProps) {
                   // Opts this row into the pointer adapter. The component
                   // stays input-agnostic: it publishes which entry it is,
                   // never what a tap should do.
+                  ref={index === state.selectedIndex ? selectedRef : null}
                   data-entry-index={index}
                   className={
                     index === state.selectedIndex
