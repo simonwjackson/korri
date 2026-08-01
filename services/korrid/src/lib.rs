@@ -16,6 +16,8 @@ use std::{
 use tokio::sync::oneshot;
 use typeshare::typeshare;
 
+pub mod config;
+
 pub const VERSION: &str = "korrid-v0";
 
 #[typeshare]
