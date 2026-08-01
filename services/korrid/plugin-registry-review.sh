@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
-PLUGIN="${1:-$ROOT/docs/research/android-app-plugin-schema-checkpoint/android-app.plugin.ts}"
+PLUGIN="${1:-$ROOT/services/korrid/plugins/android-app.plugin.ts}"
 
 if [[ "${KORRI_PLUGIN_REVIEW_IN_SHELL:-}" != "1" ]]; then
   export KORRI_ROOT="$ROOT"

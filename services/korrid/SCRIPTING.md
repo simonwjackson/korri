@@ -4,8 +4,10 @@ korrid can transpile and run TypeScript or JavaScript **at runtime**, on every
 device Korri targets. A plugin is source text that evaluates to a declaration;
 korrid performs any resulting effects itself.
 
-Nothing is compiled ahead of time. Adding or changing a plugin does not require
-rebuilding korrid or the app that embeds it.
+Plugin source is evaluated at runtime rather than compiled into native code.
+Bundled first-party source still ships through the normal korrid build; future
+external plugin sources can be evaluated without a native rebuild once a real
+source/installation policy exists.
 
 ## Shape
 
@@ -21,7 +23,10 @@ plugin.ts  ──(oxc: transpile in-process)──▶  JS  ──(QuickJS: evalu
 Both cross-compile to `aarch64-linux-android` and `x86_64-linux`. The same
 plugin file runs on every device: **source is portable where binaries are not.**
 
-See `examples/catalog.plugin.ts`, which the test suite executes so it cannot rot.
+The first bundled production source is `plugins/android-app.plugin.ts`. It is
+byte-for-byte pinned to the reviewed checkpoint copy under
+`docs/research/android-app-plugin-schema-checkpoint/`, and parity is part of the
+check suite so either copy changing alone fails.
 
 ## The sandbox is empty on purpose
 
@@ -34,12 +39,19 @@ itself to one machine by reaching for local resources.
 ## Local announcement registry
 
 korrid strictly decodes evaluated declarations into the narrow legacy plugin
-seam proven by the Android application schema checkpoint. An explicitly enabled
-plugin can currently contribute provider, system, and launcher records; disabled
-plugins remain registered but contribute nothing. Unsupported declaration fields
-fail explicitly rather than disappearing. As in legacy, system and launcher
-contribution keys retain the contributing plugin's identity; the records inside
-those entries retain their schema IDs for the later readable-snapshot slice.
+seam proven by the Android application schema checkpoint. Bundled plugins are
+registered from repository-owned source, and generic policy layers keyed by
+plugin ID decide enablement. The built-in layer enables `@korri:android-app` by
+default; a later layer can disable the same ID without changing registry code or
+adding an Android-specific switch. The user policy layer is intentionally empty
+for these slices.
+
+An enabled plugin can currently contribute provider, system, and launcher
+records; disabled plugins remain registered but contribute nothing. Unsupported
+declaration fields fail explicitly rather than disappearing. As in legacy,
+system and launcher contribution keys retain the contributing plugin's identity;
+the records inside those entries retain their schema IDs for the later
+readable-snapshot slice.
 
 Review that boundary without reading Rust:
 
@@ -47,10 +59,11 @@ Review that boundary without reading Rust:
 nix run .#korrid-plugin-review
 ```
 
-The report uses the exact checkpoint Android plugin and shows both its enabled
-and disabled states. This registry is device-local only: it does not yet load
-persisted configuration, resolve a library route, perform an Android launch, or
-publish anything to federation peers.
+The report uses the bundled Android plugin source (kept byte-identical to the
+checkpoint copy) and shows both its enabled and disabled states. This registry
+is device-local only: it does not yet load persisted configuration, resolve a
+library route, perform an Android launch, or publish anything to federation
+peers.
 
 ## Verified on hardware
 
@@ -85,19 +98,13 @@ baseline APK measured that way showed ~3.35 MB of unexplained slack, which made
 the build *with* the runtime look smaller — nonsense. Per-entry comparison is
 the trustworthy measure.
 
-## Not wired into the app yet
+## Not a launch path yet
 
-The Android shell does not call this. That is deliberate: Slice 1 stops at the
-reviewable local registry, before persisted configuration and route resolution.
-Shipping an otherwise unused engine in the app would cost ~1.59 MB, and the
-linker would otherwise strip it anyway (a `pub fn` is not an export root in a
-cdylib — an early measurement read **+16 KB** for exactly this reason, which was
-false).
-
-The Android checkpoint plugin is now the first concrete declaration consumer.
-The shell wiring belongs to the later slice that can resolve that declaration
-through a real library route and act on it; adding JNI before then would still
-produce an app-visible engine with nothing production can ask it to do.
+The Android plugin is now bundled and default-enabled through policy, but this
+slice still stops at the local announcement registry. Persisted configuration,
+route resolution, and Android launch mapping are later slices. The shell still
+performs no plugin-specific work, and `command: android-app` must not be treated
+as a generic process command.
 
 ## Traps, for the next person who touches the build
 

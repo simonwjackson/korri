@@ -699,6 +699,7 @@ pub fn verify_local_launch_spec(spec_json: &str) -> bool {
 pub mod host;
 pub mod launcher;
 pub mod plugin;
+pub mod plugin_policy;
 pub mod script;
 pub mod upstream;
 pub mod upstream_native;

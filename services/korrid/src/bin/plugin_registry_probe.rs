@@ -7,6 +7,7 @@
 use std::{env, fs, process};
 
 use korrid::plugin::{load_plugin_source, Plugin, PluginRegistry};
+use korrid::plugin_policy::{resolve_enabled_plugin_ids, PluginPolicyLayer};
 
 enum ReportMode {
     Enabled,
@@ -55,11 +56,10 @@ fn run() -> Result<(), String> {
 
 fn print_report(plugin: Plugin, enabled: bool) -> Result<(), String> {
     let plugin_id = plugin.id().to_owned();
-    let enabled_ids = if enabled {
-        vec![plugin_id.clone()]
-    } else {
-        Vec::new()
-    };
+    let enabled_ids = resolve_enabled_plugin_ids([PluginPolicyLayer::from_enabled([(
+        plugin_id.as_str(),
+        enabled,
+    )])]);
     let registry =
         PluginRegistry::new(vec![plugin], enabled_ids).map_err(|error| error.to_string())?;
 

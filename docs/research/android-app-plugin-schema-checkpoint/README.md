@@ -13,10 +13,13 @@ inputs:
 
 - `config.yaml` — trusted device configuration;
 - `library.yaml` — the TMNT library record;
-- `android-app.plugin.ts` — the declaration-only plugin contribution;
+- `android-app.plugin.ts` — the preserved declaration-only plugin contribution;
 - `validate.sh` and `validate-legacy.ts` — the reproducible validation harness.
 
-They are design fixtures, not production configuration wired into korrid.
+They are design fixtures, not production configuration. The production-owned
+copy lives at `services/korrid/plugins/android-app.plugin.ts`; the harness and
+Rust tests require both plugin files to remain byte-for-byte identical so the
+historical proof and bundled source cannot drift independently.
 
 ## Result
 
@@ -103,17 +106,20 @@ Run the checked-in proof from the repository root:
 docs/research/android-app-plugin-schema-checkpoint/validate.sh
 ```
 
-The harness evaluates the plugin with current korrid, installs the dependencies
-pinned by the archived legacy revision in a temporary directory, passes the
-exact YAML through legacy's `validateReadableDocumentStrictly`, normalizes the
-evaluated declaration with legacy's `plugin()` and `createPluginRegistry()`,
-decodes its contributed provider/system/launcher records, and runs
-`resolveReadableLaunchContext` for the TMNT item. It also proves that disabling
-the plugin removes its launcher contribution.
+The harness first compares the preserved checkpoint plugin with the
+production-owned bundled source byte-for-byte. It then evaluates the production
+copy with current korrid, installs the dependencies pinned by the archived
+legacy revision in a temporary directory, passes the exact YAML through legacy's
+`validateReadableDocumentStrictly`, normalizes the evaluated declaration with
+legacy's `plugin()` and `createPluginRegistry()`, decodes its contributed
+provider/system/launcher records, and runs `resolveReadableLaunchContext` for
+the TMNT item. It also proves that disabling the plugin removes its launcher
+contribution.
 
 Observed result:
 
 ```text
+production plugin parity: PASS
 plugin disabled removes launcher: PASS
 legacy strict schema: PASS
 legacy readable context resolver: PASS

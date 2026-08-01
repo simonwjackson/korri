@@ -1,9 +1,6 @@
 use std::process::Command;
 
-const ANDROID_PLUGIN: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../docs/research/android-app-plugin-schema-checkpoint/android-app.plugin.ts"
-);
+const ANDROID_PLUGIN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/plugins/android-app.plugin.ts");
 
 const ENABLED_REPORT: &str = concat!(
     "plugin: @korri:android-app\n",

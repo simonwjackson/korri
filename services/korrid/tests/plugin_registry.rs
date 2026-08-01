@@ -1,8 +1,6 @@
 use korrid::plugin::{decode_plugin_declaration, load_plugin_source, PluginRegistry};
 
-const ANDROID_PLUGIN: &str = include_str!(
-    "../../../docs/research/android-app-plugin-schema-checkpoint/android-app.plugin.ts"
-);
+const ANDROID_PLUGIN: &str = include_str!("../plugins/android-app.plugin.ts");
 
 #[test]
 fn enabled_android_plugin_announces_its_legacy_contributions() {
