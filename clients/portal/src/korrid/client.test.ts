@@ -124,4 +124,30 @@ describe("local games", () => {
       },
     })
   })
+
+  it("keeps healthy local games beside local configuration failures", async () => {
+    const client = createInMemoryKorridClient({
+      localFailures: [
+        {
+          code: "LocalConfigReloadFailed",
+          message: "library.yaml is malformed",
+        },
+      ],
+    })
+
+    expect(await client.localGames()).toEqual({
+      _tag: "Ok",
+      payload: {
+        games: [
+          { id: "wl4", title: "Wario Land 4", system: "Game Boy Advance" },
+        ],
+        failures: [
+          {
+            code: "LocalConfigReloadFailed",
+            message: "library.yaml is malformed",
+          },
+        ],
+      },
+    })
+  })
 })

@@ -177,6 +177,7 @@ export interface InMemoryKorridClientConfig {
     | "stop-fail"
   readonly games?: readonly Game[]
   readonly localGames?: readonly LocalGame[]
+  readonly localFailures?: readonly { readonly code: string; readonly message: string }[]
   /** Seed an active host session for now-playing flows. */
   readonly activeSession?: ActiveSession
 }
@@ -196,6 +197,7 @@ export function createInMemoryKorridClient(
   const behavior = config.behavior ?? "ok"
   const games = config.games ?? sampleGames
   const localGames = config.localGames ?? sampleLocalGames
+  const localFailures = config.localFailures
   let activeSession = config.activeSession
   return {
     async health() {
@@ -220,7 +222,13 @@ export function createInMemoryKorridClient(
           },
         }
       }
-      return { _tag: "Ok", payload: { games: [...localGames] } }
+      return {
+        _tag: "Ok",
+        payload: {
+          games: [...localGames],
+          ...(localFailures === undefined ? {} : { failures: [...localFailures] }),
+        },
+      }
     },
     async localGameLaunch(gameId) {
       if (

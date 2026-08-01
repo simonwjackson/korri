@@ -1,4 +1,6 @@
-use super::{AndroidComponent, FileProvisionMode, LaunchSpec, LocalGame, ProvisionedFile};
+use super::{
+    AndroidComponent, FileProvisionMode, LaunchError, LaunchSpec, LocalGame, ProvisionedFile,
+};
 use std::{
     collections::HashMap,
     fs::{self, OpenOptions},
@@ -6,16 +8,12 @@ use std::{
     path::Path,
 };
 
-#[derive(Debug, thiserror::Error)]
-pub enum LaunchError {
-    #[error("unknown local game: {0}")]
-    UnknownGame(String),
-    #[error("local ROM is missing: {0}")]
-    RomMissing(String),
-    #[error("local storage is unavailable: {0}")]
-    StorageAccess(String),
-    #[error("failed to provision RetroArch config: {0}")]
-    Config(String),
+pub fn static_playable_ids() -> Vec<&'static str> {
+    vec!["wl4"]
+}
+
+pub fn owns_game(game_id: &str) -> bool {
+    game_id == "wl4"
 }
 
 pub fn local_games() -> Vec<LocalGame> {

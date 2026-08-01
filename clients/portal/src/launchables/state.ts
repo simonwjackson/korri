@@ -197,6 +197,9 @@ export const LaunchablesState = {
       for (const game of localGames.payload.games) {
         entries.push({ kind: "local-game", game })
       }
+      for (const failure of localGames.payload.failures ?? []) {
+        failures.push(`local games: ${failure.code}`)
+      }
     } else if (localGames?._tag === "Err") {
       failures.push(`local games: ${localGames.payload.code}`)
     }

@@ -103,6 +103,38 @@ describe("LaunchablesState.fromSources", () => {
     })
   })
 
+  it("surfaces local configuration failures while keeping healthy local games", () => {
+    const state = LaunchablesState.fromSources(
+      [officeApps],
+      gamesOk,
+      undefined,
+      undefined,
+      {
+        _tag: "Ok",
+        payload: {
+          games: [
+            { id: "wl4", title: "Wario Land 4", system: "Game Boy Advance" },
+          ],
+          failures: [
+            {
+              code: "LocalConfigReloadFailed",
+              message: "library.yaml is malformed",
+            },
+          ],
+        },
+      },
+    )
+    expect(state).toMatchObject({
+      _tag: "Ready",
+      notice: "local games: LocalConfigReloadFailed",
+    })
+    if (state._tag !== "Ready") throw new Error("unreachable")
+    expect(state.entries[0]).toMatchObject({
+      kind: "local-game",
+      game: { id: "wl4" },
+    })
+  })
+
   it("degrades a failed korrid catalog to a notice while entries remain", () => {
     const state = LaunchablesState.fromSources([officeApps], gamesErr)
     expect(state).toMatchObject({

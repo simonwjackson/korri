@@ -340,6 +340,33 @@ describe("LaunchablesRoot pointer activation", () => {
 })
 
 describe("LaunchablesRoot local launch flow", () => {
+  it("renders configured local games and the local configuration notice together", async () => {
+    const view = await renderRoot(
+      createInMemoryKorridClient({
+        games: [],
+        localGames: [
+          {
+            id: "tmnt-shredders-revenge",
+            title: "TMNT: Shredder's Revenge",
+            system: "android",
+          },
+          { id: "wl4", title: "Wario Land 4", system: "Game Boy Advance" },
+        ],
+        localFailures: [
+          {
+            code: "LocalConfigReloadFailed",
+            message: "library.yaml is malformed",
+          },
+        ],
+      }),
+    )
+
+    expect(view.container.textContent).toContain("TMNT: Shredder's Revenge")
+    expect(view.container.textContent).toContain("Wario Land 4")
+    expect(view.container.textContent).toContain("LocalConfigReloadFailed")
+    await view.cleanup()
+  })
+
   it("confirms Wario through korrid then the launcher-neutral bridge", async () => {
     let requestedGame = ""
     let launchedSpec: unknown

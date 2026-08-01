@@ -120,6 +120,8 @@ pub struct LocalGamesListRequest {}
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LocalGames {
     pub games: Vec<launcher::LocalGame>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failures: Option<Vec<RpcFailure>>,
 }
 
 #[typeshare]
@@ -249,6 +251,7 @@ struct BrainRuntime {
     local_file_provision: launcher::FileProvisionMode,
     local_launch_signing_key: Vec<u8>,
     config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
+    plugin_registry: plugin::PluginRegistry,
 }
 
 #[derive(Clone)]
@@ -269,10 +272,48 @@ fn local_launch_failure(error: launcher::LaunchError) -> RpcFailure {
         launcher::LaunchError::RomMissing(_) => "LocalRomMissing",
         launcher::LaunchError::StorageAccess(_) => "LocalStorageUnavailable",
         launcher::LaunchError::Config(_) => "LocalConfigWriteFailed",
+        launcher::LaunchError::ConfigUnauthorized(_) => "LocalConfigUnauthorized",
+        launcher::LaunchError::RouteUnavailable(_) => "LocalRouteUnavailable",
+        launcher::LaunchError::RouteCollision(_) => "LocalRouteCollision",
     };
     RpcFailure {
         code: code.into(),
         message: error.to_string(),
+    }
+}
+
+fn snapshot_diagnostic_failure(diagnostic: &config::snapshot::SnapshotDiagnostic) -> RpcFailure {
+    RpcFailure {
+        code: snapshot_diagnostic_code(diagnostic.code).into(),
+        message: diagnostic.message.clone(),
+    }
+}
+
+fn snapshot_diagnostic_code(code: config::snapshot::SnapshotDiagnosticCode) -> &'static str {
+    match code {
+        config::snapshot::SnapshotDiagnosticCode::LocalConfigReloadFailed => {
+            "LocalConfigReloadFailed"
+        }
+        config::snapshot::SnapshotDiagnosticCode::LocalConfigUnsupported => {
+            "LocalConfigUnsupported"
+        }
+        config::snapshot::SnapshotDiagnosticCode::LocalConfigUnauthorized => {
+            "LocalConfigUnauthorized"
+        }
+    }
+}
+
+fn route_diagnostic_failure(diagnostic: &config::resolver::RouteDiagnostic) -> RpcFailure {
+    RpcFailure {
+        code: route_diagnostic_code(diagnostic.code).into(),
+        message: diagnostic.message.clone(),
+    }
+}
+
+fn route_diagnostic_code(code: config::resolver::RouteDiagnosticCode) -> &'static str {
+    match code {
+        config::resolver::RouteDiagnosticCode::LocalRouteUnavailable => "LocalRouteUnavailable",
+        config::resolver::RouteDiagnosticCode::LocalRouteCollision => "LocalRouteCollision",
     }
 }
 
@@ -414,9 +455,16 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
         },
         RpcRequest::LocalGamesList(_) => match &state.mode {
             ServerMode::Brain(brain) => {
-                let _config_state = brain.config_snapshot.reload();
+                let config_state = brain.config_snapshot.reload();
+                let catalog = launcher::local_games(&config_state, &brain.plugin_registry);
+                let mut failures = Vec::new();
+                if let Some(diagnostic) = &config_state.diagnostic {
+                    failures.push(snapshot_diagnostic_failure(diagnostic));
+                }
+                failures.extend(catalog.diagnostics.iter().map(route_diagnostic_failure));
                 RpcResponse::LocalGamesList(LocalGamesListOutcome::Ok(LocalGames {
-                    games: launcher::local_games(),
+                    games: catalog.games,
+                    failures: (!failures.is_empty()).then_some(failures),
                 }))
             }
             ServerMode::Host(_) => {
@@ -428,11 +476,13 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
         },
         RpcRequest::LocalGameLaunch(request) => match &state.mode {
             ServerMode::Brain(brain) => {
-                let _config_state = brain.config_snapshot.reload();
+                let config_state = brain.config_snapshot.reload();
                 let outcome = launcher::launch_game(
                     &brain.local_storage_root,
                     &request.game_id,
                     brain.local_file_provision,
+                    &config_state,
+                    &brain.plugin_registry,
                 )
                 .map(|spec| spec.sign(&brain.local_launch_signing_key))
                 .map(LocalGameLaunchOutcome::Ok)
@@ -518,6 +568,7 @@ fn router_with_capability_local_root_and_provision(
             local_file_provision,
             local_launch_signing_key,
             config_snapshot,
+            plugin_registry: default_plugin_registry(),
         }),
         rpc_capability: Some(rpc_capability.into()),
     };
@@ -553,6 +604,16 @@ pub fn generate_rpc_capability() -> String {
 fn generate_launch_signing_key() -> Vec<u8> {
     let bytes: [u8; 32] = rand::random();
     bytes.to_vec()
+}
+
+fn default_plugin_registry() -> plugin::PluginRegistry {
+    let plugins = plugin_policy::bundled_plugins().expect("bundled plugins must load");
+    let enabled_plugin_ids = plugin_policy::resolve_enabled_plugin_ids([
+        plugin_policy::bundled_plugin_policy_layer(),
+        plugin_policy::empty_user_plugin_policy_layer(),
+    ]);
+    plugin::PluginRegistry::new(plugins, enabled_plugin_ids)
+        .expect("bundled plugin policy must reference registered plugins")
 }
 
 #[derive(Debug, thiserror::Error)]

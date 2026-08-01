@@ -67,16 +67,17 @@ export interface LocalGameLaunchRequest {
 	gameId: string;
 }
 
-export interface LocalGames {
-	games: LocalGame[];
-}
-
-export interface LocalGamesListRequest {
-}
-
 export interface RpcFailure {
 	code: string;
 	message: string;
+}
+
+export interface LocalGames {
+	games: LocalGame[];
+	failures?: RpcFailure[];
+}
+
+export interface LocalGamesListRequest {
 }
 
 export interface SessionPrepareRequest {
