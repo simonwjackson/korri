@@ -91,12 +91,15 @@ pub fn launch_game(
     }
 
     if config_state.authorization != SnapshotAuthorization::Authorized {
-        let message = config_state
-            .diagnostic
-            .as_ref()
-            .map(|diagnostic| diagnostic.message.clone())
-            .unwrap_or_else(|| "local configuration storage is unavailable".to_owned());
-        return Err(LaunchError::ConfigUnauthorized(message));
+        if config_state.generation == 0 || config_state.snapshot.library.contains_key(game_id) {
+            let message = config_state
+                .diagnostic
+                .as_ref()
+                .map(|diagnostic| diagnostic.message.clone())
+                .unwrap_or_else(|| "local configuration storage is unavailable".to_owned());
+            return Err(LaunchError::ConfigUnauthorized(message));
+        }
+        return retroarch::launch_game(root, game_id, provision_mode);
     }
 
     if config_state.snapshot.library.contains_key(game_id) {
@@ -196,6 +199,18 @@ mod tests {
         }
     }
 
+    fn unauthorized_retained_state(state: ConfigSnapshotState) -> ConfigSnapshotState {
+        ConfigSnapshotState {
+            snapshot: state.snapshot,
+            generation: state.generation,
+            diagnostic: Some(SnapshotDiagnostic {
+                code: SnapshotDiagnosticCode::LocalConfigUnauthorized,
+                message: "local configuration storage is unavailable".into(),
+            }),
+            authorization: SnapshotAuthorization::Unauthorized,
+        }
+    }
+
     #[test]
     fn lists_dynamic_games_before_static_games_without_hardcoded_android_entries() {
         let root = tempdir().unwrap();
@@ -267,7 +282,45 @@ mod tests {
     }
 
     #[test]
-    fn unauthorized_empty_snapshot_blocks_non_static_direct_launches() {
+    fn unauthorized_retained_snapshot_blocks_known_config_backed_launches() {
+        let root = tempdir().unwrap();
+        let state = unauthorized_retained_state(checkpoint_state(root.path()));
+        let error = launch_game(
+            root.path(),
+            "tmnt-shredders-revenge",
+            FileProvisionMode::Deferred,
+            &state,
+            &registry(),
+        )
+        .expect_err("retained config knows this dynamic route but cannot authorize it");
+
+        assert!(
+            matches!(error, LaunchError::ConfigUnauthorized(_)),
+            "got: {error:?}"
+        );
+    }
+
+    #[test]
+    fn unauthorized_retained_snapshot_reports_absent_ids_as_unknown_games() {
+        let root = tempdir().unwrap();
+        let state = unauthorized_retained_state(checkpoint_state(root.path()));
+        let error = launch_game(
+            root.path(),
+            "not-in-retained-snapshot",
+            FileProvisionMode::Deferred,
+            &state,
+            &registry(),
+        )
+        .expect_err("retained config proves this id is absent");
+
+        assert!(
+            matches!(error, LaunchError::UnknownGame(_)),
+            "got: {error:?}"
+        );
+    }
+
+    #[test]
+    fn initial_unauthorized_empty_snapshot_blocks_non_static_direct_launches() {
         let root = tempdir().unwrap();
         let state = unauthorized_empty_state();
         let error = launch_game(
@@ -277,8 +330,9 @@ mod tests {
             &state,
             &registry(),
         )
-        .expect_err("unauthorized config must block non-static dynamic launches");
+        .expect_err("initial unauthorized config has no absence knowledge");
 
+        assert_eq!(state.generation, 0);
         assert!(
             matches!(error, LaunchError::ConfigUnauthorized(_)),
             "got: {error:?}"

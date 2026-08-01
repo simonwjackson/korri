@@ -155,6 +155,16 @@ async fn protected_rpc_lists_and_launches_the_checkpoint_android_route_from_reta
             }),
         )
         .await;
+        let unauthorized_absent_launch = rpc(
+            &client,
+            &url,
+            &capability,
+            json!({
+                "_tag": "app.local-games.launch",
+                "payload": { "gameId": "not-in-retained-snapshot" }
+            }),
+        )
+        .await;
         std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
 
         assert_eq!(unauthorized_list["outcome"]["_tag"], "Ok");
@@ -170,6 +180,11 @@ async fn protected_rpc_lists_and_launches_the_checkpoint_android_route_from_reta
         assert_eq!(
             unauthorized_launch["outcome"]["payload"]["code"],
             "LocalConfigUnauthorized"
+        );
+        assert_eq!(unauthorized_absent_launch["outcome"]["_tag"], "Err");
+        assert_eq!(
+            unauthorized_absent_launch["outcome"]["payload"]["code"],
+            "LocalGameNotFound"
         );
     }
 }

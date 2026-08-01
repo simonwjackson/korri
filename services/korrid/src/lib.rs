@@ -1148,6 +1148,37 @@ command = ["sh", "-c", "sleep 1"]
         ));
     }
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn local_launch_rpc_reports_initial_empty_unauthorized_config_for_non_static_ids() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = tempfile::tempdir().unwrap();
+        let app = router_with_capability_and_local_root(
+            "right-token",
+            "https://portal.example",
+            root.path(),
+        );
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o000)).unwrap();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/rpc")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, "Bearer right-token")
+                    .body(Body::from(
+                        r#"{"_tag":"app.local-games.launch","payload":{"gameId":"tmnt-shredders-revenge"}}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert!(String::from_utf8_lossy(&body).contains("LocalConfigUnauthorized"));
+    }
+
     #[tokio::test]
     async fn local_launch_rpc_maps_missing_and_unknown_games_to_distinct_codes() {
         for (game_id, code) in [("wl4", "LocalRomMissing"), ("unknown", "LocalGameNotFound")] {
