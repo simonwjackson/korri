@@ -160,8 +160,12 @@ health_response="$("${CURL[@]}" --fail --silent \
   -H "authorization: Bearer $capability" \
   -d '{"_tag":"system.health","payload":{}}' \
   "http://127.0.0.1:$HOST_PORT/rpc")"
-if ! jq -e '.outcome._tag == "Ok"' <<<"$health_response" >/dev/null; then
-  echo "Embedded brain health while game foreground was not Ok: $health_response" >&2
+if ! jq -e '
+  ._tag == "system.health"
+  and .outcome._tag == "Ok"
+  and (.outcome.payload.version | type == "string" and length > 0)
+' <<<"$health_response" >/dev/null; then
+  echo "Embedded brain health while game foreground was not a valid Ok health response: $health_response" >&2
   exit 1
 fi
 local_games_response="$("${CURL[@]}" --fail --silent \

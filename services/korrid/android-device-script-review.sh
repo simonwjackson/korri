@@ -39,8 +39,17 @@ if ! grep -F 'assert_portal_exposes_title' "$JOURNEY_RESUME" >/dev/null; then
   echo 'journey-resume.sh must verify the portal exposes the expected title before D-pad activation' >&2
   exit 1
 fi
-if ! grep -F "jq -e '.outcome._tag == \"Ok\"'" "$ANDROID_APP_ROUTE" >/dev/null; then
+foreground_health_check="$(sed -n '/health_response=/,/local_games_response=/p' "$ANDROID_APP_ROUTE")"
+if ! grep -F '._tag == "system.health"' <<<"$foreground_health_check" >/dev/null; then
+  echo 'android-app-route-check.sh must semantically assert foreground health top-level system.health tag' >&2
+  exit 1
+fi
+if ! grep -F '.outcome._tag == "Ok"' <<<"$foreground_health_check" >/dev/null; then
   echo 'android-app-route-check.sh must semantically assert foreground health outcome Ok' >&2
+  exit 1
+fi
+if ! grep -F '.outcome.payload.version | type == "string" and length > 0' <<<"$foreground_health_check" >/dev/null; then
+  echo 'android-app-route-check.sh must semantically assert foreground health response version is a non-empty string' >&2
   exit 1
 fi
 
