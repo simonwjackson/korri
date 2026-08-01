@@ -60,7 +60,16 @@ pub fn local_games(
             static_playable_ids(),
         );
         diagnostics.extend(catalog.diagnostics);
-        games.extend(catalog.routes.into_iter().map(local_game_from_route));
+        for route in catalog.routes {
+            match android_app::launch_route(&route) {
+                Ok(_) => games.push(local_game_from_route(route)),
+                Err(error) => diagnostics.push(RouteDiagnostic {
+                    code: resolver::RouteDiagnosticCode::LocalRouteUnavailable,
+                    message: error.to_string(),
+                    playable_id: Some(route.playable_id),
+                }),
+            }
+        }
     }
 
     games.extend(retroarch::local_games());
@@ -81,16 +90,16 @@ pub fn launch_game(
         return retroarch::launch_game(root, game_id, provision_mode);
     }
 
-    if config_state.snapshot.library.contains_key(game_id) {
-        if config_state.authorization != SnapshotAuthorization::Authorized {
-            let message = config_state
-                .diagnostic
-                .as_ref()
-                .map(|diagnostic| diagnostic.message.clone())
-                .unwrap_or_else(|| "local configuration storage is unavailable".to_owned());
-            return Err(LaunchError::ConfigUnauthorized(message));
-        }
+    if config_state.authorization != SnapshotAuthorization::Authorized {
+        let message = config_state
+            .diagnostic
+            .as_ref()
+            .map(|diagnostic| diagnostic.message.clone())
+            .unwrap_or_else(|| "local configuration storage is unavailable".to_owned());
+        return Err(LaunchError::ConfigUnauthorized(message));
+    }
 
+    if config_state.snapshot.library.contains_key(game_id) {
         let route = resolver::resolve_route(
             &config_state.snapshot,
             registry,
@@ -128,10 +137,20 @@ fn launch_error_from_route_diagnostic(diagnostic: RouteDiagnostic) -> LaunchErro
 mod tests {
     use super::*;
     use crate::{
-        config::snapshot::ConfigSnapshotCoordinator,
+        config::{
+            snapshot::{
+                ConfigSnapshotCoordinator, SnapshotAuthorization, SnapshotDiagnostic,
+                SnapshotDiagnosticCode,
+            },
+            ConfigSnapshot,
+        },
         plugin::PluginRegistry,
-        plugin_policy::{bundled_plugin_policy_layer, bundled_plugins, resolve_enabled_plugin_ids},
+        plugin_policy::{
+            bundled_plugin_policy_layer, bundled_plugins, resolve_enabled_plugin_ids,
+            PluginPolicyLayer,
+        },
     };
+    use std::sync::Arc;
     use tempfile::tempdir;
 
     const CHECKPOINT_CONFIG: &str =
@@ -140,17 +159,41 @@ mod tests {
         include_str!("../../../../docs/research/android-app-plugin-schema-checkpoint/library.yaml");
 
     fn registry() -> PluginRegistry {
-        PluginRegistry::new(
-            bundled_plugins().unwrap(),
-            resolve_enabled_plugin_ids([bundled_plugin_policy_layer()]),
-        )
-        .unwrap()
+        android_registry(true)
+    }
+
+    fn android_registry(enabled: bool) -> PluginRegistry {
+        let enabled_ids = if enabled {
+            resolve_enabled_plugin_ids([bundled_plugin_policy_layer()])
+        } else {
+            resolve_enabled_plugin_ids([
+                bundled_plugin_policy_layer(),
+                PluginPolicyLayer::from_enabled([("@korri:android-app", false)]),
+            ])
+        };
+        PluginRegistry::new(bundled_plugins().unwrap(), enabled_ids).unwrap()
     }
 
     fn checkpoint_state(root: &Path) -> ConfigSnapshotState {
+        checkpoint_state_with_library(root, CHECKPOINT_LIBRARY)
+    }
+
+    fn checkpoint_state_with_library(root: &Path, library: &str) -> ConfigSnapshotState {
         std::fs::write(root.join("config.yaml"), CHECKPOINT_CONFIG).unwrap();
-        std::fs::write(root.join("library.yaml"), CHECKPOINT_LIBRARY).unwrap();
+        std::fs::write(root.join("library.yaml"), library).unwrap();
         ConfigSnapshotCoordinator::new(root).reload()
+    }
+
+    fn unauthorized_empty_state() -> ConfigSnapshotState {
+        ConfigSnapshotState {
+            snapshot: Arc::new(ConfigSnapshot::default()),
+            generation: 0,
+            diagnostic: Some(SnapshotDiagnostic {
+                code: SnapshotDiagnosticCode::LocalConfigUnauthorized,
+                message: "local configuration storage is unavailable".into(),
+            }),
+            authorization: SnapshotAuthorization::Unauthorized,
+        }
     }
 
     #[test]
@@ -185,6 +228,113 @@ mod tests {
 
         assert_eq!(spec.launcher_id, "android-app");
         assert_eq!(spec.component.package_name, "com.playdigious.tmnt");
+    }
+
+    #[test]
+    fn mapper_invalid_dynamic_routes_are_omitted_and_diagnosed_on_each_list() {
+        let root = tempdir().unwrap();
+        let invalid_library = CHECKPOINT_LIBRARY.replace(
+            "ref: com.playdigious.tmnt",
+            "ref: com.playdigious.tmnt/invalid",
+        );
+        let state = checkpoint_state_with_library(root.path(), &invalid_library);
+
+        for catalog in [
+            local_games(&state, &registry()),
+            local_games(&state, &registry()),
+        ] {
+            assert_eq!(
+                catalog
+                    .games
+                    .iter()
+                    .map(|game| game.id.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["wl4"]
+            );
+            assert_eq!(catalog.diagnostics.len(), 1);
+            assert_eq!(
+                catalog.diagnostics[0].code,
+                resolver::RouteDiagnosticCode::LocalRouteUnavailable
+            );
+            assert_eq!(
+                catalog.diagnostics[0].playable_id.as_deref(),
+                Some("tmnt-shredders-revenge")
+            );
+            assert!(catalog.diagnostics[0]
+                .message
+                .contains("target has invalid package name"));
+        }
+    }
+
+    #[test]
+    fn unauthorized_empty_snapshot_blocks_non_static_direct_launches() {
+        let root = tempdir().unwrap();
+        let state = unauthorized_empty_state();
+        let error = launch_game(
+            root.path(),
+            "tmnt-shredders-revenge",
+            FileProvisionMode::Deferred,
+            &state,
+            &registry(),
+        )
+        .expect_err("unauthorized config must block non-static dynamic launches");
+
+        assert!(
+            matches!(error, LaunchError::ConfigUnauthorized(_)),
+            "got: {error:?}"
+        );
+
+        let static_error = launch_game(
+            root.path(),
+            "wl4",
+            FileProvisionMode::Deferred,
+            &state,
+            &registry(),
+        )
+        .expect_err("static RetroArch owner should still run before config authorization");
+        assert!(
+            matches!(static_error, LaunchError::RomMissing(_)),
+            "got: {static_error:?}"
+        );
+    }
+
+    #[test]
+    fn disabled_bundled_policy_omits_dynamic_games_and_direct_launch_is_unavailable() {
+        let root = tempdir().unwrap();
+        let state = checkpoint_state(root.path());
+        let registry = android_registry(false);
+        let catalog = local_games(&state, &registry);
+
+        assert_eq!(
+            catalog
+                .games
+                .iter()
+                .map(|game| game.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["wl4"]
+        );
+        assert_eq!(catalog.diagnostics.len(), 1);
+        assert_eq!(
+            catalog.diagnostics[0].code,
+            resolver::RouteDiagnosticCode::LocalRouteUnavailable
+        );
+        assert!(catalog.diagnostics[0]
+            .message
+            .contains("launcher @korri:android-app/android-app is unavailable"));
+
+        let error = launch_game(
+            root.path(),
+            "tmnt-shredders-revenge",
+            FileProvisionMode::Deferred,
+            &state,
+            &registry,
+        )
+        .expect_err("disabled plugin route must not fall through");
+        let LaunchError::RouteUnavailable(message) = error else {
+            panic!("got: {error:?}");
+        };
+        assert!(message.contains("launcher @korri:android-app/android-app is unavailable"));
+        assert!(!message.contains("process fallback"));
     }
 
     #[test]
