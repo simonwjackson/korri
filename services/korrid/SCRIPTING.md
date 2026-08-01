@@ -31,6 +31,27 @@ tests. The rule "plugins declare, korrid performs effects" is therefore
 enforced by construction rather than by convention, and a plugin cannot pin
 itself to one machine by reaching for local resources.
 
+## Local announcement registry
+
+korrid strictly decodes evaluated declarations into the narrow legacy plugin
+seam proven by the Android application schema checkpoint. An explicitly enabled
+plugin can currently contribute provider, system, and launcher records; disabled
+plugins remain registered but contribute nothing. Unsupported declaration fields
+fail explicitly rather than disappearing. As in legacy, system and launcher
+contribution keys retain the contributing plugin's identity; the records inside
+those entries retain their schema IDs for the later readable-snapshot slice.
+
+Review that boundary without reading Rust:
+
+```sh
+nix run .#korrid-plugin-review
+```
+
+The report uses the exact checkpoint Android plugin and shows both its enabled
+and disabled states. This registry is device-local only: it does not yet load
+persisted configuration, resolve a library route, perform an Android launch, or
+publish anything to federation peers.
+
 ## Verified on hardware
 
 Tablet SM-X930 (Android 16, aarch64), running the example plugin: transpile
@@ -66,16 +87,17 @@ the trustworthy measure.
 
 ## Not wired into the app yet
 
-The Android shell does not call this. That is deliberate: an unused engine
-would cost ~1.59 MB of APK for nothing, and the linker would otherwise strip it
-anyway (a `pub fn` is not an export root in a cdylib — an early measurement
-read **+16 KB** for exactly this reason, which was false).
+The Android shell does not call this. That is deliberate: Slice 1 stops at the
+reviewable local registry, before persisted configuration and route resolution.
+Shipping an otherwise unused engine in the app would cost ~1.59 MB, and the
+linker would otherwise strip it anyway (a `pub fn` is not an export root in a
+cdylib — an early measurement read **+16 KB** for exactly this reason, which was
+false).
 
-Wiring it up is small — a native method on `KorridServer`, a JNI export
-alongside the others in `src/android.rs`, and a caller. That happens when there
-is a real consumer: a plugin whose declaration korrid can actually act on.
-Until the capability model exists, there is nothing for a plugin to declare
-*to*.
+The Android checkpoint plugin is now the first concrete declaration consumer.
+The shell wiring belongs to the later slice that can resolve that declaration
+through a real library route and act on it; adding JNI before then would still
+produce an app-visible engine with nothing production can ask it to do.
 
 ## Traps, for the next person who touches the build
 

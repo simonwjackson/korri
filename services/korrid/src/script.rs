@@ -13,7 +13,7 @@
 //! transpiled in-process at load, so adding or editing a plugin never requires
 //! rebuilding korrid or the app that embeds it.
 
-use std::path::Path;
+use std::{collections::BTreeSet, path::Path};
 
 use oxc::allocator::Allocator;
 use oxc::codegen::Codegen;
@@ -21,7 +21,7 @@ use oxc::parser::Parser;
 use oxc::semantic::SemanticBuilder;
 use oxc::span::SourceType;
 use oxc::transformer::{TransformOptions, Transformer};
-use rquickjs::{Context, Runtime};
+use rquickjs::{function::This, Context, Filter, Function, Object, Runtime, Type, Value};
 
 /// Transpile TypeScript to JavaScript, in-process, at load time.
 pub fn transpile_ts(source: &str) -> Result<String, String> {
@@ -61,18 +61,155 @@ pub fn eval_plugin(source: &str) -> Result<String, String> {
     let context = Context::full(&runtime).map_err(|error| error.to_string())?;
 
     context.with(|ctx| {
+        let object_constructor: Object = ctx
+            .globals()
+            .get("Object")
+            .map_err(|error| format!("plugin sandbox not inspectable: {error}"))?;
+        let plain_object_prototype: Object = object_constructor
+            .get("prototype")
+            .map_err(|error| format!("plugin sandbox not inspectable: {error}"))?;
+        let object_to_string: Function = plain_object_prototype
+            .get("toString")
+            .map_err(|error| format!("plugin sandbox not inspectable: {error}"))?;
         let value: rquickjs::Value = ctx
             .eval(source)
             .map_err(|error| format!("plugin evaluation failed: {error}"))?;
 
-        let json = ctx
-            .json_stringify(value)
-            .map_err(|error| format!("plugin result not serialisable: {error}"))?
-            .ok_or_else(|| "plugin returned undefined".to_string())?;
-
-        json.to_string()
-            .map_err(|error| format!("plugin result not readable: {error}"))
+        let declaration =
+            json_data_from_js(&value, "$", 0, &plain_object_prototype, &object_to_string)?;
+        serde_json::to_string(&declaration)
+            .map_err(|error| format!("plugin result not serialisable: {error}"))
     })
+}
+
+fn json_data_from_js<'js>(
+    value: &Value<'js>,
+    path: &str,
+    depth: usize,
+    plain_object_prototype: &Object<'js>,
+    object_to_string: &Function<'js>,
+) -> Result<serde_json::Value, String> {
+    if depth > 64 {
+        return Err(format!(
+            "plugin result is not JSON data at {path}: nesting exceeds 64 levels"
+        ));
+    }
+
+    match value.type_of() {
+        Type::Null => Ok(serde_json::Value::Null),
+        Type::Bool => value
+            .get::<bool>()
+            .map(serde_json::Value::Bool)
+            .map_err(|error| format!("plugin result not inspectable at {path}: {error}")),
+        Type::Int => value
+            .get::<i32>()
+            .map(serde_json::Number::from)
+            .map(serde_json::Value::Number)
+            .map_err(|error| format!("plugin result not inspectable at {path}: {error}")),
+        Type::Float => {
+            let number: f64 = value
+                .get()
+                .map_err(|error| format!("plugin result not inspectable at {path}: {error}"))?;
+            let number = serde_json::Number::from_f64(number).ok_or_else(|| {
+                format!("plugin result is not JSON data at {path}: non-finite number")
+            })?;
+            Ok(serde_json::Value::Number(number))
+        }
+        Type::String => value
+            .get::<String>()
+            .map(serde_json::Value::String)
+            .map_err(|error| format!("plugin result not inspectable at {path}: {error}")),
+        Type::Array => {
+            let array = value
+                .clone()
+                .into_array()
+                .expect("value type was checked as an array");
+            reject_symbol_properties(array.as_object(), path)?;
+            let keys: BTreeSet<String> = array
+                .as_object()
+                .keys::<String>()
+                .collect::<rquickjs::Result<_>>()
+                .map_err(|error| format!("plugin result not inspectable at {path}: {error}"))?;
+            let expected_keys: BTreeSet<String> =
+                (0..array.len()).map(|index| index.to_string()).collect();
+            if keys != expected_keys {
+                return Err(format!(
+                    "plugin result is not JSON data at {path}: arrays must be dense and have no named properties"
+                ));
+            }
+            let mut items = Vec::with_capacity(array.len());
+            for index in 0..array.len() {
+                let item: Value = array.get(index).map_err(|error| {
+                    format!("plugin result not inspectable at {path}[{index}]: {error}")
+                })?;
+                items.push(json_data_from_js(
+                    &item,
+                    &format!("{path}[{index}]"),
+                    depth + 1,
+                    plain_object_prototype,
+                    object_to_string,
+                )?);
+            }
+            Ok(serde_json::Value::Array(items))
+        }
+        Type::Object => {
+            let object = value
+                .clone()
+                .into_object()
+                .expect("value type was checked as an object");
+            let object_tag: String = object_to_string
+                .call((This(value.clone()),))
+                .map_err(|error| format!("plugin result not inspectable at {path}: {error}"))?;
+            if object_tag != "[object Object]" {
+                return Err(format!(
+                    "plugin result is not JSON data at {path}: {object_tag}"
+                ));
+            }
+            if let Some(prototype) = object.get_prototype() {
+                if &prototype != plain_object_prototype {
+                    return Err(format!(
+                        "plugin result is not JSON data at {path}: non-plain object"
+                    ));
+                }
+            }
+            reject_symbol_properties(&object, path)?;
+            let mut properties = serde_json::Map::new();
+            for property in object.props::<String, Value>() {
+                let (key, property_value) = property
+                    .map_err(|error| format!("plugin result not inspectable at {path}: {error}"))?;
+                let property_path = format!("{path}.{key}");
+                properties.insert(
+                    key,
+                    json_data_from_js(
+                        &property_value,
+                        &property_path,
+                        depth + 1,
+                        plain_object_prototype,
+                        object_to_string,
+                    )?,
+                );
+            }
+            Ok(serde_json::Value::Object(properties))
+        }
+        unsupported => Err(format!(
+            "plugin result is not JSON data at {path}: found {unsupported}"
+        )),
+    }
+}
+
+fn reject_symbol_properties(object: &rquickjs::Object<'_>, path: &str) -> Result<(), String> {
+    let symbol = object
+        .own_keys::<rquickjs::Atom>(Filter::new().symbol().enum_only())
+        .next()
+        .transpose()
+        .map_err(|error| format!("plugin result not inspectable at {path}: {error}"))?;
+    if symbol.is_some() {
+        Err(format!(
+            "plugin result is not JSON data at {path}: symbol property"
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 /// Load a TypeScript plugin end to end: transpile, then evaluate.
