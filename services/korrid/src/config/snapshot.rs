@@ -13,6 +13,7 @@ use proseql_formats::FormatRegistry;
 use proseql_storage::{
     document_graph::{
         load_document_graph_sources, DocumentGraphTransformContext, DocumentGraphTransformHost,
+        LoadedDocumentGraph,
     },
     fs::FsStorageHost,
     host::StorageHost,
@@ -23,10 +24,12 @@ use proseql_storage::{
         SourceConfigInput,
     },
 };
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
-use super::{classify_snapshot_support, decode_config_pair, ConfigSchemaError, ConfigSnapshot};
+use super::{
+    classify_snapshot_support, decode_config_pair, ConfigSchemaError, ConfigSnapshot, HostPayload,
+};
 
 pub const CONFIG_FILE_NAME: &str = "config.yaml";
 pub const LIBRARY_FILE_NAME: &str = "library.yaml";
@@ -214,11 +217,9 @@ impl ConfigSnapshotCoordinator {
             .read(&library_path)
             .map_err(|error| storage_error(&library_path, error))?;
 
-        let snapshot = decode_config_pair(&config_yaml, &library_yaml)
+        decode_config_pair(&config_yaml, &library_yaml)
+            .map(|_| ())
             .map_err(|error| content_error(&root, error))?;
-        classify_snapshot_support(&snapshot).map_err(|error| CandidateLoadError::Unsupported {
-            message: sanitize_message(&root, &error.to_string()),
-        })?;
 
         let formats = FormatRegistry::with_builtins();
         let source_config =
@@ -226,7 +227,7 @@ impl ConfigSnapshotCoordinator {
                 message: sanitize_message(&root, &error.to_string()),
             })?;
         let transform = StrictReadableTransform;
-        load_document_graph_sources(
+        let graph = load_document_graph_sources(
             self.storage.as_ref(),
             &formats,
             &source_config,
@@ -236,9 +237,74 @@ impl ConfigSnapshotCoordinator {
         .map_err(|error| CandidateLoadError::Content {
             message: sanitize_message(&root, &error.to_string()),
         })?;
+        let snapshot = snapshot_from_graph(&graph).map_err(|error| content_error(&root, error))?;
+        classify_snapshot_support(&snapshot).map_err(|error| CandidateLoadError::Unsupported {
+            message: sanitize_message(&root, &error.to_string()),
+        })?;
 
         Ok(snapshot)
     }
+}
+
+fn snapshot_from_graph(graph: &LoadedDocumentGraph) -> Result<ConfigSnapshot, ConfigSchemaError> {
+    Ok(ConfigSnapshot {
+        host: decode_graph_host(graph)?,
+        storage: decode_graph_collection(graph, "storage")?,
+        providers: decode_graph_collection(graph, "providers")?,
+        provider_links: decode_graph_collection(graph, "provider-links")?,
+        systems: decode_graph_collection(graph, "systems")?,
+        launchers: decode_graph_collection(graph, "launchers")?,
+        runtimes: decode_graph_collection(graph, "runtimes")?,
+        profiles: decode_graph_collection(graph, "profiles")?,
+        hooks: decode_graph_collection(graph, "hooks")?,
+        collections: decode_graph_collection(graph, "collections")?,
+        users: decode_graph_collection(graph, "users")?,
+        library: decode_graph_collection(graph, "library")?,
+    })
+}
+
+fn decode_graph_host(
+    graph: &LoadedDocumentGraph,
+) -> Result<Option<HostPayload>, ConfigSchemaError> {
+    let Some(records) = graph.collections.get("host") else {
+        return Ok(None);
+    };
+    if records.is_empty() {
+        return Ok(None);
+    }
+    if records.len() != 1 || !records.contains_key("host") {
+        return Err(ConfigSchemaError::Invalid {
+            path: "document graph.host".to_owned(),
+            message: "host collection must contain only the host record".to_owned(),
+        });
+    }
+    decode_graph_record("host", "host", records.get("host").expect("host record")).map(Some)
+}
+
+fn decode_graph_collection<T>(
+    graph: &LoadedDocumentGraph,
+    collection: &str,
+) -> Result<BTreeMap<String, T>, ConfigSchemaError>
+where
+    T: DeserializeOwned,
+{
+    let Some(records) = graph.collections.get(collection) else {
+        return Ok(BTreeMap::new());
+    };
+    records
+        .iter()
+        .map(|(id, value)| Ok((id.clone(), decode_graph_record(collection, id, value)?)))
+        .collect()
+}
+
+fn decode_graph_record<T>(collection: &str, id: &str, value: &Value) -> Result<T, ConfigSchemaError>
+where
+    T: DeserializeOwned,
+{
+    serde_json::from_value(value.clone()).map_err(|source| ConfigSchemaError::Invalid {
+        path: format!("document graph.{collection}[{id}]"),
+        message: source.to_string(),
+    })
 }
 
 fn ensure_fixed_file(

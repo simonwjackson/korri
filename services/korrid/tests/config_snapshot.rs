@@ -172,6 +172,49 @@ fn unsupported_populated_behavior_retains_last_known_good_with_unsupported_diagn
 }
 
 #[test]
+fn loaded_document_graph_result_is_the_reload_candidate_and_support_input() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(
+        root.path().join(CONFIG_FILE_NAME),
+        "host:\n  title: direct\n",
+    )
+    .unwrap();
+    fs::write(root.path().join(LIBRARY_FILE_NAME), "{}\n").unwrap();
+    let storage = Arc::new(
+        SwitchableStorageHost::new(root.path().to_owned()).with_config_graph_candidate(
+            "host:\n  title: graph\n  moonlight:\n    platform:\n      name: v4l2m2m\n",
+        ),
+    );
+    let coordinator = ConfigSnapshotCoordinator::with_storage(root.path(), storage.clone());
+
+    let unsupported = coordinator.reload();
+
+    assert_eq!(unsupported.authorization, SnapshotAuthorization::Authorized);
+    assert_eq!(unsupported.generation, 0);
+    assert!(unsupported.snapshot.host.is_none());
+    let diagnostic = unsupported
+        .diagnostic
+        .as_ref()
+        .expect("graph-derived unsupported diagnostic");
+    assert_eq!(
+        diagnostic.code,
+        SnapshotDiagnosticCode::LocalConfigUnsupported
+    );
+    assert!(diagnostic.message.contains("host.moonlight"));
+
+    storage.set_config_graph_candidate("host:\n  title: graph\n");
+    let loaded = coordinator.reload();
+
+    assert_eq!(loaded.authorization, SnapshotAuthorization::Authorized);
+    assert_eq!(loaded.generation, 1);
+    assert!(loaded.diagnostic.is_none());
+    assert_eq!(
+        loaded.snapshot.host.as_ref().unwrap().title.as_deref(),
+        Some("graph")
+    );
+}
+
+#[test]
 fn storage_failures_withhold_the_retained_snapshot_until_a_valid_reload_reauthorizes_it() {
     let root = tempfile::tempdir().unwrap();
     fs::write(root.path().join(CONFIG_FILE_NAME), CHECKPOINT_CONFIG).unwrap();
@@ -264,6 +307,8 @@ struct SwitchableStorageHost {
     denied: std::sync::atomic::AtomicBool,
     fail_write_once: std::sync::Mutex<Option<String>>,
     read_gate: (std::sync::Mutex<ReadGate>, std::sync::Condvar),
+    config_graph_candidate: std::sync::Mutex<Option<String>>,
+    config_read_count: std::sync::atomic::AtomicUsize,
 }
 
 #[derive(Debug)]
@@ -284,12 +329,23 @@ impl SwitchableStorageHost {
                 }),
                 std::sync::Condvar::new(),
             ),
+            config_graph_candidate: std::sync::Mutex::new(None),
+            config_read_count: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 
     fn fail_write_once(self, filename: &str) -> Self {
         *self.fail_write_once.lock().unwrap() = Some(filename.to_owned());
         self
+    }
+
+    fn with_config_graph_candidate(self, yaml: &str) -> Self {
+        self.set_config_graph_candidate(yaml);
+        self
+    }
+
+    fn set_config_graph_candidate(&self, yaml: &str) {
+        *self.config_graph_candidate.lock().unwrap() = Some(yaml.to_owned());
     }
 
     fn deny(&self) {
@@ -345,6 +401,21 @@ impl StorageHost for SwitchableStorageHost {
     fn read(&self, path: &str) -> Result<String, EngineError> {
         self.check_allowed(path, StorageOperation::Read)?;
         self.maybe_block_read();
+        let filename = std::path::Path::new(path)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        if filename == CONFIG_FILE_NAME {
+            let read_index = self
+                .config_read_count
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if read_index % 2 == 1 {
+                if let Some(candidate) = self.config_graph_candidate.lock().unwrap().clone() {
+                    return Ok(candidate);
+                }
+            }
+        }
         fs::read_to_string(path)
             .map_err(|error| test_storage_error(path, StorageOperation::Read, error.to_string()))
     }
