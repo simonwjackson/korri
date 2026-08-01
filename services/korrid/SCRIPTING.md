@@ -61,9 +61,26 @@ nix run .#korrid-plugin-review
 
 The report uses the bundled Android plugin source (kept byte-identical to the
 checkpoint copy) and shows both its enabled and disabled states. This registry
-is device-local only: it does not yet load persisted configuration, resolve a
-library route, perform an Android launch, or publish anything to federation
-peers.
+is device-local only: it does not perform an Android launch or publish anything
+to federation peers.
+
+## Local route review
+
+The checkpoint readable configuration now resolves through the production
+snapshot loader, bundled policy, enabled registry, and narrow route resolver.
+That resolver selects the one launchable release, follows `launch.use`, resolves
+a `provider-ref` target into the legacy flattened target string, and joins the
+provider/system/launcher declarations that are present after policy.
+
+Review that boundary without Android effects:
+
+```sh
+nix run .#korrid-plugin-route-review
+```
+
+The enabled half reports the TMNT route owned by `@korri:android-app`; the
+disabled half reports the same route as unavailable instead of falling through
+to a process command or another launcher.
 
 ## Verified on hardware
 
@@ -98,13 +115,13 @@ baseline APK measured that way showed ~3.35 MB of unexplained slack, which made
 the build *with* the runtime look smaller — nonsense. Per-entry comparison is
 the trustworthy measure.
 
-## Not a launch path yet
+## Not an Android launch path yet
 
-The Android plugin is now bundled and default-enabled through policy, but this
-slice still stops at the local announcement registry. Persisted configuration,
-route resolution, and Android launch mapping are later slices. The shell still
-performs no plugin-specific work, and `command: android-app` must not be treated
-as a generic process command.
+The Android plugin is now bundled, default-enabled through policy, and used to
+resolve the reviewed local route. This slice still stops before `LaunchSpec`
+production and Android effects. The shell still performs no plugin-specific
+work, and `command: android-app` is treated only as an allowlisted integration
+token by the route boundary, never as a generic process command.
 
 ## Traps, for the next person who touches the build
 

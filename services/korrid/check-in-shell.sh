@@ -14,6 +14,7 @@ cargo check
 cargo test
 KORRI_CONFIG_REVIEW_IN_SHELL=1 "$CRATE/config-snapshot-review.sh"
 KORRI_PLUGIN_REVIEW_IN_SHELL=1 "$CRATE/plugin-registry-review.sh"
+KORRI_PLUGIN_ROUTE_REVIEW_IN_SHELL=1 "$CRATE/plugin-route-review.sh"
 typeshare . --lang=typescript --output-file="$GENERATED_TS"
 # Typeshare 1.13 emits trailing spaces and an extra final blank line.
 sed -i -e 's/[[:space:]]\+$//' -e '${/^$/d;}' "$GENERATED_TS"

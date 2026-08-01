@@ -1,3 +1,4 @@
+pub mod resolver;
 pub mod snapshot;
 
 use std::collections::{BTreeMap, BTreeSet};

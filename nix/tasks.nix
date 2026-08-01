@@ -165,6 +165,27 @@ let
       '';
     };
 
+    korrid-plugin-route-review = {
+      description = "Explain enabled and disabled checkpoint route resolution without Android effects.";
+      needsProseql = true;
+      runtimeInputs = [
+        rustToolchain
+        pkgs.clang
+        pkgs.llvmPackages.libclang
+      ];
+      env = {
+        CC_x86_64_unknown_linux_gnu = "${pkgs.clang}/bin/clang";
+        HOST_CC = "${pkgs.clang}/bin/clang";
+        LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+      };
+      usageSuffix = " -- [storage-root]";
+      script = ''
+        export CARGO_TARGET_DIR="$KORRI_ROOT/.cache/korrid-target"
+        export KORRI_PLUGIN_ROUTE_REVIEW_IN_SHELL=1
+        exec "$KORRI_ROOT/services/korrid/plugin-route-review.sh" "$@"
+      '';
+    };
+
     korrid-check-device = {
       description = "Run the full korrid check, then install and smoke-test it on Android.";
       needsProseql = true;
