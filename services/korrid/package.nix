@@ -1,13 +1,21 @@
 { pkgs, craneLib, proseql }:
 let
+  lib = pkgs.lib;
   proseqlSource = import ./proseql-source.nix { inherit pkgs proseql; };
   sourceRoot = ./.;
-  cleanSource = pkgs.lib.cleanSourceWith {
+  sourceRootString = toString sourceRoot;
+  bundledPluginSources = [ "plugins/android-app.plugin.ts" ];
+  relativeSourcePath = path: lib.removePrefix "${sourceRootString}/" (toString path);
+  cleanSource = lib.cleanSourceWith {
     src = sourceRoot;
     filter = path: type:
       (craneLib.filterCargoSources path type)
       # The script unit tests include the checked-in example plugin source.
-      || pkgs.lib.hasPrefix "${toString sourceRoot}/examples/" (toString path);
+      || lib.hasPrefix "${sourceRootString}/examples/" (toString path)
+      # The production plugin is bundled with include_str! and must survive the
+      # clean/composed cargo source, without pulling in arbitrary plugin source.
+      || (type == "directory" && (toString path) == "${sourceRootString}/plugins")
+      || (type != "directory" && builtins.elem (relativeSourcePath path) bundledPluginSources);
   };
   src = proseqlSource.composeCargoSource cleanSource;
   commonArgs = {
@@ -27,6 +35,17 @@ craneLib.buildPackage (commonArgs // {
   inherit cargoArtifacts;
   pname = "korrid";
   version = "0.0.0";
-  # Full repository checks run integration tests that include files outside this crate source.
-  cargoTestExtraArgs = "--lib --bins";
+  preConfigure = ''
+    plugin_sources="$(${pkgs.findutils}/bin/find plugins -type f -name '*.plugin.ts' -printf '%P\n' | sort)"
+    if [[ "$plugin_sources" != "android-app.plugin.ts" ]]; then
+      echo "unexpected bundled plugin source set:" >&2
+      printf '%s\n' "$plugin_sources" >&2
+      exit 1
+    fi
+  '';
+  # Probe binaries and most tests include review fixtures outside this crate
+  # package. The flake package ships the runtime binary plus embedded library;
+  # the full repository gate remains `nix run .#korrid-check`.
+  cargoBuildExtraArgs = "--bin korrid --lib";
+  cargoTestExtraArgs = "--bin korrid";
 })
