@@ -1,15 +1,21 @@
 #!/usr/bin/env nix-shell
 #! nix-shell -i bash -p bash coreutils curl gnugrep gnused android-tools unzip jq
+# shellcheck shell=bash
 # Install the built APK and call Rust Axum over adb forward.
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
+EXPECT_INSTALLED_ROUTE=false
+if [[ "${1:-}" == "--expect-installed-route" ]]; then
+  EXPECT_INSTALLED_ROUTE=true
+  shift
+fi
 DEVICE="${1:-${KORRI_ANDROID_DEVICE:-}}"
 if [[ -z "$DEVICE" ]]; then
-  echo "usage: android-smoke.sh <adb-serial>" >&2
+  echo "usage: android-smoke.sh [--expect-installed-route] <adb-serial>" >&2
   exit 1
 fi
-APK="$ROOT/clients/android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk"
+APK="${KORRI_ANDROID_APK:-$ROOT/clients/android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk}"
 PACKAGE="com.simonwjackson.korri.debug"
 HOST_PORT=43118
 ANDROID_STORAGE_ROOT="/sdcard/korri-retro"
@@ -17,7 +23,7 @@ CHECKPOINT_CONFIG="$ROOT/docs/research/android-app-plugin-schema-checkpoint/conf
 CHECKPOINT_LIBRARY="$ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml"
 UPSTREAMS_CONFIG="${KORRI_ANDROID_UPSTREAMS_CONFIG:-$ROOT/services/korrid/deploy/upstreams.android.json}"
 CURL=(curl --connect-timeout 2 --max-time 5 --retry 2 --retry-connrefused)
-ADB_BIN="$(command -v adb)"
+ADB_BIN="${KORRI_ADB_BIN:-$(command -v adb)}"
 adb() {
   if ! timeout 15 "$ADB_BIN" "$@"; then
     echo "adb command failed or timed out: $*" >&2
@@ -26,9 +32,9 @@ adb() {
 }
 
 if [[ "$DEVICE" == *:* ]]; then
-  timeout 15 adb connect "$DEVICE" >/dev/null || true
+  timeout 15 "$ADB_BIN" connect "$DEVICE" >/dev/null || true
 fi
-if ! timeout 15 adb -s "$DEVICE" wait-for-device; then
+if ! timeout 15 "$ADB_BIN" -s "$DEVICE" wait-for-device; then
   echo "Android target is not reachable: $DEVICE" >&2
   exit 1
 fi
@@ -42,17 +48,17 @@ fi
 
 adb -s "$DEVICE" shell mkdir -p "$ANDROID_STORAGE_ROOT"
 adb -s "$DEVICE" push "$UPSTREAMS_CONFIG" "$ANDROID_STORAGE_ROOT/upstreams.json" >/dev/null
-adb -s "$DEVICE" push "$CHECKPOINT_CONFIG" "$ANDROID_STORAGE_ROOT/config.yaml" >/dev/null
-adb -s "$DEVICE" push "$CHECKPOINT_LIBRARY" "$ANDROID_STORAGE_ROOT/library.yaml" >/dev/null
-if ! adb -s "$DEVICE" exec-out cat "$ANDROID_STORAGE_ROOT/config.yaml" | cmp -s "$CHECKPOINT_CONFIG" -; then
-  echo "Device config.yaml does not match the reviewed checkpoint bytes" >&2
-  exit 1
+if [[ "$EXPECT_INSTALLED_ROUTE" == true ]]; then
+  if ! adb -s "$DEVICE" exec-out cat "$ANDROID_STORAGE_ROOT/config.yaml" | cmp -s "$CHECKPOINT_CONFIG" -; then
+    echo "Device config.yaml does not match the reviewed checkpoint bytes" >&2
+    exit 1
+  fi
+  if ! adb -s "$DEVICE" exec-out cat "$ANDROID_STORAGE_ROOT/library.yaml" | cmp -s "$CHECKPOINT_LIBRARY" -; then
+    echo "Device library.yaml does not match the reviewed checkpoint bytes" >&2
+    exit 1
+  fi
 fi
-if ! adb -s "$DEVICE" exec-out cat "$ANDROID_STORAGE_ROOT/library.yaml" | cmp -s "$CHECKPOINT_LIBRARY" -; then
-  echo "Device library.yaml does not match the reviewed checkpoint bytes" >&2
-  exit 1
-fi
-if ! timeout 60 adb -s "$DEVICE" install -r "$APK"; then
+if ! timeout 60 "$ADB_BIN" -s "$DEVICE" install -r "$APK"; then
   echo 'Android app install failed or timed out after 60s' >&2
   exit 1
 fi
@@ -122,42 +128,56 @@ if ! jq -e '
   exit 1
 fi
 
-# The configured Android application route must come from the checkpoint files,
-# while WL4 remains available through the unchanged RetroArch source.
+# The regular device smoke must not rewrite a user's fixed config/library files.
+# TMNT route assertions are opt-in through --expect-installed-route after the
+# dedicated installed-route gate has provisioned and byte-checked its checkpoint.
 local_games_response="$("${CURL[@]}" --fail --silent \
   -H 'content-type: application/json' \
   -H "authorization: Bearer $capability" \
   -d '{"_tag":"app.local-games.list","payload":{}}' \
   "http://127.0.0.1:$HOST_PORT/rpc")"
-if ! jq -e '
-  .outcome._tag == "Ok"
-  and .outcome.payload.games[0].id == "tmnt-shredders-revenge"
-  and .outcome.payload.games[0].title == "TMNT: Shredder'"'"'s Revenge"
-  and .outcome.payload.games[1].id == "wl4"
-  and .outcome.payload.games[1].title == "Wario Land 4"
-  and (.outcome.payload.failures | not)
-' <<<"$local_games_response" >/dev/null; then
-  echo "Local-games probe did not return configured TMNT before WL4: $local_games_response" >&2
-  exit 1
+if [[ "$EXPECT_INSTALLED_ROUTE" == true ]]; then
+  if ! jq -e '
+    .outcome._tag == "Ok"
+    and .outcome.payload.games[0].id == "tmnt-shredders-revenge"
+    and .outcome.payload.games[0].title == "TMNT: Shredder'"'"'s Revenge"
+    and .outcome.payload.games[1].id == "wl4"
+    and .outcome.payload.games[1].title == "Wario Land 4"
+    and (.outcome.payload.failures | not)
+  ' <<<"$local_games_response" >/dev/null; then
+    echo "Local-games probe did not return configured TMNT before WL4: $local_games_response" >&2
+    exit 1
+  fi
+else
+  if ! jq -e '
+    .outcome._tag == "Ok"
+    and any(.outcome.payload.games[]; .id == "wl4" and .title == "Wario Land 4")
+  ' <<<"$local_games_response" >/dev/null; then
+    echo "Local-games probe did not return WL4 through the on-device brain: $local_games_response" >&2
+    exit 1
+  fi
 fi
 
-android_launch_response="$("${CURL[@]}" --fail --silent \
-  -H 'content-type: application/json' \
-  -H "authorization: Bearer $capability" \
-  -d '{"_tag":"app.local-games.launch","payload":{"gameId":"tmnt-shredders-revenge"}}' \
-  "http://127.0.0.1:$HOST_PORT/rpc")"
-if ! jq -e '
-  .outcome._tag == "Ok"
-  and .outcome.payload.launcherId == "android-app"
-  and .outcome.payload.component.packageName == "com.playdigious.tmnt"
-  and .outcome.payload.component.className == ""
-  and .outcome.payload.extras == {}
-  and .outcome.payload.directories == []
-  and .outcome.payload.files == []
-  and (.outcome.payload.integrity | type == "string" and length > 0)
-' <<<"$android_launch_response" >/dev/null; then
-  echo "Configured Android route did not return the signed android-app shape: $android_launch_response" >&2
-  exit 1
+android_launch_response=""
+if [[ "$EXPECT_INSTALLED_ROUTE" == true ]]; then
+  android_launch_response="$("${CURL[@]}" --fail --silent \
+    -H 'content-type: application/json' \
+    -H "authorization: Bearer $capability" \
+    -d '{"_tag":"app.local-games.launch","payload":{"gameId":"tmnt-shredders-revenge"}}' \
+    "http://127.0.0.1:$HOST_PORT/rpc")"
+  if ! jq -e '
+    .outcome._tag == "Ok"
+    and .outcome.payload.launcherId == "android-app"
+    and .outcome.payload.component.packageName == "com.playdigious.tmnt"
+    and .outcome.payload.component.className == ""
+    and .outcome.payload.extras == {}
+    and .outcome.payload.directories == []
+    and .outcome.payload.files == []
+    and (.outcome.payload.integrity | type == "string" and length > 0)
+  ' <<<"$android_launch_response" >/dev/null; then
+    echo "Configured Android route did not return the signed android-app shape: $android_launch_response" >&2
+    exit 1
+  fi
 fi
 
 # Embedded Android must still return a signed, deferred RetroArch instruction.
@@ -194,7 +214,9 @@ fi
 printf 'Android portal: %s\n' "$portal_ready"
 printf 'Android Rust RPC: %s\n' "$response"
 printf 'Android local games: %s\n' "$local_games_response"
-printf 'Android android-app launch: %s\n' "$android_launch_response"
+if [[ "$EXPECT_INSTALLED_ROUTE" == true ]]; then
+  printf 'Android android-app launch: %s\n' "$android_launch_response"
+fi
 printf 'Android deferred RetroArch launch: %s\n' "$local_launch_response"
 printf 'Android session status: %s\n' "$session_response"
 printf 'Android Rust library: %s\n' "$(adb -s "$DEVICE" shell dumpsys package "$PACKAGE" | grep versionName | head -1 | xargs)"

@@ -1,5 +1,6 @@
 #!/usr/bin/env nix-shell
 #! nix-shell -i bash -p bash curl coreutils
+# shellcheck shell=bash
 # THROWAWAY PROTOTYPE implementation; invoked by run-spike.sh in its devshell.
 set -euo pipefail
 
@@ -15,6 +16,7 @@ cargo test
 KORRI_CONFIG_REVIEW_IN_SHELL=1 "$CRATE/config-snapshot-review.sh"
 KORRI_PLUGIN_REVIEW_IN_SHELL=1 "$CRATE/plugin-registry-review.sh"
 KORRI_PLUGIN_ROUTE_REVIEW_IN_SHELL=1 "$CRATE/plugin-route-review.sh"
+"$CRATE/android-device-script-review.sh"
 typeshare . --lang=typescript --output-file="$GENERATED_TS"
 # Typeshare 1.13 emits trailing spaces and an extra final blank line.
 sed -i -e 's/[[:space:]]\+$//' -e '${/^$/d;}' "$GENERATED_TS"

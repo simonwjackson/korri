@@ -20,10 +20,15 @@ TAP_X="${3:-539}"
 TAP_Y="${4:-882}"
 KORRI=com.simonwjackson.korri.debug
 SHOTS="${SHOTS:-/tmp/korri-journey}"
-ADB=(adb -s "$SERIAL")
+EXPECTED_PORTAL_TITLE="${KORRI_JOURNEY_EXPECTED_TITLE:-}"
+if [[ -z "$EXPECTED_PORTAL_TITLE" ]]; then
+  EXPECTED_PORTAL_TITLE="TMNT: Shredder's Revenge"
+fi
+ADB_BIN="${KORRI_ADB_BIN:-adb}"
+ADB=("$ADB_BIN" -s "$SERIAL")
 
 mkdir -p "$SHOTS"
-[[ "$SERIAL" == *:* ]] && { adb connect "$SERIAL" >/dev/null || true; }
+[[ "$SERIAL" == *:* ]] && { "$ADB_BIN" connect "$SERIAL" >/dev/null || true; }
 "${ADB[@]}" wait-for-device
 if ! "${ADB[@]}" shell pm path "$GAME" | grep -q '^package:'; then
   echo "FAILED: required game package is not installed: $GAME"
@@ -33,8 +38,11 @@ fi
 # Fixed tap targets only make sense in a known orientation, and a landscape
 # game leaves the device rotated. Pin portrait for the run, restore after.
 PRIOR_AUTO="$("${ADB[@]}" shell settings get system accelerometer_rotation | tr -d "\r\n")"
+PRIOR_USER="$("${ADB[@]}" shell settings get system user_rotation | tr -d "\r\n")"
 "${ADB[@]}" shell "settings put system accelerometer_rotation 0; settings put system user_rotation 0"
-restore_rotation() { "${ADB[@]}" shell "settings put system accelerometer_rotation ${PRIOR_AUTO:-1}" >/dev/null 2>&1 || true; }
+restore_rotation() {
+  "${ADB[@]}" shell "settings put system accelerometer_rotation ${PRIOR_AUTO:-1}; settings put system user_rotation ${PRIOR_USER:-0}" >/dev/null 2>&1 || true
+}
 trap restore_rotation EXIT
 
 pid_of() { "${ADB[@]}" shell "pidof $GAME" 2>/dev/null | tr -d '\r\n'; }
@@ -43,6 +51,11 @@ top_of() {
     | sed 's/.*u0 //; s/ .*//' | tr -d '\r\n'
 }
 shot() { "${ADB[@]}" shell "screencap -p /sdcard/j.png" >/dev/null && "${ADB[@]}" pull /sdcard/j.png "$SHOTS/$1.png" >/dev/null; }
+dump_ui() {
+  local label="$1"
+  "${ADB[@]}" shell "uiautomator dump /sdcard/j.xml" >/dev/null
+  "${ADB[@]}" pull /sdcard/j.xml "$SHOTS/$label.xml" >/dev/null
+}
 note() { printf '%-30s pid=%-8s top=%s\n' "$1" "$(pid_of)" "$(top_of)"; }
 
 step() { # label, wait
@@ -71,6 +84,17 @@ assert_top_contains() {
     exit 1
   fi
 }
+assert_portal_exposes_title() {
+  local label="$1"
+  local expected="$2"
+  dump_ui "$label"
+  if ! grep -F "$expected" "$SHOTS/$label.xml" >/dev/null; then
+    echo "FAILED: portal did not expose $expected before D-pad activation"
+    echo "        see $SHOTS/$label.png"
+    echo "        see $SHOTS/$label.xml"
+    exit 1
+  fi
+}
 
 INITIAL_PID="$(pid_of)"
 echo "== portal launch"
@@ -78,6 +102,7 @@ echo "== portal launch"
 open_korri
 step "1-korri-home" 7
 assert_top_contains "1-korri-home" "$KORRI"
+assert_portal_exposes_title "1-korri-home" "$EXPECTED_PORTAL_TITLE"
 
 open_selected_local_game
 step "2-game-first" 20
@@ -98,6 +123,7 @@ step "3-home-away" 4
 open_korri
 step "4-korri-return" 7
 assert_top_contains "4-korri-return" "$KORRI"
+assert_portal_exposes_title "4-korri-return" "$EXPECTED_PORTAL_TITLE"
 
 open_selected_local_game
 step "5-game-resumed" 20
