@@ -172,46 +172,35 @@ fn unsupported_populated_behavior_retains_last_known_good_with_unsupported_diagn
 }
 
 #[test]
-fn loaded_document_graph_result_is_the_reload_candidate_and_support_input() {
+fn coordinator_publishes_the_once_captured_documents_through_graph_conversion() {
     let root = tempfile::tempdir().unwrap();
     fs::write(
         root.path().join(CONFIG_FILE_NAME),
-        "host:\n  title: direct\n",
+        "host:\n  title: captured\n",
     )
     .unwrap();
     fs::write(root.path().join(LIBRARY_FILE_NAME), "{}\n").unwrap();
     let storage = Arc::new(
-        SwitchableStorageHost::new(root.path().to_owned()).with_config_graph_candidate(
-            "host:\n  title: graph\n  moonlight:\n    platform:\n      name: v4l2m2m\n",
-        ),
+        SwitchableStorageHost::new(root.path().to_owned())
+            .with_config_second_read("host:\n  title: second-read\n"),
     );
     let coordinator = ConfigSnapshotCoordinator::with_storage(root.path(), storage.clone());
 
-    let unsupported = coordinator.reload();
+    let state = coordinator.reload();
 
-    assert_eq!(unsupported.authorization, SnapshotAuthorization::Authorized);
-    assert_eq!(unsupported.generation, 0);
-    assert!(unsupported.snapshot.host.is_none());
-    let diagnostic = unsupported
-        .diagnostic
-        .as_ref()
-        .expect("graph-derived unsupported diagnostic");
+    assert_eq!(state.authorization, SnapshotAuthorization::Authorized);
+    assert_eq!(state.generation, 1);
+    assert!(state.diagnostic.is_none());
     assert_eq!(
-        diagnostic.code,
-        SnapshotDiagnosticCode::LocalConfigUnsupported
+        state.snapshot.host.as_ref().unwrap().title.as_deref(),
+        Some("captured")
     );
-    assert!(diagnostic.message.contains("host.moonlight"));
-
-    storage.set_config_graph_candidate("host:\n  title: graph\n");
-    let loaded = coordinator.reload();
-
-    assert_eq!(loaded.authorization, SnapshotAuthorization::Authorized);
-    assert_eq!(loaded.generation, 1);
-    assert!(loaded.diagnostic.is_none());
-    assert_eq!(
-        loaded.snapshot.host.as_ref().unwrap().title.as_deref(),
-        Some("graph")
+    assert_ne!(
+        state.snapshot.host.as_ref().unwrap().title.as_deref(),
+        Some("second-read")
     );
+    assert_eq!(storage.read_count(CONFIG_FILE_NAME), 1);
+    assert_eq!(storage.read_count(LIBRARY_FILE_NAME), 1);
 }
 
 #[test]
@@ -307,8 +296,8 @@ struct SwitchableStorageHost {
     denied: std::sync::atomic::AtomicBool,
     fail_write_once: std::sync::Mutex<Option<String>>,
     read_gate: (std::sync::Mutex<ReadGate>, std::sync::Condvar),
-    config_graph_candidate: std::sync::Mutex<Option<String>>,
-    config_read_count: std::sync::atomic::AtomicUsize,
+    config_second_read: std::sync::Mutex<Option<String>>,
+    read_counts: std::sync::Mutex<std::collections::BTreeMap<String, usize>>,
 }
 
 #[derive(Debug)]
@@ -329,8 +318,8 @@ impl SwitchableStorageHost {
                 }),
                 std::sync::Condvar::new(),
             ),
-            config_graph_candidate: std::sync::Mutex::new(None),
-            config_read_count: std::sync::atomic::AtomicUsize::new(0),
+            config_second_read: std::sync::Mutex::new(None),
+            read_counts: std::sync::Mutex::new(std::collections::BTreeMap::new()),
         }
     }
 
@@ -339,13 +328,18 @@ impl SwitchableStorageHost {
         self
     }
 
-    fn with_config_graph_candidate(self, yaml: &str) -> Self {
-        self.set_config_graph_candidate(yaml);
+    fn with_config_second_read(self, yaml: &str) -> Self {
+        *self.config_second_read.lock().unwrap() = Some(yaml.to_owned());
         self
     }
 
-    fn set_config_graph_candidate(&self, yaml: &str) {
-        *self.config_graph_candidate.lock().unwrap() = Some(yaml.to_owned());
+    fn read_count(&self, filename: &str) -> usize {
+        self.read_counts
+            .lock()
+            .unwrap()
+            .get(filename)
+            .copied()
+            .unwrap_or(0)
     }
 
     fn deny(&self) {
@@ -406,14 +400,16 @@ impl StorageHost for SwitchableStorageHost {
             .unwrap()
             .to_string_lossy()
             .into_owned();
-        if filename == CONFIG_FILE_NAME {
-            let read_index = self
-                .config_read_count
-                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            if read_index % 2 == 1 {
-                if let Some(candidate) = self.config_graph_candidate.lock().unwrap().clone() {
-                    return Ok(candidate);
-                }
+        let read_index = {
+            let mut read_counts = self.read_counts.lock().unwrap();
+            let count = read_counts.entry(filename.clone()).or_insert(0);
+            let read_index = *count;
+            *count += 1;
+            read_index
+        };
+        if filename == CONFIG_FILE_NAME && read_index > 0 {
+            if let Some(candidate) = self.config_second_read.lock().unwrap().clone() {
+                return Ok(candidate);
             }
         }
         fs::read_to_string(path)

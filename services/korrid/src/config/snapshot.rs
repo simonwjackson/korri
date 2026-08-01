@@ -17,6 +17,7 @@ use proseql_storage::{
     },
     fs::FsStorageHost,
     host::StorageHost,
+    memory::MemoryStorageHost,
     persistence::CollectionStorageConfig,
     source_config::{
         normalize_source_config, DatabaseSourceConfig, DocumentGraphFragmentErrorPolicy,
@@ -221,6 +222,13 @@ impl ConfigSnapshotCoordinator {
             .map(|_| ())
             .map_err(|error| content_error(&root, error))?;
 
+        let graph_storage = captured_graph_storage(
+            &root_dir,
+            &config_path,
+            &config_yaml,
+            &library_path,
+            &library_yaml,
+        )?;
         let formats = FormatRegistry::with_builtins();
         let source_config =
             graph_source_config(&root).map_err(|error| CandidateLoadError::Content {
@@ -228,7 +236,7 @@ impl ConfigSnapshotCoordinator {
             })?;
         let transform = StrictReadableTransform;
         let graph = load_document_graph_sources(
-            self.storage.as_ref(),
+            &graph_storage,
             &formats,
             &source_config,
             None,
@@ -325,6 +333,26 @@ fn ensure_fixed_file(
         .map_err(|error| storage_error(&path, error))
 }
 
+fn captured_graph_storage(
+    root_dir: &str,
+    config_path: &str,
+    config_yaml: &str,
+    library_path: &str,
+    library_yaml: &str,
+) -> Result<MemoryStorageHost, CandidateLoadError> {
+    let storage = MemoryStorageHost::default();
+    storage
+        .ensure_dir(root_dir)
+        .map_err(|error| storage_error(root_dir, error))?;
+    storage
+        .write(config_path, config_yaml)
+        .map_err(|error| storage_error(config_path, error))?;
+    storage
+        .write(library_path, library_yaml)
+        .map_err(|error| storage_error(library_path, error))?;
+    Ok(storage)
+}
+
 fn graph_source_config(
     root: &str,
 ) -> Result<proseql_storage::source_config::NormalizedSourceConfig, EngineError> {
@@ -393,32 +421,8 @@ impl DocumentGraphTransformHost for StrictReadableTransform {
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or(context.path.as_str());
-        strict_validate_raw_document(file_name, document)
-            .map_err(|error| json!({ "message": error.to_string() }))?;
         readable_document_to_graph(file_name, document)
             .map_err(|message| json!({ "message": message }))
-    }
-}
-
-fn strict_validate_raw_document(
-    file_name: &str,
-    document: &Value,
-) -> Result<(), ConfigSchemaError> {
-    let raw = serde_yaml::to_string(document).map_err(|source| ConfigSchemaError::Yaml {
-        file: if file_name == CONFIG_FILE_NAME {
-            "config.yaml"
-        } else {
-            "library.yaml"
-        },
-        source,
-    })?;
-    match file_name {
-        CONFIG_FILE_NAME => decode_config_pair(&raw, "{}\n").map(|_| ()),
-        LIBRARY_FILE_NAME => decode_config_pair("{}\n", &raw).map(|_| ()),
-        other => Err(ConfigSchemaError::Invalid {
-            path: other.to_owned(),
-            message: "only config.yaml and library.yaml are owned by the local snapshot".to_owned(),
-        }),
     }
 }
 
