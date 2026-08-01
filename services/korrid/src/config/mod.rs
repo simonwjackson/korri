@@ -1,7 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use serde::{de::Error as DeError, Deserialize, Deserializer};
+use serde::{
+    de::{Error as DeError, MapAccess, Visitor},
+    Deserialize, Deserializer,
+};
 use serde_json::Value;
 use thiserror::Error;
 
@@ -54,27 +57,92 @@ struct RawDocument {
     #[serde(default, deserialize_with = "optional_non_null")]
     host: Option<HostPayload>,
     #[serde(default)]
-    storage: BTreeMap<String, StoragePayload>,
+    storage: SectionRecords<StoragePayload>,
     #[serde(default)]
-    providers: BTreeMap<String, ProviderPayload>,
+    providers: SectionRecords<ProviderPayload>,
     #[serde(default, rename = "provider-links")]
-    provider_links: BTreeMap<String, ProviderLinkPayload>,
+    provider_links: SectionRecords<ProviderLinkPayload>,
     #[serde(default)]
-    systems: BTreeMap<String, SystemPayload>,
+    systems: SectionRecords<SystemPayload>,
     #[serde(default)]
-    launchers: BTreeMap<String, AppPayload>,
+    launchers: SectionRecords<AppPayload>,
     #[serde(default)]
-    runtimes: BTreeMap<String, RuntimePayload>,
+    runtimes: SectionRecords<RuntimePayload>,
     #[serde(default)]
-    profiles: BTreeMap<String, ProfilePayload>,
+    profiles: SectionRecords<ProfilePayload>,
     #[serde(default)]
-    hooks: BTreeMap<String, HookProfilePayload>,
+    hooks: SectionRecords<HookProfilePayload>,
     #[serde(default)]
-    collections: BTreeMap<String, CollectionPayload>,
+    collections: SectionRecords<CollectionPayload>,
     #[serde(default)]
-    users: BTreeMap<String, UserPayload>,
+    users: SectionRecords<UserPayload>,
     #[serde(default)]
-    library: BTreeMap<String, LibraryItemPayload>,
+    library: SectionRecords<LibraryItemPayload>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct SectionRecords<T> {
+    present: bool,
+    records: BTreeMap<String, T>,
+}
+
+impl<T> Default for SectionRecords<T> {
+    fn default() -> Self {
+        Self {
+            present: false,
+            records: BTreeMap::new(),
+        }
+    }
+}
+
+impl<T> std::ops::Deref for SectionRecords<T> {
+    type Target = BTreeMap<String, T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.records
+    }
+}
+
+impl<'de, T> Deserialize<'de> for SectionRecords<T>
+where
+    T: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct SectionRecordsVisitor<T>(std::marker::PhantomData<T>);
+
+        impl<'de, T> Visitor<'de> for SectionRecordsVisitor<T>
+        where
+            T: Deserialize<'de>,
+        {
+            type Value = SectionRecords<T>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a section record map")
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let mut records = BTreeMap::new();
+                while let Some((key, value)) = map.next_entry::<String, T>()? {
+                    if records.contains_key(&key) {
+                        return Err(A::Error::custom(format!("duplicate record key '{key}'")));
+                    }
+                    records.insert(key, value);
+                }
+                Ok(SectionRecords {
+                    present: true,
+                    records,
+                })
+            }
+        }
+
+        deserializer.deserialize_map(SectionRecordsVisitor(std::marker::PhantomData))
+    }
 }
 
 pub fn decode_config_pair(
@@ -94,17 +162,17 @@ pub fn decode_config_pair(
 
     Ok(ConfigSnapshot {
         host: config.host,
-        storage: config.storage,
-        providers: config.providers,
-        provider_links: config.provider_links,
-        systems: config.systems,
-        launchers: config.launchers,
-        runtimes: config.runtimes,
-        profiles: config.profiles,
-        hooks: config.hooks,
-        collections: library.collections,
-        users: library.users,
-        library: library.library,
+        storage: config.storage.records,
+        providers: config.providers.records,
+        provider_links: config.provider_links.records,
+        systems: config.systems.records,
+        launchers: config.launchers.records,
+        runtimes: config.runtimes.records,
+        profiles: config.profiles.records,
+        hooks: config.hooks.records,
+        collections: library.collections.records,
+        users: library.users.records,
+        library: library.library.records,
     })
 }
 
@@ -133,17 +201,17 @@ impl RawDocument {
     fn has_section(&self, section: &str) -> bool {
         match section {
             "host" => self.host.is_some(),
-            "storage" => !self.storage.is_empty(),
-            "providers" => !self.providers.is_empty(),
-            "provider-links" => !self.provider_links.is_empty(),
-            "systems" => !self.systems.is_empty(),
-            "launchers" => !self.launchers.is_empty(),
-            "runtimes" => !self.runtimes.is_empty(),
-            "profiles" => !self.profiles.is_empty(),
-            "hooks" => !self.hooks.is_empty(),
-            "collections" => !self.collections.is_empty(),
-            "users" => !self.users.is_empty(),
-            "library" => !self.library.is_empty(),
+            "storage" => self.storage.present,
+            "providers" => self.providers.present,
+            "provider-links" => self.provider_links.present,
+            "systems" => self.systems.present,
+            "launchers" => self.launchers.present,
+            "runtimes" => self.runtimes.present,
+            "profiles" => self.profiles.present,
+            "hooks" => self.hooks.present,
+            "collections" => self.collections.present,
+            "users" => self.users.present,
+            "library" => self.library.present,
             _ => false,
         }
     }
@@ -207,7 +275,7 @@ fn validate_document_values(
     file: &'static str,
     document: &RawDocument,
 ) -> Result<(), ConfigSchemaError> {
-    for (id, provider) in &document.providers {
+    for (id, provider) in document.providers.iter() {
         if provider.kind.is_some() {
             return Err(ConfigSchemaError::Invalid {
                 path: format!("{file}.providers[{id}].kind"),
@@ -216,7 +284,7 @@ fn validate_document_values(
         }
     }
 
-    for (id, item) in &document.library {
+    for (id, item) in document.library.iter() {
         if item.source.is_some() {
             return Err(ConfigSchemaError::Invalid {
                 path: format!("{file}.library[{id}].source"),
@@ -1446,11 +1514,14 @@ impl<'de> Deserialize<'de> for ArtifactIdString {
     {
         let value = String::deserialize(deserializer)?;
         let valid = value.strip_prefix("sha256:").is_some_and(|digest| {
-            digest.len() == 64 && digest.chars().all(|c| c.is_ascii_hexdigit())
+            digest.len() == 64
+                && digest
+                    .chars()
+                    .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
         });
         if !valid {
             return Err(D::Error::custom(
-                "artifact ids must be sha256:<64 hex characters>",
+                "artifact ids must be sha256:<64 lowercase hex characters>",
             ));
         }
         Ok(Self(value))

@@ -135,6 +135,59 @@ fn fixed_file_ownership_is_enforced_before_merge_order_can_win() {
 }
 
 #[test]
+fn empty_sections_still_belong_to_their_fixed_file() {
+    let library_in_config = decode_config_pair("library: {}\n", "{}\n")
+        .expect_err("empty library section is still not owned by config.yaml");
+    assert!(library_in_config.to_string().contains("config.yaml"));
+
+    let provider_in_library = decode_config_pair("{}\n", "providers: {}\n")
+        .expect_err("empty providers section is still not owned by library.yaml");
+    assert!(provider_in_library.to_string().contains("library.yaml"));
+}
+
+#[test]
+fn duplicate_top_level_section_record_keys_are_rejected() {
+    let error = decode_config_pair(
+        "providers:\n  \"@korri:android-app\":\n    title: Android\n  \"@korri:android-app\":\n    title: Duplicate Android\n",
+        "{}\n",
+    )
+    .expect_err("section record keys must not silently collapse on decode");
+
+    assert!(
+        error
+            .to_string()
+            .contains("duplicate record key '@korri:android-app'"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn artifact_identity_hashes_must_be_lowercase_sha256_hex() {
+    let lower = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    decode_config_pair(
+        "{}\n",
+        &format!(
+            "library:\n  gba-game:\n    releases:\n      - id: gba\n        system: gba\n        target:\n          kind: file\n          storage: roms\n          path: game.gba\n        identity:\n          kind: hash\n          value: sha256:{lower}\n"
+        ),
+    )
+    .expect("lowercase sha256 artifact identity should decode");
+
+    let uppercase = "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF";
+    let error = decode_config_pair(
+        "{}\n",
+        &format!(
+            "library:\n  gba-game:\n    releases:\n      - id: gba\n        system: gba\n        target:\n          kind: file\n          storage: roms\n          path: game.gba\n        identity:\n          kind: hash\n          value: sha256:{uppercase}\n"
+        ),
+    )
+    .expect_err("uppercase sha256 artifact identity must fail");
+
+    assert!(
+        error.to_string().contains("lowercase"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
 fn populated_unsupported_behavior_is_reported_explicitly() {
     let snapshot = decode_config_pair(
         "host:\n  title: usu\n  moonlight:\n    platform:\n      name: v4l2m2m\n",
