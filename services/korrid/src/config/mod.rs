@@ -1,3 +1,5 @@
+pub mod snapshot;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 

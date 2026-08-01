@@ -123,6 +123,27 @@ let
       '';
     };
 
+    korrid-config-review = {
+      description = "Explain fixed local config initialization, checkpoint load, and last-known-good retention.";
+      needsProseql = true;
+      runtimeInputs = [
+        rustToolchain
+        pkgs.clang
+        pkgs.llvmPackages.libclang
+      ];
+      env = {
+        CC_x86_64_unknown_linux_gnu = "${pkgs.clang}/bin/clang";
+        HOST_CC = "${pkgs.clang}/bin/clang";
+        LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+      };
+      usageSuffix = " -- [storage-root]";
+      script = ''
+        export CARGO_TARGET_DIR="$KORRI_ROOT/.cache/korrid-target"
+        export KORRI_CONFIG_REVIEW_IN_SHELL=1
+        exec "$KORRI_ROOT/services/korrid/config-snapshot-review.sh" "$@"
+      '';
+    };
+
     korrid-plugin-review = {
       description = "Explain the enabled and disabled local announcements for a plugin.";
       needsProseql = true;

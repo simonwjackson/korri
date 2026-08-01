@@ -248,6 +248,7 @@ struct BrainRuntime {
     local_storage_root: PathBuf,
     local_file_provision: launcher::FileProvisionMode,
     local_launch_signing_key: Vec<u8>,
+    config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
 }
 
 #[derive(Clone)]
@@ -412,7 +413,8 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
             })),
         },
         RpcRequest::LocalGamesList(_) => match &state.mode {
-            ServerMode::Brain(_) => {
+            ServerMode::Brain(brain) => {
+                let _config_state = brain.config_snapshot.reload();
                 RpcResponse::LocalGamesList(LocalGamesListOutcome::Ok(LocalGames {
                     games: launcher::local_games(),
                 }))
@@ -426,6 +428,7 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
         },
         RpcRequest::LocalGameLaunch(request) => match &state.mode {
             ServerMode::Brain(brain) => {
+                let _config_state = brain.config_snapshot.reload();
                 let outcome = launcher::launch_game(
                     &brain.local_storage_root,
                     &request.game_id,
@@ -505,6 +508,7 @@ fn router_with_capability_local_root_and_provision(
     local_launch_signing_key: Vec<u8>,
 ) -> Router {
     let local_storage_root = local_storage_root.as_ref().to_owned();
+    let config_snapshot = config::snapshot::ConfigSnapshotCoordinator::new(&local_storage_root);
     let state = AppState {
         mode: ServerMode::Brain(BrainRuntime {
             upstream: upstreams::UpstreamRegistry::from_env_or_file(
@@ -513,6 +517,7 @@ fn router_with_capability_local_root_and_provision(
             local_storage_root,
             local_file_provision,
             local_launch_signing_key,
+            config_snapshot,
         }),
         rpc_capability: Some(rpc_capability.into()),
     };
