@@ -96,6 +96,7 @@ Those can be earned by a concrete need.
 ## Command
 
 ```sh
-nix run .#korrid-check         # host + TS + Android compile
-nix run .#korrid-check-device  # same, then install and call RPC on tablet
+nix run .#korrid-check                       # host + TS + Android compile
+nix run .#korrid-check-device -- <adb-serial> # same, then install and call RPC on tablet
+nix run .#android-app-route-check -- <adb-serial> # installed TMNT portal-to-PackageManager proof
 ```

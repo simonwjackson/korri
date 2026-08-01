@@ -19,8 +19,11 @@ whether the game is actually on screen afterwards.
 
 The experiment is `separate-task-launch.patch` beside this file: it adds
 `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_RESET_TASK_IF_NEEDED` for `android-app`
-launches only. It was reverted after measuring. Reproduce with
-`services/korrid/journey-compare.sh <serial>`.
+launches only. It was reverted after measuring. Reproduce the comparison with
+`services/korrid/journey-compare.sh <serial>`. The production resume gate uses
+only the successful Home/task-switch path in
+`services/korrid/journey-resume.sh <serial>`; Back is intentionally not accepted
+as resume evidence.
 
 ## What the numbers actually say
 

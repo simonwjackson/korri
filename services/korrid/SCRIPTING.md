@@ -115,13 +115,36 @@ baseline APK measured that way showed ~3.35 MB of unexplained slack, which made
 the build *with* the runtime look smaller — nonsense. Per-entry comparison is
 the trustworthy measure.
 
-## Not an Android launch path yet
+## Android app route source of truth
 
-The Android plugin is now bundled, default-enabled through policy, and used to
-resolve the reviewed local route. This slice still stops before `LaunchSpec`
-production and Android effects. The shell still performs no plugin-specific
-work, and `command: android-app` is treated only as an allowlisted integration
-token by the route boundary, never as a generic process command.
+The Android plugin-backed route is wired into production. On each local-games
+list or launch, korrid reloads the two fixed readable documents under the
+existing local storage root (`config.yaml` and `library.yaml`), composes the
+bundled default-enabled `@korri:android-app` plugin, resolves the route, signs
+the unchanged `LaunchSpec`, and leaves installed-package/activity truth to the
+Android shell's `PackageManager` edge.
+
+The checkpoint files under `docs/research/android-app-plugin-schema-checkpoint/`
+are review fixtures, not install defaults. Device proof copies those exact bytes
+into the existing Android storage root before starting the brain; a fresh empty
+root still initializes to empty readable documents and must not invent TMNT.
+
+`command: android-app` is only the allowlisted integration token for this route.
+It never falls through to generic process execution.
+
+Review the installed surface with an explicit adb target and an already
+installed TMNT package:
+
+```sh
+nix run .#android-app-route-check -- <adb-serial>
+```
+
+That gate verifies protected RPC shape/signature, launches the portal-selected
+local game through the native bridge, asserts `com.playdigious.tmnt` as
+`topResumedActivity`, checks process evidence, verifies the embedded brain still
+answers RPC while the game is foreground, and proves the measured
+Home/task-switch relaunch/resume path. It does not install, uninstall, clear, or
+otherwise mutate the game package.
 
 ## Traps, for the next person who touches the build
 

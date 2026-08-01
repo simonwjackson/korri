@@ -99,5 +99,6 @@ printf 'APK: '
 du -h app/build/outputs/apk/debug/app-arm64-v8a-debug.apk | cut -f1
 
 if [[ "${1:-}" == "--device" ]]; then
-  "$CRATE/android-smoke.sh"
+  shift
+  "$CRATE/android-smoke.sh" "${1:-${KORRI_ANDROID_DEVICE:-}}"
 fi

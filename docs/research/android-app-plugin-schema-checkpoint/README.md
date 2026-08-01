@@ -47,7 +47,7 @@ Nothing in the fixture introduces a new persisted vocabulary.
 
 | Fixture value or shape | Existing source |
 | --- | --- |
-| `tmnt-shredders-revenge`, display title, `com.playdigious.tmnt` | Current hardcoded Android application record in `services/korrid/src/launcher/android_app.rs` |
+| `tmnt-shredders-revenge`, display title, `com.playdigious.tmnt` | Former Android application table, now preserved as this checked readable fixture |
 | `android-app` integration token | Current signed `LaunchSpec.launcher_id` and Android shell handling |
 | `android` system id | Legacy's existing Android platform normalization and its unconstrained system-id record |
 | `@korri:android-app` | Legacy provider/plugin identity syntax |
@@ -69,28 +69,33 @@ already present in the current launch treaty. A provider-qualified Android
 launch integration must consume it. It must never fall through to generic
 process execution.
 
-## Remaining implementation gap
+## Production route boundary
 
-Schema acceptance and route resolution do not perform an Android launch. The
-future Android launch integration still has to:
+The production Rust path now consumes the same shape proven here. The Android
+route mapper:
 
-1. require the selected app kind to be `@korri:android-app`;
-2. recover the package name from the legacy resolver's flattened target by
+1. requires the selected app kind to be `@korri:android-app`;
+2. recovers the package name from the legacy resolver's flattened target by
    requiring and removing the complete `@korri:android-app:` prefix—not by
    splitting on `:`, because the provider id itself contains a colon;
-3. emit the current exact unsigned launch instruction: launcher
+3. emits the current exact unsigned launch instruction: launcher
    `android-app`, that package name, empty activity class, extras `{}`,
    directories `[]`, files `[]`, and integrity `""`;
-4. let the existing signing and JVM PackageManager edge handle the effect and
+4. lets the existing signing and JVM PackageManager edge handle the effect and
    installed-package check.
 
-Until that integration is registered, the provider-qualified route must fail
-explicitly rather than run `android-app` as a process.
+The production source of truth is therefore split deliberately: the two fixed
+readable documents under Korri's local storage root own the configured library
+record; `services/korrid/plugins/android-app.plugin.ts` owns the bundled plugin
+contribution; the Android shell owns installed package/activity truth. The
+checkpoint files remain historical fixtures and are copied by the device gate
+only to configure that test device. They are not baked into fresh-install
+defaults.
 
-Plugin enablement and package fulfillability are also deliberately outside the
-two persisted documents. The first belongs to device/plugin composition; the
-second is Android hardware truth. This checkpoint does not define either
-future policy or a federation wire format.
+Plugin enablement and package fulfillability remain outside the two persisted
+documents. The first belongs to device/plugin composition; the second is Android
+hardware truth. This checkpoint does not define a future user policy file or a
+federation wire format.
 
 ## Validation evidence
 
@@ -125,9 +130,9 @@ legacy strict schema: PASS
 legacy readable context resolver: PASS
 ```
 
-This proves strict decoding and readable launch-context selection. It does not
-claim that legacy's repository can prepare the final `LaunchSpec`: that remains
-correctly unavailable until the Android readable launch integration exists.
+This proves strict decoding and readable launch-context selection. The current
+production mapper and device gate own the later `LaunchSpec`, signing, and
+PackageManager proof.
 
 The exercise also exposed a legacy normalization mismatch: `plugin()`'s
 implicit own-provider payload does not itself satisfy the later strict

@@ -4,10 +4,17 @@
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
-DEVICE="${KORRI_ANDROID_DEVICE:-100.65.66.40:39991}"
+DEVICE="${1:-${KORRI_ANDROID_DEVICE:-}}"
+if [[ -z "$DEVICE" ]]; then
+  echo "usage: android-smoke.sh <adb-serial>" >&2
+  exit 1
+fi
 APK="$ROOT/clients/android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk"
 PACKAGE="com.simonwjackson.korri.debug"
 HOST_PORT=43118
+ANDROID_STORAGE_ROOT="/sdcard/korri-retro"
+CHECKPOINT_CONFIG="$ROOT/docs/research/android-app-plugin-schema-checkpoint/config.yaml"
+CHECKPOINT_LIBRARY="$ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml"
 UPSTREAMS_CONFIG="${KORRI_ANDROID_UPSTREAMS_CONFIG:-$ROOT/services/korrid/deploy/upstreams.android.json}"
 CURL=(curl --connect-timeout 2 --max-time 5 --retry 2 --retry-connrefused)
 ADB_BIN="$(command -v adb)"
@@ -33,8 +40,18 @@ if ! unzip -l "$APK" | grep 'assets/portal/index.html' >/dev/null; then
   exit 1
 fi
 
-adb -s "$DEVICE" shell mkdir -p /sdcard/korri-retro
-adb -s "$DEVICE" push "$UPSTREAMS_CONFIG" /sdcard/korri-retro/upstreams.json >/dev/null
+adb -s "$DEVICE" shell mkdir -p "$ANDROID_STORAGE_ROOT"
+adb -s "$DEVICE" push "$UPSTREAMS_CONFIG" "$ANDROID_STORAGE_ROOT/upstreams.json" >/dev/null
+adb -s "$DEVICE" push "$CHECKPOINT_CONFIG" "$ANDROID_STORAGE_ROOT/config.yaml" >/dev/null
+adb -s "$DEVICE" push "$CHECKPOINT_LIBRARY" "$ANDROID_STORAGE_ROOT/library.yaml" >/dev/null
+if ! adb -s "$DEVICE" exec-out cat "$ANDROID_STORAGE_ROOT/config.yaml" | cmp -s "$CHECKPOINT_CONFIG" -; then
+  echo "Device config.yaml does not match the reviewed checkpoint bytes" >&2
+  exit 1
+fi
+if ! adb -s "$DEVICE" exec-out cat "$ANDROID_STORAGE_ROOT/library.yaml" | cmp -s "$CHECKPOINT_LIBRARY" -; then
+  echo "Device library.yaml does not match the reviewed checkpoint bytes" >&2
+  exit 1
+fi
 if ! timeout 60 adb -s "$DEVICE" install -r "$APK"; then
   echo 'Android app install failed or timed out after 60s' >&2
   exit 1
@@ -105,24 +122,46 @@ if ! jq -e '
   exit 1
 fi
 
-# The device-local launcher source is independent of the upstream host and
-# must always expose the hardcoded v1 entry through embedded korrid.
+# The configured Android application route must come from the checkpoint files,
+# while WL4 remains available through the unchanged RetroArch source.
 local_games_response="$("${CURL[@]}" --fail --silent \
   -H 'content-type: application/json' \
   -H "authorization: Bearer $capability" \
   -d '{"_tag":"app.local-games.list","payload":{}}' \
   "http://127.0.0.1:$HOST_PORT/rpc")"
-if ! printf '%s' "$local_games_response" | grep -q '"id":"wl4"'; then
-  echo "Local-games probe is missing Wario Land 4: $local_games_response" >&2
-  exit 1
-fi
-if ! printf '%s' "$local_games_response" | grep -q '"title":"Wario Land 4"'; then
-  echo "Local-games probe returned an unexpected title: $local_games_response" >&2
+if ! jq -e '
+  .outcome._tag == "Ok"
+  and .outcome.payload.games[0].id == "tmnt-shredders-revenge"
+  and .outcome.payload.games[0].title == "TMNT: Shredder'"'"'s Revenge"
+  and .outcome.payload.games[1].id == "wl4"
+  and .outcome.payload.games[1].title == "Wario Land 4"
+  and (.outcome.payload.failures | not)
+' <<<"$local_games_response" >/dev/null; then
+  echo "Local-games probe did not return configured TMNT before WL4: $local_games_response" >&2
   exit 1
 fi
 
-# Embedded Android must return a signed, deferred instruction. Rust must not
-# attempt the external-storage write that scoped storage denies.
+android_launch_response="$("${CURL[@]}" --fail --silent \
+  -H 'content-type: application/json' \
+  -H "authorization: Bearer $capability" \
+  -d '{"_tag":"app.local-games.launch","payload":{"gameId":"tmnt-shredders-revenge"}}' \
+  "http://127.0.0.1:$HOST_PORT/rpc")"
+if ! jq -e '
+  .outcome._tag == "Ok"
+  and .outcome.payload.launcherId == "android-app"
+  and .outcome.payload.component.packageName == "com.playdigious.tmnt"
+  and .outcome.payload.component.className == ""
+  and .outcome.payload.extras == {}
+  and .outcome.payload.directories == []
+  and .outcome.payload.files == []
+  and (.outcome.payload.integrity | type == "string" and length > 0)
+' <<<"$android_launch_response" >/dev/null; then
+  echo "Configured Android route did not return the signed android-app shape: $android_launch_response" >&2
+  exit 1
+fi
+
+# Embedded Android must still return a signed, deferred RetroArch instruction.
+# Rust must not attempt the external-storage write that scoped storage denies.
 local_launch_response="$("${CURL[@]}" --fail --silent \
   -H 'content-type: application/json' \
   -H "authorization: Bearer $capability" \
@@ -155,6 +194,7 @@ fi
 printf 'Android portal: %s\n' "$portal_ready"
 printf 'Android Rust RPC: %s\n' "$response"
 printf 'Android local games: %s\n' "$local_games_response"
-printf 'Android local launch: %s\n' "$local_launch_response"
+printf 'Android android-app launch: %s\n' "$android_launch_response"
+printf 'Android deferred RetroArch launch: %s\n' "$local_launch_response"
 printf 'Android session status: %s\n' "$session_response"
 printf 'Android Rust library: %s\n' "$(adb -s "$DEVICE" shell dumpsys package "$PACKAGE" | grep versionName | head -1 | xargs)"

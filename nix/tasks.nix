@@ -187,7 +187,7 @@ let
     };
 
     korrid-check-device = {
-      description = "Run the full korrid check, then install and smoke-test it on Android.";
+      description = "Run the full korrid check, then install and RPC-smoke-test it on an explicit Android target.";
       needsProseql = true;
       runtimeInputs = [
         pkgs.android-tools
@@ -195,11 +195,33 @@ let
         pkgs.nix
       ];
       env.KORRI_PORTAL_BUNDLE = "${packages.portal-bundle}/bin/portal-bundle";
+      usageSuffix = " -- <adb-serial>";
       script = ''
-        serial="''${KORRI_ANDROID_DEVICE:-100.65.66.40:39991}"
+        serial="''${1:?usage: korrid-check-device <adb-serial>}"
+        shift
         ${adbPreflight}
         export KORRI_ANDROID_DEVICE="$serial"
-        exec "$KORRI_ROOT/services/korrid/check.sh" --device
+        exec "$KORRI_ROOT/services/korrid/check.sh" --device "$@"
+      '';
+    };
+
+    android-app-route-check = {
+      description = "Build Korri, then prove the installed plugin-backed Android app route through portal and PackageManager on an explicit Android target.";
+      needsProseql = true;
+      runtimeInputs = [
+        pkgs.android-tools
+        pkgs.coreutils
+        pkgs.nix
+      ];
+      env.KORRI_PORTAL_BUNDLE = "${packages.portal-bundle}/bin/portal-bundle";
+      usageSuffix = " -- <adb-serial>";
+      script = ''
+        serial="''${1:?usage: android-app-route-check <adb-serial>}"
+        shift
+        ${adbPreflight}
+        export KORRI_ANDROID_DEVICE="$serial"
+        "$KORRI_ROOT/services/korrid/check.sh" "$@"
+        exec "$KORRI_ROOT/services/korrid/android-app-route-check.sh" "$serial"
       '';
     };
 
@@ -276,7 +298,7 @@ let
     };
 
     journey-resume = deviceScript "journey-resume" "journey-resume.sh" {
-      description = "Verify on a device that leaving an Android game with Back and relaunching resumes the same process on screen.";
+      description = "Verify on a device that the Home/task-switch Android app journey resumes the same process on screen.";
       usageSuffix = " -- <adb-serial> [package] [tap-x tap-y]";
       runtimeInputs = [
         pkgs.gnugrep
