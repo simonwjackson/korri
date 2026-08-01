@@ -29,6 +29,9 @@ typeshare = "1"
 
 rquickjs = { version = "0.9", features = ["macro", "bindgen"] }
 oxc = { version = "0.142.0", features = ["transformer", "codegen", "semantic"] }
+proseql-engine = { path = ".cache/proseql/crates/proseql-engine" }
+proseql-formats = { path = ".cache/proseql/crates/proseql-formats" }
+proseql-storage = { path = ".cache/proseql/crates/proseql-storage" }
 
 [dev-dependencies]
 tempfile = "3"

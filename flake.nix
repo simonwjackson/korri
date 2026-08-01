@@ -9,6 +9,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     crane.url = "github:ipetkov/crane";
+    proseql = {
+      url = "github:simonwjackson/proseql/7ba57cf17c01b15ccdb030237a96b6376a349253";
+      flake = false;
+    };
   };
 
   # This flake is an index: it wires inputs and composes per-area nix
@@ -21,6 +25,7 @@
       flake-utils,
       rust-overlay,
       crane,
+      proseql,
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
@@ -34,16 +39,16 @@
             allowUnfree = true;
           };
         };
+        craneLib = (crane.mkLib pkgs).overrideToolchain pkgs.rust-bin.stable.latest.default;
       in
       {
-        apps = import ./nix/tasks.nix { inherit pkgs; };
+        apps = import ./nix/tasks.nix { inherit pkgs proseql; };
         devShells.android = import ./clients/android/devshell.nix { inherit pkgs; };
         devShells.portal = import ./clients/portal/devshell.nix { inherit pkgs; };
-        devShells.korrid = import ./services/korrid/devshell.nix { inherit pkgs; };
+        devShells.korrid = import ./services/korrid/devshell.nix { inherit pkgs proseql; };
         devShells.retroarch = import ./runtimes/retroarch/devshell.nix { inherit pkgs; };
         packages.korrid = import ./services/korrid/package.nix {
-          inherit pkgs;
-          craneLib = crane.mkLib pkgs;
+          inherit pkgs proseql craneLib;
         };
         packages.default = self.packages.${system}.korrid;
       }

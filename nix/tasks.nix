@@ -1,7 +1,8 @@
 # Korri task definitions. Runnable apps and generated help derive from the
 # same definitions so the command surface cannot drift from its documentation.
-{ pkgs }:
+{ pkgs, proseql }:
 let
+  proseqlSource = import ../services/korrid/proseql-source.nix { inherit pkgs proseql; };
   android = import ../clients/android/sdk.nix { inherit pkgs; };
 
   rustToolchain = pkgs.rust-bin.stable.latest.default.override {
@@ -114,6 +115,7 @@ let
 
     korrid-check = {
       description = "Run the full host, contracts, portal, and Android check.";
+      needsProseql = true;
       runtimeInputs = [ pkgs.nix ];
       env.KORRI_PORTAL_BUNDLE = "${packages.portal-bundle}/bin/portal-bundle";
       script = ''
@@ -123,6 +125,7 @@ let
 
     korrid-plugin-review = {
       description = "Explain the enabled and disabled local announcements for a plugin.";
+      needsProseql = true;
       runtimeInputs = [
         rustToolchain
         pkgs.clang
@@ -143,6 +146,7 @@ let
 
     korrid-check-device = {
       description = "Run the full korrid check, then install and smoke-test it on Android.";
+      needsProseql = true;
       runtimeInputs = [
         pkgs.android-tools
         pkgs.coreutils
@@ -159,6 +163,7 @@ let
 
     korrid-script-device = {
       description = "Run the example TypeScript plugin on an Android device.";
+      needsProseql = true;
       runtimeInputs = [
         rustToolchain
         pkgs.android-tools
@@ -190,6 +195,7 @@ let
 
     storage-notice-check = deviceScript "storage-notice-check" "storage-notice-check.sh" {
       description = "Build, install, and verify on a device that denied storage access shows a reachable portal prompt.";
+      needsProseql = true;
       runtimeInputs = androidInputs ++ [
         rustToolchain
         pkgs.android-tools
@@ -255,6 +261,7 @@ let
 
     korrid-test = {
       description = "Run the korrid host test suite.";
+      needsProseql = true;
       runtimeInputs = [
         rustToolchain
         pkgs.clang
@@ -415,6 +422,7 @@ let
         fi
         KORRI_ROOT="$(cd "$korri_root" && pwd -P)"
         export KORRI_ROOT
+        ${pkgs.lib.optionalString (task.needsProseql or false) proseqlSource.hydrateShell}
         ${exports.${name}}
         ${task.script}
       '';
