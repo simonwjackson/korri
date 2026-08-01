@@ -65,7 +65,7 @@ fn checkpoint_route_resolves_through_the_default_enabled_registry() {
     assert!(catalog.diagnostics.is_empty(), "{:?}", catalog.diagnostics);
     assert_eq!(catalog.routes.len(), 1);
     assert_checkpoint_route(&catalog.routes[0]);
-    let direct = resolve_route(&snapshot, &registry, "tmnt-shredders-revenge")
+    let direct = resolve_route(&snapshot, &registry, ["wl4"], "tmnt-shredders-revenge")
         .expect("direct checkpoint route should resolve");
     assert_checkpoint_route(&direct);
 }
@@ -87,7 +87,7 @@ fn checkpoint_route_is_unavailable_when_the_plugin_is_disabled() {
         catalog.diagnostics[0].playable_id.as_deref(),
         Some("tmnt-shredders-revenge")
     );
-    let direct = resolve_route(&snapshot, &registry, "tmnt-shredders-revenge")
+    let direct = resolve_route(&snapshot, &registry, ["wl4"], "tmnt-shredders-revenge")
         .expect_err("disabled plugin should make the route unavailable");
     assert_eq!(direct.code, RouteDiagnosticCode::LocalRouteUnavailable);
     assert!(direct.message.contains("@korri:android-app/android-app"));
@@ -131,7 +131,7 @@ fn route_resolution_fails_closed_for_unknown_or_unsupported_checkpoint_parts() {
 
     for (label, config, library, expected_message) in cases {
         let snapshot = snapshot_from_pair(config, &library);
-        let error = match resolve_route(&snapshot, &registry, "tmnt-shredders-revenge") {
+        let error = match resolve_route(&snapshot, &registry, ["wl4"], "tmnt-shredders-revenge") {
             Ok(route) => panic!("{label} should not resolve: {route:?}"),
             Err(error) => error,
         };
@@ -166,7 +166,7 @@ launchers:
     );
     let registry = android_registry(false);
 
-    let error = resolve_route(&snapshot, &registry, "tmnt-shredders-revenge")
+    let error = resolve_route(&snapshot, &registry, ["wl4"], "tmnt-shredders-revenge")
         .expect_err("generic commands must not resolve");
 
     assert_eq!(error.code, RouteDiagnosticCode::LocalRouteUnavailable);
@@ -190,7 +190,7 @@ launchers:
     );
     let registry = android_registry(false);
 
-    let error = resolve_route(&snapshot, &registry, "tmnt-shredders-revenge")
+    let error = resolve_route(&snapshot, &registry, ["wl4"], "tmnt-shredders-revenge")
         .expect_err("process fallback must not resolve");
 
     assert_eq!(error.code, RouteDiagnosticCode::LocalRouteUnavailable);
@@ -202,7 +202,7 @@ fn provider_ref_target_preserves_the_provider_identity_separator() {
     let snapshot = checkpoint_snapshot();
     let registry = android_registry(true);
 
-    let route = resolve_route(&snapshot, &registry, "tmnt-shredders-revenge")
+    let route = resolve_route(&snapshot, &registry, ["wl4"], "tmnt-shredders-revenge")
         .expect("checkpoint route should resolve");
 
     assert_eq!(route.provider_id, "@korri:android-app");
@@ -235,6 +235,22 @@ fn dynamic_playable_collision_keeps_the_static_owner() {
     assert!(catalog.diagnostics[0]
         .message
         .contains("static route remains active"));
+}
+
+#[test]
+fn direct_dynamic_playable_collision_keeps_the_static_owner() {
+    let snapshot = snapshot_from_pair(
+        CHECKPOINT_CONFIG,
+        &CHECKPOINT_LIBRARY.replace("tmnt-shredders-revenge", "wl4"),
+    );
+    let registry = android_registry(true);
+
+    let direct = resolve_route(&snapshot, &registry, ["wl4"], "wl4")
+        .expect_err("direct collision must not resolve the dynamic route");
+
+    assert_eq!(direct.code, RouteDiagnosticCode::LocalRouteCollision);
+    assert_eq!(direct.playable_id.as_deref(), Some("wl4"));
+    assert!(direct.message.contains("static route remains active"));
 }
 
 #[test]
@@ -307,7 +323,7 @@ library:
         .message
         .contains("launcher @korri:android-app/android-app"));
 
-    let direct = resolve_route(&snapshot, &registry, "tmnt-shredders-revenge")
+    let direct = resolve_route(&snapshot, &registry, ["wl4"], "tmnt-shredders-revenge")
         .expect_err("colliding route should not resolve");
     assert_eq!(direct.code, RouteDiagnosticCode::LocalRouteCollision);
 }

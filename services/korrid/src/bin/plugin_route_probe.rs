@@ -14,6 +14,7 @@ use korrid::plugin_policy::{
 };
 
 const CHECKPOINT_PLAYABLE_ID: &str = "tmnt-shredders-revenge";
+const STATIC_PLAYABLE_IDS: [&str; 1] = ["wl4"];
 
 #[derive(Clone, Copy)]
 enum ReportMode {
@@ -82,7 +83,7 @@ fn print_report(root: &str, enabled: bool) -> Result<(), String> {
         }
     );
 
-    let catalog = resolve_launchable_routes(&state.snapshot, &registry, ["wl4"]);
+    let catalog = resolve_launchable_routes(&state.snapshot, &registry, STATIC_PLAYABLE_IDS);
     if catalog.routes.is_empty() {
         println!("route: none");
     } else {
@@ -107,7 +108,12 @@ fn print_report(root: &str, enabled: bool) -> Result<(), String> {
         }
     }
 
-    match resolve_route(&state.snapshot, &registry, CHECKPOINT_PLAYABLE_ID) {
+    match resolve_route(
+        &state.snapshot,
+        &registry,
+        STATIC_PLAYABLE_IDS,
+        CHECKPOINT_PLAYABLE_ID,
+    ) {
         Ok(route) => println!(
             "direct {CHECKPOINT_PLAYABLE_ID}: {}",
             route.flattened_target

@@ -75,13 +75,7 @@ pub fn resolve_launchable_routes<'a>(
 
     for playable_id in snapshot.library.keys() {
         if static_playable_ids.contains(playable_id) {
-            diagnostics.push(RouteDiagnostic {
-                code: RouteDiagnosticCode::LocalRouteCollision,
-                playable_id: Some(playable_id.clone()),
-                message: format!(
-                    "dynamic local route {playable_id} collides with an existing static local game; the static route remains active"
-                ),
-            });
+            diagnostics.push(static_playable_collision(playable_id));
             continue;
         }
 
@@ -97,11 +91,19 @@ pub fn resolve_launchable_routes<'a>(
     }
 }
 
-pub fn resolve_route(
+pub fn resolve_route<'a>(
     snapshot: &ConfigSnapshot,
     registry: &PluginRegistry,
+    static_playable_ids: impl IntoIterator<Item = &'a str>,
     playable_id: &str,
 ) -> Result<ResolvedRoute, RouteUnavailable> {
+    if static_playable_ids
+        .into_iter()
+        .any(|static_playable_id| static_playable_id == playable_id)
+    {
+        return Err(static_playable_collision(playable_id));
+    }
+
     let contributions = compose_contributions(snapshot, registry);
     resolve_route_with_contributions(snapshot, &contributions, playable_id)
 }
@@ -374,6 +376,15 @@ fn target_kind(target: &Target) -> &'static str {
         Target::Url { .. } => "url",
         Target::ProviderRef { .. } => "provider-ref",
     }
+}
+
+fn static_playable_collision(playable_id: &str) -> RouteUnavailable {
+    collision(
+        Some(playable_id),
+        format!(
+            "dynamic local route {playable_id} collides with an existing static local game; the static route remains active"
+        ),
+    )
 }
 
 fn unavailable(playable_id: Option<&str>, message: String) -> RouteUnavailable {
