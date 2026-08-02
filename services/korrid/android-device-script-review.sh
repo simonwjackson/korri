@@ -60,6 +60,88 @@ ADB_LOG="$TMP/adb.log"
 CHILD_LOG="$TMP/children.log"
 FAKE_ADB="$TMP/adb"
 
+PID_OF_FUNCTION="$TMP/journey-pid-of.sh"
+grep -E '^pid_of\(\) \{' "$JOURNEY_RESUME" >"$PID_OF_FUNCTION"
+if [[ "$(wc -l <"$PID_OF_FUNCTION")" -ne 1 ]]; then
+  echo 'journey-resume.sh must keep exactly one pid_of function for deterministic review' >&2
+  exit 1
+fi
+PIDOF_BIN="$TMP/pidof-bin"
+PIDOF_ADB="$TMP/pidof-adb"
+mkdir -p "$PIDOF_BIN"
+cat >"$PIDOF_BIN/pidof" <<'PIDOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${KORRI_DEVICE_SCRIPT_REVIEW_PIDOF_MODE:-missing}" in
+  missing)
+    exit 1
+    ;;
+  present)
+    printf '12345\r\n'
+    ;;
+  error)
+    exit 2
+    ;;
+  *)
+    exit 64
+    ;;
+esac
+PIDOF
+chmod +x "$PIDOF_BIN/pidof"
+cat >"$PIDOF_ADB" <<'PIDOF_ADB'
+#!/usr/bin/env bash
+set -euo pipefail
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -s)
+      shift 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+subcommand="${1:-}"
+if [[ $# -gt 0 ]]; then
+  shift
+fi
+if [[ "$subcommand" != shell ]]; then
+  exit 1
+fi
+PATH="$KORRI_DEVICE_SCRIPT_REVIEW_PIDOF_BIN:$PATH" bash -c "$*"
+PIDOF_ADB
+chmod +x "$PIDOF_ADB"
+# shellcheck disable=SC2034 # Used by the sourced journey-resume.sh pid_of function.
+GAME=com.playdigious.tmnt
+# shellcheck disable=SC2034 # Used by the sourced journey-resume.sh pid_of function.
+ADB=("$PIDOF_ADB" -s device-1)
+export KORRI_DEVICE_SCRIPT_REVIEW_PIDOF_BIN="$PIDOF_BIN"
+# shellcheck source=/dev/null
+source "$PID_OF_FUNCTION"
+export KORRI_DEVICE_SCRIPT_REVIEW_PIDOF_MODE=missing
+if ! empty_pid="$(pid_of)"; then
+  echo 'journey-resume.sh pid_of must treat pidof exit 1 as an empty process result' >&2
+  exit 1
+fi
+if [[ -n "$empty_pid" ]]; then
+  echo "journey-resume.sh pid_of returned output for an absent process: $empty_pid" >&2
+  exit 1
+fi
+export KORRI_DEVICE_SCRIPT_REVIEW_PIDOF_MODE=present
+if [[ "$(pid_of)" != 12345 ]]; then
+  echo 'journey-resume.sh pid_of must trim CR/LF while returning a real pid' >&2
+  exit 1
+fi
+export KORRI_DEVICE_SCRIPT_REVIEW_PIDOF_MODE=error
+set +e
+pid_of >"$TMP/pid-error.out" 2>"$TMP/pid-error.err"
+pid_error_status=$?
+set -e
+if [[ "$pid_error_status" -eq 0 ]]; then
+  echo 'journey-resume.sh pid_of must not mask non-empty pidof failures' >&2
+  exit 1
+fi
+
 # shellcheck source=/dev/null
 KORRI_ANDROID_SMOKE_LIBRARY=true source "$ANDROID_SMOKE"
 
