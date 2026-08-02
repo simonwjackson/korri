@@ -18,12 +18,22 @@ if sed '/^[[:space:]]*#/d' "$ANDROID_SMOKE" | grep -E 'push "\$CHECKPOINT_(CONFI
   exit 1
 fi
 if ! grep -F -- '--expect-installed-route' "$ANDROID_SMOKE" >/dev/null; then
-  echo 'android-smoke.sh must keep TMNT installed-route assertions behind --expect-installed-route' >&2
+  echo 'android-smoke.sh must keep installed-route assertions behind --expect-installed-route' >&2
   exit 1
 fi
 # shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
 if ! grep -F -- '--expect-installed-route "$SERIAL"' "$ANDROID_APP_ROUTE" >/dev/null; then
   echo 'android-app-route-check.sh must opt in to installed-route smoke assertions explicitly' >&2
+  exit 1
+fi
+# shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
+if ! grep -F 'CHECKPOINT_LIBRARY="${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-$ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml}"' "$ANDROID_APP_ROUTE" >/dev/null; then
+  echo 'android-app-route-check.sh must expose an override for the checkpoint library while keeping the canonical default' >&2
+  exit 1
+fi
+# shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
+if ! grep -F 'CHECKPOINT_LIBRARY="${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-$ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml}"' "$ANDROID_SMOKE" >/dev/null; then
+  echo 'android-smoke.sh must byte-check the same overrideable checkpoint library as the dedicated installed-route gate' >&2
   exit 1
 fi
 if ! grep -F 'PRIOR_USER=' "$JOURNEY_RESUME" >/dev/null; then
@@ -39,8 +49,14 @@ if ! grep -F 'assert_portal_exposes_title' "$JOURNEY_RESUME" >/dev/null; then
   echo 'journey-resume.sh must verify the portal exposes the expected title before D-pad activation' >&2
   exit 1
 fi
+# shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
 if ! grep -F 'KORRI_ACTIVITY="$KORRI/com.limelight.KorriShellActivity"' "$JOURNEY_RESUME" >/dev/null; then
   echo 'journey-resume.sh must target KorriShellActivity explicitly when foregrounding Korri' >&2
+  exit 1
+fi
+# shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
+if ! grep -F '"$JOURNEY_RESUME" "$SERIAL" "$GAME"' "$ANDROID_APP_ROUTE" >/dev/null; then
+  echo 'android-app-route-check.sh must pass the configured Android app package into journey-resume.sh' >&2
   exit 1
 fi
 if sed '/^[[:space:]]*#/d' "$JOURNEY_RESUME" | grep -F 'monkey -p' >/dev/null; then
@@ -317,6 +333,17 @@ case "$subcommand" in
               printf 'korri\n' >"$state_file"
             fi
             ;;
+          fail-once)
+            if ((count % 2 == 1)); then
+              printf 'review am start failure\n' >&2
+              exit 23
+            fi
+            printf 'korri\n' >"$state_file"
+            ;;
+          always-fail)
+            printf 'review am start failure\n' >&2
+            exit 23
+            ;;
           never)
             ;;
           *)
@@ -483,6 +510,35 @@ if ! test -f "$review_shots/1-korri-home.xml"; then
   exit 1
 fi
 
+review_shots="$TMP/journey-start-failure-retry"
+review_state="$TMP/journey-start-failure-retry.state"
+review_magick_log="$TMP/journey-start-failure-retry-magick.log"
+review_tesseract_log="$TMP/journey-start-failure-retry-tesseract.log"
+review_adb_log="$TMP/journey-start-failure-retry-adb.log"
+review_start_count="$TMP/journey-start-failure-retry-start-count"
+printf 'korri\n' >"$review_state"
+printf '0\n' >"$review_start_count"
+PATH="$JOURNEY_REVIEW_BIN:$PATH" \
+KORRI_ADB_BIN="$JOURNEY_REVIEW_ADB" \
+KORRI_MAGICK_BIN="$JOURNEY_REVIEW_MAGICK" \
+KORRI_TESSERACT_BIN="$JOURNEY_REVIEW_TESSERACT" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_START_COUNT="$review_start_count" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_START_MODE=fail-once \
+KORRI_DEVICE_SCRIPT_REVIEW_MAGICK_LOG="$review_magick_log" \
+KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_ADB_LOG="$review_adb_log" \
+KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT="$review_ocr_with_banner" \
+KORRI_DEVICE_SCRIPT_REVIEW_AMBIENT_SCREENSHOT="$AMBIENT_CONVENTIONAL_HOME" \
+KORRI_DEVICE_SCRIPT_REVIEW_GAME="$review_game" \
+SHOTS="$review_shots" \
+  "$JOURNEY_RESUME" device-1 "$review_game" >"$TMP/journey-start-failure-retry.out" 2>"$TMP/journey-start-failure-retry.err"
+assert_journey_wake_dismiss_precede_explicit_start "$review_adb_log"
+if [[ "$(cat "$review_start_count")" -lt 4 ]]; then
+  echo 'journey-resume.sh did not retry after nonzero explicit am start failures' >&2
+  exit 1
+fi
+
 review_shots="$TMP/journey-no-banner"
 review_state="$TMP/journey-no-banner.state"
 review_magick_log="$TMP/journey-no-banner-magick.log"
@@ -522,7 +578,7 @@ KORRI_MAGICK_BIN="$JOURNEY_REVIEW_MAGICK" \
 KORRI_TESSERACT_BIN="$JOURNEY_REVIEW_TESSERACT" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_START_COUNT="$review_start_count" \
-KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_START_MODE=never \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_START_MODE=always-fail \
 KORRI_DEVICE_SCRIPT_REVIEW_MAGICK_LOG="$review_magick_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT="$review_ocr_with_banner" \
@@ -544,6 +600,18 @@ if ! grep -F 'FAILED: 1-korri-home did not bring Korri activity to foreground' "
 fi
 if ! grep -F 'top=com.android.launcher/.Launcher' "$journey_foreground_timeout_evidence" >/dev/null; then
   echo 'journey-resume.sh foreground timeout did not preserve top activity evidence' >&2
+  exit 1
+fi
+if ! grep -F 'am_start_status=23' "$journey_foreground_timeout_evidence" >/dev/null; then
+  echo 'journey-resume.sh foreground timeout did not report the nonzero am start status' >&2
+  exit 1
+fi
+if ! grep -F 'am start output: review am start failure' "$journey_foreground_timeout_evidence" >/dev/null; then
+  echo 'journey-resume.sh foreground timeout did not report the nonzero am start output' >&2
+  exit 1
+fi
+if [[ "$(cat "$review_start_count")" -ne 4 ]]; then
+  echo 'journey-resume.sh did not exhaust bounded retries after nonzero am start failures' >&2
   exit 1
 fi
 if ! grep -F -- "$review_shots/1-korri-home.png" "$journey_foreground_timeout_evidence" >/dev/null; then
@@ -603,6 +671,53 @@ fi
 
 # shellcheck source=/dev/null
 KORRI_ANDROID_SMOKE_LIBRARY=true source "$ANDROID_SMOKE"
+
+ALT_ANDROID_APP_RESPONSE="$(jq -n --arg package 'review.android.game' '{
+  _tag: "app.local-games.launch",
+  outcome: {
+    _tag: "Ok",
+    payload: {
+      launcherId: "android-app",
+      component: {
+        packageName: $package,
+        className: ""
+      },
+      extras: {},
+      directories: [],
+      files: [],
+      integrity: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  }
+}')"
+CANONICAL_ANDROID_APP_RESPONSE="$(jq -n --arg package 'com.playdigious.tmnt' '{
+  _tag: "app.local-games.launch",
+  outcome: {
+    _tag: "Ok",
+    payload: {
+      launcherId: "android-app",
+      component: {
+        packageName: $package,
+        className: ""
+      },
+      extras: {},
+      directories: [],
+      files: [],
+      integrity: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  }
+}')"
+if ! KORRI_ANDROID_APP_PACKAGE=review.android.game require_android_app_launch_response "$ALT_ANDROID_APP_RESPONSE"; then
+  echo 'android-smoke.sh rejected the configured alternate Android app package in the protected launch response' >&2
+  exit 1
+fi
+set +e
+KORRI_ANDROID_APP_PACKAGE=review.android.game require_android_app_launch_response "$CANONICAL_ANDROID_APP_RESPONSE" >"$TMP/android-app-canonical-package.out" 2>"$TMP/android-app-canonical-package.err"
+canonical_package_status=$?
+set -e
+if [[ "$canonical_package_status" -eq 0 ]]; then
+  echo 'android-smoke.sh accepted the canonical package when an alternate Android app package was configured' >&2
+  exit 1
+fi
 
 assert_executed_library_reaches_usage() {
   local label="$1"
@@ -771,7 +886,8 @@ case "$subcommand" in
     shell_command="$*"
     case "$shell_command" in
       pm\ path*)
-        printf 'package:/data/app/com.playdigious.tmnt/base.apk\n'
+        package="${shell_command#pm path }"
+        printf 'package:/data/app/%s/base.apk\n' "$package"
         ;;
       "test -e '/sdcard/korri-retro/config.yaml'")
         exit 0
@@ -788,7 +904,7 @@ case "$subcommand" in
       exit 0
     fi
     if [[ "${1:-}" == cat && "${2:-}" == /sdcard/korri-retro/library.yaml ]]; then
-      cat "$KORRI_ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml"
+      cat "${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-$KORRI_ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml}"
       exit 0
     fi
     exit 0
@@ -804,7 +920,7 @@ SMOKE="$TMP/smoke.sh"
 cat >"$SMOKE" <<'SMOKE'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'smoke:%s\n' "$*" >>"$KORRI_DEVICE_SCRIPT_REVIEW_CHILD_LOG"
+printf 'smoke:%s package=%s library=%s\n' "$*" "${KORRI_ANDROID_APP_PACKAGE:-}" "${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-}" >>"$KORRI_DEVICE_SCRIPT_REVIEW_CHILD_LOG"
 exit 42
 SMOKE
 chmod +x "$SMOKE"
@@ -816,6 +932,9 @@ set -euo pipefail
 printf 'journey:%s\n' "$*" >>"$KORRI_DEVICE_SCRIPT_REVIEW_CHILD_LOG"
 JOURNEY
 chmod +x "$JOURNEY"
+
+ALT_CHECKPOINT_LIBRARY="$TMP/alternate-library.yaml"
+printf 'alternate installed app checkpoint library\n' >"$ALT_CHECKPOINT_LIBRARY"
 
 set +e
 KORRI_ADB_BIN="$FAKE_ADB" \
@@ -855,6 +974,43 @@ if ! grep -F -- "cp '/sdcard/korri-retro/.android-app-route-check-backup-" "$ADB
 fi
 if ! grep -F -- "rm -f '/sdcard/korri-retro/library.yaml'" "$ADB_LOG" >/dev/null; then
   echo 'android-app-route-check.sh did not remove a library.yaml it created after failure' >&2
+  exit 1
+fi
+
+: >"$ADB_LOG"
+: >"$CHILD_LOG"
+set +e
+KORRI_ADB_BIN="$FAKE_ADB" \
+KORRI_ANDROID_APP_PACKAGE=review.android.game \
+KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY="$ALT_CHECKPOINT_LIBRARY" \
+KORRI_ANDROID_APP_ROUTE_SMOKE_SH="$SMOKE" \
+KORRI_ANDROID_APP_ROUTE_JOURNEY_SH="$JOURNEY" \
+KORRI_DEVICE_SCRIPT_REVIEW_ADB_LOG="$ADB_LOG" \
+KORRI_DEVICE_SCRIPT_REVIEW_CHILD_LOG="$CHILD_LOG" \
+KORRI_ROOT="$ROOT" \
+  "$ANDROID_APP_ROUTE" device-1 >"$TMP/route-alternate.out" 2>"$TMP/route-alternate.err"
+alternate_status=$?
+set -e
+if [[ "$alternate_status" -ne 42 ]]; then
+  echo "android-app-route-check.sh alternate route seam expected child exit 42, got $alternate_status" >&2
+  cat "$TMP/route-alternate.out" >&2
+  cat "$TMP/route-alternate.err" >&2
+  exit 1
+fi
+if ! grep -F -- 'pm path review.android.game' "$ADB_LOG" >/dev/null; then
+  echo 'android-app-route-check.sh did not require the configured alternate Android app package' >&2
+  exit 1
+fi
+if ! grep -F -- "push $ALT_CHECKPOINT_LIBRARY /sdcard/korri-retro/library.yaml" "$ADB_LOG" >/dev/null; then
+  echo 'android-app-route-check.sh did not provision the configured alternate checkpoint library path' >&2
+  exit 1
+fi
+if grep -F -- "push $ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml /sdcard/korri-retro/library.yaml" "$ADB_LOG" >/dev/null; then
+  echo 'android-app-route-check.sh ignored the alternate checkpoint library path and pushed the canonical library' >&2
+  exit 1
+fi
+if ! grep -F -- "smoke:--expect-installed-route device-1 package=review.android.game library=$ALT_CHECKPOINT_LIBRARY" "$CHILD_LOG" >/dev/null; then
+  echo 'android-app-route-check.sh did not propagate alternate package/library environment to android-smoke.sh' >&2
   exit 1
 fi
 

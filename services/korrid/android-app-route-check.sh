@@ -5,8 +5,9 @@
 #
 # This gate is intentionally device-only: it installs the current Korri APK,
 # copies the reviewed readable checkpoint into Korri's existing Android storage
-# root, proves the protected RPC route/signature, then launches TMNT through the
-# portal and verifies Android's real foreground/task behavior. It never
+# root, proves the protected RPC route/signature, then launches the configured
+# Android app route through the portal and verifies Android's real foreground/task
+# behavior. It never
 # installs, uninstalls, clears, or otherwise mutates the user's installed game
 # package, and it restores any pre-existing fixed config files before exiting.
 set -euo pipefail
@@ -17,7 +18,7 @@ HOST_PORT="${KORRI_ANDROID_APP_ROUTE_HOST_PORT:-43120}"
 ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
 ANDROID_STORAGE_ROOT="/sdcard/korri-retro"
 CHECKPOINT_CONFIG="$ROOT/docs/research/android-app-plugin-schema-checkpoint/config.yaml"
-CHECKPOINT_LIBRARY="$ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml"
+CHECKPOINT_LIBRARY="${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-$ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml}"
 CONFIG_REMOTE="$ANDROID_STORAGE_ROOT/config.yaml"
 LIBRARY_REMOTE="$ANDROID_STORAGE_ROOT/library.yaml"
 CHECKPOINT_BACKUP_DIR="$ANDROID_STORAGE_ROOT/.android-app-route-check-backup-$$"
@@ -114,8 +115,9 @@ fi
 provision_checkpoint_files
 
 # The smoke script installs Korri and proves protected RPC list/launch
-# signatures for TMNT and WL4 against the already-provisioned checkpoint. Keep
-# this call first so the portal journey below drives the same configured app
+# signatures for the configured Android app route and WL4 against the
+# already-provisioned checkpoint. Keep this call first so the portal journey
+# below drives the same configured app
 # state that RPC just observed.
 "$ANDROID_SMOKE" --expect-installed-route "$SERIAL"
 

@@ -11,7 +11,8 @@ HOST_PORT=43118
 ANDROID_STORAGE_ALIAS="/sdcard/korri-retro"
 ANDROID_STORAGE_ROOT="$ANDROID_STORAGE_ALIAS"
 CHECKPOINT_CONFIG="$ROOT/docs/research/android-app-plugin-schema-checkpoint/config.yaml"
-CHECKPOINT_LIBRARY="$ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml"
+CHECKPOINT_LIBRARY="${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-$ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml}"
+ANDROID_APP_PACKAGE="${KORRI_ANDROID_APP_PACKAGE:-com.playdigious.tmnt}"
 UPSTREAMS_CONFIG="${KORRI_ANDROID_UPSTREAMS_CONFIG:-$ROOT/services/korrid/deploy/upstreams.android.json}"
 CURL=(curl --connect-timeout 2 --max-time 5 --retry 2 --retry-connrefused)
 
@@ -57,6 +58,27 @@ require_wl4_local_launch_response() {
   fi
 
   echo "WL4 launch probe returned neither a signed deferred RetroArch instruction nor the stable LocalRomMissing error: $response" >&2
+  return 1
+}
+
+require_android_app_launch_response() {
+  local response="$1"
+  local android_app_package="${KORRI_ANDROID_APP_PACKAGE:-$ANDROID_APP_PACKAGE}"
+
+  if jq -e --arg android_app_package "$android_app_package" '
+    .outcome._tag == "Ok"
+    and .outcome.payload.launcherId == "android-app"
+    and .outcome.payload.component.packageName == $android_app_package
+    and .outcome.payload.component.className == ""
+    and .outcome.payload.extras == {}
+    and .outcome.payload.directories == []
+    and .outcome.payload.files == []
+    and (.outcome.payload.integrity | type == "string" and length > 0)
+  ' <<<"$response" >/dev/null; then
+    return 0
+  fi
+
+  echo "Configured Android route did not return the signed android-app shape for package $android_app_package: $response" >&2
   return 1
 }
 
@@ -194,8 +216,9 @@ if ! jq -e '
 fi
 
 # The regular device smoke must not rewrite a user's fixed config/library files.
-# TMNT route assertions are opt-in through --expect-installed-route after the
-# dedicated installed-route gate has provisioned and byte-checked its checkpoint.
+# Installed Android route assertions are opt-in through --expect-installed-route
+# after the dedicated installed-route gate has provisioned and byte-checked its
+# checkpoint.
 local_games_response="$("${CURL[@]}" --fail --silent \
   -H 'content-type: application/json' \
   -H "authorization: Bearer $capability" \
@@ -230,17 +253,7 @@ if [[ "$EXPECT_INSTALLED_ROUTE" == true ]]; then
     -H "authorization: Bearer $capability" \
     -d '{"_tag":"app.local-games.launch","payload":{"gameId":"tmnt-shredders-revenge"}}' \
     "http://127.0.0.1:$HOST_PORT/rpc")"
-  if ! jq -e '
-    .outcome._tag == "Ok"
-    and .outcome.payload.launcherId == "android-app"
-    and .outcome.payload.component.packageName == "com.playdigious.tmnt"
-    and .outcome.payload.component.className == ""
-    and .outcome.payload.extras == {}
-    and .outcome.payload.directories == []
-    and .outcome.payload.files == []
-    and (.outcome.payload.integrity | type == "string" and length > 0)
-  ' <<<"$android_launch_response" >/dev/null; then
-    echo "Configured Android route did not return the signed android-app shape: $android_launch_response" >&2
+  if ! require_android_app_launch_response "$android_launch_response"; then
     exit 1
   fi
 fi

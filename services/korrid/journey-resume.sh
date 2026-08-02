@@ -8,8 +8,9 @@
 # trap: Android keeps recently-used processes cached, so a dead activity can
 # leave a live process behind and make a failure look like a success.
 #
-# Requires granted storage access and checkpoint config loaded. TMNT must be the
-# first local-game entry after any active-session banner.
+# Requires granted storage access and checkpoint config loaded. The configured
+# installed Android-app route must be the first local-game entry after any
+# active-session banner.
 set -euo pipefail
 
 SERIAL="${1:?usage: journey-resume.sh <adb-serial> [package] [tap-x tap-y]}"
@@ -132,10 +133,20 @@ open_korri() {
   local attempt
   local poll
   local top=""
+  local start_output=""
+  local start_status=0
+  local last_start_output=""
+  local last_start_status=0
 
   wake_and_dismiss_keyguard
   for ((attempt = 1; attempt <= KORRI_OPEN_ATTEMPTS; attempt += 1)); do
-    "${ADB[@]}" shell "am start -n $KORRI_ACTIVITY" >/dev/null 2>&1
+    if start_output="$("${ADB[@]}" shell "am start -n $KORRI_ACTIVITY" 2>&1)"; then
+      start_status=0
+    else
+      start_status=$?
+    fi
+    last_start_output="$start_output"
+    last_start_status="$start_status"
     for ((poll = 1; poll <= KORRI_OPEN_POLLS; poll += 1)); do
       top="$(top_of || true)"
       if [[ "$top" == *"$KORRI_ACTIVITY"* ]]; then
@@ -145,7 +156,10 @@ open_korri() {
     done
   done
 
-  echo "FAILED: $label did not bring Korri activity to foreground (top=$top)"
+  echo "FAILED: $label did not bring Korri activity to foreground (top=$top, am_start_status=$last_start_status)"
+  if [[ -n "$last_start_output" ]]; then
+    echo "        am start output: $last_start_output"
+  fi
   shot "$label" || true
   echo "        see $SHOTS/$label.png"
   exit 1
