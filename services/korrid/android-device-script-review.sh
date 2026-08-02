@@ -63,18 +63,31 @@ FAKE_ADB="$TMP/adb"
 # shellcheck source=/dev/null
 KORRI_ANDROID_SMOKE_LIBRARY=true source "$ANDROID_SMOKE"
 
-set +e
-KORRI_ANDROID_SMOKE_LIBRARY=true bash "$ANDROID_SMOKE" >"$TMP/executed-library.out" 2>"$TMP/executed-library.err"
-executed_library_status=$?
-set -e
-if [[ "$executed_library_status" -eq 0 ]]; then
-  echo 'android-smoke.sh returned early when library mode was set during execution' >&2
-  exit 1
-fi
-if ! grep -F 'usage: android-smoke.sh' "$TMP/executed-library.err" >/dev/null; then
-  echo 'android-smoke.sh executed library-mode failure did not reach the normal usage guard' >&2
-  exit 1
-fi
+assert_executed_library_reaches_usage() {
+  local label="$1"
+  shift
+  local out="$TMP/$label.out"
+  local err="$TMP/$label.err"
+  local status
+
+  set +e
+  env -u KORRI_ANDROID_DEVICE -u ANDROID_SERIAL KORRI_ANDROID_SMOKE_LIBRARY=true "$@" >"$out" 2>"$err"
+  status=$?
+  set -e
+
+  if [[ "$status" -eq 0 ]]; then
+    echo 'android-smoke.sh returned early when library mode was set during execution' >&2
+    exit 1
+  fi
+  if ! grep -F 'usage: android-smoke.sh' "$err" >/dev/null; then
+    echo 'android-smoke.sh executed library-mode failure did not reach the normal usage guard' >&2
+    exit 1
+  fi
+}
+
+assert_executed_library_reaches_usage executed-library bash "$ANDROID_SMOKE"
+KORRI_ANDROID_DEVICE=review-inherited-device ANDROID_SERIAL=review-inherited-serial \
+  assert_executed_library_reaches_usage executed-library-inherited-device bash "$ANDROID_SMOKE"
 
 ADB_RESOLVE_LOG="$TMP/adb-resolve.log"
 adb() {
