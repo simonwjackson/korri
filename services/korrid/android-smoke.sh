@@ -8,7 +8,8 @@ ROOT="$(git rev-parse --show-toplevel)"
 APK="${KORRI_ANDROID_APK:-$ROOT/clients/android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk}"
 PACKAGE="com.simonwjackson.korri.debug"
 HOST_PORT=43118
-ANDROID_STORAGE_ROOT="/sdcard/korri-retro"
+ANDROID_STORAGE_ALIAS="/sdcard/korri-retro"
+ANDROID_STORAGE_ROOT="$ANDROID_STORAGE_ALIAS"
 CHECKPOINT_CONFIG="$ROOT/docs/research/android-app-plugin-schema-checkpoint/config.yaml"
 CHECKPOINT_LIBRARY="$ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml"
 UPSTREAMS_CONFIG="${KORRI_ANDROID_UPSTREAMS_CONFIG:-$ROOT/services/korrid/deploy/upstreams.android.json}"
@@ -18,19 +19,27 @@ require_wl4_local_launch_response() {
   local response="$1"
 
   if jq -e --arg storage_root "$ANDROID_STORAGE_ROOT" '
-    ._tag == "app.local-games.launch"
+    def exact_keys($expected): type == "object" and (keys == ($expected | sort));
+
+    exact_keys(["_tag", "outcome"])
+    and ._tag == "app.local-games.launch"
+    and (.outcome | exact_keys(["_tag", "payload"]))
     and (
       (
         .outcome._tag == "Ok"
+        and (.outcome.payload | exact_keys(["component", "directories", "extras", "files", "integrity", "launcherId"]))
         and .outcome.payload.launcherId == "retroarch"
+        and (.outcome.payload.component | exact_keys(["className", "packageName"]))
         and .outcome.payload.component.packageName == "com.korri.retroarch"
         and .outcome.payload.component.className == "com.retroarch.browser.retroactivity.RetroActivityFuture"
+        and (.outcome.payload.extras | exact_keys(["CONFIGFILE", "KORRI_CONTROL_TOKEN", "LIBRETRO", "ROM"]))
         and .outcome.payload.extras.ROM == ($storage_root + "/roms/wl4.gba")
         and .outcome.payload.extras.LIBRETRO == "/data/data/com.korri.retroarch/cores/mgba_libretro_android.so"
         and .outcome.payload.extras.CONFIGFILE == ($storage_root + "/retroarch.cfg")
         and (.outcome.payload.extras.KORRI_CONTROL_TOKEN | test("^[0-9a-f]{64}$"))
         and .outcome.payload.directories == (["system", "saves", "states", "screenshots"] | map($storage_root + "/" + .))
-        and (.outcome.payload.files | length == 1)
+        and (.outcome.payload.files | type == "array" and length == 1)
+        and (.outcome.payload.files[0] | exact_keys(["content", "path"]))
         and .outcome.payload.files[0].path == ($storage_root + "/retroarch.cfg")
         and (.outcome.payload.files[0].content | contains("video_driver = \"gl\""))
         and (.outcome.payload.files[0].content | contains("kiosk_mode_enable = \"true\""))
@@ -38,6 +47,7 @@ require_wl4_local_launch_response() {
       )
       or (
         .outcome._tag == "Err"
+        and (.outcome.payload | exact_keys(["code", "message"]))
         and .outcome.payload.code == "LocalRomMissing"
         and .outcome.payload.message == ("local ROM is missing: " + $storage_root + "/roms/wl4.gba")
       )
@@ -50,9 +60,22 @@ require_wl4_local_launch_response() {
   return 1
 }
 
-if [[ "${KORRI_ANDROID_SMOKE_LIBRARY:-false}" == true ]]; then
-  # shellcheck disable=SC2317 # The exit fallback is used only when executed, not sourced.
-  return 0 2>/dev/null || exit 0
+resolve_android_storage_root() {
+  local device="$1"
+  local storage_alias="$2"
+  local resolved_root
+
+  adb -s "$device" shell "mkdir -p '$storage_alias'"
+  resolved_root="$(adb -s "$device" shell "cd '$storage_alias' && pwd -P" | tr -d '\r' | tail -n 1)"
+  if [[ "$resolved_root" != /* ]]; then
+    echo "Android storage root did not resolve to an absolute path: $resolved_root" >&2
+    return 1
+  fi
+  ANDROID_STORAGE_ROOT="$resolved_root"
+}
+
+if [[ "${KORRI_ANDROID_SMOKE_LIBRARY:-false}" == true && "${BASH_SOURCE[0]}" != "$0" ]]; then
+  return 0
 fi
 
 EXPECT_INSTALLED_ROUTE=false
@@ -80,6 +103,7 @@ if ! timeout 15 "$ADB_BIN" -s "$DEVICE" wait-for-device; then
   echo "Android target is not reachable: $DEVICE" >&2
   exit 1
 fi
+resolve_android_storage_root "$DEVICE" "$ANDROID_STORAGE_ALIAS"
 
 # grep must drain the whole listing: with pipefail, `grep -q` exiting at
 # the first match SIGPIPEs unzip and fails the pipeline spuriously.
@@ -88,7 +112,6 @@ if ! unzip -l "$APK" | grep 'assets/portal/index.html' >/dev/null; then
   exit 1
 fi
 
-adb -s "$DEVICE" shell mkdir -p "$ANDROID_STORAGE_ROOT"
 adb -s "$DEVICE" push "$UPSTREAMS_CONFIG" "$ANDROID_STORAGE_ROOT/upstreams.json" >/dev/null
 if [[ "$EXPECT_INSTALLED_ROUTE" == true ]]; then
   if ! adb -s "$DEVICE" exec-out cat "$ANDROID_STORAGE_ROOT/config.yaml" | cmp -s "$CHECKPOINT_CONFIG" -; then

@@ -62,7 +62,44 @@ FAKE_ADB="$TMP/adb"
 
 # shellcheck source=/dev/null
 KORRI_ANDROID_SMOKE_LIBRARY=true source "$ANDROID_SMOKE"
-SIGNED_WL4_RESPONSE="$(jq -n --arg root '/sdcard/korri-retro' '{
+
+set +e
+KORRI_ANDROID_SMOKE_LIBRARY=true bash "$ANDROID_SMOKE" >"$TMP/executed-library.out" 2>"$TMP/executed-library.err"
+executed_library_status=$?
+set -e
+if [[ "$executed_library_status" -eq 0 ]]; then
+  echo 'android-smoke.sh returned early when library mode was set during execution' >&2
+  exit 1
+fi
+if ! grep -F 'usage: android-smoke.sh' "$TMP/executed-library.err" >/dev/null; then
+  echo 'android-smoke.sh executed library-mode failure did not reach the normal usage guard' >&2
+  exit 1
+fi
+
+ADB_RESOLVE_LOG="$TMP/adb-resolve.log"
+adb() {
+  printf '%s\n' "$*" >>"$ADB_RESOLVE_LOG"
+  if [[ "$*" == "-s device-1 shell mkdir -p '/sdcard/korri-retro'" ]]; then
+    return 0
+  fi
+  if [[ "$*" == "-s device-1 shell cd '/sdcard/korri-retro' && pwd -P" ]]; then
+    printf '/storage/emulated/0/korri-retro\r\n'
+    return 0
+  fi
+  return 1
+}
+ANDROID_STORAGE_ROOT="/sdcard/korri-retro"
+resolve_android_storage_root device-1 "/sdcard/korri-retro"
+if [[ "$ANDROID_STORAGE_ROOT" != "/storage/emulated/0/korri-retro" ]]; then
+  echo "android-smoke.sh did not canonicalize the Android storage root: $ANDROID_STORAGE_ROOT" >&2
+  exit 1
+fi
+if ! grep -F -- "-s device-1 shell cd '/sdcard/korri-retro' && pwd -P" "$ADB_RESOLVE_LOG" >/dev/null; then
+  echo 'android-smoke.sh did not resolve the storage root through adb shell pwd -P' >&2
+  exit 1
+fi
+
+SIGNED_WL4_RESPONSE="$(jq -n --arg root '/storage/emulated/0/korri-retro' '{
   _tag: "app.local-games.launch",
   outcome: {
     _tag: "Ok",
@@ -87,7 +124,17 @@ SIGNED_WL4_RESPONSE="$(jq -n --arg root '/sdcard/korri-retro' '{
     }
   }
 }')"
-MISSING_WL4_RESPONSE="$(jq -n --arg root '/sdcard/korri-retro' '{
+MISSING_WL4_RESPONSE="$(jq -n --arg root '/storage/emulated/0/korri-retro' '{
+  _tag: "app.local-games.launch",
+  outcome: {
+    _tag: "Err",
+    payload: {
+      code: "LocalRomMissing",
+      message: ("local ROM is missing: " + $root + "/roms/wl4.gba")
+    }
+  }
+}')"
+ALIAS_WL4_RESPONSE="$(jq -n --arg root '/sdcard/korri-retro' '{
   _tag: "app.local-games.launch",
   outcome: {
     _tag: "Err",
@@ -107,6 +154,8 @@ BAD_WL4_RESPONSE="$(jq -n '{
     }
   }
 }')"
+EXTRA_HOST_PATH_RESPONSE="$(jq '.outcome.payload.extras.HOST_PATH = "/tmp/host-root/roms/wl4.gba"' <<<"$SIGNED_WL4_RESPONSE")"
+EXTRA_ERR_PATH_RESPONSE="$(jq '.outcome.payload.hostPath = "/tmp/host-root/roms/wl4.gba"' <<<"$MISSING_WL4_RESPONSE")"
 if ! require_wl4_local_launch_response "$SIGNED_WL4_RESPONSE"; then
   echo 'android-smoke.sh rejected the signed deferred WL4 RetroArch launch branch' >&2
   exit 1
@@ -116,11 +165,29 @@ if ! require_wl4_local_launch_response "$MISSING_WL4_RESPONSE"; then
   exit 1
 fi
 set +e
+require_wl4_local_launch_response "$ALIAS_WL4_RESPONSE" >"$TMP/alias-wl4.out" 2>"$TMP/alias-wl4.err"
+alias_wl4_status=$?
 require_wl4_local_launch_response "$BAD_WL4_RESPONSE" >"$TMP/bad-wl4.out" 2>"$TMP/bad-wl4.err"
 bad_wl4_status=$?
+require_wl4_local_launch_response "$EXTRA_HOST_PATH_RESPONSE" >"$TMP/extra-host-path.out" 2>"$TMP/extra-host-path.err"
+extra_host_path_status=$?
+require_wl4_local_launch_response "$EXTRA_ERR_PATH_RESPONSE" >"$TMP/extra-err-path.out" 2>"$TMP/extra-err-path.err"
+extra_err_path_status=$?
 set -e
+if [[ "$alias_wl4_status" -eq 0 ]]; then
+  echo 'android-smoke.sh accepted the /sdcard alias after canonical root resolution' >&2
+  exit 1
+fi
 if [[ "$bad_wl4_status" -eq 0 ]]; then
   echo 'android-smoke.sh accepted a WL4 missing-ROM error with an unsanitized path' >&2
+  exit 1
+fi
+if [[ "$extra_host_path_status" -eq 0 ]]; then
+  echo 'android-smoke.sh accepted a signed WL4 response with an injected extras.HOST_PATH' >&2
+  exit 1
+fi
+if [[ "$extra_err_path_status" -eq 0 ]]; then
+  echo 'android-smoke.sh accepted a WL4 missing-ROM error with an injected path field' >&2
   exit 1
 fi
 
