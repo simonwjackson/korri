@@ -22,9 +22,20 @@ mkdir -p "$SHOTS"
 "${ADB[@]}" shell "settings put system accelerometer_rotation 0; settings put system user_rotation 0"
 
 pid_of() { "${ADB[@]}" shell "pidof $GAME" 2>/dev/null | tr -d '\r\n'; }
-top_of() {
+resumed_component_from_line() {
+  local line="${1:-$(cat)}"
+  sed -nE 's/.*[[:space:]]u[0-9]+[[:space:]]([^[:space:]}]+\/[^[:space:]}]+)\}?[[:space:]].*/\1/p' <<<"$line" | tr -d '\r\n'
+}
+package_from_component() {
+  local component="$1"
+  printf '%s' "${component%%/*}"
+}
+top_component_of() {
   "${ADB[@]}" shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" \
-    | sed 's/.*u0 //; s|/.*||' | tr -d '\r\n'
+    | resumed_component_from_line
+}
+top_of() {
+  package_from_component "$(top_component_of)"
 }
 open_korri() { "${ADB[@]}" shell "monkey -p $KORRI -c android.intent.category.LAUNCHER 1" >/dev/null 2>&1; }
 say() { printf '  %-26s pid=%-8s top=%s\n' "$1" "$(pid_of)" "$(top_of)"; }
@@ -38,7 +49,7 @@ say "korri home"
 "${ADB[@]}" shell "input keyevent KEYCODE_DPAD_CENTER"; sleep 18
 say "game open"
 FIRST="$(pid_of)"
-[[ "$(top_of)" == *"$GAME"* ]] || { echo "  ABORT: game never opened"; exit 1; }
+[[ "$(top_of)" == "$GAME" ]] || { echo "  ABORT: game never opened"; exit 1; }
 
 # The whole point: switch away without Back.
 "${ADB[@]}" shell "input keyevent KEYCODE_HOME"; sleep 4
@@ -51,9 +62,9 @@ say "opened the Korri app"
 "${ADB[@]}" pull /sdcard/s.png "$SHOTS/switch-back-to-korri.png" >/dev/null
 
 echo
-if [[ "$TOP" == *"$GAME"* ]]; then
+if [[ "$TOP" == "$GAME" ]]; then
   echo "  Opening Korri lands on THE GAME — the portal is unreachable without Back."
-elif [[ "$TOP" == *"$KORRI"* ]]; then
+elif [[ "$TOP" == "$KORRI" ]]; then
   echo "  Opening Korri lands on THE PORTAL, game still alive (pid $FIRST)."
 else
   echo "  Landed somewhere else entirely: $TOP"

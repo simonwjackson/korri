@@ -19,9 +19,20 @@ mkdir -p "$SHOTS"
 "${ADB[@]}" shell "settings put system accelerometer_rotation 0; settings put system user_rotation 0"
 
 pid_of() { "${ADB[@]}" shell "pidof $GAME" 2>/dev/null | tr -d '\r\n'; }
-top_of() {
+resumed_component_from_line() {
+  local line="${1:-$(cat)}"
+  sed -nE 's/.*[[:space:]]u[0-9]+[[:space:]]([^[:space:]}]+\/[^[:space:]}]+)\}?[[:space:]].*/\1/p' <<<"$line" | tr -d '\r\n'
+}
+package_from_component() {
+  local component="$1"
+  printf '%s' "${component%%/*}"
+}
+top_component_of() {
   "${ADB[@]}" shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" \
-    | sed 's/.*u0 //; s|/.*||' | tr -d '\r\n'
+    | resumed_component_from_line
+}
+top_of() {
+  package_from_component "$(top_component_of)"
 }
 open_game() {
   "${ADB[@]}" shell "input keyevent KEYCODE_DPAD_CENTER"
@@ -40,7 +51,7 @@ run_journey() { # $1 = BACK | HOME
   local first top1
   first="$(pid_of)"; top1="$(top_of)"
   printf '  %-22s pid=%-8s top=%s\n' "game opened" "$first" "$top1"
-  if [[ "$top1" != *"$GAME"* ]]; then
+  if [[ "$top1" != "$GAME" ]]; then
     echo "  ABORT: the game never opened"
     return 1
   fi
@@ -63,7 +74,7 @@ run_journey() { # $1 = BACK | HOME
   "${ADB[@]}" shell "screencap -p /sdcard/c.png" >/dev/null
   "${ADB[@]}" pull /sdcard/c.png "$SHOTS/compare-$exit_key.png" >/dev/null
 
-  if [[ "$top2" != *"$GAME"* ]]; then
+  if [[ "$top2" != "$GAME" ]]; then
     echo "  RESULT: reopening did not reach the game (ended on $top2)"
   elif [[ -n "$first" && "$first" == "$second" ]]; then
     echo "  RESULT: RESUMED — same process, player keeps their place"

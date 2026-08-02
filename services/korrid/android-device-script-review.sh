@@ -362,6 +362,9 @@ case "$subcommand" in
             modern)
               printf 'topResumedActivity=ActivityRecord{1 u0 %s t1}\n' "$component"
               ;;
+            android13)
+              printf 'topResumedActivity=ActivityRecord{1 u0 %s} t10}\n' "$component"
+              ;;
             android12)
               printf '  mResumedActivity: ActivityRecord{1 u0 %s t1}\n' "$component"
               ;;
@@ -582,6 +585,42 @@ if ! test -f "$review_shots/1-korri-home.ocr.png"; then
 fi
 if ! test -f "$review_shots/1-korri-home.xml"; then
   echo 'journey-resume.sh did not keep UIAutomator XML evidence while using OCR for assertion' >&2
+  exit 1
+fi
+
+review_shots="$TMP/journey-android13-resumed-component"
+review_state="$TMP/journey-android13-resumed-component.state"
+review_magick_log="$TMP/journey-android13-resumed-component-magick.log"
+review_tesseract_log="$TMP/journey-android13-resumed-component-tesseract.log"
+review_adb_log="$TMP/journey-android13-resumed-component-adb.log"
+review_start_count="$TMP/journey-android13-resumed-component-start-count"
+printf 'korri\n' >"$review_state"
+printf '0\n' >"$review_start_count"
+PATH="$JOURNEY_REVIEW_BIN:$PATH" \
+KORRI_ADB_BIN="$JOURNEY_REVIEW_ADB" \
+KORRI_MAGICK_BIN="$JOURNEY_REVIEW_MAGICK" \
+KORRI_TESSERACT_BIN="$JOURNEY_REVIEW_TESSERACT" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_START_COUNT="$review_start_count" \
+KORRI_DEVICE_SCRIPT_REVIEW_RESUMED_ACTIVITY_FORMAT=android13 \
+KORRI_DEVICE_SCRIPT_REVIEW_MAGICK_LOG="$review_magick_log" \
+KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_ADB_LOG="$review_adb_log" \
+KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT="$review_ocr_with_banner" \
+KORRI_DEVICE_SCRIPT_REVIEW_AMBIENT_SCREENSHOT="$AMBIENT_CONVENTIONAL_HOME" \
+KORRI_DEVICE_SCRIPT_REVIEW_GAME="$review_game" \
+SHOTS="$review_shots" \
+  "$JOURNEY_RESUME" device-1 "$review_game" >"$TMP/journey-android13-resumed-component.out" 2>"$TMP/journey-android13-resumed-component.err" || {
+    cat "$TMP/journey-android13-resumed-component.out" >&2
+    cat "$TMP/journey-android13-resumed-component.err" >&2
+    exit 1
+  }
+if grep -F 'top=com.simonwjackson.korri.debug/com.limelight.KorriShellActivity}' "$TMP/journey-android13-resumed-component.out" >/dev/null; then
+  echo 'journey-resume.sh left a trailing Android 13 activity-record brace on the parsed Korri component' >&2
+  exit 1
+fi
+if grep -F "top=$review_game/.MainActivity}" "$TMP/journey-android13-resumed-component.out" >/dev/null; then
+  echo 'journey-resume.sh left a trailing Android 13 activity-record brace on the parsed game component' >&2
   exit 1
 fi
 
@@ -990,6 +1029,9 @@ case "$subcommand" in
           modern)
             activity_line="topResumedActivity=ActivityRecord{1 u0 ${KORRI_ANDROID_APP_PACKAGE:-com.playdigious.tmnt}/.MainActivity t1}"
             ;;
+          android13)
+            activity_line="topResumedActivity=ActivityRecord{1 u0 ${KORRI_ANDROID_APP_PACKAGE:-com.playdigious.tmnt}/.MainActivity} t10}"
+            ;;
           android12)
             activity_line="  mResumedActivity: ActivityRecord{1 u0 ${KORRI_ANDROID_APP_PACKAGE:-com.playdigious.tmnt}/.MainActivity t1}"
             ;;
@@ -1327,6 +1369,7 @@ run_route_resumed_activity_review() {
 }
 
 run_route_resumed_activity_review modern topResumedActivity modern
+run_route_resumed_activity_review android13 topResumedActivity android13
 run_route_resumed_activity_review android12 mResumedActivity android12
 
 printf 'Android device script review: ok\n'

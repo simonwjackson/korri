@@ -55,7 +55,7 @@ trap restore_rotation EXIT
 
 resumed_component_from_line() {
   local line="${1:-$(cat)}"
-  sed 's/.*u0 //; s/ .*//' <<<"$line" | tr -d '\r\n'
+  sed -nE 's/.*[[:space:]]u[0-9]+[[:space:]]([^[:space:]}]+\/[^[:space:]}]+)\}?[[:space:]].*/\1/p' <<<"$line" | tr -d '\r\n'
 }
 
 package_from_component() {
