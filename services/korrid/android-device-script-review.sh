@@ -39,6 +39,14 @@ if ! grep -F 'assert_portal_exposes_title' "$JOURNEY_RESUME" >/dev/null; then
   echo 'journey-resume.sh must verify the portal exposes the expected title before D-pad activation' >&2
   exit 1
 fi
+if ! grep -F 'KORRI_ACTIVITY="$KORRI/com.limelight.KorriShellActivity"' "$JOURNEY_RESUME" >/dev/null; then
+  echo 'journey-resume.sh must target KorriShellActivity explicitly when foregrounding Korri' >&2
+  exit 1
+fi
+if sed '/^[[:space:]]*#/d' "$JOURNEY_RESUME" | grep -F 'monkey -p' >/dev/null; then
+  echo 'journey-resume.sh must not use monkey launcher activation for Korri foregrounding' >&2
+  exit 1
+fi
 foreground_health_check="$(sed -n '/health_response=/,/local_games_response=/p' "$ANDROID_APP_ROUTE")"
 if ! grep -F '._tag == "system.health"' <<<"$foreground_health_check" >/dev/null; then
   echo 'android-app-route-check.sh must semantically assert foreground health top-level system.health tag' >&2
@@ -286,8 +294,11 @@ case "$subcommand" in
           home)
             printf 'topResumedActivity=ActivityRecord{1 u0 com.android.launcher/.Launcher t1}\n'
             ;;
+          korri)
+            printf 'topResumedActivity=ActivityRecord{1 u0 com.simonwjackson.korri.debug/com.limelight.KorriShellActivity t1}\n'
+            ;;
           *)
-            printf 'topResumedActivity=ActivityRecord{1 u0 com.simonwjackson.korri.debug/.MainActivity t1}\n'
+            printf 'topResumedActivity=ActivityRecord{1 u0 com.android.launcher/.Launcher t1}\n'
             ;;
         esac
         ;;
@@ -295,8 +306,23 @@ case "$subcommand" in
         ;;
       uiautomator\ dump\ /sdcard/j.xml)
         ;;
-      monkey\ -p*)
-        printf 'korri\n' >"$state_file"
+      am\ start\ -n\ com.simonwjackson.korri.debug/com.limelight.KorriShellActivity)
+        count_file="${KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_START_COUNT:?}"
+        count="$(cat "$count_file" 2>/dev/null || printf '0')"
+        count="$((count + 1))"
+        printf '%s\n' "$count" >"$count_file"
+        case "${KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_START_MODE:-retry}" in
+          retry)
+            if ((count % 2 == 0)); then
+              printf 'korri\n' >"$state_file"
+            fi
+            ;;
+          never)
+            ;;
+          *)
+            exit 64
+            ;;
+        esac
         ;;
       wm\ dismiss-keyguard)
         ;;
@@ -307,7 +333,7 @@ case "$subcommand" in
         printf 'home\n' >"$state_file"
         ;;
       am\ force-stop*)
-        printf 'korri\n' >"$state_file"
+        printf 'stopped\n' >"$state_file"
         ;;
       *)
         ;;
@@ -320,24 +346,47 @@ esac
 JOURNEY_ADB
 chmod +x "$JOURNEY_REVIEW_ADB"
 
-assert_journey_wake_dismiss_precede_launcher() {
+assert_journey_wake_dismiss_precede_explicit_start() {
   local log="$1"
   awk '
-    /^shell:input keyevent KEYCODE_WAKEUP$/ { saw_wake = NR }
+    /^shell:input keyevent KEYCODE_WAKEUP$/ {
+      saw_wake = NR
+      open_has_start = 0
+    }
     /^shell:wm dismiss-keyguard$/ { saw_dismiss = NR }
-    /^shell:monkey -p com\.simonwjackson\.korri\.debug -c android\.intent\.category\.LAUNCHER 1$/ {
+    /^shell:am start -n com\.simonwjackson\.korri\.debug\/com\.limelight\.KorriShellActivity$/ {
       if (!(saw_wake && saw_dismiss && saw_wake < saw_dismiss && saw_dismiss < NR)) {
         failed = 1
-        printf "journey-resume.sh opened Korri before wake/dismiss (line %d)\n", NR > "/dev/stderr"
+        printf "journey-resume.sh explicitly started Korri before wake/dismiss (line %d)\n", NR > "/dev/stderr"
         exit 1
       }
-      launches += 1
+      starts += 1
+      if (!open_has_start) {
+        opens += 1
+        open_has_start = 1
+      }
+    }
+    /^shell:dumpsys activity activities 2>\/dev\/null \| grep -m1 topResumedActivity$/ {
+      if (open_has_start) {
+        top_polls_after_start += 1
+      }
+    }
+    /^shell:input keyevent KEYCODE_DPAD_CENTER$/ || /^shell:input keyevent KEYCODE_HOME$/ {
       saw_wake = 0
       saw_dismiss = 0
+      open_has_start = 0
     }
     END {
-      if (!failed && launches < 2) {
-        printf "journey-resume.sh review saw %d Korri launcher activations, expected at least 2\n", launches > "/dev/stderr"
+      if (!failed && opens < 2) {
+        printf "journey-resume.sh review saw %d Korri open phases, expected at least 2\n", opens > "/dev/stderr"
+        exit 1
+      }
+      if (!failed && starts < 4) {
+        printf "journey-resume.sh review saw %d explicit Korri starts, expected retry evidence\n", starts > "/dev/stderr"
+        exit 1
+      }
+      if (!failed && top_polls_after_start < starts) {
+        printf "journey-resume.sh review saw %d top polls after %d explicit starts\n", top_polls_after_start, starts > "/dev/stderr"
         exit 1
       }
     }
@@ -388,7 +437,9 @@ review_state="$TMP/journey-success.state"
 review_magick_log="$TMP/journey-success-magick.log"
 review_tesseract_log="$TMP/journey-success-tesseract.log"
 review_adb_log="$TMP/journey-success-adb.log"
+review_start_count="$TMP/journey-success-start-count"
 printf 'korri\n' >"$review_state"
+printf '0\n' >"$review_start_count"
 review_ocr_with_banner="tmnt
 shredder
 revenge
@@ -398,6 +449,7 @@ KORRI_ADB_BIN="$JOURNEY_REVIEW_ADB" \
 KORRI_MAGICK_BIN="$JOURNEY_REVIEW_MAGICK" \
 KORRI_TESSERACT_BIN="$JOURNEY_REVIEW_TESSERACT" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_START_COUNT="$review_start_count" \
 KORRI_DEVICE_SCRIPT_REVIEW_MAGICK_LOG="$review_magick_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_ADB_LOG="$review_adb_log" \
@@ -406,7 +458,7 @@ KORRI_DEVICE_SCRIPT_REVIEW_AMBIENT_SCREENSHOT="$AMBIENT_CONVENTIONAL_HOME" \
 KORRI_DEVICE_SCRIPT_REVIEW_GAME="$review_game" \
 SHOTS="$review_shots" \
   "$JOURNEY_RESUME" device-1 "$review_game" >"$TMP/journey-success.out" 2>"$TMP/journey-success.err"
-assert_journey_wake_dismiss_precede_launcher "$review_adb_log"
+assert_journey_wake_dismiss_precede_explicit_start "$review_adb_log"
 assert_journey_tmnt_launch_navigation "$review_adb_log" 1 'journey-resume.sh active-session banner'
 if ! grep -F -- "$review_shots/1-korri-home.png -deskew 40% $review_shots/1-korri-home.ocr.png" "$review_magick_log" >/dev/null; then
   echo 'journey-resume.sh did not deskew the captured portal screenshot before OCR' >&2
@@ -436,13 +488,16 @@ review_state="$TMP/journey-no-banner.state"
 review_magick_log="$TMP/journey-no-banner-magick.log"
 review_tesseract_log="$TMP/journey-no-banner-tesseract.log"
 review_adb_log="$TMP/journey-no-banner-adb.log"
+review_start_count="$TMP/journey-no-banner-start-count"
 printf 'korri\n' >"$review_state"
+printf '0\n' >"$review_start_count"
 PATH="$JOURNEY_REVIEW_BIN:$PATH" \
 KORRI_ADB_BIN="$JOURNEY_REVIEW_ADB" \
 KORRI_MAGICK_BIN="$JOURNEY_REVIEW_MAGICK" \
 KORRI_TESSERACT_BIN="$JOURNEY_REVIEW_TESSERACT" \
 KORRI_JOURNEY_EXPECTED_TITLE="$review_title" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_START_COUNT="$review_start_count" \
 KORRI_DEVICE_SCRIPT_REVIEW_MAGICK_LOG="$review_magick_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_ADB_LOG="$review_adb_log" \
@@ -453,11 +508,60 @@ SHOTS="$review_shots" \
   "$JOURNEY_RESUME" device-1 "$review_game" >"$TMP/journey-no-banner.out" 2>"$TMP/journey-no-banner.err"
 assert_journey_tmnt_launch_navigation "$review_adb_log" 0 'journey-resume.sh no active-session banner'
 
+review_shots="$TMP/journey-foreground-timeout"
+review_state="$TMP/journey-foreground-timeout.state"
+review_magick_log="$TMP/journey-foreground-timeout-magick.log"
+review_tesseract_log="$TMP/journey-foreground-timeout-tesseract.log"
+review_start_count="$TMP/journey-foreground-timeout-start-count"
+printf 'korri\n' >"$review_state"
+printf '0\n' >"$review_start_count"
+set +e
+PATH="$JOURNEY_REVIEW_BIN:$PATH" \
+KORRI_ADB_BIN="$JOURNEY_REVIEW_ADB" \
+KORRI_MAGICK_BIN="$JOURNEY_REVIEW_MAGICK" \
+KORRI_TESSERACT_BIN="$JOURNEY_REVIEW_TESSERACT" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_START_COUNT="$review_start_count" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_START_MODE=never \
+KORRI_DEVICE_SCRIPT_REVIEW_MAGICK_LOG="$review_magick_log" \
+KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
+KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT="$review_ocr_with_banner" \
+KORRI_DEVICE_SCRIPT_REVIEW_AMBIENT_SCREENSHOT="$AMBIENT_CONVENTIONAL_HOME" \
+KORRI_DEVICE_SCRIPT_REVIEW_GAME="$review_game" \
+SHOTS="$review_shots" \
+  "$JOURNEY_RESUME" device-1 "$review_game" >"$TMP/journey-foreground-timeout.out" 2>"$TMP/journey-foreground-timeout.err"
+journey_foreground_timeout_status=$?
+set -e
+if [[ "$journey_foreground_timeout_status" -eq 0 ]]; then
+  echo 'journey-resume.sh accepted a Korri foreground timeout' >&2
+  exit 1
+fi
+journey_foreground_timeout_evidence="$TMP/journey-foreground-timeout.evidence"
+cat "$TMP/journey-foreground-timeout.out" "$TMP/journey-foreground-timeout.err" >"$journey_foreground_timeout_evidence"
+if ! grep -F 'FAILED: 1-korri-home did not bring Korri activity to foreground' "$journey_foreground_timeout_evidence" >/dev/null; then
+  echo 'journey-resume.sh foreground timeout did not report the failed open label' >&2
+  exit 1
+fi
+if ! grep -F 'top=com.android.launcher/.Launcher' "$journey_foreground_timeout_evidence" >/dev/null; then
+  echo 'journey-resume.sh foreground timeout did not preserve top activity evidence' >&2
+  exit 1
+fi
+if ! grep -F -- "$review_shots/1-korri-home.png" "$journey_foreground_timeout_evidence" >/dev/null; then
+  echo 'journey-resume.sh foreground timeout did not print screenshot evidence path' >&2
+  exit 1
+fi
+if ! test -f "$review_shots/1-korri-home.png"; then
+  echo 'journey-resume.sh foreground timeout did not capture screenshot evidence' >&2
+  exit 1
+fi
+
 review_shots="$TMP/journey-failure"
 review_state="$TMP/journey-failure.state"
 review_magick_log="$TMP/journey-failure-magick.log"
 review_tesseract_log="$TMP/journey-failure-tesseract.log"
+review_start_count="$TMP/journey-failure-start-count"
 printf 'korri\n' >"$review_state"
+printf '0\n' >"$review_start_count"
 set +e
 PATH="$JOURNEY_REVIEW_BIN:$PATH" \
 KORRI_ADB_BIN="$JOURNEY_REVIEW_ADB" \
@@ -465,6 +569,7 @@ KORRI_MAGICK_BIN="$JOURNEY_REVIEW_MAGICK" \
 KORRI_TESSERACT_BIN="$JOURNEY_REVIEW_TESSERACT" \
 KORRI_JOURNEY_EXPECTED_TITLE="$review_title" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_START_COUNT="$review_start_count" \
 KORRI_DEVICE_SCRIPT_REVIEW_MAGICK_LOG="$review_magick_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT='different review text' \

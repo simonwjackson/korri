@@ -19,6 +19,9 @@ TAP_X="${3:-539}"
 # shellcheck disable=SC2034 # Backward-compatible positional args; launch is D-pad based now.
 TAP_Y="${4:-882}"
 KORRI=com.simonwjackson.korri.debug
+KORRI_ACTIVITY="$KORRI/com.limelight.KorriShellActivity"
+KORRI_OPEN_ATTEMPTS=4
+KORRI_OPEN_POLLS=3
 SHOTS="${SHOTS:-/tmp/korri-journey}"
 EXPECTED_PORTAL_TITLE="${KORRI_JOURNEY_EXPECTED_TITLE:-}"
 if [[ -z "$EXPECTED_PORTAL_TITLE" ]]; then
@@ -125,8 +128,27 @@ wake_and_dismiss_keyguard() {
   "${ADB[@]}" shell "wm dismiss-keyguard" >/dev/null 2>&1 || true
 }
 open_korri() {
+  local label="$1"
+  local attempt
+  local poll
+  local top=""
+
   wake_and_dismiss_keyguard
-  "${ADB[@]}" shell "monkey -p $KORRI -c android.intent.category.LAUNCHER 1" >/dev/null 2>&1
+  for ((attempt = 1; attempt <= KORRI_OPEN_ATTEMPTS; attempt += 1)); do
+    "${ADB[@]}" shell "am start -n $KORRI_ACTIVITY" >/dev/null 2>&1
+    for ((poll = 1; poll <= KORRI_OPEN_POLLS; poll += 1)); do
+      top="$(top_of || true)"
+      if [[ "$top" == *"$KORRI_ACTIVITY"* ]]; then
+        return 0
+      fi
+      sleep 1
+    done
+  done
+
+  echo "FAILED: $label did not bring Korri activity to foreground (top=$top)"
+  shot "$label" || true
+  echo "        see $SHOTS/$label.png"
+  exit 1
 }
 reset_portal_selection_to_top() {
   local step
@@ -177,7 +199,7 @@ assert_portal_exposes_title() {
 INITIAL_PID="$(pid_of)"
 echo "== portal launch"
 "${ADB[@]}" shell "am force-stop $KORRI"
-open_korri
+open_korri "1-korri-home"
 step "1-korri-home" 7
 assert_top_contains "1-korri-home" "$KORRI"
 assert_portal_exposes_title "1-korri-home" "$EXPECTED_PORTAL_TITLE"
@@ -198,7 +220,7 @@ fi
 step "3-home-away" 4
 
 # Return by task switching/relaunching Korri, not by pressing Back in the game.
-open_korri
+open_korri "4-korri-return"
 step "4-korri-return" 7
 assert_top_contains "4-korri-return" "$KORRI"
 assert_portal_exposes_title "4-korri-return" "$EXPECTED_PORTAL_TITLE"
