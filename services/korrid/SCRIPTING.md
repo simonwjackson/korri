@@ -140,8 +140,9 @@ nix run .#android-app-route-check -- <adb-serial>
 ```
 
 That gate verifies protected RPC shape/signature, launches the portal-selected
-local game through the native bridge, asserts `com.playdigious.tmnt` as
-`topResumedActivity`, checks process evidence, verifies the embedded brain still
+local game through the native bridge, asserts `com.playdigious.tmnt` from
+Android's top-resumed activity field (`topResumedActivity` or Android 12
+`mResumedActivity`), checks process evidence, verifies the embedded brain still
 answers RPC while the game is foreground, and proves the measured
 Home/task-switch relaunch/resume path. It does not install, uninstall, clear, or
 otherwise mutate the game package.

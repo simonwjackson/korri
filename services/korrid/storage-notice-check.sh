@@ -66,7 +66,7 @@ echo "== confirm the prompt (D-pad confirm) and see where we land"
 "${ADB[@]}" shell "input keyevent KEYCODE_DPAD_CENTER"
 sleep 4
 echo "-- foreground activity now:"
-TOP_ACTIVITY="$("${ADB[@]}" shell "dumpsys activity activities | grep -m1 'topResumedActivity'" || true)"
+TOP_ACTIVITY="$("${ADB[@]}" shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" || true)"
 printf '%s\n' "$TOP_ACTIVITY"
-printf '%s\n' "$TOP_ACTIVITY" | grep -Eq 'topResumedActivity.*com\.android\.settings/.*(AllFiles|ExternalStorage|ManageExternalStorage)' \
+printf '%s\n' "$TOP_ACTIVITY" | grep -Eq '(topResumedActivity|mResumedActivity).*com\.android\.settings/.*(AllFiles|ExternalStorage|ManageExternalStorage)' \
   || fail_with_dumps "confirm did not land on Android Settings all-files-access screen"

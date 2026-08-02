@@ -20,7 +20,7 @@ mkdir -p "$SHOTS"
 
 pid_of() { "${ADB[@]}" shell "pidof $GAME" 2>/dev/null | tr -d '\r\n'; }
 top_of() {
-  "${ADB[@]}" shell "dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity" \
+  "${ADB[@]}" shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" \
     | sed 's/.*u0 //; s|/.*||' | tr -d '\r\n'
 }
 open_game() {

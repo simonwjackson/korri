@@ -64,7 +64,7 @@ trap restore_rotation EXIT
 
 pid_of() { "${ADB[@]}" shell "pidof $GAME || { status=\$?; [ \"\$status\" -eq 1 ] && exit 0; exit \"\$status\"; }" 2>/dev/null | tr -d '\r\n'; }
 top_of() {
-  "${ADB[@]}" shell "dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity" \
+  "${ADB[@]}" shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" \
     | sed 's/.*u0 //; s/ .*//' | tr -d '\r\n'
 }
 shot() { "${ADB[@]}" shell "screencap -p /sdcard/j.png" >/dev/null && "${ADB[@]}" pull /sdcard/j.png "$SHOTS/$1.png" >/dev/null; }

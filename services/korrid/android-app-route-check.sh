@@ -125,7 +125,7 @@ provision_checkpoint_files
 # Korri as the measured return path; Back is never used as resume evidence.
 "$JOURNEY_RESUME" "$SERIAL" "$GAME"
 
-top_activity="$("${ADB[@]}" shell "dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity" | tr -d '\r')"
+top_activity="$("${ADB[@]}" shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" | tr -d '\r')"
 if [[ "$top_activity" != *"$GAME"* ]]; then
   echo "Android app route check ended without $GAME top-resumed: $top_activity" >&2
   exit 1

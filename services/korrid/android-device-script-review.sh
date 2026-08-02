@@ -35,6 +35,20 @@ unset \
 
 bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$JOURNEY_RESUME"
 
+for resumed_activity_script in \
+  "$ANDROID_APP_ROUTE" \
+  "$CRATE/journey-compare.sh" \
+  "$JOURNEY_RESUME" \
+  "$CRATE/journey-switch.sh" \
+  "$CRATE/storage-notice-check.sh"; do
+  if sed '/^[[:space:]]*#/d' "$resumed_activity_script" \
+    | grep -E 'grep .*ResumedActivity' \
+    | grep -Fv '(topResumedActivity|mResumedActivity)' >/dev/null; then
+    echo "$(basename "$resumed_activity_script") must match only topResumedActivity/mResumedActivity, not broad ResumedActivity history" >&2
+    exit 1
+  fi
+done
+
 # shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
 if sed '/^[[:space:]]*#/d' "$ANDROID_SMOKE" | grep -E 'push "\$CHECKPOINT_(CONFIG|LIBRARY)"' >/dev/null; then
   echo 'android-smoke.sh must not push checkpoint config.yaml/library.yaml in the general device smoke path' >&2
@@ -326,20 +340,38 @@ case "$subcommand" in
         fi
         ;;
       dumpsys\ activity\ activities*)
+        resumed_activity_line() {
+          local component="$1"
+          case "${KORRI_DEVICE_SCRIPT_REVIEW_RESUMED_ACTIVITY_FORMAT:-modern}" in
+            modern)
+              printf 'topResumedActivity=ActivityRecord{1 u0 %s t1}\n' "$component"
+              ;;
+            android12)
+              printf '  mResumedActivity: ActivityRecord{1 u0 %s t1}\n' "$component"
+              ;;
+            *)
+              exit 64
+              ;;
+          esac
+        }
         case "$(cat "$state_file" 2>/dev/null || true)" in
           game)
-            printf 'topResumedActivity=ActivityRecord{1 u0 %s/.MainActivity t1}\n' "${KORRI_DEVICE_SCRIPT_REVIEW_GAME:-review.game}"
+            activity_line="$(resumed_activity_line "${KORRI_DEVICE_SCRIPT_REVIEW_GAME:-review.game}/.MainActivity")"
             ;;
           home)
-            printf 'topResumedActivity=ActivityRecord{1 u0 com.android.launcher/.Launcher t1}\n'
+            activity_line="$(resumed_activity_line 'com.android.launcher/.Launcher')"
             ;;
           korri)
-            printf 'topResumedActivity=ActivityRecord{1 u0 com.simonwjackson.korri.debug/com.limelight.KorriShellActivity t1}\n'
+            activity_line="$(resumed_activity_line 'com.simonwjackson.korri.debug/com.limelight.KorriShellActivity')"
             ;;
           *)
-            printf 'topResumedActivity=ActivityRecord{1 u0 com.android.launcher/.Launcher t1}\n'
+            activity_line="$(resumed_activity_line 'com.android.launcher/.Launcher')"
             ;;
         esac
+        if [[ "$shell_command" == *"grep -m1 topResumedActivity"* && "$activity_line" != *topResumedActivity* ]]; then
+          exit 1
+        fi
+        printf '%s\n' "$activity_line"
         ;;
       screencap\ -p\ /sdcard/j.png)
         ;;
@@ -416,7 +448,7 @@ assert_journey_wake_dismiss_precede_explicit_start() {
         open_has_start = 1
       }
     }
-    /^shell:dumpsys activity activities 2>\/dev\/null \| grep -m1 topResumedActivity$/ {
+    index($0, "shell:dumpsys activity activities 2>/dev/null | grep -m1 -E ") == 1 && index($0, "topResumedActivity|mResumedActivity") {
       if (open_has_start) {
         top_polls_after_start += 1
       }
@@ -577,6 +609,7 @@ KORRI_TESSERACT_BIN="$JOURNEY_REVIEW_TESSERACT" \
 KORRI_JOURNEY_EXPECTED_TITLE="$review_title" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_START_COUNT="$review_start_count" \
+KORRI_DEVICE_SCRIPT_REVIEW_RESUMED_ACTIVITY_FORMAT=android12 \
 KORRI_DEVICE_SCRIPT_REVIEW_MAGICK_LOG="$review_magick_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_ADB_LOG="$review_adb_log" \
@@ -918,6 +951,26 @@ case "$subcommand" in
       "test -e '/sdcard/korri-retro/library.yaml'")
         exit 1
         ;;
+      dumpsys\ activity\ activities*)
+        case "${KORRI_DEVICE_SCRIPT_REVIEW_RESUMED_ACTIVITY_FORMAT:-modern}" in
+          modern)
+            activity_line="topResumedActivity=ActivityRecord{1 u0 ${KORRI_ANDROID_APP_PACKAGE:-com.playdigious.tmnt}/.MainActivity t1}"
+            ;;
+          android12)
+            activity_line="  mResumedActivity: ActivityRecord{1 u0 ${KORRI_ANDROID_APP_PACKAGE:-com.playdigious.tmnt}/.MainActivity t1}"
+            ;;
+          *)
+            exit 64
+            ;;
+        esac
+        if [[ "$shell_command" == *"grep -m1 topResumedActivity"* && "$activity_line" != *topResumedActivity* ]]; then
+          exit 1
+        fi
+        printf '%s\n' "$activity_line"
+        ;;
+      pidof\ *)
+        printf '12345\r\n'
+        ;;
     esac
     exit 0
     ;;
@@ -931,6 +984,10 @@ case "$subcommand" in
       exit 0
     fi
     exit 0
+    ;;
+  logcat)
+    printf '08-01 00:00:00.000 I/KorridServer: listening on 127.0.0.1:43210\n'
+    printf '08-01 00:00:00.001 I/KorridServer: debug capability=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n'
     ;;
   *)
     exit 0
@@ -955,6 +1012,34 @@ set -euo pipefail
 printf 'journey:%s\n' "$*" >>"$KORRI_DEVICE_SCRIPT_REVIEW_CHILD_LOG"
 JOURNEY
 chmod +x "$JOURNEY"
+
+SMOKE_SUCCESS="$TMP/smoke-success.sh"
+cat >"$SMOKE_SUCCESS" <<'SMOKE_SUCCESS'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'smoke-success:%s package=%s library=%s\n' "$*" "${KORRI_ANDROID_APP_PACKAGE:-}" "${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-}" >>"$KORRI_DEVICE_SCRIPT_REVIEW_CHILD_LOG"
+SMOKE_SUCCESS
+chmod +x "$SMOKE_SUCCESS"
+
+ROUTE_REVIEW_BIN="$TMP/route-bin"
+mkdir -p "$ROUTE_REVIEW_BIN"
+cat >"$ROUTE_REVIEW_BIN/curl" <<'ROUTE_CURL'
+#!/usr/bin/env bash
+set -euo pipefail
+request="$*"
+case "$request" in
+  *system.health*)
+    printf '{"_tag":"system.health","outcome":{"_tag":"Ok","payload":{"version":"review"}}}\n'
+    ;;
+  *app.local-games.list*)
+    printf '{"_tag":"app.local-games.list","outcome":{"_tag":"Ok","payload":{"games":[{"id":"tmnt-shredders-revenge"},{"id":"wl4"}]}}}\n'
+    ;;
+  *)
+    exit 64
+    ;;
+esac
+ROUTE_CURL
+chmod +x "$ROUTE_REVIEW_BIN/curl"
 
 ALT_CHECKPOINT_LIBRARY="$TMP/alternate-library.yaml"
 printf 'alternate installed app checkpoint library\n' >"$ALT_CHECKPOINT_LIBRARY"
@@ -1036,5 +1121,39 @@ if ! grep -F -- "smoke:--expect-installed-route device-1 package=review.android.
   echo 'android-app-route-check.sh did not propagate alternate package/library environment to android-smoke.sh' >&2
   exit 1
 fi
+
+run_route_resumed_activity_review() {
+  local format="$1"
+  local expected_field="$2"
+  local label="$3"
+  local out="$TMP/route-$label.out"
+  local err="$TMP/route-$label.err"
+  : >"$ADB_LOG"
+  : >"$CHILD_LOG"
+  PATH="$ROUTE_REVIEW_BIN:$PATH" \
+  KORRI_ADB_BIN="$FAKE_ADB" \
+  KORRI_ANDROID_APP_ROUTE_SMOKE_SH="$SMOKE_SUCCESS" \
+  KORRI_ANDROID_APP_ROUTE_JOURNEY_SH="$JOURNEY" \
+  KORRI_DEVICE_SCRIPT_REVIEW_ADB_LOG="$ADB_LOG" \
+  KORRI_DEVICE_SCRIPT_REVIEW_CHILD_LOG="$CHILD_LOG" \
+  KORRI_DEVICE_SCRIPT_REVIEW_RESUMED_ACTIVITY_FORMAT="$format" \
+  KORRI_ROOT="$ROOT" \
+    bash "$ANDROID_APP_ROUTE" device-1 >"$out" 2>"$err"
+  if ! grep -F -- "$expected_field" "$out" >/dev/null; then
+    echo "android-app-route-check.sh did not preserve $expected_field foreground evidence" >&2
+    cat "$out" >&2
+    cat "$err" >&2
+    exit 1
+  fi
+  if ! grep -F -- 'Android app route health while game foreground:' "$out" >/dev/null; then
+    echo 'android-app-route-check.sh did not complete foreground health assertions under fake adb review' >&2
+    cat "$out" >&2
+    cat "$err" >&2
+    exit 1
+  fi
+}
+
+run_route_resumed_activity_review modern topResumedActivity modern
+run_route_resumed_activity_review android12 mResumedActivity android12
 
 printf 'Android device script review: ok\n'
