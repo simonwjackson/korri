@@ -28,7 +28,6 @@ ANDROID_SMOKE="${KORRI_ANDROID_APP_ROUTE_SMOKE_SH:-$ROOT/services/korrid/android
 JOURNEY_RESUME="${KORRI_ANDROID_APP_ROUTE_JOURNEY_SH:-$ROOT/services/korrid/journey-resume.sh}"
 ADB_BIN="${KORRI_ADB_BIN:-$(command -v adb)}"
 CURL=(curl --connect-timeout 2 --max-time 5 --retry 2 --retry-connrefused)
-ADB=("$ADB_BIN" -s "$SERIAL")
 CONFIG_WAS_PRESENT=false
 LIBRARY_WAS_PRESENT=false
 CHECKPOINT_RESTORE_NEEDED=false
@@ -70,38 +69,73 @@ acquire_device_lock() {
 
 release_device_lock() {
   if [[ "$LOCK_ACQUIRED" != true ]]; then
-    return
+    return 0
   fi
-  adb_target -s "$SERIAL" shell "rm -rf '$LOCK_REMOTE'" >/dev/null 2>&1 || true
+  if ! adb_target -s "$SERIAL" shell "rm -rf '$LOCK_REMOTE'" >/dev/null 2>&1; then
+    echo "Android app route check failed to release the device config lock at $LOCK_REMOTE" >&2
+    return 1
+  fi
   LOCK_ACQUIRED=false
 }
 
 restore_checkpoint_files() {
+  local restore_failed=false
+
   if [[ "$CHECKPOINT_RESTORE_NEEDED" != true ]]; then
-    return
+    return 0
   fi
 
   if [[ "$CONFIG_WAS_PRESENT" == true ]]; then
-    adb_target -s "$SERIAL" shell "cp '$CHECKPOINT_BACKUP_DIR/config.yaml' '$CONFIG_REMOTE'" >/dev/null 2>&1 || true
+    if ! adb_target -s "$SERIAL" shell "cp '$CHECKPOINT_BACKUP_DIR/config.yaml' '$CONFIG_REMOTE'" >/dev/null 2>&1; then
+      echo "Android app route check failed to restore prior config.yaml" >&2
+      restore_failed=true
+    fi
   else
-    adb_target -s "$SERIAL" shell "rm -f '$CONFIG_REMOTE'" >/dev/null 2>&1 || true
+    if ! adb_target -s "$SERIAL" shell "rm -f '$CONFIG_REMOTE'" >/dev/null 2>&1; then
+      echo "Android app route check failed to remove created config.yaml" >&2
+      restore_failed=true
+    fi
   fi
 
   if [[ "$LIBRARY_WAS_PRESENT" == true ]]; then
-    adb_target -s "$SERIAL" shell "cp '$CHECKPOINT_BACKUP_DIR/library.yaml' '$LIBRARY_REMOTE'" >/dev/null 2>&1 || true
+    if ! adb_target -s "$SERIAL" shell "cp '$CHECKPOINT_BACKUP_DIR/library.yaml' '$LIBRARY_REMOTE'" >/dev/null 2>&1; then
+      echo "Android app route check failed to restore prior library.yaml" >&2
+      restore_failed=true
+    fi
   else
-    adb_target -s "$SERIAL" shell "rm -f '$LIBRARY_REMOTE'" >/dev/null 2>&1 || true
+    if ! adb_target -s "$SERIAL" shell "rm -f '$LIBRARY_REMOTE'" >/dev/null 2>&1; then
+      echo "Android app route check failed to remove created library.yaml" >&2
+      restore_failed=true
+    fi
   fi
 
-  adb_target -s "$SERIAL" shell "rm -rf '$CHECKPOINT_BACKUP_DIR'" >/dev/null 2>&1 || true
+  if ! adb_target -s "$SERIAL" shell "rm -rf '$CHECKPOINT_BACKUP_DIR'" >/dev/null 2>&1; then
+    echo "Android app route check failed to remove checkpoint backup directory $CHECKPOINT_BACKUP_DIR" >&2
+    restore_failed=true
+  fi
+
+  [[ "$restore_failed" == false ]]
 }
 
 cleanup() {
+  local status=$?
+  local cleanup_failed=false
+
   if [[ "$FORWARD_ACTIVE" == true ]]; then
     adb_target -s "$SERIAL" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
   fi
-  restore_checkpoint_files
-  release_device_lock
+  if ! restore_checkpoint_files; then
+    cleanup_failed=true
+  fi
+  if ! release_device_lock; then
+    cleanup_failed=true
+  fi
+
+  if [[ "$cleanup_failed" == true && "$status" -eq 0 ]]; then
+    echo "Android app route check cleanup failed after successful run; fixed config may need manual inspection" >&2
+    exit 1
+  fi
+  exit "$status"
 }
 trap cleanup EXIT
 
@@ -142,7 +176,7 @@ if ! timeout 15 "$ADB_BIN" -s "$SERIAL" wait-for-device; then
   echo "Android target is not reachable: $SERIAL" >&2
   exit 1
 fi
-if ! "${ADB[@]}" shell pm path "$GAME" | grep -q '^package:'; then
+if ! adb_shell_capture "pm path $GAME" | grep -q '^package:'; then
   echo "Required Android package is not installed: $GAME" >&2
   echo "Install it on the target device, then rerun this check. The check will not install, uninstall, clear, or otherwise mutate the game package." >&2
   exit 1

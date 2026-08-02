@@ -33,7 +33,6 @@ PORTAL_SELECTION_RESET_STEPS=12
 ADB_BIN="${KORRI_ADB_BIN:-adb}"
 MAGICK_BIN="${KORRI_MAGICK_BIN:-magick}"
 TESSERACT_BIN="${KORRI_TESSERACT_BIN:-tesseract}"
-ADB=("$ADB_BIN" -s "$SERIAL")
 PRIOR_AUTO=""
 PRIOR_USER=""
 ROTATION_RESTORE_NEEDED=false
@@ -74,7 +73,7 @@ if ! command -v "$TESSERACT_BIN" >/dev/null 2>&1; then
 fi
 
 mkdir -p "$SHOTS"
-[[ "$SERIAL" == *:* ]] && { "$ADB_BIN" connect "$SERIAL" >/dev/null || true; }
+[[ "$SERIAL" == *:* ]] && { timeout 15 "$ADB_BIN" connect "$SERIAL" >/dev/null || true; }
 adb_cmd wait-for-device
 if ! adb_shell "pm path $GAME" | grep -q '^package:'; then
   echo "FAILED: required game package is not installed: $GAME"
@@ -89,7 +88,7 @@ PRIOR_USER="$(adb_shell settings get system user_rotation | tr -d "\r\n")"
 ROTATION_RESTORE_NEEDED=true
 adb_shell "settings put system accelerometer_rotation 0; settings put system user_rotation 0"
 
-pid_of() { "${ADB[@]}" shell "pidof $GAME || { status=\$?; [ \"\$status\" -eq 1 ] && exit 0; exit \"\$status\"; }" 2>/dev/null | tr -d '\r\n'; }
+pid_of() { adb_shell "pidof $GAME || { status=\$?; [ \"\$status\" -eq 1 ] && exit 0; exit \"\$status\"; }" 2>/dev/null | tr -d '\r\n'; }
 top_of() {
   adb_shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" \
     | resumed_component_from_line

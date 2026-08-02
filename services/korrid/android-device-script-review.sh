@@ -96,6 +96,21 @@ if ! grep -F '"$JOURNEY_RESUME" "$SERIAL" "$GAME"' "$ANDROID_APP_ROUTE" >/dev/nu
   echo 'android-app-route-check.sh must pass the configured Android app package into journey-resume.sh' >&2
   exit 1
 fi
+# shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
+if ! grep -F 'adb_shell_capture "pm path $GAME"' "$ANDROID_APP_ROUTE" >/dev/null; then
+  echo 'android-app-route-check.sh must run the package probe through the bounded adb helper' >&2
+  exit 1
+fi
+# shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
+if ! grep -F 'timeout 15 "$ADB_BIN" connect "$SERIAL"' "$JOURNEY_RESUME" >/dev/null; then
+  echo 'journey-resume.sh must bound wireless adb connect attempts' >&2
+  exit 1
+fi
+# shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
+if ! grep -F 'pid_of() { adb_shell "pidof $GAME' "$JOURNEY_RESUME" >/dev/null; then
+  echo 'journey-resume.sh must route pid_of through the bounded adb shell helper' >&2
+  exit 1
+fi
 if sed '/^[[:space:]]*#/d' "$JOURNEY_RESUME" | grep -F 'monkey -p' >/dev/null; then
   echo 'journey-resume.sh must not use monkey launcher activation for Korri foregrounding' >&2
   exit 1
@@ -174,8 +189,9 @@ PIDOF_ADB
 chmod +x "$PIDOF_ADB"
 # shellcheck disable=SC2034 # Used by the sourced journey-resume.sh pid_of function.
 GAME=com.playdigious.tmnt
-# shellcheck disable=SC2034 # Used by the sourced journey-resume.sh pid_of function.
-ADB=("$PIDOF_ADB" -s device-1)
+adb_shell() {
+  "$PIDOF_ADB" -s device-1 shell "$@"
+}
 export KORRI_DEVICE_SCRIPT_REVIEW_PIDOF_BIN="$PIDOF_BIN"
 # shellcheck source=/dev/null
 source "$PID_OF_FUNCTION"
@@ -950,6 +966,14 @@ case "$subcommand" in
         exit 75
       fi
     fi
+    if [[ "${KORRI_DEVICE_SCRIPT_REVIEW_CLEANUP_FAIL:-}" == restore && "$shell_command" == *"cp '/sdcard/korri-retro/.android-app-route-check-backup-"*"/config.yaml' '/sdcard/korri-retro/config.yaml'"* ]]; then
+      echo 'fake adb: restore config failed' >&2
+      exit 66
+    fi
+    if [[ "${KORRI_DEVICE_SCRIPT_REVIEW_CLEANUP_FAIL:-}" == unlock && "$shell_command" == "rm -rf '/sdcard/korri-retro/.android-app-route-check.lock'" ]]; then
+      echo 'fake adb: unlock failed' >&2
+      exit 67
+    fi
     case "$shell_command" in
       pm\ path*)
         package="${shell_command#pm path }"
@@ -1135,6 +1159,102 @@ if ! grep -F -- 'If this is stale, remove it manually only after verifying no ro
 fi
 if grep -E -- "push .* /sdcard/korri-retro/(config|library)\.yaml|cp '/sdcard/korri-retro/(config|library)\.yaml'" "$ADB_LOG" >/dev/null; then
   echo 'android-app-route-check.sh mutated fixed config files after failing to acquire the device lock' >&2
+  exit 1
+fi
+
+: >"$ADB_LOG"
+: >"$CHILD_LOG"
+set +e
+KORRI_ADB_BIN="$FAKE_ADB" \
+KORRI_ANDROID_APP_ROUTE_SMOKE_SH="$SMOKE" \
+KORRI_ANDROID_APP_ROUTE_JOURNEY_SH="$JOURNEY" \
+KORRI_DEVICE_SCRIPT_REVIEW_ADB_LOG="$ADB_LOG" \
+KORRI_DEVICE_SCRIPT_REVIEW_CHILD_LOG="$CHILD_LOG" \
+KORRI_DEVICE_SCRIPT_REVIEW_CLEANUP_FAIL=restore \
+KORRI_ROOT="$ROOT" \
+  "$ANDROID_APP_ROUTE" device-1 >"$TMP/route-original-failure-cleanup.out" 2>"$TMP/route-original-failure-cleanup.err"
+original_cleanup_status=$?
+set -e
+if [[ "$original_cleanup_status" -ne 42 ]]; then
+  echo "android-app-route-check.sh failed to preserve original nonzero status when cleanup also failed (got $original_cleanup_status)" >&2
+  cat "$TMP/route-original-failure-cleanup.out" >&2
+  cat "$TMP/route-original-failure-cleanup.err" >&2
+  exit 1
+fi
+if ! grep -F -- 'Android app route check failed to restore prior config.yaml' "$TMP/route-original-failure-cleanup.err" >/dev/null; then
+  echo 'android-app-route-check.sh did not emit a clear restore failure while preserving original failure status' >&2
+  cat "$TMP/route-original-failure-cleanup.err" >&2
+  exit 1
+fi
+if grep -F -- 'cleanup failed after successful run' "$TMP/route-original-failure-cleanup.err" >/dev/null; then
+  echo 'android-app-route-check.sh treated an original failure as a successful-main cleanup failure' >&2
+  cat "$TMP/route-original-failure-cleanup.err" >&2
+  exit 1
+fi
+
+: >"$ADB_LOG"
+: >"$CHILD_LOG"
+set +e
+PATH="$ROUTE_REVIEW_BIN:$PATH" \
+KORRI_ADB_BIN="$FAKE_ADB" \
+KORRI_ANDROID_APP_ROUTE_SMOKE_SH="$SMOKE_SUCCESS" \
+KORRI_ANDROID_APP_ROUTE_JOURNEY_SH="$JOURNEY" \
+KORRI_DEVICE_SCRIPT_REVIEW_ADB_LOG="$ADB_LOG" \
+KORRI_DEVICE_SCRIPT_REVIEW_CHILD_LOG="$CHILD_LOG" \
+KORRI_DEVICE_SCRIPT_REVIEW_CLEANUP_FAIL=restore \
+KORRI_ROOT="$ROOT" \
+  bash "$ANDROID_APP_ROUTE" device-1 >"$TMP/route-success-cleanup-failure.out" 2>"$TMP/route-success-cleanup-failure.err"
+success_cleanup_status=$?
+set -e
+if [[ "$success_cleanup_status" -eq 0 ]]; then
+  echo 'android-app-route-check.sh reported success even though cleanup restore failed after a successful run' >&2
+  cat "$TMP/route-success-cleanup-failure.out" >&2
+  cat "$TMP/route-success-cleanup-failure.err" >&2
+  exit 1
+fi
+if ! grep -F -- 'Android app route check failed to restore prior config.yaml' "$TMP/route-success-cleanup-failure.err" >/dev/null; then
+  echo 'android-app-route-check.sh did not emit a clear successful-main restore failure' >&2
+  cat "$TMP/route-success-cleanup-failure.err" >&2
+  exit 1
+fi
+if ! grep -F -- 'Android app route check cleanup failed after successful run' "$TMP/route-success-cleanup-failure.err" >/dev/null; then
+  echo 'android-app-route-check.sh did not turn successful-main cleanup failure into an explicit nonzero failure' >&2
+  cat "$TMP/route-success-cleanup-failure.err" >&2
+  exit 1
+fi
+if ! grep -F -- "rm -rf '/sdcard/korri-retro/.android-app-route-check.lock'" "$ADB_LOG" >/dev/null; then
+  echo 'android-app-route-check.sh did not attempt to release the route-check lock after a restore cleanup failure' >&2
+  exit 1
+fi
+
+: >"$ADB_LOG"
+: >"$CHILD_LOG"
+set +e
+PATH="$ROUTE_REVIEW_BIN:$PATH" \
+KORRI_ADB_BIN="$FAKE_ADB" \
+KORRI_ANDROID_APP_ROUTE_SMOKE_SH="$SMOKE_SUCCESS" \
+KORRI_ANDROID_APP_ROUTE_JOURNEY_SH="$JOURNEY" \
+KORRI_DEVICE_SCRIPT_REVIEW_ADB_LOG="$ADB_LOG" \
+KORRI_DEVICE_SCRIPT_REVIEW_CHILD_LOG="$CHILD_LOG" \
+KORRI_DEVICE_SCRIPT_REVIEW_CLEANUP_FAIL=unlock \
+KORRI_ROOT="$ROOT" \
+  bash "$ANDROID_APP_ROUTE" device-1 >"$TMP/route-success-unlock-failure.out" 2>"$TMP/route-success-unlock-failure.err"
+success_unlock_status=$?
+set -e
+if [[ "$success_unlock_status" -eq 0 ]]; then
+  echo 'android-app-route-check.sh reported success even though cleanup unlock failed after a successful run' >&2
+  cat "$TMP/route-success-unlock-failure.out" >&2
+  cat "$TMP/route-success-unlock-failure.err" >&2
+  exit 1
+fi
+if ! grep -F -- 'Android app route check failed to release the device config lock' "$TMP/route-success-unlock-failure.err" >/dev/null; then
+  echo 'android-app-route-check.sh did not emit a clear successful-main unlock failure' >&2
+  cat "$TMP/route-success-unlock-failure.err" >&2
+  exit 1
+fi
+if ! grep -F -- 'Android app route check cleanup failed after successful run' "$TMP/route-success-unlock-failure.err" >/dev/null; then
+  echo 'android-app-route-check.sh did not turn successful-main unlock failure into an explicit nonzero failure' >&2
+  cat "$TMP/route-success-unlock-failure.err" >&2
   exit 1
 fi
 
