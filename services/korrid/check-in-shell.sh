@@ -16,7 +16,17 @@ cargo test
 KORRI_CONFIG_REVIEW_IN_SHELL=1 "$CRATE/config-snapshot-review.sh"
 KORRI_PLUGIN_REVIEW_IN_SHELL=1 "$CRATE/plugin-registry-review.sh"
 KORRI_PLUGIN_ROUTE_REVIEW_IN_SHELL=1 "$CRATE/plugin-route-review.sh"
-"$CRATE/android-device-script-review.sh"
+(
+  hostile_android_review_tmp="$(mktemp -d)"
+  trap 'rm -rf "$hostile_android_review_tmp"' EXIT
+  hostile_checkpoint_library="$hostile_android_review_tmp/ambient-library.yaml"
+  printf 'hostile ambient checkpoint library\n' >"$hostile_checkpoint_library"
+  KORRI_ANDROID_APP_PACKAGE=ambient.hostile.package \
+  KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY="$hostile_checkpoint_library" \
+  KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_START_MODE=always-fail \
+  KORRI_JOURNEY_EXPECTED_TITLE='Ambient Hostile Title' \
+    "$CRATE/android-device-script-review.sh"
+)
 typeshare . --lang=typescript --output-file="$GENERATED_TS"
 # Typeshare 1.13 emits trailing spaces and an extra final blank line.
 sed -i -e 's/[[:space:]]\+$//' -e '${/^$/d;}' "$GENERATED_TS"

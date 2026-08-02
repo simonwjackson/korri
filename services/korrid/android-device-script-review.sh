@@ -10,6 +10,29 @@ ANDROID_SMOKE="$CRATE/android-smoke.sh"
 ANDROID_APP_ROUTE="$CRATE/android-app-route-check.sh"
 JOURNEY_RESUME="$CRATE/journey-resume.sh"
 
+# The review's canonical cases must stay deterministic even when a developer's
+# shell is primed for an alternate device-gate run. Individual alternate cases
+# below set their own overrides explicitly.
+for name in "${!KORRI_DEVICE_SCRIPT_REVIEW_@}"; do
+  unset "$name"
+done
+unset \
+  ANDROID_SERIAL \
+  KORRI_ADB_BIN \
+  KORRI_ANDROID_APK \
+  KORRI_ANDROID_APP_PACKAGE \
+  KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY \
+  KORRI_ANDROID_APP_ROUTE_HOST_PORT \
+  KORRI_ANDROID_APP_ROUTE_JOURNEY_SH \
+  KORRI_ANDROID_APP_ROUTE_SMOKE_SH \
+  KORRI_ANDROID_DEVICE \
+  KORRI_ANDROID_SMOKE_LIBRARY \
+  KORRI_ANDROID_UPSTREAMS_CONFIG \
+  KORRI_JOURNEY_EXPECTED_TITLE \
+  KORRI_MAGICK_BIN \
+  KORRI_TESSERACT_BIN \
+  SHOTS
+
 bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$JOURNEY_RESUME"
 
 # shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
