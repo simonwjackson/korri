@@ -25,7 +25,13 @@ if [[ -z "$EXPECTED_PORTAL_TITLE" ]]; then
   EXPECTED_PORTAL_TITLE="TMNT: Shredder's Revenge"
 fi
 ADB_BIN="${KORRI_ADB_BIN:-adb}"
+TESSERACT_BIN="${KORRI_TESSERACT_BIN:-tesseract}"
 ADB=("$ADB_BIN" -s "$SERIAL")
+
+if ! command -v "$TESSERACT_BIN" >/dev/null 2>&1; then
+  echo "FAILED: tesseract binary is required for portal screenshot OCR ($TESSERACT_BIN)"
+  exit 1
+fi
 
 mkdir -p "$SHOTS"
 [[ "$SERIAL" == *:* ]] && { "$ADB_BIN" connect "$SERIAL" >/dev/null || true; }
@@ -55,6 +61,16 @@ dump_ui() {
   local label="$1"
   "${ADB[@]}" shell "uiautomator dump /sdcard/j.xml" >/dev/null
   "${ADB[@]}" pull /sdcard/j.xml "$SHOTS/$label.xml" >/dev/null
+}
+ocr_shot() {
+  local label="$1"
+  "$TESSERACT_BIN" "$SHOTS/$label.png" stdout >"$SHOTS/$label.ocr.txt"
+}
+print_portal_evidence_paths() {
+  local label="$1"
+  echo "        screenshot: $SHOTS/$label.png"
+  echo "        uiautomator: $SHOTS/$label.xml"
+  echo "        ocr: $SHOTS/$label.ocr.txt"
 }
 note() { printf '%-30s pid=%-8s top=%s\n' "$1" "$(pid_of)" "$(top_of)"; }
 
@@ -88,10 +104,14 @@ assert_portal_exposes_title() {
   local label="$1"
   local expected="$2"
   dump_ui "$label"
-  if ! grep -F "$expected" "$SHOTS/$label.xml" >/dev/null; then
-    echo "FAILED: portal did not expose $expected before D-pad activation"
-    echo "        see $SHOTS/$label.png"
-    echo "        see $SHOTS/$label.xml"
+  if ! ocr_shot "$label"; then
+    echo "FAILED: portal screenshot OCR failed before D-pad activation"
+    print_portal_evidence_paths "$label"
+    exit 1
+  fi
+  if ! grep -F "$expected" "$SHOTS/$label.ocr.txt" >/dev/null; then
+    echo "FAILED: portal screenshot OCR did not expose $expected before D-pad activation"
+    print_portal_evidence_paths "$label"
     exit 1
   fi
 }

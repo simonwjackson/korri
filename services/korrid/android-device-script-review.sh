@@ -142,6 +142,215 @@ if [[ "$pid_error_status" -eq 0 ]]; then
   exit 1
 fi
 
+# shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
+if ! grep -F 'TESSERACT_BIN="${KORRI_TESSERACT_BIN:-tesseract}"' "$JOURNEY_RESUME" >/dev/null; then
+  echo 'journey-resume.sh must expose a tesseract binary override seam for deterministic review' >&2
+  exit 1
+fi
+# shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
+if ! grep -F 'ocr_shot "$label"' "$JOURNEY_RESUME" >/dev/null; then
+  echo 'journey-resume.sh must OCR the portal screenshot before D-pad activation' >&2
+  exit 1
+fi
+if ! sed -n '/android-app-route-check = {/,/^    };/p' "$ROOT/nix/tasks.nix" | grep -F 'pkgs.tesseract' >/dev/null; then
+  echo 'android-app-route-check task must put tesseract on PATH for the journey gate' >&2
+  exit 1
+fi
+if ! sed -n '/journey-resume = deviceScript/,/^    };/p' "$ROOT/nix/tasks.nix" | grep -F 'pkgs.tesseract' >/dev/null; then
+  echo 'journey-resume task must put tesseract on PATH for the portal OCR gate' >&2
+  exit 1
+fi
+
+JOURNEY_REVIEW_BIN="$TMP/journey-bin"
+JOURNEY_REVIEW_ADB="$TMP/journey-adb"
+JOURNEY_REVIEW_TESSERACT="$TMP/journey-tesseract"
+JOURNEY_REVIEW_SLEEP="$JOURNEY_REVIEW_BIN/sleep"
+mkdir -p "$JOURNEY_REVIEW_BIN"
+cat >"$JOURNEY_REVIEW_SLEEP" <<'JOURNEY_SLEEP'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+JOURNEY_SLEEP
+chmod +x "$JOURNEY_REVIEW_SLEEP"
+cat >"$JOURNEY_REVIEW_TESSERACT" <<'JOURNEY_TESSERACT'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"$KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG"
+printf '%s\n' "${KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT:-}"
+JOURNEY_TESSERACT
+chmod +x "$JOURNEY_REVIEW_TESSERACT"
+cat >"$JOURNEY_REVIEW_ADB" <<'JOURNEY_ADB'
+#!/usr/bin/env bash
+set -euo pipefail
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -s)
+      shift 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+subcommand="${1:-}"
+if [[ $# -gt 0 ]]; then
+  shift
+fi
+state_file="$KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE"
+case "$subcommand" in
+  wait-for-device|connect)
+    exit 0
+    ;;
+  pull)
+    source_path="${1:?}"
+    destination="${2:?}"
+    mkdir -p "$(dirname "$destination")"
+    case "$source_path" in
+      /sdcard/j.png)
+        printf 'review png\n' >"$destination"
+        ;;
+      /sdcard/j.xml)
+        printf '<hierarchy><node class="android.webkit.WebView" /></hierarchy>\n' >"$destination"
+        ;;
+      *)
+        exit 1
+        ;;
+    esac
+    ;;
+  shell)
+    shell_command="$*"
+    case "$shell_command" in
+      pm\ path*)
+        printf 'package:/data/app/%s/base.apk\n' "${KORRI_DEVICE_SCRIPT_REVIEW_GAME:-review.game}"
+        ;;
+      settings\ get\ system*)
+        printf '0\r\n'
+        ;;
+      settings\ put\ system*)
+        ;;
+      pidof\ *)
+        if [[ "$(cat "$state_file" 2>/dev/null || true)" == game ]]; then
+          printf '12345\r\n'
+        fi
+        ;;
+      dumpsys\ activity\ activities*)
+        case "$(cat "$state_file" 2>/dev/null || true)" in
+          game)
+            printf 'topResumedActivity=ActivityRecord{1 u0 %s/.MainActivity t1}\n' "${KORRI_DEVICE_SCRIPT_REVIEW_GAME:-review.game}"
+            ;;
+          home)
+            printf 'topResumedActivity=ActivityRecord{1 u0 com.android.launcher/.Launcher t1}\n'
+            ;;
+          *)
+            printf 'topResumedActivity=ActivityRecord{1 u0 com.simonwjackson.korri.debug/.MainActivity t1}\n'
+            ;;
+        esac
+        ;;
+      screencap\ -p\ /sdcard/j.png)
+        ;;
+      uiautomator\ dump\ /sdcard/j.xml)
+        ;;
+      monkey\ -p*)
+        printf 'korri\n' >"$state_file"
+        ;;
+      input\ keyevent\ KEYCODE_DPAD_CENTER)
+        printf 'game\n' >"$state_file"
+        ;;
+      input\ keyevent\ KEYCODE_HOME)
+        printf 'home\n' >"$state_file"
+        ;;
+      am\ force-stop*)
+        printf 'korri\n' >"$state_file"
+        ;;
+      *)
+        ;;
+    esac
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+JOURNEY_ADB
+chmod +x "$JOURNEY_REVIEW_ADB"
+
+review_title='Review OCR Title'
+review_game='review.android.game'
+review_shots="$TMP/journey-success"
+review_state="$TMP/journey-success.state"
+review_tesseract_log="$TMP/journey-success-tesseract.log"
+printf 'korri\n' >"$review_state"
+PATH="$JOURNEY_REVIEW_BIN:$PATH" \
+KORRI_ADB_BIN="$JOURNEY_REVIEW_ADB" \
+KORRI_TESSERACT_BIN="$JOURNEY_REVIEW_TESSERACT" \
+KORRI_JOURNEY_EXPECTED_TITLE="$review_title" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
+KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
+KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT="$review_title" \
+KORRI_DEVICE_SCRIPT_REVIEW_GAME="$review_game" \
+SHOTS="$review_shots" \
+  "$JOURNEY_RESUME" device-1 "$review_game" >"$TMP/journey-success.out" 2>"$TMP/journey-success.err"
+if ! grep -F -- "$review_shots/1-korri-home.png stdout" "$review_tesseract_log" >/dev/null; then
+  echo 'journey-resume.sh did not OCR the captured portal screenshot' >&2
+  exit 1
+fi
+if ! grep -Fx -- "$review_title" "$review_shots/1-korri-home.ocr.txt" >/dev/null; then
+  echo 'journey-resume.sh did not save portal OCR text beside screenshot evidence' >&2
+  exit 1
+fi
+if ! test -f "$review_shots/1-korri-home.xml"; then
+  echo 'journey-resume.sh did not keep UIAutomator XML evidence while using OCR for assertion' >&2
+  exit 1
+fi
+
+review_shots="$TMP/journey-failure"
+review_state="$TMP/journey-failure.state"
+review_tesseract_log="$TMP/journey-failure-tesseract.log"
+printf 'korri\n' >"$review_state"
+set +e
+PATH="$JOURNEY_REVIEW_BIN:$PATH" \
+KORRI_ADB_BIN="$JOURNEY_REVIEW_ADB" \
+KORRI_TESSERACT_BIN="$JOURNEY_REVIEW_TESSERACT" \
+KORRI_JOURNEY_EXPECTED_TITLE="$review_title" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
+KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
+KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT='different review text' \
+KORRI_DEVICE_SCRIPT_REVIEW_GAME="$review_game" \
+SHOTS="$review_shots" \
+  "$JOURNEY_RESUME" device-1 "$review_game" >"$TMP/journey-failure.out" 2>"$TMP/journey-failure.err"
+journey_failure_status=$?
+set -e
+if [[ "$journey_failure_status" -eq 0 ]]; then
+  echo 'journey-resume.sh accepted a portal screenshot OCR result without the expected title' >&2
+  exit 1
+fi
+journey_failure_evidence="$TMP/journey-failure.evidence"
+cat "$TMP/journey-failure.out" "$TMP/journey-failure.err" >"$journey_failure_evidence"
+for evidence_path in \
+  "$review_shots/1-korri-home.png" \
+  "$review_shots/1-korri-home.xml" \
+  "$review_shots/1-korri-home.ocr.txt"; do
+  if ! grep -F -- "$evidence_path" "$journey_failure_evidence" >/dev/null; then
+    echo "journey-resume.sh failure did not print evidence path: $evidence_path" >&2
+    exit 1
+  fi
+done
+
+observed_home=/tmp/korri-journey/1-korri-home.png
+if [[ -f "$observed_home" ]] && command -v tesseract >/dev/null 2>&1; then
+  observed_ocr="$TMP/observed-korri-home.ocr.txt"
+  default_title="$(awk -F'"' '/EXPECTED_PORTAL_TITLE="TMNT:/ { print $2; exit }' "$JOURNEY_RESUME")"
+  if [[ -z "$default_title" ]]; then
+    echo 'journey-resume.sh default expected portal title could not be recovered for observed screenshot review' >&2
+    exit 1
+  fi
+  tesseract "$observed_home" stdout >"$observed_ocr" 2>"$TMP/observed-korri-home.ocr.err"
+  if ! grep -F -- "$default_title" "$observed_ocr" >/dev/null; then
+    echo "observed portal screenshot OCR did not contain expected title: $observed_home" >&2
+    echo "        ocr: $observed_ocr" >&2
+    exit 1
+  fi
+fi
+
 # shellcheck source=/dev/null
 KORRI_ANDROID_SMOKE_LIBRARY=true source "$ANDROID_SMOKE"
 

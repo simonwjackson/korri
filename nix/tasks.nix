@@ -212,6 +212,7 @@ let
         pkgs.android-tools
         pkgs.coreutils
         pkgs.nix
+        pkgs.tesseract
       ];
       env.KORRI_PORTAL_BUNDLE = "${packages.portal-bundle}/bin/portal-bundle";
       usageSuffix = " -- <adb-serial>";
@@ -303,6 +304,7 @@ let
       runtimeInputs = [
         pkgs.gnugrep
         pkgs.gnused
+        pkgs.tesseract
       ];
     };
 
