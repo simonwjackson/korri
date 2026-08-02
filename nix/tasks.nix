@@ -211,6 +211,7 @@ let
       runtimeInputs = [
         pkgs.android-tools
         pkgs.coreutils
+        pkgs.imagemagick
         pkgs.nix
         pkgs.tesseract
       ];
@@ -304,6 +305,7 @@ let
       runtimeInputs = [
         pkgs.gnugrep
         pkgs.gnused
+        pkgs.imagemagick
         pkgs.tesseract
       ];
     };

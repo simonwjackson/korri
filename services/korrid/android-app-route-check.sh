@@ -1,5 +1,5 @@
 #!/usr/bin/env nix-shell
-#! nix-shell -i bash -p bash android-tools coreutils curl gnugrep gnused jq tesseract
+#! nix-shell -i bash -p bash android-tools coreutils curl gnugrep gnused imagemagick jq tesseract
 # shellcheck shell=bash
 # Canonical installed Android application route proof.
 #

@@ -24,12 +24,17 @@ EXPECTED_PORTAL_TITLE="${KORRI_JOURNEY_EXPECTED_TITLE:-}"
 if [[ -z "$EXPECTED_PORTAL_TITLE" ]]; then
   EXPECTED_PORTAL_TITLE="TMNT: Shredder's Revenge"
 fi
-NOW_PLAYING_OCR_MARKER="Confirm resumes"
+NOW_PLAYING_OCR_MARKER="resumes"
 PORTAL_SELECTION_RESET_STEPS=12
 ADB_BIN="${KORRI_ADB_BIN:-adb}"
+MAGICK_BIN="${KORRI_MAGICK_BIN:-magick}"
 TESSERACT_BIN="${KORRI_TESSERACT_BIN:-tesseract}"
 ADB=("$ADB_BIN" -s "$SERIAL")
 
+if ! command -v "$MAGICK_BIN" >/dev/null 2>&1; then
+  echo "FAILED: ImageMagick magick binary is required for portal screenshot OCR ($MAGICK_BIN)"
+  exit 1
+fi
 if ! command -v "$TESSERACT_BIN" >/dev/null 2>&1; then
   echo "FAILED: tesseract binary is required for portal screenshot OCR ($TESSERACT_BIN)"
   exit 1
@@ -66,13 +71,46 @@ dump_ui() {
 }
 ocr_shot() {
   local label="$1"
-  "$TESSERACT_BIN" "$SHOTS/$label.png" stdout >"$SHOTS/$label.ocr.txt"
+  "$MAGICK_BIN" "$SHOTS/$label.png" -deskew 40% "$SHOTS/$label.ocr.png"
+  "$TESSERACT_BIN" "$SHOTS/$label.ocr.png" stdout --psm 6 >"$SHOTS/$label.ocr.txt"
 }
 print_portal_evidence_paths() {
   local label="$1"
   echo "        screenshot: $SHOTS/$label.png"
   echo "        uiautomator: $SHOTS/$label.xml"
+  echo "        ocr image: $SHOTS/$label.ocr.png"
   echo "        ocr: $SHOTS/$label.ocr.txt"
+}
+expected_title_tokens() {
+  printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]' | tr -cs '[:alnum:]' '\n' | grep -E '.{3,}' || true
+}
+ocr_text_tokens() {
+  tr '[:upper:]' '[:lower:]' <"$1" | tr -cs '[:alnum:]' '\n' | grep -E '.{3,}' || true
+}
+ocr_contains_token() {
+  local ocr_file="$1"
+  local token="$2"
+  ocr_text_tokens "$ocr_file" | grep -Fxi -- "$token" >/dev/null
+}
+assert_ocr_contains_expected_title_tokens() {
+  local expected="$1"
+  local ocr_file="$2"
+  local ocr_tokens
+  local missing=()
+  local token
+
+  ocr_tokens="$(ocr_text_tokens "$ocr_file")"
+  while IFS= read -r token; do
+    [[ -z "$token" ]] && continue
+    if ! grep -Fx -- "$token" <<<"$ocr_tokens" >/dev/null; then
+      missing+=("$token")
+    fi
+  done < <(expected_title_tokens "$expected")
+
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    printf 'missing expected OCR token(s): %s\n' "${missing[*]}"
+    return 1
+  fi
 }
 note() { printf '%-30s pid=%-8s top=%s\n' "$1" "$(pid_of)" "$(top_of)"; }
 
@@ -103,7 +141,7 @@ open_tmnt_local_game() {
   # fixed tap points miss. Reset to the top of the semantic list, then skip the
   # active-session banner only when the screenshot OCR proves it is present.
   reset_portal_selection_to_top
-  if grep -F "$NOW_PLAYING_OCR_MARKER" "$SHOTS/$portal_label.ocr.txt" >/dev/null; then
+  if ocr_contains_token "$SHOTS/$portal_label.ocr.txt" "$NOW_PLAYING_OCR_MARKER"; then
     "${ADB[@]}" shell "input keyevent KEYCODE_DPAD_DOWN"
   fi
   "${ADB[@]}" shell "input keyevent KEYCODE_DPAD_CENTER"
@@ -128,11 +166,12 @@ assert_portal_exposes_title() {
     print_portal_evidence_paths "$label"
     exit 1
   fi
-  if ! grep -F "$expected" "$SHOTS/$label.ocr.txt" >/dev/null; then
-    echo "FAILED: portal screenshot OCR did not expose $expected before D-pad activation"
+  if ! assert_ocr_contains_expected_title_tokens "$expected" "$SHOTS/$label.ocr.txt"; then
+    echo "FAILED: portal screenshot OCR did not expose significant tokens from $expected before D-pad activation"
     print_portal_evidence_paths "$label"
     exit 1
   fi
+  print_portal_evidence_paths "$label"
 }
 
 INITIAL_PID="$(pid_of)"

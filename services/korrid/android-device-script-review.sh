@@ -143,6 +143,11 @@ if [[ "$pid_error_status" -eq 0 ]]; then
 fi
 
 # shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
+if ! grep -F 'MAGICK_BIN="${KORRI_MAGICK_BIN:-magick}"' "$JOURNEY_RESUME" >/dev/null; then
+  echo 'journey-resume.sh must expose a magick binary override seam for deterministic review' >&2
+  exit 1
+fi
+# shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
 if ! grep -F 'TESSERACT_BIN="${KORRI_TESSERACT_BIN:-tesseract}"' "$JOURNEY_RESUME" >/dev/null; then
   echo 'journey-resume.sh must expose a tesseract binary override seam for deterministic review' >&2
   exit 1
@@ -152,8 +157,16 @@ if ! grep -F 'ocr_shot "$label"' "$JOURNEY_RESUME" >/dev/null; then
   echo 'journey-resume.sh must OCR the portal screenshot before D-pad activation' >&2
   exit 1
 fi
+if ! sed -n '/android-app-route-check = {/,/^    };/p' "$ROOT/nix/tasks.nix" | grep -F 'pkgs.imagemagick' >/dev/null; then
+  echo 'android-app-route-check task must put ImageMagick on PATH for the journey OCR gate' >&2
+  exit 1
+fi
 if ! sed -n '/android-app-route-check = {/,/^    };/p' "$ROOT/nix/tasks.nix" | grep -F 'pkgs.tesseract' >/dev/null; then
   echo 'android-app-route-check task must put tesseract on PATH for the journey gate' >&2
+  exit 1
+fi
+if ! sed -n '/journey-resume = deviceScript/,/^    };/p' "$ROOT/nix/tasks.nix" | grep -F 'pkgs.imagemagick' >/dev/null; then
+  echo 'journey-resume task must put ImageMagick on PATH for the portal OCR gate' >&2
   exit 1
 fi
 if ! sed -n '/journey-resume = deviceScript/,/^    };/p' "$ROOT/nix/tasks.nix" | grep -F 'pkgs.tesseract' >/dev/null; then
@@ -163,6 +176,7 @@ fi
 
 JOURNEY_REVIEW_BIN="$TMP/journey-bin"
 JOURNEY_REVIEW_ADB="$TMP/journey-adb"
+JOURNEY_REVIEW_MAGICK="$TMP/journey-magick"
 JOURNEY_REVIEW_TESSERACT="$TMP/journey-tesseract"
 JOURNEY_REVIEW_SLEEP="$JOURNEY_REVIEW_BIN/sleep"
 # Seed the stale-screenshot hazard under this review's temp dir; the source
@@ -182,6 +196,20 @@ set -euo pipefail
 exit 0
 JOURNEY_SLEEP
 chmod +x "$JOURNEY_REVIEW_SLEEP"
+cat >"$JOURNEY_REVIEW_MAGICK" <<'JOURNEY_MAGICK'
+#!/usr/bin/env bash
+set -euo pipefail
+input="${1:?}"
+shift
+if [[ "$input" == "${KORRI_DEVICE_SCRIPT_REVIEW_AMBIENT_SCREENSHOT:-}" ]]; then
+  echo 'deterministic review attempted deskew on an ambient journey screenshot' >&2
+  exit 97
+fi
+printf '%s %s\n' "$input" "$*" >>"$KORRI_DEVICE_SCRIPT_REVIEW_MAGICK_LOG"
+output="${@: -1}"
+cp "$input" "$output"
+JOURNEY_MAGICK
+chmod +x "$JOURNEY_REVIEW_MAGICK"
 cat >"$JOURNEY_REVIEW_TESSERACT" <<'JOURNEY_TESSERACT'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -353,20 +381,24 @@ assert_journey_tmnt_launch_navigation() {
 }
 
 review_title='Review OCR Title'
-now_playing_marker='Confirm resumes'
+now_playing_marker='RESUMES'
 review_game='review.android.game'
 review_shots="$TMP/journey-success"
 review_state="$TMP/journey-success.state"
+review_magick_log="$TMP/journey-success-magick.log"
 review_tesseract_log="$TMP/journey-success-tesseract.log"
 review_adb_log="$TMP/journey-success-adb.log"
 printf 'korri\n' >"$review_state"
-review_ocr_with_banner="${review_title}
+review_ocr_with_banner="tmnt
+shredder
+revenge
 ${now_playing_marker}"
 PATH="$JOURNEY_REVIEW_BIN:$PATH" \
 KORRI_ADB_BIN="$JOURNEY_REVIEW_ADB" \
+KORRI_MAGICK_BIN="$JOURNEY_REVIEW_MAGICK" \
 KORRI_TESSERACT_BIN="$JOURNEY_REVIEW_TESSERACT" \
-KORRI_JOURNEY_EXPECTED_TITLE="$review_title" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
+KORRI_DEVICE_SCRIPT_REVIEW_MAGICK_LOG="$review_magick_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_ADB_LOG="$review_adb_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT="$review_ocr_with_banner" \
@@ -376,12 +408,22 @@ SHOTS="$review_shots" \
   "$JOURNEY_RESUME" device-1 "$review_game" >"$TMP/journey-success.out" 2>"$TMP/journey-success.err"
 assert_journey_wake_dismiss_precede_launcher "$review_adb_log"
 assert_journey_tmnt_launch_navigation "$review_adb_log" 1 'journey-resume.sh active-session banner'
-if ! grep -F -- "$review_shots/1-korri-home.png stdout" "$review_tesseract_log" >/dev/null; then
-  echo 'journey-resume.sh did not OCR the captured portal screenshot' >&2
+if ! grep -F -- "$review_shots/1-korri-home.png -deskew 40% $review_shots/1-korri-home.ocr.png" "$review_magick_log" >/dev/null; then
+  echo 'journey-resume.sh did not deskew the captured portal screenshot before OCR' >&2
   exit 1
 fi
-if ! grep -Fx -- "$review_title" "$review_shots/1-korri-home.ocr.txt" >/dev/null; then
-  echo 'journey-resume.sh did not save portal OCR text beside screenshot evidence' >&2
+if ! grep -F -- "$review_shots/1-korri-home.ocr.png stdout --psm 6" "$review_tesseract_log" >/dev/null; then
+  echo 'journey-resume.sh did not OCR the deskewed portal screenshot with fixed page segmentation' >&2
+  exit 1
+fi
+for token in tmnt shredder revenge; do
+  if ! grep -Fxi -- "$token" "$review_shots/1-korri-home.ocr.txt" >/dev/null; then
+    echo "journey-resume.sh did not save portal OCR token beside screenshot evidence: $token" >&2
+    exit 1
+  fi
+done
+if ! test -f "$review_shots/1-korri-home.ocr.png"; then
+  echo 'journey-resume.sh did not keep deskewed OCR image evidence' >&2
   exit 1
 fi
 if ! test -f "$review_shots/1-korri-home.xml"; then
@@ -391,17 +433,20 @@ fi
 
 review_shots="$TMP/journey-no-banner"
 review_state="$TMP/journey-no-banner.state"
+review_magick_log="$TMP/journey-no-banner-magick.log"
 review_tesseract_log="$TMP/journey-no-banner-tesseract.log"
 review_adb_log="$TMP/journey-no-banner-adb.log"
 printf 'korri\n' >"$review_state"
 PATH="$JOURNEY_REVIEW_BIN:$PATH" \
 KORRI_ADB_BIN="$JOURNEY_REVIEW_ADB" \
+KORRI_MAGICK_BIN="$JOURNEY_REVIEW_MAGICK" \
 KORRI_TESSERACT_BIN="$JOURNEY_REVIEW_TESSERACT" \
 KORRI_JOURNEY_EXPECTED_TITLE="$review_title" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
+KORRI_DEVICE_SCRIPT_REVIEW_MAGICK_LOG="$review_magick_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_ADB_LOG="$review_adb_log" \
-KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT="$review_title" \
+KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT="review ocr title" \
 KORRI_DEVICE_SCRIPT_REVIEW_AMBIENT_SCREENSHOT="$AMBIENT_CONVENTIONAL_HOME" \
 KORRI_DEVICE_SCRIPT_REVIEW_GAME="$review_game" \
 SHOTS="$review_shots" \
@@ -410,14 +455,17 @@ assert_journey_tmnt_launch_navigation "$review_adb_log" 0 'journey-resume.sh no 
 
 review_shots="$TMP/journey-failure"
 review_state="$TMP/journey-failure.state"
+review_magick_log="$TMP/journey-failure-magick.log"
 review_tesseract_log="$TMP/journey-failure-tesseract.log"
 printf 'korri\n' >"$review_state"
 set +e
 PATH="$JOURNEY_REVIEW_BIN:$PATH" \
 KORRI_ADB_BIN="$JOURNEY_REVIEW_ADB" \
+KORRI_MAGICK_BIN="$JOURNEY_REVIEW_MAGICK" \
 KORRI_TESSERACT_BIN="$JOURNEY_REVIEW_TESSERACT" \
 KORRI_JOURNEY_EXPECTED_TITLE="$review_title" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
+KORRI_DEVICE_SCRIPT_REVIEW_MAGICK_LOG="$review_magick_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT='different review text' \
 KORRI_DEVICE_SCRIPT_REVIEW_AMBIENT_SCREENSHOT="$AMBIENT_CONVENTIONAL_HOME" \
@@ -435,6 +483,7 @@ cat "$TMP/journey-failure.out" "$TMP/journey-failure.err" >"$journey_failure_evi
 for evidence_path in \
   "$review_shots/1-korri-home.png" \
   "$review_shots/1-korri-home.xml" \
+  "$review_shots/1-korri-home.ocr.png" \
   "$review_shots/1-korri-home.ocr.txt"; do
   if ! grep -F -- "$evidence_path" "$journey_failure_evidence" >/dev/null; then
     echo "journey-resume.sh failure did not print evidence path: $evidence_path" >&2
@@ -442,7 +491,7 @@ for evidence_path in \
   fi
 done
 
-if grep -F -- "$AMBIENT_CONVENTIONAL_HOME" "$TMP"/journey-*-tesseract.log >/dev/null; then
+if grep -F -- "$AMBIENT_CONVENTIONAL_HOME" "$TMP"/journey-*-magick.log "$TMP"/journey-*-tesseract.log >/dev/null; then
   echo 'android-device-script-review.sh used an ambient journey screenshot instead of fresh review artifacts' >&2
   exit 1
 fi
