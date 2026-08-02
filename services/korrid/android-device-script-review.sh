@@ -302,13 +302,52 @@ assert_journey_wake_dismiss_precede_launcher() {
   ' "$log"
 }
 
+assert_journey_tmnt_launch_navigation() {
+  local log="$1"
+  local expected_downs="$2"
+  local label="$3"
+  awk -v expected_downs="$expected_downs" -v label="$label" '
+    /^shell:input keyevent KEYCODE_DPAD_UP$/ {
+      ups += 1
+      next
+    }
+    /^shell:input keyevent KEYCODE_DPAD_DOWN$/ {
+      downs += 1
+      next
+    }
+    /^shell:input keyevent KEYCODE_DPAD_CENTER$/ {
+      launches += 1
+      if (ups != 12) {
+        printf "%s launch %d reset with %d DPAD_UP events, expected 12\n", label, launches, ups > "/dev/stderr"
+        exit 1
+      }
+      if (downs != expected_downs) {
+        printf "%s launch %d used %d DPAD_DOWN events, expected %d\n", label, launches, downs, expected_downs > "/dev/stderr"
+        exit 1
+      }
+      ups = 0
+      downs = 0
+      next
+    }
+    END {
+      if (launches != 2) {
+        printf "%s review saw %d TMNT launch confirmations, expected 2\n", label, launches > "/dev/stderr"
+        exit 1
+      }
+    }
+  ' "$log"
+}
+
 review_title='Review OCR Title'
+now_playing_marker='Confirm resumes'
 review_game='review.android.game'
 review_shots="$TMP/journey-success"
 review_state="$TMP/journey-success.state"
 review_tesseract_log="$TMP/journey-success-tesseract.log"
 review_adb_log="$TMP/journey-success-adb.log"
 printf 'korri\n' >"$review_state"
+review_ocr_with_banner="${review_title}
+${now_playing_marker}"
 PATH="$JOURNEY_REVIEW_BIN:$PATH" \
 KORRI_ADB_BIN="$JOURNEY_REVIEW_ADB" \
 KORRI_TESSERACT_BIN="$JOURNEY_REVIEW_TESSERACT" \
@@ -316,11 +355,12 @@ KORRI_JOURNEY_EXPECTED_TITLE="$review_title" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_ADB_LOG="$review_adb_log" \
-KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT="$review_title" \
+KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT="$review_ocr_with_banner" \
 KORRI_DEVICE_SCRIPT_REVIEW_GAME="$review_game" \
 SHOTS="$review_shots" \
   "$JOURNEY_RESUME" device-1 "$review_game" >"$TMP/journey-success.out" 2>"$TMP/journey-success.err"
 assert_journey_wake_dismiss_precede_launcher "$review_adb_log"
+assert_journey_tmnt_launch_navigation "$review_adb_log" 1 'journey-resume.sh active-session banner'
 if ! grep -F -- "$review_shots/1-korri-home.png stdout" "$review_tesseract_log" >/dev/null; then
   echo 'journey-resume.sh did not OCR the captured portal screenshot' >&2
   exit 1
@@ -333,6 +373,24 @@ if ! test -f "$review_shots/1-korri-home.xml"; then
   echo 'journey-resume.sh did not keep UIAutomator XML evidence while using OCR for assertion' >&2
   exit 1
 fi
+
+review_shots="$TMP/journey-no-banner"
+review_state="$TMP/journey-no-banner.state"
+review_tesseract_log="$TMP/journey-no-banner-tesseract.log"
+review_adb_log="$TMP/journey-no-banner-adb.log"
+printf 'korri\n' >"$review_state"
+PATH="$JOURNEY_REVIEW_BIN:$PATH" \
+KORRI_ADB_BIN="$JOURNEY_REVIEW_ADB" \
+KORRI_TESSERACT_BIN="$JOURNEY_REVIEW_TESSERACT" \
+KORRI_JOURNEY_EXPECTED_TITLE="$review_title" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
+KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_ADB_LOG="$review_adb_log" \
+KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT="$review_title" \
+KORRI_DEVICE_SCRIPT_REVIEW_GAME="$review_game" \
+SHOTS="$review_shots" \
+  "$JOURNEY_RESUME" device-1 "$review_game" >"$TMP/journey-no-banner.out" 2>"$TMP/journey-no-banner.err"
+assert_journey_tmnt_launch_navigation "$review_adb_log" 0 'journey-resume.sh no active-session banner'
 
 review_shots="$TMP/journey-failure"
 review_state="$TMP/journey-failure.state"

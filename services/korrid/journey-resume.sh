@@ -8,8 +8,8 @@
 # trap: Android keeps recently-used processes cached, so a dead activity can
 # leave a live process behind and make a failure look like a success.
 #
-# Requires granted storage access and checkpoint config loaded: TMNT must be the
-# first local-game entry in the portal.
+# Requires granted storage access and checkpoint config loaded. TMNT must be the
+# first local-game entry after any active-session banner.
 set -euo pipefail
 
 SERIAL="${1:?usage: journey-resume.sh <adb-serial> [package] [tap-x tap-y]}"
@@ -24,6 +24,8 @@ EXPECTED_PORTAL_TITLE="${KORRI_JOURNEY_EXPECTED_TITLE:-}"
 if [[ -z "$EXPECTED_PORTAL_TITLE" ]]; then
   EXPECTED_PORTAL_TITLE="TMNT: Shredder's Revenge"
 fi
+NOW_PLAYING_OCR_MARKER="Confirm resumes"
+PORTAL_SELECTION_RESET_STEPS=12
 ADB_BIN="${KORRI_ADB_BIN:-adb}"
 TESSERACT_BIN="${KORRI_TESSERACT_BIN:-tesseract}"
 ADB=("$ADB_BIN" -s "$SERIAL")
@@ -88,10 +90,22 @@ open_korri() {
   wake_and_dismiss_keyguard
   "${ADB[@]}" shell "monkey -p $KORRI -c android.intent.category.LAUNCHER 1" >/dev/null 2>&1
 }
-open_selected_local_game() {
+reset_portal_selection_to_top() {
+  local step
+  for ((step = 0; step < PORTAL_SELECTION_RESET_STEPS; step += 1)); do
+    "${ADB[@]}" shell "input keyevent KEYCODE_DPAD_UP"
+  done
+}
+open_tmnt_local_game() {
+  local portal_label="$1"
+
   # Orientation-independent: a landscape game leaves the device rotated, so
-  # fixed tap points miss. With granted storage, checkpoint config, and no
-  # active host banner, TMNT is the first local-game entry.
+  # fixed tap points miss. Reset to the top of the semantic list, then skip the
+  # active-session banner only when the screenshot OCR proves it is present.
+  reset_portal_selection_to_top
+  if grep -F "$NOW_PLAYING_OCR_MARKER" "$SHOTS/$portal_label.ocr.txt" >/dev/null; then
+    "${ADB[@]}" shell "input keyevent KEYCODE_DPAD_DOWN"
+  fi
   "${ADB[@]}" shell "input keyevent KEYCODE_DPAD_CENTER"
 }
 assert_top_contains() {
@@ -129,7 +143,7 @@ step "1-korri-home" 7
 assert_top_contains "1-korri-home" "$KORRI"
 assert_portal_exposes_title "1-korri-home" "$EXPECTED_PORTAL_TITLE"
 
-open_selected_local_game
+open_tmnt_local_game "1-korri-home"
 step "2-game-first" 20
 assert_top_contains "2-game-first" "$GAME"
 FIRST="$(pid_of)"
@@ -150,7 +164,7 @@ step "4-korri-return" 7
 assert_top_contains "4-korri-return" "$KORRI"
 assert_portal_exposes_title "4-korri-return" "$EXPECTED_PORTAL_TITLE"
 
-open_selected_local_game
+open_tmnt_local_game "4-korri-return"
 step "5-game-resumed" 20
 SECOND="$(pid_of)"
 TOP="$(top_of)"
