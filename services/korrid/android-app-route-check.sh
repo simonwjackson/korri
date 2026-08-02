@@ -7,9 +7,9 @@
 # copies the reviewed readable checkpoint into Korri's existing Android storage
 # root, proves the protected RPC route/signature, then launches the configured
 # Android app route through the portal and verifies Android's real foreground/task
-# behavior. It never
-# installs, uninstalls, clears, or otherwise mutates the user's installed game
-# package, and it restores any pre-existing fixed config files before exiting.
+# behavior. It never installs, uninstalls, clears, or otherwise mutates the
+# user's installed game package, and it restores any pre-existing fixed config
+# files before exiting.
 set -euo pipefail
 
 SERIAL="${1:?usage: android-app-route-check.sh <adb-serial>}"
@@ -22,6 +22,8 @@ CHECKPOINT_LIBRARY="${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-$ROOT/docs/res
 CONFIG_REMOTE="$ANDROID_STORAGE_ROOT/config.yaml"
 LIBRARY_REMOTE="$ANDROID_STORAGE_ROOT/library.yaml"
 CHECKPOINT_BACKUP_DIR="$ANDROID_STORAGE_ROOT/.android-app-route-check-backup-$$"
+LOCK_REMOTE="$ANDROID_STORAGE_ROOT/.android-app-route-check.lock"
+LOCK_OWNER_REMOTE="$LOCK_REMOTE/owner"
 ANDROID_SMOKE="${KORRI_ANDROID_APP_ROUTE_SMOKE_SH:-$ROOT/services/korrid/android-smoke.sh}"
 JOURNEY_RESUME="${KORRI_ANDROID_APP_ROUTE_JOURNEY_SH:-$ROOT/services/korrid/journey-resume.sh}"
 ADB_BIN="${KORRI_ADB_BIN:-$(command -v adb)}"
@@ -31,12 +33,47 @@ CONFIG_WAS_PRESENT=false
 LIBRARY_WAS_PRESENT=false
 CHECKPOINT_RESTORE_NEEDED=false
 FORWARD_ACTIVE=false
+LOCK_ACQUIRED=false
 
 adb_target() {
   if ! timeout 15 "$ADB_BIN" "$@"; then
     echo "adb command failed or timed out: $*" >&2
     return 1
   fi
+}
+
+adb_capture() {
+  timeout 15 "$ADB_BIN" -s "$SERIAL" "$@"
+}
+
+adb_shell_capture() {
+  adb_capture shell "$@"
+}
+
+resumed_component_from_line() {
+  local line="${1:-$(cat)}"
+  sed 's/.*u0 //; s/ .*//' <<<"$line" | tr -d '\r\n'
+}
+
+package_from_component() {
+  local component="$1"
+  printf '%s' "${component%%/*}"
+}
+
+acquire_device_lock() {
+  if ! adb_target -s "$SERIAL" shell "mkdir -p '$ANDROID_STORAGE_ROOT' && if mkdir '$LOCK_REMOTE' 2>/dev/null; then printf '%s\n' 'pid=$$ started=$(date -u +%Y-%m-%dT%H:%M:%SZ)' > '$LOCK_OWNER_REMOTE'; else echo 'Android app route check lock is held at $LOCK_REMOTE. If this is stale, remove it manually only after verifying no route check is running.' >&2; exit 75; fi"; then
+    echo "Android app route check could not acquire the device config lock at $LOCK_REMOTE" >&2
+    exit 1
+  fi
+  LOCK_ACQUIRED=true
+}
+
+release_device_lock() {
+  if [[ "$LOCK_ACQUIRED" != true ]]; then
+    return
+  fi
+  adb_target -s "$SERIAL" shell "rm -rf '$LOCK_REMOTE'" >/dev/null 2>&1 || true
+  LOCK_ACQUIRED=false
 }
 
 restore_checkpoint_files() {
@@ -64,6 +101,7 @@ cleanup() {
     adb_target -s "$SERIAL" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
   fi
   restore_checkpoint_files
+  release_device_lock
 }
 trap cleanup EXIT
 
@@ -72,7 +110,8 @@ remote_exists() {
 }
 
 provision_checkpoint_files() {
-  adb_target -s "$SERIAL" shell "mkdir -p '$ANDROID_STORAGE_ROOT'; rm -rf '$CHECKPOINT_BACKUP_DIR'; mkdir -p '$CHECKPOINT_BACKUP_DIR'"
+  acquire_device_lock
+  adb_target -s "$SERIAL" shell "rm -rf '$CHECKPOINT_BACKUP_DIR'; mkdir -p '$CHECKPOINT_BACKUP_DIR'"
   CHECKPOINT_RESTORE_NEEDED=true
 
   if remote_exists "$CONFIG_REMOTE"; then
@@ -117,20 +156,27 @@ provision_checkpoint_files
 # The smoke script installs Korri and proves protected RPC list/launch
 # signatures for the configured Android app route and WL4 against the
 # already-provisioned checkpoint. Keep this call first so the portal journey
-# below drives the same configured app
-# state that RPC just observed.
+# below drives the same configured app state that RPC just observed.
 "$ANDROID_SMOKE" --expect-installed-route "$SERIAL"
 
 # Drive the real portal/native bridge path. This uses Home plus relaunching
 # Korri as the measured return path; Back is never used as resume evidence.
 "$JOURNEY_RESUME" "$SERIAL" "$GAME"
 
-top_activity="$("${ADB[@]}" shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" | tr -d '\r')"
-if [[ "$top_activity" != *"$GAME"* ]]; then
+if ! top_activity="$(adb_shell_capture "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" | tr -d '\r')"; then
+  echo "Android app route check could not read the resumed activity from the device" >&2
+  exit 1
+fi
+top_component="$(resumed_component_from_line "$top_activity")"
+top_package="$(package_from_component "$top_component")"
+if [[ "$top_package" != "$GAME" ]]; then
   echo "Android app route check ended without $GAME top-resumed: $top_activity" >&2
   exit 1
 fi
-pid="$("${ADB[@]}" shell "pidof $GAME" 2>/dev/null | tr -d '\r\n')"
+if ! pid="$(adb_shell_capture "pidof $GAME || { status=\$?; [ \"\$status\" -eq 1 ] && exit 0; exit \"\$status\"; }" 2>/dev/null | tr -d '\r\n')"; then
+  echo "Android app route check could not read process evidence for $GAME" >&2
+  exit 1
+fi
 if [[ -z "$pid" ]]; then
   echo "Android app route check ended with $GAME top-resumed but no process evidence" >&2
   exit 1
@@ -139,10 +185,13 @@ fi
 port=""
 capability=""
 for _ in $(seq 1 10); do
-  line="$("${ADB[@]}" logcat -d -s KorridServer:I 2>/dev/null | grep 'listening on 127.0.0.1:' | tail -1 || true)"
-  port="$(printf '%s' "$line" | sed -n 's/.*127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p')"
-  capability_line="$("${ADB[@]}" logcat -d -s KorridServer:I 2>/dev/null | grep 'debug capability=' | tail -1 || true)"
-  capability="$(printf '%s' "$capability_line" | sed -n 's/.*debug capability=\([0-9a-f][0-9a-f]*\).*/\1/p')"
+  logcat_output=""
+  if logcat_output="$(adb_capture logcat -d -s KorridServer:I 2>/dev/null)"; then
+    line="$(grep 'listening on 127.0.0.1:' <<<"$logcat_output" | tail -1 || true)"
+    port="$(printf '%s' "$line" | sed -n 's/.*127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p')"
+    capability_line="$(grep 'debug capability=' <<<"$logcat_output" | tail -1 || true)"
+    capability="$(printf '%s' "$capability_line" | sed -n 's/.*debug capability=\([0-9a-f][0-9a-f]*\).*/\1/p')"
+  fi
   if [[ -n "$port" && -n "$capability" ]]; then
     break
   fi

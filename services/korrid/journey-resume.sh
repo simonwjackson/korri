@@ -34,6 +34,35 @@ ADB_BIN="${KORRI_ADB_BIN:-adb}"
 MAGICK_BIN="${KORRI_MAGICK_BIN:-magick}"
 TESSERACT_BIN="${KORRI_TESSERACT_BIN:-tesseract}"
 ADB=("$ADB_BIN" -s "$SERIAL")
+PRIOR_AUTO=""
+PRIOR_USER=""
+ROTATION_RESTORE_NEEDED=false
+
+adb_cmd() {
+  timeout 15 "$ADB_BIN" -s "$SERIAL" "$@"
+}
+
+adb_shell() {
+  adb_cmd shell "$@"
+}
+
+restore_rotation() {
+  if [[ "$ROTATION_RESTORE_NEEDED" != true ]]; then
+    return
+  fi
+  adb_shell "settings put system accelerometer_rotation ${PRIOR_AUTO:-1}; settings put system user_rotation ${PRIOR_USER:-0}" >/dev/null 2>&1 || true
+}
+trap restore_rotation EXIT
+
+resumed_component_from_line() {
+  local line="${1:-$(cat)}"
+  sed 's/.*u0 //; s/ .*//' <<<"$line" | tr -d '\r\n'
+}
+
+package_from_component() {
+  local component="$1"
+  printf '%s' "${component%%/*}"
+}
 
 if ! command -v "$MAGICK_BIN" >/dev/null 2>&1; then
   echo "FAILED: ImageMagick magick binary is required for portal screenshot OCR ($MAGICK_BIN)"
@@ -46,32 +75,33 @@ fi
 
 mkdir -p "$SHOTS"
 [[ "$SERIAL" == *:* ]] && { "$ADB_BIN" connect "$SERIAL" >/dev/null || true; }
-"${ADB[@]}" wait-for-device
-if ! "${ADB[@]}" shell pm path "$GAME" | grep -q '^package:'; then
+adb_cmd wait-for-device
+if ! adb_shell "pm path $GAME" | grep -q '^package:'; then
   echo "FAILED: required game package is not installed: $GAME"
   exit 1
 fi
 
 # Fixed tap targets only make sense in a known orientation, and a landscape
-# game leaves the device rotated. Pin portrait for the run, restore after.
-PRIOR_AUTO="$("${ADB[@]}" shell settings get system accelerometer_rotation | tr -d "\r\n")"
-PRIOR_USER="$("${ADB[@]}" shell settings get system user_rotation | tr -d "\r\n")"
-"${ADB[@]}" shell "settings put system accelerometer_rotation 0; settings put system user_rotation 0"
-restore_rotation() {
-  "${ADB[@]}" shell "settings put system accelerometer_rotation ${PRIOR_AUTO:-1}; settings put system user_rotation ${PRIOR_USER:-0}" >/dev/null 2>&1 || true
-}
-trap restore_rotation EXIT
+# game leaves the device rotated. Pin portrait for the run, restore after. The
+# EXIT cleanup is installed before the first settings mutation above.
+PRIOR_AUTO="$(adb_shell settings get system accelerometer_rotation | tr -d "\r\n")"
+PRIOR_USER="$(adb_shell settings get system user_rotation | tr -d "\r\n")"
+ROTATION_RESTORE_NEEDED=true
+adb_shell "settings put system accelerometer_rotation 0; settings put system user_rotation 0"
 
 pid_of() { "${ADB[@]}" shell "pidof $GAME || { status=\$?; [ \"\$status\" -eq 1 ] && exit 0; exit \"\$status\"; }" 2>/dev/null | tr -d '\r\n'; }
 top_of() {
-  "${ADB[@]}" shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" \
-    | sed 's/.*u0 //; s/ .*//' | tr -d '\r\n'
+  adb_shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" \
+    | resumed_component_from_line
 }
-shot() { "${ADB[@]}" shell "screencap -p /sdcard/j.png" >/dev/null && "${ADB[@]}" pull /sdcard/j.png "$SHOTS/$1.png" >/dev/null; }
+top_package_of() {
+  package_from_component "$(top_of)"
+}
+shot() { adb_shell "screencap -p /sdcard/j.png" >/dev/null && adb_cmd pull /sdcard/j.png "$SHOTS/$1.png" >/dev/null; }
 dump_ui() {
   local label="$1"
-  "${ADB[@]}" shell "uiautomator dump /sdcard/j.xml" >/dev/null
-  "${ADB[@]}" pull /sdcard/j.xml "$SHOTS/$label.xml" >/dev/null
+  adb_shell "uiautomator dump /sdcard/j.xml" >/dev/null
+  adb_cmd pull /sdcard/j.xml "$SHOTS/$label.xml" >/dev/null
 }
 ocr_shot() {
   local label="$1"
@@ -125,8 +155,8 @@ step() { # label, wait
 }
 
 wake_and_dismiss_keyguard() {
-  "${ADB[@]}" shell "input keyevent KEYCODE_WAKEUP"
-  "${ADB[@]}" shell "wm dismiss-keyguard" >/dev/null 2>&1 || true
+  adb_shell "input keyevent KEYCODE_WAKEUP"
+  adb_shell "wm dismiss-keyguard" >/dev/null 2>&1 || true
 }
 open_korri() {
   local label="$1"
@@ -140,7 +170,7 @@ open_korri() {
 
   wake_and_dismiss_keyguard
   for ((attempt = 1; attempt <= KORRI_OPEN_ATTEMPTS; attempt += 1)); do
-    if start_output="$("${ADB[@]}" shell "am start -n $KORRI_ACTIVITY" 2>&1)"; then
+    if start_output="$(adb_shell "am start -n $KORRI_ACTIVITY" 2>&1)"; then
       start_status=0
     else
       start_status=$?
@@ -149,7 +179,7 @@ open_korri() {
     last_start_status="$start_status"
     for ((poll = 1; poll <= KORRI_OPEN_POLLS; poll += 1)); do
       top="$(top_of || true)"
-      if [[ "$top" == *"$KORRI_ACTIVITY"* ]]; then
+      if [[ "$top" == "$KORRI_ACTIVITY" ]]; then
         return 0
       fi
       sleep 1
@@ -167,7 +197,7 @@ open_korri() {
 reset_portal_selection_to_top() {
   local step
   for ((step = 0; step < PORTAL_SELECTION_RESET_STEPS; step += 1)); do
-    "${ADB[@]}" shell "input keyevent KEYCODE_DPAD_UP"
+    adb_shell "input keyevent KEYCODE_DPAD_UP"
   done
 }
 open_tmnt_local_game() {
@@ -178,17 +208,30 @@ open_tmnt_local_game() {
   # active-session banner only when the screenshot OCR proves it is present.
   reset_portal_selection_to_top
   if ocr_contains_token "$SHOTS/$portal_label.ocr.txt" "$NOW_PLAYING_OCR_MARKER"; then
-    "${ADB[@]}" shell "input keyevent KEYCODE_DPAD_DOWN"
+    adb_shell "input keyevent KEYCODE_DPAD_DOWN"
   fi
-  "${ADB[@]}" shell "input keyevent KEYCODE_DPAD_CENTER"
+  adb_shell "input keyevent KEYCODE_DPAD_CENTER"
 }
-assert_top_contains() {
+assert_top_package() {
   local label="$1"
-  local expected="$2"
+  local expected_package="$2"
+  local top
+  local top_package
+  top="$(top_of)"
+  top_package="$(package_from_component "$top")"
+  if [[ "$top_package" != "$expected_package" ]]; then
+    echo "FAILED: $label did not reach $expected_package (top=$top)"
+    echo "        see $SHOTS/$label.png"
+    exit 1
+  fi
+}
+assert_top_component() {
+  local label="$1"
+  local expected_component="$2"
   local top
   top="$(top_of)"
-  if [[ "$top" != *"$expected"* ]]; then
-    echo "FAILED: $label did not reach $expected (top=$top)"
+  if [[ "$top" != "$expected_component" ]]; then
+    echo "FAILED: $label did not reach $expected_component (top=$top)"
     echo "        see $SHOTS/$label.png"
     exit 1
   fi
@@ -212,15 +255,15 @@ assert_portal_exposes_title() {
 
 INITIAL_PID="$(pid_of)"
 echo "== portal launch"
-"${ADB[@]}" shell "am force-stop $KORRI"
+adb_shell "am force-stop $KORRI"
 open_korri "1-korri-home"
 step "1-korri-home" 7
-assert_top_contains "1-korri-home" "$KORRI"
+assert_top_component "1-korri-home" "$KORRI_ACTIVITY"
 assert_portal_exposes_title "1-korri-home" "$EXPECTED_PORTAL_TITLE"
 
 open_tmnt_local_game "1-korri-home"
 step "2-game-first" 20
-assert_top_contains "2-game-first" "$GAME"
+assert_top_package "2-game-first" "$GAME"
 FIRST="$(pid_of)"
 if [[ -z "$FIRST" ]]; then
   echo "FAILED: first launch reached $GAME on screen but produced no process evidence"
@@ -230,22 +273,23 @@ if [[ -n "$INITIAL_PID" && "$INITIAL_PID" == "$FIRST" ]]; then
   echo "NOTE: $GAME was already resident before launch; using pid $FIRST as resume identity."
 fi
 
-"${ADB[@]}" shell "input keyevent KEYCODE_HOME"
+adb_shell "input keyevent KEYCODE_HOME"
 step "3-home-away" 4
 
 # Return by task switching/relaunching Korri, not by pressing Back in the game.
 open_korri "4-korri-return"
 step "4-korri-return" 7
-assert_top_contains "4-korri-return" "$KORRI"
+assert_top_component "4-korri-return" "$KORRI_ACTIVITY"
 assert_portal_exposes_title "4-korri-return" "$EXPECTED_PORTAL_TITLE"
 
 open_tmnt_local_game "4-korri-return"
 step "5-game-resumed" 20
 SECOND="$(pid_of)"
 TOP="$(top_of)"
+TOP_PACKAGE="$(package_from_component "$TOP")"
 
 echo
-if [[ "$TOP" != *"$GAME"* ]]; then
+if [[ "$TOP_PACKAGE" != "$GAME" ]]; then
   echo "FAILED: relaunch did not bring the game forward (top=$TOP)"
   echo "        see $SHOTS/5-game-resumed.png"
   exit 1

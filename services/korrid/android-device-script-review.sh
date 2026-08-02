@@ -539,7 +539,11 @@ KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT="$review_ocr_with_banner" \
 KORRI_DEVICE_SCRIPT_REVIEW_AMBIENT_SCREENSHOT="$AMBIENT_CONVENTIONAL_HOME" \
 KORRI_DEVICE_SCRIPT_REVIEW_GAME="$review_game" \
 SHOTS="$review_shots" \
-  "$JOURNEY_RESUME" device-1 "$review_game" >"$TMP/journey-success.out" 2>"$TMP/journey-success.err"
+  "$JOURNEY_RESUME" device-1 "$review_game" >"$TMP/journey-success.out" 2>"$TMP/journey-success.err" || {
+    cat "$TMP/journey-success.out" >&2
+    cat "$TMP/journey-success.err" >&2
+    exit 1
+  }
 assert_journey_wake_dismiss_precede_explicit_start "$review_adb_log"
 assert_journey_tmnt_launch_navigation "$review_adb_log" 1 'journey-resume.sh active-session banner'
 if ! grep -F -- "$review_shots/1-korri-home.png -deskew 40% $review_shots/1-korri-home.ocr.png" "$review_magick_log" >/dev/null; then
@@ -940,6 +944,12 @@ case "$subcommand" in
     ;;
   shell)
     shell_command="$*"
+    if [[ "$shell_command" == *"mkdir '/sdcard/korri-retro/.android-app-route-check.lock'"* ]]; then
+      if [[ "${KORRI_DEVICE_SCRIPT_REVIEW_ROUTE_LOCK_HELD:-false}" == true ]]; then
+        echo 'Android app route check lock is held at /sdcard/korri-retro/.android-app-route-check.lock. If this is stale, remove it manually only after verifying no route check is running.' >&2
+        exit 75
+      fi
+    fi
     case "$shell_command" in
       pm\ path*)
         package="${shell_command#pm path }"
@@ -1082,6 +1092,49 @@ if ! grep -F -- "cp '/sdcard/korri-retro/.android-app-route-check-backup-" "$ADB
 fi
 if ! grep -F -- "rm -f '/sdcard/korri-retro/library.yaml'" "$ADB_LOG" >/dev/null; then
   echo 'android-app-route-check.sh did not remove a library.yaml it created after failure' >&2
+  exit 1
+fi
+lock_line="$(grep -nF -- "mkdir '/sdcard/korri-retro/.android-app-route-check.lock'" "$ADB_LOG" | head -1 | cut -d: -f1)"
+backup_line="$(grep -nF -- "cp '/sdcard/korri-retro/config.yaml' '/sdcard/korri-retro/.android-app-route-check-backup-" "$ADB_LOG" | head -1 | cut -d: -f1)"
+restore_line="$(grep -nF -- "/config.yaml' '/sdcard/korri-retro/config.yaml'" "$ADB_LOG" | tail -1 | cut -d: -f1)"
+unlock_line="$(grep -nF -- "rm -rf '/sdcard/korri-retro/.android-app-route-check.lock'" "$ADB_LOG" | tail -1 | cut -d: -f1)"
+if [[ -z "$lock_line" || -z "$backup_line" || -z "$restore_line" || -z "$unlock_line" ]]; then
+  echo 'android-app-route-check.sh did not acquire and release the route-check lock around config backup/restore' >&2
+  exit 1
+fi
+if (( lock_line >= backup_line )); then
+  echo 'android-app-route-check.sh must acquire the device lock before backing up fixed config files' >&2
+  exit 1
+fi
+if (( unlock_line <= restore_line )); then
+  echo 'android-app-route-check.sh must release the device lock only after restoring fixed config files' >&2
+  exit 1
+fi
+
+: >"$ADB_LOG"
+: >"$CHILD_LOG"
+set +e
+KORRI_ADB_BIN="$FAKE_ADB" \
+KORRI_ANDROID_APP_ROUTE_SMOKE_SH="$SMOKE" \
+KORRI_ANDROID_APP_ROUTE_JOURNEY_SH="$JOURNEY" \
+KORRI_DEVICE_SCRIPT_REVIEW_ADB_LOG="$ADB_LOG" \
+KORRI_DEVICE_SCRIPT_REVIEW_CHILD_LOG="$CHILD_LOG" \
+KORRI_DEVICE_SCRIPT_REVIEW_ROUTE_LOCK_HELD=true \
+KORRI_ROOT="$ROOT" \
+  "$ANDROID_APP_ROUTE" device-1 >"$TMP/route-held-lock.out" 2>"$TMP/route-held-lock.err"
+held_lock_status=$?
+set -e
+if [[ "$held_lock_status" -eq 0 ]]; then
+  echo 'android-app-route-check.sh accepted a held route-check device lock' >&2
+  exit 1
+fi
+if ! grep -F -- 'If this is stale, remove it manually only after verifying no route check is running.' "$TMP/route-held-lock.err" >/dev/null; then
+  echo 'android-app-route-check.sh held-lock failure did not explain manual stale-lock recovery' >&2
+  cat "$TMP/route-held-lock.err" >&2
+  exit 1
+fi
+if grep -E -- "push .* /sdcard/korri-retro/(config|library)\.yaml|cp '/sdcard/korri-retro/(config|library)\.yaml'" "$ADB_LOG" >/dev/null; then
+  echo 'android-app-route-check.sh mutated fixed config files after failing to acquire the device lock' >&2
   exit 1
 fi
 
