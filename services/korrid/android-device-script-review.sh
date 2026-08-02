@@ -60,6 +60,70 @@ ADB_LOG="$TMP/adb.log"
 CHILD_LOG="$TMP/children.log"
 FAKE_ADB="$TMP/adb"
 
+# shellcheck source=/dev/null
+KORRI_ANDROID_SMOKE_LIBRARY=true source "$ANDROID_SMOKE"
+SIGNED_WL4_RESPONSE="$(jq -n --arg root '/sdcard/korri-retro' '{
+  _tag: "app.local-games.launch",
+  outcome: {
+    _tag: "Ok",
+    payload: {
+      launcherId: "retroarch",
+      component: {
+        packageName: "com.korri.retroarch",
+        className: "com.retroarch.browser.retroactivity.RetroActivityFuture"
+      },
+      extras: {
+        ROM: ($root + "/roms/wl4.gba"),
+        LIBRETRO: "/data/data/com.korri.retroarch/cores/mgba_libretro_android.so",
+        CONFIGFILE: ($root + "/retroarch.cfg"),
+        KORRI_CONTROL_TOKEN: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      directories: (["system", "saves", "states", "screenshots"] | map($root + "/" + .)),
+      files: [{
+        path: ($root + "/retroarch.cfg"),
+        content: "video_driver = \"gl\"\nkiosk_mode_enable = \"true\""
+      }],
+      integrity: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  }
+}')"
+MISSING_WL4_RESPONSE="$(jq -n --arg root '/sdcard/korri-retro' '{
+  _tag: "app.local-games.launch",
+  outcome: {
+    _tag: "Err",
+    payload: {
+      code: "LocalRomMissing",
+      message: ("local ROM is missing: " + $root + "/roms/wl4.gba")
+    }
+  }
+}')"
+BAD_WL4_RESPONSE="$(jq -n '{
+  _tag: "app.local-games.launch",
+  outcome: {
+    _tag: "Err",
+    payload: {
+      code: "LocalRomMissing",
+      message: "local ROM is missing: /tmp/host-root/roms/wl4.gba"
+    }
+  }
+}')"
+if ! require_wl4_local_launch_response "$SIGNED_WL4_RESPONSE"; then
+  echo 'android-smoke.sh rejected the signed deferred WL4 RetroArch launch branch' >&2
+  exit 1
+fi
+if ! require_wl4_local_launch_response "$MISSING_WL4_RESPONSE"; then
+  echo 'android-smoke.sh rejected the stable WL4 LocalRomMissing branch' >&2
+  exit 1
+fi
+set +e
+require_wl4_local_launch_response "$BAD_WL4_RESPONSE" >"$TMP/bad-wl4.out" 2>"$TMP/bad-wl4.err"
+bad_wl4_status=$?
+set -e
+if [[ "$bad_wl4_status" -eq 0 ]]; then
+  echo 'android-smoke.sh accepted a WL4 missing-ROM error with an unsanitized path' >&2
+  exit 1
+fi
+
 cat >"$FAKE_ADB" <<'FAKE_ADB'
 #!/usr/bin/env bash
 set -euo pipefail

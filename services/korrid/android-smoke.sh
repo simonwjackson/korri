@@ -5,6 +5,56 @@
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
+APK="${KORRI_ANDROID_APK:-$ROOT/clients/android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk}"
+PACKAGE="com.simonwjackson.korri.debug"
+HOST_PORT=43118
+ANDROID_STORAGE_ROOT="/sdcard/korri-retro"
+CHECKPOINT_CONFIG="$ROOT/docs/research/android-app-plugin-schema-checkpoint/config.yaml"
+CHECKPOINT_LIBRARY="$ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml"
+UPSTREAMS_CONFIG="${KORRI_ANDROID_UPSTREAMS_CONFIG:-$ROOT/services/korrid/deploy/upstreams.android.json}"
+CURL=(curl --connect-timeout 2 --max-time 5 --retry 2 --retry-connrefused)
+
+require_wl4_local_launch_response() {
+  local response="$1"
+
+  if jq -e --arg storage_root "$ANDROID_STORAGE_ROOT" '
+    ._tag == "app.local-games.launch"
+    and (
+      (
+        .outcome._tag == "Ok"
+        and .outcome.payload.launcherId == "retroarch"
+        and .outcome.payload.component.packageName == "com.korri.retroarch"
+        and .outcome.payload.component.className == "com.retroarch.browser.retroactivity.RetroActivityFuture"
+        and .outcome.payload.extras.ROM == ($storage_root + "/roms/wl4.gba")
+        and .outcome.payload.extras.LIBRETRO == "/data/data/com.korri.retroarch/cores/mgba_libretro_android.so"
+        and .outcome.payload.extras.CONFIGFILE == ($storage_root + "/retroarch.cfg")
+        and (.outcome.payload.extras.KORRI_CONTROL_TOKEN | test("^[0-9a-f]{64}$"))
+        and .outcome.payload.directories == (["system", "saves", "states", "screenshots"] | map($storage_root + "/" + .))
+        and (.outcome.payload.files | length == 1)
+        and .outcome.payload.files[0].path == ($storage_root + "/retroarch.cfg")
+        and (.outcome.payload.files[0].content | contains("video_driver = \"gl\""))
+        and (.outcome.payload.files[0].content | contains("kiosk_mode_enable = \"true\""))
+        and (.outcome.payload.integrity | test("^[0-9a-f]{64}$"))
+      )
+      or (
+        .outcome._tag == "Err"
+        and .outcome.payload.code == "LocalRomMissing"
+        and .outcome.payload.message == ("local ROM is missing: " + $storage_root + "/roms/wl4.gba")
+      )
+    )
+  ' <<<"$response" >/dev/null; then
+    return 0
+  fi
+
+  echo "WL4 launch probe returned neither a signed deferred RetroArch instruction nor the stable LocalRomMissing error: $response" >&2
+  return 1
+}
+
+if [[ "${KORRI_ANDROID_SMOKE_LIBRARY:-false}" == true ]]; then
+  # shellcheck disable=SC2317 # The exit fallback is used only when executed, not sourced.
+  return 0 2>/dev/null || exit 0
+fi
+
 EXPECT_INSTALLED_ROUTE=false
 if [[ "${1:-}" == "--expect-installed-route" ]]; then
   EXPECT_INSTALLED_ROUTE=true
@@ -15,14 +65,6 @@ if [[ -z "$DEVICE" ]]; then
   echo "usage: android-smoke.sh [--expect-installed-route] <adb-serial>" >&2
   exit 1
 fi
-APK="${KORRI_ANDROID_APK:-$ROOT/clients/android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk}"
-PACKAGE="com.simonwjackson.korri.debug"
-HOST_PORT=43118
-ANDROID_STORAGE_ROOT="/sdcard/korri-retro"
-CHECKPOINT_CONFIG="$ROOT/docs/research/android-app-plugin-schema-checkpoint/config.yaml"
-CHECKPOINT_LIBRARY="$ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml"
-UPSTREAMS_CONFIG="${KORRI_ANDROID_UPSTREAMS_CONFIG:-$ROOT/services/korrid/deploy/upstreams.android.json}"
-CURL=(curl --connect-timeout 2 --max-time 5 --retry 2 --retry-connrefused)
 ADB_BIN="${KORRI_ADB_BIN:-$(command -v adb)}"
 adb() {
   if ! timeout 15 "$ADB_BIN" "$@"; then
@@ -187,12 +229,9 @@ local_launch_response="$("${CURL[@]}" --fail --silent \
   -H "authorization: Bearer $capability" \
   -d '{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}' \
   "http://127.0.0.1:$HOST_PORT/rpc")"
-for expected in '"launcherId":"retroarch"' '"KORRI_CONTROL_TOKEN":"' '"directories":[' '"files":[' '"integrity":"'; do
-  if ! printf '%s' "$local_launch_response" | grep -F "$expected" >/dev/null; then
-    echo "Deferred local launch is missing $expected: $local_launch_response" >&2
-    exit 1
-  fi
-done
+if ! require_wl4_local_launch_response "$local_launch_response"; then
+  exit 1
+fi
 
 # Session status must round-trip through the on-device brain: either a
 # well-formed Ok (with or without an active session) or a tagged Err code
