@@ -181,8 +181,20 @@ mod tests {
         checkpoint_state_with_library(root, CHECKPOINT_LIBRARY)
     }
 
+    fn checkpoint_state_with_config(root: &Path, config: &str) -> ConfigSnapshotState {
+        checkpoint_state_with_config_and_library(root, config, CHECKPOINT_LIBRARY)
+    }
+
     fn checkpoint_state_with_library(root: &Path, library: &str) -> ConfigSnapshotState {
-        std::fs::write(root.join("config.yaml"), CHECKPOINT_CONFIG).unwrap();
+        checkpoint_state_with_config_and_library(root, CHECKPOINT_CONFIG, library)
+    }
+
+    fn checkpoint_state_with_config_and_library(
+        root: &Path,
+        config: &str,
+        library: &str,
+    ) -> ConfigSnapshotState {
+        std::fs::write(root.join("config.yaml"), config).unwrap();
         std::fs::write(root.join("library.yaml"), library).unwrap();
         ConfigSnapshotCoordinator::new(root).reload()
     }
@@ -384,6 +396,64 @@ mod tests {
             &registry,
         )
         .expect_err("disabled plugin route must not fall through");
+        let LaunchError::RouteUnavailable(message) = error else {
+            panic!("got: {error:?}");
+        };
+        assert!(message.contains("launcher @korri:android-app/android-app is unavailable"));
+        assert!(!message.contains("process fallback"));
+    }
+
+    #[test]
+    fn disabled_bundled_policy_rejects_copied_first_party_records() {
+        let root = tempdir().unwrap();
+        let state = checkpoint_state_with_config(
+            root.path(),
+            r#"
+providers:
+  "@korri:android-app": { title: "Copied Android" }
+systems:
+  android: { title: "Copied Android" }
+launchers:
+  "@korri:android-app/android-app":
+    plugin: "@korri:android-app"
+    command: android-app
+    systems: [android]
+"#,
+        );
+        let registry = android_registry(false);
+
+        let catalog = local_games(&state, &registry);
+
+        assert_eq!(
+            catalog
+                .games
+                .iter()
+                .map(|game| game.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["wl4"]
+        );
+        assert_eq!(catalog.diagnostics.len(), 1);
+        assert_eq!(
+            catalog.diagnostics[0].code,
+            resolver::RouteDiagnosticCode::LocalRouteUnavailable
+        );
+        assert_eq!(
+            catalog.diagnostics[0].playable_id.as_deref(),
+            Some("tmnt-shredders-revenge")
+        );
+        assert!(catalog.diagnostics[0]
+            .message
+            .contains("launcher @korri:android-app/android-app is unavailable"));
+        assert!(!catalog.diagnostics[0].message.contains("process fallback"));
+
+        let error = launch_game(
+            root.path(),
+            "tmnt-shredders-revenge",
+            FileProvisionMode::Deferred,
+            &state,
+            &registry,
+        )
+        .expect_err("copied first-party records must not bypass disabled policy");
         let LaunchError::RouteUnavailable(message) = error else {
             panic!("got: {error:?}");
         };

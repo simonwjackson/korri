@@ -27,6 +27,54 @@ fn snapshot_from_pair(config: &str, library: &str) -> ConfigSnapshot {
     decode_config_pair(config, library).expect("test fixture should decode")
 }
 
+fn copied_android_records_config() -> &'static str {
+    r#"
+providers:
+  "@korri:android-app": { title: "Copied Android" }
+  "@korri:other": { title: "Other" }
+systems:
+  android: { title: "Copied Android" }
+  other-system: { title: "Other System" }
+launchers:
+  "@korri:android-app/android-app":
+    plugin: "@korri:android-app"
+    command: android-app
+    systems: [android]
+  "@korri:other/android-app":
+    plugin: "@korri:other"
+    command: android-app
+    systems: [other-system]
+"#
+}
+
+fn copied_android_records_library() -> &'static str {
+    r#"
+library:
+  tmnt-shredders-revenge:
+    title: "TMNT: Shredder's Revenge"
+    releases:
+      - id: android
+        system: android
+        target:
+          kind: provider-ref
+          provider: "@korri:android-app"
+          ref: com.playdigious.tmnt
+        launch:
+          use: "@korri:android-app/android-app"
+  other-game:
+    title: "Other Game"
+    releases:
+      - id: android
+        system: other-system
+        target:
+          kind: provider-ref
+          provider: "@korri:other"
+          ref: package.name
+        launch:
+          use: "@korri:other/android-app"
+"#
+}
+
 fn android_registry(enabled: bool) -> PluginRegistry {
     let plugins = bundled_plugins().expect("bundled plugins should load");
     let enabled_ids = if enabled {
@@ -94,6 +142,52 @@ fn checkpoint_route_is_unavailable_when_the_plugin_is_disabled() {
 }
 
 #[test]
+fn disabled_registered_plugin_rejects_copied_first_party_records_without_blocking_user_routes() {
+    let snapshot = snapshot_from_pair(
+        copied_android_records_config(),
+        copied_android_records_library(),
+    );
+    let registry = android_registry(false);
+
+    let catalog = resolve_launchable_routes(&snapshot, &registry, ["wl4"]);
+
+    assert_eq!(catalog.routes.len(), 1);
+    assert_eq!(catalog.routes[0].playable_id, "other-game");
+    assert_eq!(catalog.routes[0].provider_id, "@korri:other");
+    assert_eq!(
+        catalog.routes[0].flattened_target,
+        "@korri:other:package.name"
+    );
+    assert_eq!(catalog.diagnostics.len(), 1);
+    assert_eq!(
+        catalog.diagnostics[0].code,
+        RouteDiagnosticCode::LocalRouteUnavailable
+    );
+    assert_eq!(
+        catalog.diagnostics[0].playable_id.as_deref(),
+        Some("tmnt-shredders-revenge")
+    );
+    assert!(catalog.diagnostics[0]
+        .message
+        .contains("launcher @korri:android-app/android-app is unavailable"));
+    assert!(!catalog.diagnostics[0].message.contains("process fallback"));
+
+    let copied = resolve_route(&snapshot, &registry, ["wl4"], "tmnt-shredders-revenge")
+        .expect_err("copied first-party records must not bypass disabled policy");
+    assert_eq!(copied.code, RouteDiagnosticCode::LocalRouteUnavailable);
+    assert!(copied
+        .message
+        .contains("launcher @korri:android-app/android-app is unavailable"));
+    assert!(!copied.message.contains("process fallback"));
+
+    let user_owned = resolve_route(&snapshot, &registry, ["wl4"], "other-game")
+        .expect("unrelated user-owned route should still resolve");
+    assert_eq!(user_owned.provider_id, "@korri:other");
+    assert_eq!(user_owned.system_id, "other-system");
+    assert_eq!(user_owned.launcher_id, "@korri:other/android-app");
+}
+
+#[test]
 fn route_resolution_fails_closed_for_unknown_or_unsupported_checkpoint_parts() {
     let registry = android_registry(true);
     let cases = [
@@ -150,19 +244,29 @@ fn route_resolution_fails_closed_for_unknown_or_unsupported_checkpoint_parts() {
 
 #[test]
 fn unsupported_launcher_command_never_falls_back_to_a_process() {
+    let library = CHECKPOINT_LIBRARY
+        .replace(
+            "provider: \"@korri:android-app\"",
+            "provider: \"@korri:user\"",
+        )
+        .replace(
+            "use: \"@korri:android-app/android-app\"",
+            "use: \"@korri:user/android-app\"",
+        )
+        .replace("system: android", "system: user-system");
     let snapshot = snapshot_from_pair(
         r#"
 providers:
-  "@korri:android-app": {}
+  "@korri:user": {}
 systems:
-  android: {}
+  user-system: {}
 launchers:
-  "@korri:android-app/android-app":
-    plugin: "@korri:android-app"
+  "@korri:user/android-app":
+    plugin: "@korri:user"
     command: sh
-    systems: [android]
+    systems: [user-system]
 "#,
-        CHECKPOINT_LIBRARY,
+        &library,
     );
     let registry = android_registry(false);
 
@@ -175,18 +279,28 @@ launchers:
 
 #[test]
 fn launcher_without_plugin_kind_never_uses_process_fallback() {
+    let library = CHECKPOINT_LIBRARY
+        .replace(
+            "provider: \"@korri:android-app\"",
+            "provider: \"@korri:user\"",
+        )
+        .replace(
+            "use: \"@korri:android-app/android-app\"",
+            "use: \"@korri:user/android-app\"",
+        )
+        .replace("system: android", "system: user-system");
     let snapshot = snapshot_from_pair(
         r#"
 providers:
-  "@korri:android-app": {}
+  "@korri:user": {}
 systems:
-  android: {}
+  user-system: {}
 launchers:
-  "@korri:android-app/android-app":
+  "@korri:user/android-app":
     command: android-app
-    systems: [android]
+    systems: [user-system]
 "#,
-        CHECKPOINT_LIBRARY,
+        &library,
     );
     let registry = android_registry(false);
 

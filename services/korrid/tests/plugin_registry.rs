@@ -34,7 +34,7 @@ fn enabled_android_plugin_announces_its_legacy_contributions() {
 }
 
 #[test]
-fn disabled_plugin_announces_no_contributions() {
+fn disabled_plugin_announces_no_contributions_but_reserves_its_record_identities() {
     let plugin = load_plugin_source(ANDROID_PLUGIN).expect("checkpoint plugin should load");
     let registry = PluginRegistry::new(vec![plugin], Vec::new()).expect("plugin should register");
 
@@ -43,6 +43,12 @@ fn disabled_plugin_announces_no_contributions() {
     assert!(registry.providers().is_empty());
     assert!(registry.systems().is_empty());
     assert!(registry.launchers().is_empty());
+    assert!(registry.owns_registered_provider_id("@korri:android-app"));
+    assert!(registry.owns_registered_system_id("android"));
+    assert!(registry.owns_registered_launcher_id("@korri:android-app/android-app"));
+    assert!(!registry.owns_registered_provider_id("@korri:other"));
+    assert!(!registry.owns_registered_system_id("other-system"));
+    assert!(!registry.owns_registered_launcher_id("@korri:other/android-app"));
 }
 
 #[test]

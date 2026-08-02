@@ -75,6 +75,9 @@ impl Plugin {
 pub struct PluginRegistry {
     plugins: BTreeMap<String, Plugin>,
     enabled_plugin_ids: BTreeSet<String>,
+    registered_provider_ids: BTreeSet<String>,
+    registered_system_ids: BTreeSet<String>,
+    registered_launcher_ids: BTreeSet<String>,
     providers: BTreeMap<String, ProviderRecord>,
     systems: BTreeMap<String, SystemRecord>,
     launchers: BTreeMap<String, LauncherRecord>,
@@ -96,9 +99,20 @@ impl PluginRegistry {
         }
 
         let enabled_plugin_ids = requested_enabled;
+        let mut registered_provider_ids = BTreeSet::new();
+        let mut registered_system_ids = BTreeSet::new();
+        let mut registered_launcher_ids = BTreeSet::new();
         let mut providers = BTreeMap::new();
         let mut systems = BTreeMap::new();
         let mut launchers = BTreeMap::new();
+
+        for plugin in by_id.values() {
+            registered_provider_ids
+                .extend(plugin.providers.values().map(|record| record.id.clone()));
+            registered_system_ids.extend(plugin.systems.values().map(|record| record.id.clone()));
+            registered_launcher_ids
+                .extend(plugin.launchers.values().map(|record| record.id.clone()));
+        }
 
         for plugin_id in &enabled_plugin_ids {
             let plugin = by_id
@@ -127,6 +141,9 @@ impl PluginRegistry {
         Ok(Self {
             plugins: by_id,
             enabled_plugin_ids,
+            registered_provider_ids,
+            registered_system_ids,
+            registered_launcher_ids,
             providers,
             systems,
             launchers,
@@ -139,6 +156,18 @@ impl PluginRegistry {
 
     pub fn enabled_plugin_ids(&self) -> Vec<&str> {
         self.enabled_plugin_ids.iter().map(String::as_str).collect()
+    }
+
+    pub fn owns_registered_provider_id(&self, id: &str) -> bool {
+        self.registered_provider_ids.contains(id)
+    }
+
+    pub fn owns_registered_system_id(&self, id: &str) -> bool {
+        self.registered_system_ids.contains(id)
+    }
+
+    pub fn owns_registered_launcher_id(&self, id: &str) -> bool {
+        self.registered_launcher_ids.contains(id)
     }
 
     pub fn providers(&self) -> &BTreeMap<String, ProviderRecord> {

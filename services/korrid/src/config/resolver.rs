@@ -283,6 +283,8 @@ fn compose_contributions(snapshot: &ConfigSnapshot, registry: &PluginRegistry) -
         if contributions.providers.contains_key(id) {
             contributions.provider_collisions.insert(id.clone());
             contributions.providers.remove(id);
+        } else if registry.owns_registered_provider_id(id) {
+            continue;
         } else {
             contributions.providers.insert(
                 id.clone(),
@@ -298,6 +300,8 @@ fn compose_contributions(snapshot: &ConfigSnapshot, registry: &PluginRegistry) -
         if contributions.systems.contains_key(id) {
             contributions.system_collisions.insert(id.clone());
             contributions.systems.remove(id);
+        } else if registry.owns_registered_system_id(id) {
+            continue;
         } else {
             contributions.systems.insert(
                 id.clone(),
@@ -313,6 +317,8 @@ fn compose_contributions(snapshot: &ConfigSnapshot, registry: &PluginRegistry) -
         if contributions.launchers.contains_key(id) {
             contributions.launcher_collisions.insert(id.clone());
             contributions.launchers.remove(id);
+        } else if registry.owns_registered_launcher_id(id) {
+            continue;
         } else {
             contributions
                 .launchers
