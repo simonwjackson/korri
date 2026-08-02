@@ -219,6 +219,9 @@ case "$subcommand" in
     ;;
   shell)
     shell_command="$*"
+    if [[ -n "${KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_ADB_LOG:-}" ]]; then
+      printf 'shell:%s\n' "$shell_command" >>"$KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_ADB_LOG"
+    fi
     case "$shell_command" in
       pm\ path*)
         printf 'package:/data/app/%s/base.apk\n' "${KORRI_DEVICE_SCRIPT_REVIEW_GAME:-review.game}"
@@ -253,6 +256,8 @@ case "$subcommand" in
       monkey\ -p*)
         printf 'korri\n' >"$state_file"
         ;;
+      wm\ dismiss-keyguard)
+        ;;
       input\ keyevent\ KEYCODE_DPAD_CENTER)
         printf 'game\n' >"$state_file"
         ;;
@@ -273,11 +278,36 @@ esac
 JOURNEY_ADB
 chmod +x "$JOURNEY_REVIEW_ADB"
 
+assert_journey_wake_dismiss_precede_launcher() {
+  local log="$1"
+  awk '
+    /^shell:input keyevent KEYCODE_WAKEUP$/ { saw_wake = NR }
+    /^shell:wm dismiss-keyguard$/ { saw_dismiss = NR }
+    /^shell:monkey -p com\.simonwjackson\.korri\.debug -c android\.intent\.category\.LAUNCHER 1$/ {
+      if (!(saw_wake && saw_dismiss && saw_wake < saw_dismiss && saw_dismiss < NR)) {
+        failed = 1
+        printf "journey-resume.sh opened Korri before wake/dismiss (line %d)\n", NR > "/dev/stderr"
+        exit 1
+      }
+      launches += 1
+      saw_wake = 0
+      saw_dismiss = 0
+    }
+    END {
+      if (!failed && launches < 2) {
+        printf "journey-resume.sh review saw %d Korri launcher activations, expected at least 2\n", launches > "/dev/stderr"
+        exit 1
+      }
+    }
+  ' "$log"
+}
+
 review_title='Review OCR Title'
 review_game='review.android.game'
 review_shots="$TMP/journey-success"
 review_state="$TMP/journey-success.state"
 review_tesseract_log="$TMP/journey-success-tesseract.log"
+review_adb_log="$TMP/journey-success-adb.log"
 printf 'korri\n' >"$review_state"
 PATH="$JOURNEY_REVIEW_BIN:$PATH" \
 KORRI_ADB_BIN="$JOURNEY_REVIEW_ADB" \
@@ -285,10 +315,12 @@ KORRI_TESSERACT_BIN="$JOURNEY_REVIEW_TESSERACT" \
 KORRI_JOURNEY_EXPECTED_TITLE="$review_title" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
+KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_ADB_LOG="$review_adb_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT="$review_title" \
 KORRI_DEVICE_SCRIPT_REVIEW_GAME="$review_game" \
 SHOTS="$review_shots" \
   "$JOURNEY_RESUME" device-1 "$review_game" >"$TMP/journey-success.out" 2>"$TMP/journey-success.err"
+assert_journey_wake_dismiss_precede_launcher "$review_adb_log"
 if ! grep -F -- "$review_shots/1-korri-home.png stdout" "$review_tesseract_log" >/dev/null; then
   echo 'journey-resume.sh did not OCR the captured portal screenshot' >&2
   exit 1

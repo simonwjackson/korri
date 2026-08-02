@@ -80,7 +80,12 @@ step() { # label, wait
   shot "$1"
 }
 
+wake_and_dismiss_keyguard() {
+  "${ADB[@]}" shell "input keyevent KEYCODE_WAKEUP"
+  "${ADB[@]}" shell "wm dismiss-keyguard" >/dev/null 2>&1 || true
+}
 open_korri() {
+  wake_and_dismiss_keyguard
   "${ADB[@]}" shell "monkey -p $KORRI -c android.intent.category.LAUNCHER 1" >/dev/null 2>&1
 }
 open_selected_local_game() {
@@ -118,7 +123,7 @@ assert_portal_exposes_title() {
 
 INITIAL_PID="$(pid_of)"
 echo "== portal launch"
-"${ADB[@]}" shell "am force-stop $KORRI; input keyevent KEYCODE_WAKEUP"
+"${ADB[@]}" shell "am force-stop $KORRI"
 open_korri
 step "1-korri-home" 7
 assert_top_contains "1-korri-home" "$KORRI"
