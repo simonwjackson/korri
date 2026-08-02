@@ -22,6 +22,7 @@ pub struct ResolvedRoute {
     pub release_id: String,
     pub provider_id: String,
     pub system_id: String,
+    pub system_title: Option<String>,
     pub launcher_id: String,
     pub launcher_kind: String,
     pub integration_token: String,
@@ -164,12 +165,12 @@ fn resolve_route_with_contributions(
             ),
         ));
     }
-    if !contributions.systems.contains_key(system_id) {
-        return Err(unavailable(
+    let system = contributions.systems.get(system_id).ok_or_else(|| {
+        unavailable(
             Some(playable_id),
             format!("system {system_id} is unavailable"),
-        ));
-    }
+        )
+    })?;
 
     let (provider_id, provider_ref) = match target {
         Target::ProviderRef {
@@ -255,6 +256,7 @@ fn resolve_route_with_contributions(
         release_id: release.id.0.clone(),
         provider_id: provider_id.to_owned(),
         system_id: system_id.to_owned(),
+        system_title: system.title.clone(),
         launcher_id: launcher.id.clone(),
         launcher_kind: launcher_kind.to_owned(),
         integration_token: command.to_owned(),

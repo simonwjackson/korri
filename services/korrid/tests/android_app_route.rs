@@ -68,6 +68,10 @@ async fn protected_rpc_lists_and_launches_the_checkpoint_android_route_from_reta
         listed["outcome"]["payload"]["games"][0]["id"],
         "tmnt-shredders-revenge"
     );
+    assert_eq!(
+        listed["outcome"]["payload"]["games"][0]["system"],
+        "Android"
+    );
     assert_eq!(listed["outcome"]["payload"]["games"][1]["id"], "wl4");
     assert!(listed["outcome"]["payload"].get("failures").is_none());
 

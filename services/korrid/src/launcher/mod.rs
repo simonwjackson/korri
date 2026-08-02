@@ -121,7 +121,7 @@ fn local_game_from_route(route: ResolvedRoute) -> LocalGame {
     LocalGame {
         id: route.playable_id,
         title: route.title.unwrap_or(route.release_id),
-        system: route.system_id,
+        system: route.system_title.unwrap_or(route.system_id),
     }
 }
 

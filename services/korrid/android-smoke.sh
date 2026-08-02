@@ -229,6 +229,7 @@ if [[ "$EXPECT_INSTALLED_ROUTE" == true ]]; then
     .outcome._tag == "Ok"
     and .outcome.payload.games[0].id == "tmnt-shredders-revenge"
     and .outcome.payload.games[0].title == "TMNT: Shredder'"'"'s Revenge"
+    and .outcome.payload.games[0].system == "Android"
     and .outcome.payload.games[1].id == "wl4"
     and .outcome.payload.games[1].title == "Wario Land 4"
     and (.outcome.payload.failures | not)

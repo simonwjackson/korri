@@ -94,6 +94,7 @@ fn assert_checkpoint_route(route: &ResolvedRoute) {
     assert_eq!(route.release_id, "android");
     assert_eq!(route.provider_id, "@korri:android-app");
     assert_eq!(route.system_id, "android");
+    assert_eq!(route.system_title.as_deref(), Some("Android"));
     assert_eq!(route.launcher_id, "@korri:android-app/android-app");
     assert_eq!(route.launcher_kind, "@korri:android-app");
     assert_eq!(route.integration_token, "android-app");

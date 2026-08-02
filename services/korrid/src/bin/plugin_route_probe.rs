@@ -148,6 +148,9 @@ fn print_route(route: &ResolvedRoute) {
     println!("release: {}", route.release_id);
     println!("provider: {}", route.provider_id);
     println!("system: {}", route.system_id);
+    if let Some(system_title) = &route.system_title {
+        println!("system title: {system_title}");
+    }
     println!("launcher: {}", route.launcher_id);
     println!("launcher kind: {}", route.launcher_kind);
     println!("integration token: {}", route.integration_token);

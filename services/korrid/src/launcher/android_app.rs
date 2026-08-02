@@ -124,6 +124,7 @@ mod tests {
             release_id: "android".into(),
             provider_id: "@korri:android-app".into(),
             system_id: "android".into(),
+            system_title: Some("Android".into()),
             launcher_id: "@korri:android-app/android-app".into(),
             launcher_kind: "@korri:android-app".into(),
             integration_token: "android-app".into(),
@@ -159,5 +160,39 @@ mod tests {
             launch_route(&wrong_prefix),
             Err(AndroidAppRouteError::TargetPrefix { .. })
         ));
+    }
+
+    #[test]
+    fn rejects_routes_with_wrong_android_identity_guards() {
+        let cases: [(&str, Box<dyn FnOnce(&mut ResolvedRoute)>); 4] = [
+            (
+                "provider",
+                Box::new(|route| route.provider_id = "@korri:other".into()),
+            ),
+            (
+                "launcher",
+                Box::new(|route| route.launcher_id = "@korri:android-app/other".into()),
+            ),
+            (
+                "launcher kind",
+                Box::new(|route| route.launcher_kind = "@korri:other".into()),
+            ),
+            (
+                "system",
+                Box::new(|route| route.system_id = "switch".into()),
+            ),
+        ];
+
+        for (label, mutate) in cases {
+            let mut candidate = route();
+            mutate(&mut candidate);
+            match (label, launch_route(&candidate)) {
+                ("provider", Err(AndroidAppRouteError::Provider { .. })) => {}
+                ("launcher", Err(AndroidAppRouteError::Launcher { .. })) => {}
+                ("launcher kind", Err(AndroidAppRouteError::LauncherKind { .. })) => {}
+                ("system", Err(AndroidAppRouteError::System { .. })) => {}
+                (other, result) => panic!("{other} guard returned {result:?}"),
+            }
+        }
     }
 }
