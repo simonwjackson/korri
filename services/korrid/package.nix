@@ -1,6 +1,7 @@
-{ pkgs, craneLib, proseql }:
+{ pkgs, crane, proseql }:
 let
   lib = pkgs.lib;
+  craneLib = (crane.mkLib pkgs).overrideToolchain pkgs.rust-bin.stable.latest.default;
   proseqlSource = import ./proseql-source.nix { inherit pkgs proseql; };
   sourceRoot = ./.;
   sourceRootString = toString sourceRoot;

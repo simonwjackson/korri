@@ -39,7 +39,6 @@
             allowUnfree = true;
           };
         };
-        craneLib = (crane.mkLib pkgs).overrideToolchain pkgs.rust-bin.stable.latest.default;
       in
       {
         apps = import ./nix/tasks.nix { inherit pkgs proseql; };
@@ -48,7 +47,7 @@
         devShells.korrid = import ./services/korrid/devshell.nix { inherit pkgs proseql; };
         devShells.retroarch = import ./runtimes/retroarch/devshell.nix { inherit pkgs; };
         packages.korrid = import ./services/korrid/package.nix {
-          inherit pkgs proseql craneLib;
+          inherit pkgs proseql crane;
         };
         packages.default = self.packages.${system}.korrid;
       }
