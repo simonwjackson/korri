@@ -4,7 +4,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APK="${1:-$HERE/upstream/pkg/android/phoenix/build/outputs/apk/aarch64/release/phoenix-aarch64-release.apk}"
 AAPT="${ANDROID_HOME:?run inside the RetroArch Nix devshell}/build-tools/30.0.3/aapt"
-CORE="$HERE/cores/mgba/out/mgba_libretro_android.so"
+# The APK temporarily carries the independently owned @korri:mgba output.
+CORE="${MGBA_CORE:-$HERE/../../mgba/android/out/mgba_libretro_android.so}"
 
 [[ -f "$APK" ]] || { echo "RetroArch APK missing: $APK" >&2; exit 1; }
 badging="$($AAPT dump badging "$APK")"

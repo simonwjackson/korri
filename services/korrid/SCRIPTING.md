@@ -41,17 +41,17 @@ itself to one machine by reaching for local resources.
 korrid strictly decodes evaluated declarations into the narrow legacy plugin
 seam proven by the Android application schema checkpoint. Bundled plugins are
 registered from repository-owned source, and generic policy layers keyed by
-plugin ID decide enablement. The built-in layer enables `@korri:android-app` by
-default; a later layer can disable the same ID without changing registry code or
-adding an Android-specific switch. The user policy layer is intentionally empty
-for these slices.
+plugin ID decide enablement. The built-in layer enables `@korri:android-app` and
+`@korri:retroarch` by default; a later layer can disable either ID without
+changing registry code or adding an integration-specific switch. The user
+policy layer is intentionally empty for these slices.
 
-An enabled plugin can currently contribute provider, system, and launcher
-records; disabled plugins remain registered but contribute nothing. Unsupported
-declaration fields fail explicitly rather than disappearing. As in legacy,
-system and launcher contribution keys retain the contributing plugin's identity;
-the records inside those entries retain their schema IDs for the later
-readable-snapshot slice.
+An enabled plugin can currently contribute provider, system, launcher, and
+runtime records; disabled plugins remain registered but contribute nothing while
+still reserving their identities. Unsupported declaration fields fail explicitly
+rather than disappearing. As in legacy, system, launcher, and runtime
+contribution keys retain the contributing plugin's identity; the records inside
+those entries retain their schema IDs for route resolution.
 
 Review that boundary without reading Rust:
 
@@ -81,6 +81,14 @@ nix run .#korrid-plugin-route-review
 The enabled half reports the TMNT route owned by `@korri:android-app`; the
 disabled half reports the same route as unavailable instead of falling through
 to a process command or another launcher.
+
+The companion RetroArch checkpoint in
+`docs/research/retroarch-plugin-route/` resolves a file target through the
+plugin-provided `@korri:retroarch/retroarch` launcher and
+`@korri:mgba/mgba` runtime. `plugins/retroarch/android/` owns the launcher
+artifact while `plugins/mgba/android/` owns the core build. The launcher APK
+temporarily carries the core as an Android packaging bridge; plugin evaluation
+itself still performs no I/O.
 
 ## Verified on hardware
 

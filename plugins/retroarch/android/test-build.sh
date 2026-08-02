@@ -16,8 +16,10 @@ make_tool() {
 make_tool fetch 'exit 0'
 make_tool source-verify 'exit 0'
 make_tool core 'exit 0'
+# shellcheck disable=SC2016 # Expanded when the generated helper runs.
 make_tool verify 'test -s "$1"'
 make_tool gradle-fail 'exit 23'
+# shellcheck disable=SC2016 # Expanded when the generated helper runs.
 make_tool gradle-pass 'printf fresh-apk > "$RETROARCH_APK"'
 
 export RETROARCH_UPSTREAM_DIR="$TMP/source"

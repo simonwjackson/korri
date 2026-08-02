@@ -5,7 +5,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE="${RETROARCH_UPSTREAM_DIR:-$HERE/upstream}"
 FETCH="${RETROARCH_FETCH:-$HERE/fetch-upstream.sh}"
 SOURCE_VERIFY="${RETROARCH_SOURCE_VERIFY:-$HERE/test-source-contract.sh}"
-CORE_BUILD="${RETROARCH_CORE_BUILD:-$HERE/cores/mgba/build.sh}"
+# mGBA is an independent plugin. Its build currently stages its output into
+# this APK as a temporary Android packaging bridge.
+CORE_BUILD="${RETROARCH_CORE_BUILD:-$HERE/../../mgba/android/build.sh}"
 GRADLE_DIR="$SOURCE/pkg/android/phoenix"
 GRADLE="${RETROARCH_GRADLE:-$GRADLE_DIR/gradlew}"
 APK="${RETROARCH_APK:-$GRADLE_DIR/build/outputs/apk/aarch64/release/phoenix-aarch64-release.apk}"

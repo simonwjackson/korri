@@ -105,28 +105,43 @@ describe("callKorrid", () => {
 })
 
 describe("local games", () => {
-  it("serves a browser-dev Wario Land fixture and launch spec", async () => {
+  it("does not manufacture plugin-owned local routes by default", async () => {
     const client = createInMemoryKorridClient()
     expect(await client.localGames()).toEqual({
       _tag: "Ok",
-      payload: {
-        games: [
-          { id: "wl4", title: "Wario Land 4", system: "Game Boy Advance" },
-        ],
-      },
+      payload: { games: [] },
     })
     expect(await client.localGameLaunch("wl4")).toMatchObject({
+      _tag: "Err",
+      payload: { code: "LocalRomMissing" },
+    })
+  })
+
+  it("returns caller-provided local launch instructions unchanged", async () => {
+    const spec = {
+      launcherId: "fixture-launcher",
+      component: { packageName: "dev.fixture.runtime", className: "dev.fixture.Main" },
+      extras: { CONTENT: "/fixture/game.bin" },
+      directories: [],
+      files: [],
+      integrity: "fixture-integrity",
+    }
+    const client = createInMemoryKorridClient({
+      localGames: [{ id: "fixture", title: "Fixture", system: "Test" }],
+      localLaunchSpecs: { fixture: spec },
+    })
+
+    expect(await client.localGameLaunch("fixture")).toEqual({
       _tag: "Ok",
-      payload: {
-        launcherId: "retroarch",
-        component: { packageName: "com.korri.retroarch" },
-        extras: { ROM: "/browser-dev/korri-retro/roms/wl4.gba" },
-      },
+      payload: spec,
     })
   })
 
   it("keeps healthy local games beside local configuration failures", async () => {
     const client = createInMemoryKorridClient({
+      localGames: [
+        { id: "wl4", title: "Wario Land 4", system: "Game Boy Advance" },
+      ],
       localFailures: [
         {
           code: "LocalConfigReloadFailed",

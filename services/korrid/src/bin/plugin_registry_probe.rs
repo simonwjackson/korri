@@ -94,6 +94,13 @@ fn print_report(plugin: Plugin, enabled: bool) -> Result<(), String> {
             .values()
             .map(|record| record.id.as_str()),
     );
+    print_records(
+        "runtime",
+        registry
+            .runtimes()
+            .values()
+            .map(|record| record.id.as_str()),
+    );
 
     Ok(())
 }

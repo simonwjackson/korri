@@ -9,7 +9,7 @@ let
     targets = [ "aarch64-linux-android" ];
   };
 
-  retroarch = import ../runtimes/retroarch/sdk.nix { inherit pkgs; };
+  retroarch = import ../plugins/retroarch/android/sdk.nix { inherit pkgs; };
 
   androidInputs = [
     android.jdk
@@ -377,20 +377,23 @@ let
     };
 
     ra-accept = {
-      description = "Build, deploy, and run RetroArch acceptance on Android.";
+      description = "Run read-only-prerequisite RetroArch acceptance on Android.";
       runtimeInputs = [
         pkgs.android-tools
         pkgs.coreutils
         pkgs.curl
+        pkgs.diffutils
         pkgs.gnugrep
         pkgs.gnused
+        pkgs.imagemagick
+        pkgs.jq
+        pkgs.tesseract
       ];
       usageSuffix = " -- <adb-serial>";
       script = ''
         serial="''${1:?usage: ra-accept <adb-serial>}"
         shift
-        ${packages.ra-deploy}/bin/ra-deploy "$serial"
-        exec ${pkgs.bash}/bin/bash "$KORRI_ROOT/runtimes/retroarch/device-acceptance.sh" "$serial" "$@"
+        exec ${pkgs.bash}/bin/bash "$KORRI_ROOT/plugins/retroarch/android/device-acceptance.sh" "$serial" "$@"
       '';
     };
 
@@ -400,7 +403,7 @@ let
       env = retroarchEnv;
       script = ''
         ${retroarchSetup}
-        exec "$KORRI_ROOT/runtimes/retroarch/build.sh" "$@"
+        exec "$KORRI_ROOT/plugins/retroarch/android/build.sh" "$@"
       '';
     };
 
@@ -413,21 +416,22 @@ let
         pkgs.gnused
       ];
       script = ''
-        "$KORRI_ROOT/runtimes/retroarch/test-fetch-upstream.sh"
-        "$KORRI_ROOT/runtimes/retroarch/test-build.sh"
-        "$KORRI_ROOT/runtimes/retroarch/test-install-device.sh"
+        "$KORRI_ROOT/plugins/retroarch/android/test-fetch-upstream.sh"
+        "$KORRI_ROOT/plugins/retroarch/android/test-build.sh"
+        "$KORRI_ROOT/plugins/retroarch/android/test-install-device.sh"
+        "$KORRI_ROOT/plugins/retroarch/android/test-acceptance-contract.sh"
         exec ${packages.ra-build}/bin/ra-build
       '';
     };
 
-    ra-core-mgba = {
-      description = "Build and stage the pinned arm64 mGBA libretro core.";
+    mgba-build = {
+      description = "Build the @korri:mgba arm64 libretro core and stage its packaging bridge.";
       runtimeInputs = retroarchInputs;
       env = retroarchEnv;
       script = ''
         ${packages.ra-fetch}/bin/ra-fetch
         ${retroarchSetup}
-        exec "$KORRI_ROOT/runtimes/retroarch/cores/mgba/build.sh" "$@"
+        exec "$KORRI_ROOT/plugins/mgba/android/build.sh" "$@"
       '';
     };
 
@@ -442,7 +446,7 @@ let
         ${adbPreflight}
         ${packages.ra-build}/bin/ra-build
         ${retroarchSetup}
-        exec "$KORRI_ROOT/runtimes/retroarch/install-device.sh" "$serial" "$@"
+        exec "$KORRI_ROOT/plugins/retroarch/android/install-device.sh" "$serial" "$@"
       '';
     };
 
@@ -453,7 +457,7 @@ let
         pkgs.git
       ];
       script = ''
-        exec "$KORRI_ROOT/runtimes/retroarch/fetch-upstream.sh" "$@"
+        exec "$KORRI_ROOT/plugins/retroarch/android/fetch-upstream.sh" "$@"
       '';
     };
   };

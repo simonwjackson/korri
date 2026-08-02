@@ -10,6 +10,7 @@ import type {
   CatalogSnapshotOutcome,
   Game,
   HealthOutcome,
+  LaunchSpec,
   LocalGame,
   LocalGameLaunchOutcome,
   LocalGamesListOutcome,
@@ -177,6 +178,7 @@ export interface InMemoryKorridClientConfig {
     | "stop-fail"
   readonly games?: readonly Game[]
   readonly localGames?: readonly LocalGame[]
+  readonly localLaunchSpecs?: Readonly<Record<string, LaunchSpec>>
   readonly localFailures?: readonly { readonly code: string; readonly message: string }[]
   /** Seed an active host session for now-playing flows. */
   readonly activeSession?: ActiveSession
@@ -187,16 +189,13 @@ const sampleGames: readonly Game[] = [
   { id: "neverball", title: "Neverball" },
 ]
 
-const sampleLocalGames: readonly LocalGame[] = [
-  { id: "wl4", title: "Wario Land 4", system: "Game Boy Advance" },
-]
-
 export function createInMemoryKorridClient(
   config: InMemoryKorridClientConfig = {},
 ): KorridClient {
   const behavior = config.behavior ?? "ok"
   const games = config.games ?? sampleGames
-  const localGames = config.localGames ?? sampleLocalGames
+  const localGames = config.localGames ?? []
+  const localLaunchSpecs = config.localLaunchSpecs ?? {}
   const localFailures = config.localFailures
   let activeSession = config.activeSession
   return {
@@ -231,35 +230,18 @@ export function createInMemoryKorridClient(
       }
     },
     async localGameLaunch(gameId) {
+      const spec = localLaunchSpecs[gameId]
       if (
         behavior === "local-launch-fail" ||
-        !localGames.some(game => game.id === gameId)
+        !localGames.some(game => game.id === gameId) ||
+        spec === undefined
       ) {
         return {
           _tag: "Err",
           payload: { code: "LocalRomMissing", message: `cannot launch ${gameId}` },
         }
       }
-      return {
-        _tag: "Ok",
-        payload: {
-          launcherId: "retroarch",
-          component: {
-            packageName: "com.korri.retroarch",
-            className:
-              "com.retroarch.browser.retroactivity.RetroActivityFuture",
-          },
-          extras: {
-            ROM: "/browser-dev/korri-retro/roms/wl4.gba",
-            LIBRETRO:
-              "/data/data/com.korri.retroarch/cores/mgba_libretro_android.so",
-            CONFIGFILE: "/browser-dev/korri-retro/retroarch.cfg",
-          },
-          directories: [],
-          files: [],
-          integrity: "browser-dev-only",
-        },
-      }
+      return { _tag: "Ok", payload: spec }
     },
     async sessionPrepare(gameId, host) {
       if (

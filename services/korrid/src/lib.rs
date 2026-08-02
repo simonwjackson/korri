@@ -778,6 +778,14 @@ mod tests {
     };
     use tower::ServiceExt;
 
+    const WL4_PLUGIN_LIBRARY: &str =
+        include_str!("../../../docs/research/retroarch-plugin-route/library-wl4.yaml");
+
+    fn write_wl4_plugin_config(root: &Path) {
+        std::fs::write(root.join("config.yaml"), "{}\n").unwrap();
+        std::fs::write(root.join("library.yaml"), WL4_PLUGIN_LIBRARY).unwrap();
+    }
+
     #[test]
     fn status_with_active_session_maps_to_ok_with_details() {
         let outcome = session_status_outcome(Ok(upstream::UpstreamSessionStatus::SessionStatus {
@@ -997,6 +1005,7 @@ command = ["sh", "-c", "sleep 1"]
     #[tokio::test]
     async fn local_games_rpc_lists_wario_land_from_the_device_brain() {
         let root = tempfile::tempdir().unwrap();
+        write_wl4_plugin_config(root.path());
         let app = router_with_capability_and_local_root(
             "right-token",
             "https://portal.example",
@@ -1026,6 +1035,7 @@ command = ["sh", "-c", "sleep 1"]
     #[tokio::test]
     async fn local_launch_rpc_uses_the_configured_root_and_returns_a_spec() {
         let root = tempfile::tempdir().unwrap();
+        write_wl4_plugin_config(root.path());
         std::fs::create_dir_all(root.path().join("roms")).unwrap();
         std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
         let app = router_with_capability_and_local_root(
@@ -1057,6 +1067,7 @@ command = ["sh", "-c", "sleep 1"]
     #[tokio::test]
     async fn embedded_local_launch_rpc_defers_the_config_and_save_tree() {
         let root = tempfile::tempdir().unwrap();
+        write_wl4_plugin_config(root.path());
         std::fs::create_dir_all(root.path().join("roms")).unwrap();
         std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
         let app = router_with_capability_local_root_and_provision(
@@ -1107,6 +1118,7 @@ command = ["sh", "-c", "sleep 1"]
         }
 
         let root = tempfile::tempdir().unwrap();
+        write_wl4_plugin_config(root.path());
         std::fs::create_dir_all(root.path().join("roms")).unwrap();
         std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
         let port = start_local_server(
@@ -1183,6 +1195,7 @@ command = ["sh", "-c", "sleep 1"]
     async fn local_launch_rpc_maps_missing_and_unknown_games_to_distinct_codes() {
         for (game_id, code) in [("wl4", "LocalRomMissing"), ("unknown", "LocalGameNotFound")] {
             let root = tempfile::tempdir().unwrap();
+            write_wl4_plugin_config(root.path());
             let app = router_with_capability_and_local_root(
                 "right-token",
                 "https://portal.example",
@@ -1210,14 +1223,15 @@ command = ["sh", "-c", "sleep 1"]
 
     #[cfg(unix)]
     #[tokio::test]
-    async fn local_launch_rpc_distinguishes_storage_read_and_config_write_failures() {
+    async fn local_launch_rpc_distinguishes_config_authorization_and_write_failures() {
         use std::os::unix::fs::PermissionsExt;
 
         for (mode, code) in [
-            (0o000, "LocalStorageUnavailable"),
+            (0o000, "LocalConfigUnauthorized"),
             (0o500, "LocalConfigWriteFailed"),
         ] {
             let root = tempfile::tempdir().unwrap();
+            write_wl4_plugin_config(root.path());
             std::fs::create_dir_all(root.path().join("roms")).unwrap();
             std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
             let app = router_with_capability_and_local_root(
@@ -1242,7 +1256,11 @@ command = ["sh", "-c", "sleep 1"]
                 .unwrap();
             std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
             let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-            assert!(String::from_utf8_lossy(&body).contains(code));
+            assert!(
+                String::from_utf8_lossy(&body).contains(code),
+                "mode {mode:o} expected {code}, got {}",
+                String::from_utf8_lossy(&body)
+            );
         }
     }
 

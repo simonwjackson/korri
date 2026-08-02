@@ -10,7 +10,7 @@ const CHECKPOINT_ANDROID_PLUGIN: &str = include_str!(
 const PRODUCTION_ANDROID_PLUGIN: &str = include_str!("../plugins/android-app.plugin.ts");
 
 #[test]
-fn bundled_policy_enables_android_plugin_by_default() {
+fn bundled_policy_enables_first_party_android_plugins_by_default() {
     let plugins = bundled_plugins().expect("bundled plugins should load");
     let enabled_ids = resolve_enabled_plugin_ids([
         bundled_plugin_policy_layer(),
@@ -19,15 +19,27 @@ fn bundled_policy_enables_android_plugin_by_default() {
     let registry =
         PluginRegistry::new(plugins, enabled_ids).expect("bundled policy should register");
 
-    assert_eq!(registry.registered_plugin_ids(), ["@korri:android-app"]);
-    assert_eq!(registry.enabled_plugin_ids(), ["@korri:android-app"]);
+    assert_eq!(
+        registry.registered_plugin_ids(),
+        ["@korri:android-app", "@korri:mgba", "@korri:retroarch"]
+    );
+    assert_eq!(
+        registry.enabled_plugin_ids(),
+        ["@korri:android-app", "@korri:mgba", "@korri:retroarch"]
+    );
     assert!(registry.providers().contains_key("@korri:android-app"));
+    assert!(registry.providers().contains_key("@korri:mgba"));
+    assert!(registry.providers().contains_key("@korri:retroarch"));
     assert!(registry
         .systems()
         .contains_key("@korri:android-app/android"));
     assert!(registry
         .launchers()
         .contains_key("@korri:android-app/android-app"));
+    assert!(registry
+        .launchers()
+        .contains_key("@korri:retroarch/retroarch"));
+    assert!(registry.runtimes().contains_key("@korri:mgba/mgba"));
 }
 
 #[test]
@@ -40,11 +52,22 @@ fn later_policy_layer_disables_bundled_android_plugin() {
     let registry = PluginRegistry::new(plugins, enabled_ids)
         .expect("disabled plugin should remain registered");
 
-    assert_eq!(registry.registered_plugin_ids(), ["@korri:android-app"]);
-    assert!(registry.enabled_plugin_ids().is_empty());
-    assert!(registry.providers().is_empty());
-    assert!(registry.systems().is_empty());
-    assert!(registry.launchers().is_empty());
+    assert_eq!(
+        registry.registered_plugin_ids(),
+        ["@korri:android-app", "@korri:mgba", "@korri:retroarch"]
+    );
+    assert_eq!(
+        registry.enabled_plugin_ids(),
+        ["@korri:mgba", "@korri:retroarch"]
+    );
+    assert!(!registry.providers().contains_key("@korri:android-app"));
+    assert!(registry.providers().contains_key("@korri:mgba"));
+    assert!(registry.providers().contains_key("@korri:retroarch"));
+    assert!(registry.systems().contains_key("@korri:mgba/gba"));
+    assert!(registry
+        .launchers()
+        .contains_key("@korri:retroarch/retroarch"));
+    assert!(registry.runtimes().contains_key("@korri:mgba/mgba"));
 }
 
 #[test]

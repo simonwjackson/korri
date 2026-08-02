@@ -40,13 +40,21 @@ export KORRID_MODE="brain"
 export KORRID_RPC_CAPABILITY="check-capability"
 export KORRID_ADDRESS="127.0.0.1:49117"
 export KORRID_SPIKE_URL="http://$KORRID_ADDRESS"
+local_storage_root="$(mktemp -d)"
+cp "$ROOT/docs/research/retroarch-plugin-route/config.yaml" "$local_storage_root/config.yaml"
+cp "$ROOT/docs/research/retroarch-plugin-route/library.yaml" "$local_storage_root/library.yaml"
+export KORRI_LOCAL_STORAGE_ROOT="$local_storage_root"
 if (exec 9<>/dev/tcp/127.0.0.1/49117) 2>/dev/null; then
   echo 'korrid check port 49117 is already occupied' >&2
   exit 1
 fi
 "$CARGO_TARGET_DIR/release/korrid" &
 server_pid=$!
-trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+cleanup_server() {
+  kill "$server_pid" 2>/dev/null || true
+  rm -rf "$local_storage_root"
+}
+trap cleanup_server EXIT
 server_ready=false
 for _ in $(seq 1 20); do
   if ! kill -0 "$server_pid" 2>/dev/null; then

@@ -69,16 +69,16 @@ The source pin and published patch series are the corresponding-source form of
 Korri's GPL-3.0 distribution. Do not edit `upstream/` directly; changes belong
 in one numbered patch and its `patches/README.md` entry.
 
-## Bundled mGBA core
+## Temporary mGBA packaging bridge
 
-`cores/mgba/build.sh` pins mGBA 0.10.5 at
-`26b7884bc25a5933960f3cdcd98bac1ae14d42e2`, cross-compiles only the arm64
-libretro core with the same NDK 22 toolchain, and stages the exact output as
-`assets/cores/mgba_libretro_android.so`. Patch 0003 copies that immutable APK
-asset synchronously before native startup to
+The independent `@korri:mgba` plugin's `plugins/mgba/android/build.sh` pins
+mGBA 0.10.5 at `26b7884bc25a5933960f3cdcd98bac1ae14d42e2`, cross-compiles only the
+arm64 libretro core with the same NDK 22 toolchain, and stages the exact output
+as `assets/cores/mgba_libretro_android.so`. Patch 0003 copies that immutable
+APK asset synchronously before native startup to
 `/data/data/com.korri.retroarch/cores/mgba_libretro_android.so`. APK validation
-compares the bundled bytes with the build output. This avoids buildbot binary
-debt and keeps the core's corresponding source pin reproducible.
+compares the bundled bytes with the mGBA plugin output. The APK carriage is
+temporary and does not transfer plugin ownership to `@korri:retroarch`.
 
 ## Caveats
 

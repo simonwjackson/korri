@@ -60,7 +60,10 @@ grep -q 'pm path com.korri.retroarch' "$ADB_LOG"
 grep -q 'dumpsys package com.korri.retroarch' "$ADB_LOG"
 grep -q 'pm grant com.korri.retroarch android.permission.READ_EXTERNAL_STORAGE' "$ADB_LOG"
 grep -q 'pm grant com.korri.retroarch android.permission.WRITE_EXTERNAL_STORAGE' "$ADB_LOG"
-! grep -q 'uninstall' "$ADB_LOG"
+if grep -q 'uninstall' "$ADB_LOG"; then
+  echo 'deployment must not uninstall RetroArch' >&2
+  exit 1
+fi
 
 : > "$ADB_LOG"
 if ADB_VERSION_CODE=41 "$INSTALL" serial-1 >/dev/null 2>&1; then
@@ -75,7 +78,10 @@ if ADB_INSTALL_FAIL=1 "$INSTALL" serial-1 >/dev/null 2>&1; then
   exit 1
 fi
 grep -q -- 'settings put global verifier_verify_adb_installs 1' "$ADB_LOG"
-! grep -q 'uninstall' "$ADB_LOG"
+if grep -q 'uninstall' "$ADB_LOG"; then
+  echo 'failed deployment must not uninstall RetroArch' >&2
+  exit 1
+fi
 
 : > "$ADB_LOG"
 if ADB_INSTALL_SLEEP=2 RETROARCH_INSTALL_TIMEOUT_SECONDS=1 \

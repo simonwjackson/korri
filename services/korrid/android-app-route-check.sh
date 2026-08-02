@@ -17,8 +17,12 @@ GAME="${KORRI_ANDROID_APP_PACKAGE:-com.playdigious.tmnt}"
 HOST_PORT="${KORRI_ANDROID_APP_ROUTE_HOST_PORT:-43120}"
 ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
 ANDROID_STORAGE_ROOT="/sdcard/korri-retro"
-CHECKPOINT_CONFIG="$ROOT/docs/research/android-app-plugin-schema-checkpoint/config.yaml"
-CHECKPOINT_LIBRARY="${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-$ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml}"
+CHECKPOINT_CONFIG="$ROOT/docs/research/retroarch-plugin-route/config.yaml"
+CHECKPOINT_LIBRARY="${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-$ROOT/docs/research/retroarch-plugin-route/library.yaml}"
+EXPECT_RETROARCH_ROUTE=true
+if [[ -n "${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-}" ]]; then
+  EXPECT_RETROARCH_ROUTE=false
+fi
 CONFIG_REMOTE="$ANDROID_STORAGE_ROOT/config.yaml"
 LIBRARY_REMOTE="$ANDROID_STORAGE_ROOT/library.yaml"
 CHECKPOINT_BACKUP_DIR="$ANDROID_STORAGE_ROOT/.android-app-route-check-backup-$$"
@@ -188,10 +192,11 @@ fi
 provision_checkpoint_files
 
 # The smoke script installs Korri and proves protected RPC list/launch
-# signatures for the configured Android app route and WL4 against the
-# already-provisioned checkpoint. Keep this call first so the portal journey
-# below drives the same configured app state that RPC just observed.
-"$ANDROID_SMOKE" --expect-installed-route "$SERIAL"
+# signatures for the configured Android app route and, for the canonical
+# checkpoint, the plugin-backed WL4 route. Keep this call first so the portal
+# journey below drives the same configured app state that RPC just observed.
+KORRI_EXPECT_RETROARCH_ROUTE="$EXPECT_RETROARCH_ROUTE" \
+  "$ANDROID_SMOKE" --expect-installed-route "$SERIAL"
 
 # Drive the real portal/native bridge path. This uses Home plus relaunching
 # Korri as the measured return path; Back is never used as resume evidence.
@@ -261,9 +266,14 @@ local_games_response="$("${CURL[@]}" --fail --silent \
 if ! jq -e '
   .outcome._tag == "Ok"
   and .outcome.payload.games[0].id == "tmnt-shredders-revenge"
-  and any(.outcome.payload.games[]; .id == "wl4")
 ' <<<"$local_games_response" >/dev/null; then
-  echo "Embedded brain survived but local route state did not: $local_games_response" >&2
+  echo "Embedded brain survived but Android route state did not: $local_games_response" >&2
+  exit 1
+fi
+if [[ "$EXPECT_RETROARCH_ROUTE" == true ]] && ! jq -e '
+  any(.outcome.payload.games[]; .id == "wl4")
+' <<<"$local_games_response" >/dev/null; then
+  echo "Embedded brain lost the canonical RetroArch route: $local_games_response" >&2
   exit 1
 fi
 

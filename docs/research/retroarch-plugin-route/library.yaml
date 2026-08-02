@@ -1,0 +1,24 @@
+library:
+  tmnt-shredders-revenge:
+    title: "TMNT: Shredder's Revenge"
+    releases:
+      - id: android
+        system: android
+        target:
+          kind: provider-ref
+          provider: "@korri:android-app"
+          ref: com.playdigious.tmnt
+        launch:
+          use: "@korri:android-app/android-app"
+  wl4:
+    title: "Wario Land 4"
+    releases:
+      - id: gba
+        system: gba
+        target:
+          kind: file
+          storage: roms
+          path: wl4.gba
+        launch:
+          use: "@korri:retroarch/retroarch"
+          runtime: "@korri:mgba/mgba"

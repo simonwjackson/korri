@@ -5,7 +5,11 @@ let
   proseqlSource = import ./proseql-source.nix { inherit pkgs proseql; };
   sourceRoot = ./.;
   sourceRootString = toString sourceRoot;
-  bundledPluginSources = [ "plugins/android-app.plugin.ts" ];
+  bundledPluginSources = [
+    "plugins/android-app.plugin.ts"
+    "plugins/mgba.plugin.ts"
+    "plugins/retroarch.plugin.ts"
+  ];
   relativeSourcePath = path: lib.removePrefix "${sourceRootString}/" (toString path);
   cleanSource = lib.cleanSourceWith {
     src = sourceRoot;
@@ -18,9 +22,22 @@ let
       || (type == "directory" && (toString path) == "${sourceRootString}/plugins")
       || (type != "directory" && builtins.elem (relativeSourcePath path) bundledPluginSources);
   };
-  src = proseqlSource.composeCargoSource cleanSource;
+  composedSource = proseqlSource.composeCargoSource cleanSource;
+  # The checkout uses a relative symlink so the plugin-owned declaration stays
+  # beside its Android acquisition/build package. Nix sources cannot retain a
+  # symlinks that escape sourceRoot, so materialize those canonical files in
+  # the hermetic crate source.
+  src = pkgs.runCommand "korrid-source-with-bundled-plugins" { } ''
+    mkdir -p "$out"
+    cp -R --no-preserve=mode,ownership ${composedSource}/. "$out/"
+    rm -f "$out/plugins/mgba.plugin.ts" "$out/plugins/retroarch.plugin.ts"
+    cp ${../../plugins/mgba/plugin.ts} "$out/plugins/mgba.plugin.ts"
+    cp ${../../plugins/retroarch/plugin.ts} "$out/plugins/retroarch.plugin.ts"
+  '';
   commonArgs = {
     inherit src;
+    pname = "korrid";
+    version = "0.0.0";
     strictDeps = true;
     nativeBuildInputs = [
       pkgs.clang
@@ -34,11 +51,10 @@ let
 in
 craneLib.buildPackage (commonArgs // {
   inherit cargoArtifacts;
-  pname = "korrid";
-  version = "0.0.0";
   preConfigure = ''
     plugin_sources="$(${pkgs.findutils}/bin/find plugins -type f -name '*.plugin.ts' -printf '%P\n' | sort)"
-    if [[ "$plugin_sources" != "android-app.plugin.ts" ]]; then
+    expected_plugin_sources=$'android-app.plugin.ts\nmgba.plugin.ts\nretroarch.plugin.ts'
+    if [[ "$plugin_sources" != "$expected_plugin_sources" ]]; then
       echo "unexpected bundled plugin source set:" >&2
       printf '%s\n' "$plugin_sources" >&2
       exit 1

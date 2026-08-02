@@ -1,6 +1,8 @@
 use korrid::plugin::{decode_plugin_declaration, load_plugin_source, PluginRegistry};
 
 const ANDROID_PLUGIN: &str = include_str!("../plugins/android-app.plugin.ts");
+const MGBA_PLUGIN: &str = include_str!("../../../plugins/mgba/plugin.ts");
+const RETROARCH_PLUGIN: &str = include_str!("../../../plugins/retroarch/plugin.ts");
 
 #[test]
 fn enabled_android_plugin_announces_its_legacy_contributions() {
@@ -31,6 +33,100 @@ fn enabled_android_plugin_announces_its_legacy_contributions() {
             .map(|record| record.id.as_str()),
         Some("@korri:android-app/android-app")
     );
+}
+
+#[test]
+fn enabled_retroarch_plugin_announces_only_its_launcher_component() {
+    let plugin = load_plugin_source(RETROARCH_PLUGIN).expect("RetroArch plugin should load");
+    let registry = PluginRegistry::new(vec![plugin], vec!["@korri:retroarch".to_owned()])
+        .expect("RetroArch plugin should register");
+
+    let launcher = registry
+        .launchers()
+        .get("@korri:retroarch/retroarch")
+        .expect("plugin launcher");
+    assert_eq!(
+        launcher
+            .android
+            .as_ref()
+            .map(|android| android.package_name.as_str()),
+        Some("com.korri.retroarch")
+    );
+    assert!(launcher.systems.is_none());
+    assert!(registry.systems().is_empty());
+    assert!(registry.runtimes().is_empty());
+}
+
+#[test]
+fn enabled_mgba_plugin_announces_its_system_and_runtime() {
+    let plugin = load_plugin_source(MGBA_PLUGIN).expect("mGBA plugin should load");
+    let registry = PluginRegistry::new(vec![plugin], vec!["@korri:mgba".to_owned()])
+        .expect("mGBA plugin should register");
+
+    assert_eq!(
+        registry
+            .systems()
+            .get("@korri:mgba/gba")
+            .map(|system| system.id.as_str()),
+        Some("gba")
+    );
+    let runtime = registry
+        .runtimes()
+        .get("@korri:mgba/mgba")
+        .expect("plugin runtime");
+    assert_eq!(runtime.kind, "libretro-core");
+    assert_eq!(runtime.app, "@korri:retroarch/retroarch");
+    assert_eq!(
+        runtime.path,
+        "/data/data/com.korri.retroarch/cores/mgba_libretro_android.so"
+    );
+}
+
+#[test]
+fn disabled_plugins_reserve_only_their_own_contribution_identities() {
+    let retroarch = PluginRegistry::new(
+        vec![load_plugin_source(RETROARCH_PLUGIN).unwrap()],
+        Vec::new(),
+    )
+    .expect("RetroArch plugin should register");
+    assert!(retroarch.owns_registered_launcher_id("@korri:retroarch/retroarch"));
+    assert!(!retroarch.owns_registered_runtime_id("@korri:mgba/mgba"));
+    assert!(!retroarch.owns_registered_system_id("gba"));
+
+    let mgba = PluginRegistry::new(vec![load_plugin_source(MGBA_PLUGIN).unwrap()], Vec::new())
+        .expect("mGBA plugin should register");
+    assert!(mgba.owns_registered_runtime_id("@korri:mgba/mgba"));
+    assert!(mgba.owns_registered_system_id("gba"));
+    assert!(!mgba.owns_registered_launcher_id("@korri:retroarch/retroarch"));
+}
+
+#[test]
+fn malformed_runtime_and_android_launcher_fields_are_rejected() {
+    let invalid_sources = [
+        MGBA_PLUGIN.replace("id: \"@korri:mgba/mgba\"", "id: \"@korri:mgba/wrong\""),
+        MGBA_PLUGIN.replace("kind: \"libretro-core\"", "kind: \"\""),
+        MGBA_PLUGIN.replace("app: \"@korri:retroarch/retroarch\"", "app: \"\""),
+        MGBA_PLUGIN.replace(
+            "path: \"/data/data/com.korri.retroarch/cores/mgba_libretro_android.so\"",
+            "path: \"relative/mgba.so\"",
+        ),
+        MGBA_PLUGIN.replace(
+            "path: \"/data/data/com.korri.retroarch/cores/mgba_libretro_android.so\"",
+            "path: \"/cores/bad\\\"name.so\"",
+        ),
+        RETROARCH_PLUGIN.replace(
+            "packageName: \"com.korri.retroarch\"",
+            "packageName: \"com.korri/bad\"",
+        ),
+        MGBA_PLUGIN.replace("supports: {", "unknownRuntimeField: true, supports: {"),
+    ];
+
+    for source in invalid_sources {
+        assert!(
+            load_plugin_source(&source).is_err(),
+            "malformed declaration unexpectedly loaded: {source}"
+        );
+    }
 }
 
 #[test]

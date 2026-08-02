@@ -3,7 +3,10 @@ import { act } from "react"
 import { createRoot } from "react-dom/client"
 import { SHELL_RESUMED_EVENT } from "@contracts/bridge/korri-native-bridge"
 import { createInMemoryLauncherBridge } from "../bridge/launcher-bridge"
-import { createInMemoryKorridClient } from "../korrid/client"
+import {
+  createInMemoryKorridClient,
+  type InMemoryKorridClientConfig,
+} from "../korrid/client"
 import { createInputBus } from "../input/bus"
 import { LaunchablesRoot } from "./LaunchablesRoot"
 
@@ -13,8 +16,34 @@ import { LaunchablesRoot } from "./LaunchablesRoot"
 
 const flush = () => new Promise(resolve => setTimeout(resolve, 25))
 
+const localGame = {
+  id: "wl4",
+  title: "Wario Land 4",
+  system: "Game Boy Advance",
+} as const
+const localLaunchSpec = {
+  launcherId: "fixture-local",
+  component: {
+    packageName: "dev.fixture.runtime",
+    className: "dev.fixture.runtime.MainActivity",
+  },
+  extras: { CONTENT: "/fixture/wl4.gba" },
+  directories: [],
+  files: [],
+  integrity: "fixture-integrity",
+}
+
+function createLocalKorridClient(config: InMemoryKorridClientConfig = {}) {
+  return createInMemoryKorridClient({
+    games: [],
+    localGames: [localGame],
+    localLaunchSpecs: { wl4: localLaunchSpec },
+    ...config,
+  })
+}
+
 async function renderRoot(
-  korrid = createInMemoryKorridClient({ games: [] }),
+  korrid = createLocalKorridClient(),
   bridge = createInMemoryLauncherBridge({
     streamHosts: [],
   }),
@@ -248,7 +277,7 @@ describe("LaunchablesRoot pointer activation", () => {
         return baseBridge.launchLocal(spec)
       },
     }
-    const view = await renderRoot(createInMemoryKorridClient({ games: [] }), bridge)
+    const view = await renderRoot(createLocalKorridClient(), bridge)
 
     await act(async () => {
       view.bus.emit({
@@ -276,7 +305,7 @@ describe("LaunchablesRoot pointer activation", () => {
         return baseBridge.launchLocal(spec)
       },
     }
-    const view = await renderRoot(createInMemoryKorridClient({ games: [] }), bridge)
+    const view = await renderRoot(createLocalKorridClient(), bridge)
 
     await act(async () => {
       view.bus.emit({
@@ -312,7 +341,7 @@ describe("LaunchablesRoot pointer activation", () => {
         return baseBridge.launchLocal(spec)
       },
     }
-    const view = await renderRoot(createInMemoryKorridClient({ games: [] }), bridge)
+    const view = await renderRoot(createLocalKorridClient(), bridge)
     expect(view.container.textContent).toContain("Wario Land 4")
 
     await act(async () => {
@@ -371,7 +400,7 @@ describe("LaunchablesRoot local launch flow", () => {
     let requestedGame = ""
     let launchedSpec: unknown
     let reloads = 0
-    const baseKorrid = createInMemoryKorridClient({ games: [] })
+    const baseKorrid = createLocalKorridClient()
     const korrid = {
       ...baseKorrid,
       async localGames() {
@@ -402,7 +431,7 @@ describe("LaunchablesRoot local launch flow", () => {
     })
 
     expect(requestedGame).toBe("wl4")
-    expect(launchedSpec).toMatchObject({ launcherId: "retroarch" })
+    expect(launchedSpec).toEqual(localLaunchSpec)
 
     await act(async () => {
       window.dispatchEvent(new Event(SHELL_RESUMED_EVENT))
@@ -414,8 +443,7 @@ describe("LaunchablesRoot local launch flow", () => {
 
   it("keeps the portal usable and skips the bridge when the ROM is missing", async () => {
     let bridgeCalls = 0
-    const korrid = createInMemoryKorridClient({
-      games: [],
+    const korrid = createLocalKorridClient({
       behavior: "local-launch-fail",
     })
     const baseBridge = createInMemoryLauncherBridge({

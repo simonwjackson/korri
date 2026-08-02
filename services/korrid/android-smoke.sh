@@ -10,9 +10,10 @@ PACKAGE="com.simonwjackson.korri.debug"
 HOST_PORT=43118
 ANDROID_STORAGE_ALIAS="/sdcard/korri-retro"
 ANDROID_STORAGE_ROOT="$ANDROID_STORAGE_ALIAS"
-CHECKPOINT_CONFIG="$ROOT/docs/research/android-app-plugin-schema-checkpoint/config.yaml"
-CHECKPOINT_LIBRARY="${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-$ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml}"
+CHECKPOINT_CONFIG="$ROOT/docs/research/retroarch-plugin-route/config.yaml"
+CHECKPOINT_LIBRARY="${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-$ROOT/docs/research/retroarch-plugin-route/library.yaml}"
 ANDROID_APP_PACKAGE="${KORRI_ANDROID_APP_PACKAGE:-com.playdigious.tmnt}"
+EXPECT_RETROARCH_ROUTE="${KORRI_EXPECT_RETROARCH_ROUTE:-false}"
 UPSTREAMS_CONFIG="${KORRI_ANDROID_UPSTREAMS_CONFIG:-$ROOT/services/korrid/deploy/upstreams.android.json}"
 CURL=(curl --connect-timeout 2 --max-time 5 --retry 2 --retry-connrefused)
 
@@ -230,19 +231,25 @@ if [[ "$EXPECT_INSTALLED_ROUTE" == true ]]; then
     and .outcome.payload.games[0].id == "tmnt-shredders-revenge"
     and .outcome.payload.games[0].title == "TMNT: Shredder'"'"'s Revenge"
     and .outcome.payload.games[0].system == "Android"
-    and .outcome.payload.games[1].id == "wl4"
-    and .outcome.payload.games[1].title == "Wario Land 4"
     and (.outcome.payload.failures | not)
   ' <<<"$local_games_response" >/dev/null; then
-    echo "Local-games probe did not return configured TMNT before WL4: $local_games_response" >&2
+    echo "Local-games probe did not return the configured Android route: $local_games_response" >&2
+    exit 1
+  fi
+  if [[ "$EXPECT_RETROARCH_ROUTE" == true ]] && ! jq -e '
+    .outcome.payload.games[1].id == "wl4"
+    and .outcome.payload.games[1].title == "Wario Land 4"
+  ' <<<"$local_games_response" >/dev/null; then
+    echo "Local-games probe did not return the canonical RetroArch route: $local_games_response" >&2
     exit 1
   fi
 else
   if ! jq -e '
     .outcome._tag == "Ok"
-    and any(.outcome.payload.games[]; .id == "wl4" and .title == "Wario Land 4")
+    and (.outcome.payload.games | type == "array")
+    and (.outcome.payload.failures | not)
   ' <<<"$local_games_response" >/dev/null; then
-    echo "Local-games probe did not return WL4 through the on-device brain: $local_games_response" >&2
+    echo "Local-games probe did not return a valid configured catalog: $local_games_response" >&2
     exit 1
   fi
 fi
@@ -259,15 +266,19 @@ if [[ "$EXPECT_INSTALLED_ROUTE" == true ]]; then
   fi
 fi
 
-# Embedded Android must still return a signed, deferred RetroArch instruction.
-# Rust must not attempt the external-storage write that scoped storage denies.
-local_launch_response="$("${CURL[@]}" --fail --silent \
-  -H 'content-type: application/json' \
-  -H "authorization: Bearer $capability" \
-  -d '{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}' \
-  "http://127.0.0.1:$HOST_PORT/rpc")"
-if ! require_wl4_local_launch_response "$local_launch_response"; then
-  exit 1
+local_launch_response=""
+if [[ "$EXPECT_INSTALLED_ROUTE" == true && "$EXPECT_RETROARCH_ROUTE" == true ]]; then
+  # The dedicated checkpoint composes the @korri:retroarch launcher with the
+  # independently enabled @korri:mgba runtime. Embedded Android must return a signed,
+  # deferred instruction without attempting scoped-storage writes in Rust.
+  local_launch_response="$("${CURL[@]}" --fail --silent \
+    -H 'content-type: application/json' \
+    -H "authorization: Bearer $capability" \
+    -d '{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}' \
+    "http://127.0.0.1:$HOST_PORT/rpc")"
+  if ! require_wl4_local_launch_response "$local_launch_response"; then
+    exit 1
+  fi
 fi
 
 # Session status must round-trip through the on-device brain: either a
@@ -293,6 +304,8 @@ printf 'Android local games: %s\n' "$local_games_response"
 if [[ "$EXPECT_INSTALLED_ROUTE" == true ]]; then
   printf 'Android android-app launch: %s\n' "$android_launch_response"
 fi
-printf 'Android deferred RetroArch launch: %s\n' "$local_launch_response"
+if [[ "$EXPECT_RETROARCH_ROUTE" == true ]]; then
+  printf 'Android deferred RetroArch launch: %s\n' "$local_launch_response"
+fi
 printf 'Android session status: %s\n' "$session_response"
 printf 'Android Rust library: %s\n' "$(adb -s "$DEVICE" shell dumpsys package "$PACKAGE" | grep versionName | head -1 | xargs)"

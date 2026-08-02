@@ -37,11 +37,10 @@ pub enum LaunchError {
     RouteCollision(String),
 }
 
-/// Static local playable ids owned by built-in launchers. Dynamic configuration
-/// may not shadow these ids; list diagnostics report the collision and direct
-/// launches continue to use the static owner.
+/// Static local playable ids owned outside configuration. First-party Android
+/// integrations are plugin routes, so this is intentionally empty.
 pub fn static_playable_ids() -> Vec<&'static str> {
-    retroarch::static_playable_ids()
+    Vec::new()
 }
 
 /// Everything playable on this device, from the immutable configuration state
@@ -61,24 +60,32 @@ pub fn local_games(
         );
         diagnostics.extend(catalog.diagnostics);
         for route in catalog.routes {
-            match android_app::launch_route(&route) {
-                Ok(_) => games.push(local_game_from_route(route)),
-                Err(error) => diagnostics.push(RouteDiagnostic {
+            let validation = match route.launcher_kind.as_str() {
+                "@korri:android-app" => android_app::launch_route(&route)
+                    .map(|_| ())
+                    .map_err(|error| error.to_string()),
+                "@korri:retroarch" => {
+                    retroarch::validate_route(&route).map_err(|error| error.to_string())
+                }
+                other => Err(format!("unsupported launcher kind {other}")),
+            };
+            match validation {
+                Ok(()) => games.push(local_game_from_route(route)),
+                Err(message) => diagnostics.push(RouteDiagnostic {
                     code: resolver::RouteDiagnosticCode::LocalRouteUnavailable,
-                    message: error.to_string(),
+                    message,
                     playable_id: Some(route.playable_id),
                 }),
             }
         }
     }
 
-    games.extend(retroarch::local_games());
     LocalGameCatalog { games, diagnostics }
 }
 
-/// Build the launch instruction for a game. Static launchers retain ownership
-/// of their ids; non-static ids present in the retained snapshot must resolve
-/// through the enabled plugin registry and never fall through to RetroArch.
+/// Build a launch instruction by resolving the library selection through the
+/// enabled plugin registry. Integration mappers perform effects; plugins only
+/// provide declarations.
 pub fn launch_game(
     root: &Path,
     game_id: &str,
@@ -86,10 +93,6 @@ pub fn launch_game(
     config_state: &ConfigSnapshotState,
     registry: &PluginRegistry,
 ) -> Result<LaunchSpec, LaunchError> {
-    if retroarch::owns_game(game_id) {
-        return retroarch::launch_game(root, game_id, provision_mode);
-    }
-
     if config_state.authorization != SnapshotAuthorization::Authorized {
         if config_state.generation == 0 || config_state.snapshot.library.contains_key(game_id) {
             let message = config_state
@@ -99,22 +102,29 @@ pub fn launch_game(
                 .unwrap_or_else(|| "local configuration storage is unavailable".to_owned());
             return Err(LaunchError::ConfigUnauthorized(message));
         }
-        return retroarch::launch_game(root, game_id, provision_mode);
+        return Err(LaunchError::UnknownGame(game_id.to_owned()));
     }
 
-    if config_state.snapshot.library.contains_key(game_id) {
-        let route = resolver::resolve_route(
-            &config_state.snapshot,
-            registry,
-            static_playable_ids(),
-            game_id,
-        )
-        .map_err(launch_error_from_route_diagnostic)?;
-        return android_app::launch_route(&route)
-            .map_err(|error| LaunchError::RouteUnavailable(error.to_string()));
+    if !config_state.snapshot.library.contains_key(game_id) {
+        return Err(LaunchError::UnknownGame(game_id.to_owned()));
     }
 
-    retroarch::launch_game(root, game_id, provision_mode)
+    let route = resolver::resolve_route(
+        &config_state.snapshot,
+        registry,
+        static_playable_ids(),
+        game_id,
+    )
+    .map_err(launch_error_from_route_diagnostic)?;
+
+    match route.launcher_kind.as_str() {
+        "@korri:android-app" => android_app::launch_route(&route)
+            .map_err(|error| LaunchError::RouteUnavailable(error.to_string())),
+        "@korri:retroarch" => retroarch::launch_route(root, &route, provision_mode),
+        other => Err(LaunchError::RouteUnavailable(format!(
+            "unsupported launcher kind {other}"
+        ))),
+    }
 }
 
 fn local_game_from_route(route: ResolvedRoute) -> LocalGame {
@@ -159,7 +169,7 @@ mod tests {
     const CHECKPOINT_CONFIG: &str =
         include_str!("../../../../docs/research/android-app-plugin-schema-checkpoint/config.yaml");
     const CHECKPOINT_LIBRARY: &str =
-        include_str!("../../../../docs/research/android-app-plugin-schema-checkpoint/library.yaml");
+        include_str!("../../../../docs/research/retroarch-plugin-route/library.yaml");
 
     fn registry() -> PluginRegistry {
         android_registry(true)
@@ -294,6 +304,37 @@ mod tests {
     }
 
     #[test]
+    fn malformed_retroarch_routes_are_omitted_and_diagnosed_in_the_catalog() {
+        for library in [
+            CHECKPOINT_LIBRARY.replace("path: wl4.gba", "path: ../outside.gba"),
+            CHECKPOINT_LIBRARY.replace("storage: roms", "storage: outside"),
+            CHECKPOINT_LIBRARY.replace(
+                "path: wl4.gba",
+                "path: wl4.gba\n          discovery:\n            first-seen-at: 2026-08-02",
+            ),
+            CHECKPOINT_LIBRARY.replace(
+                "runtime: \"@korri:mgba/mgba\"",
+                "runtime: \"@korri:retroarch/missing\"",
+            ),
+        ] {
+            let root = tempdir().unwrap();
+            let state = checkpoint_state_with_library(root.path(), &library);
+            let catalog = local_games(&state, &registry());
+
+            assert_eq!(
+                catalog
+                    .games
+                    .iter()
+                    .map(|game| game.id.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["tmnt-shredders-revenge"]
+            );
+            assert_eq!(catalog.diagnostics.len(), 1, "{library}");
+            assert_eq!(catalog.diagnostics[0].playable_id.as_deref(), Some("wl4"));
+        }
+    }
+
+    #[test]
     fn unauthorized_retained_snapshot_blocks_known_config_backed_launches() {
         let root = tempdir().unwrap();
         let state = unauthorized_retained_state(checkpoint_state(root.path()));
@@ -350,17 +391,17 @@ mod tests {
             "got: {error:?}"
         );
 
-        let static_error = launch_game(
+        let retroarch_error = launch_game(
             root.path(),
             "wl4",
             FileProvisionMode::Deferred,
             &state,
             &registry(),
         )
-        .expect_err("static RetroArch owner should still run before config authorization");
+        .expect_err("plugin routes require an authorized configuration snapshot");
         assert!(
-            matches!(static_error, LaunchError::RomMissing(_)),
-            "got: {static_error:?}"
+            matches!(retroarch_error, LaunchError::ConfigUnauthorized(_)),
+            "got: {retroarch_error:?}"
         );
     }
 
@@ -464,7 +505,7 @@ launchers:
     #[test]
     fn still_reports_retroarch_failures_for_retroarch_games() {
         let root = tempdir().unwrap();
-        let state = ConfigSnapshotCoordinator::new(root.path()).reload();
+        let state = checkpoint_state(root.path());
         let error = launch_game(
             root.path(),
             "wl4",

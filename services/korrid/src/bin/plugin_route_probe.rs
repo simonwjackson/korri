@@ -14,7 +14,7 @@ use korrid::plugin_policy::{
 };
 
 const CHECKPOINT_PLAYABLE_ID: &str = "tmnt-shredders-revenge";
-const STATIC_PLAYABLE_IDS: [&str; 1] = ["wl4"];
+const STATIC_PLAYABLE_IDS: [&str; 0] = [];
 
 #[derive(Clone, Copy)]
 enum ReportMode {

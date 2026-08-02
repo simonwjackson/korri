@@ -1,6 +1,11 @@
 use std::process::Command;
 
 const ANDROID_PLUGIN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/plugins/android-app.plugin.ts");
+const MGBA_PLUGIN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../plugins/mgba/plugin.ts");
+const RETROARCH_PLUGIN: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../plugins/retroarch/plugin.ts"
+);
 
 const ENABLED_REPORT: &str = concat!(
     "plugin: @korri:android-app\n",
@@ -9,6 +14,7 @@ const ENABLED_REPORT: &str = concat!(
     "provider: @korri:android-app\n",
     "system: android\n",
     "launcher: @korri:android-app/android-app\n",
+    "runtime: none\n",
 );
 
 const DISABLED_REPORT: &str = concat!(
@@ -18,6 +24,27 @@ const DISABLED_REPORT: &str = concat!(
     "provider: none\n",
     "system: none\n",
     "launcher: none\n",
+    "runtime: none\n",
+);
+
+const MGBA_ENABLED_REPORT: &str = concat!(
+    "plugin: @korri:mgba\n",
+    "registered: yes\n",
+    "enabled: yes\n",
+    "provider: @korri:mgba\n",
+    "system: gba\n",
+    "launcher: none\n",
+    "runtime: @korri:mgba/mgba\n",
+);
+
+const RETROARCH_ENABLED_REPORT: &str = concat!(
+    "plugin: @korri:retroarch\n",
+    "registered: yes\n",
+    "enabled: yes\n",
+    "provider: @korri:retroarch\n",
+    "system: none\n",
+    "launcher: @korri:retroarch/retroarch\n",
+    "runtime: none\n",
 );
 
 #[test]
@@ -28,6 +55,8 @@ fn review_probe_explains_enabled_and_disabled_announcements() {
         run_probe(&[ANDROID_PLUGIN, "--review"]),
         format!("== enabled plugin ==\n{ENABLED_REPORT}\n== disabled plugin ==\n{DISABLED_REPORT}")
     );
+    assert_eq!(run_probe(&[MGBA_PLUGIN]), MGBA_ENABLED_REPORT);
+    assert_eq!(run_probe(&[RETROARCH_PLUGIN]), RETROARCH_ENABLED_REPORT);
 }
 
 fn run_probe(args: &[&str]) -> String {

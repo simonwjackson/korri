@@ -3,14 +3,17 @@ set -euo pipefail
 
 SCRIPT_DIR="$(dirname -- "${BASH_SOURCE[0]}")"
 HERE="$(cd "$SCRIPT_DIR" && pwd)"
-RUNTIME_ROOT="$(cd "$HERE/../.." && pwd)"
+REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
+RETROARCH_ANDROID_ROOT="${RETROARCH_ANDROID_ROOT:-$REPO_ROOT/plugins/retroarch/android}"
 MGBA_URL="${MGBA_UPSTREAM_URL:-https://github.com/mgba-emu/mgba.git}"
 MGBA_REF="${MGBA_UPSTREAM_REF:-0.10.5}"
 MGBA_COMMIT="${MGBA_UPSTREAM_COMMIT:-26b7884bc25a5933960f3cdcd98bac1ae14d42e2}"
 SOURCE="${MGBA_UPSTREAM_DIR:-$HERE/upstream}"
 BUILD="${MGBA_BUILD_DIR:-$HERE/build}"
 OUT="${MGBA_OUTPUT_DIR:-$HERE/out}"
-BUNDLED_CORES="$RUNTIME_ROOT/upstream/pkg/android/phoenix/assets/cores"
+# Temporary packaging bridge: mGBA owns and builds the core, while the
+# RetroArch APK carries the resulting bytes until Android core import exists.
+BUNDLED_CORES="${RETROARCH_BUNDLED_CORES:-$RETROARCH_ANDROID_ROOT/upstream/pkg/android/phoenix/assets/cores}"
 
 : "${ANDROID_NDK_ROOT:?run inside the RetroArch Nix devshell}"
 

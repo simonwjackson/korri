@@ -2,10 +2,13 @@
 //!
 //! This is the narrow legacy plugin seam exercised by the Android application
 //! checkpoint: a plugin identifies itself and contributes provider, system,
-//! and launcher records. Plugins still perform no effects; this module only
+//! launcher, and runtime records. Plugins still perform no effects; this module only
 //! evaluates, validates, normalizes, and announces their declarations.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::{Component, Path},
+};
 
 use serde::{Deserialize, Deserializer};
 use thiserror::Error;
@@ -36,6 +39,13 @@ pub struct SystemRecord {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AndroidLauncherRecord {
+    pub package_name: String,
+    pub class_name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct LauncherRecord {
     pub id: String,
@@ -45,6 +55,26 @@ pub struct LauncherRecord {
     pub command: Option<String>,
     #[serde(default, deserialize_with = "deserialize_optional_non_null")]
     pub systems: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_non_null")]
+    pub android: Option<AndroidLauncherRecord>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct RuntimeSupportsRecord {
+    #[serde(default, deserialize_with = "deserialize_optional_non_null")]
+    pub systems: Option<Vec<String>>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct RuntimeRecord {
+    pub id: String,
+    pub kind: String,
+    pub app: String,
+    pub path: String,
+    #[serde(default, deserialize_with = "deserialize_optional_non_null")]
+    pub supports: Option<RuntimeSupportsRecord>,
 }
 
 #[derive(Clone, Debug)]
@@ -55,6 +85,7 @@ pub struct Plugin {
     providers: BTreeMap<String, ProviderRecord>,
     systems: BTreeMap<String, SystemRecord>,
     launchers: BTreeMap<String, LauncherRecord>,
+    runtimes: BTreeMap<String, RuntimeRecord>,
 }
 
 impl Plugin {
@@ -78,9 +109,11 @@ pub struct PluginRegistry {
     registered_provider_ids: BTreeSet<String>,
     registered_system_ids: BTreeSet<String>,
     registered_launcher_ids: BTreeSet<String>,
+    registered_runtime_ids: BTreeSet<String>,
     providers: BTreeMap<String, ProviderRecord>,
     systems: BTreeMap<String, SystemRecord>,
     launchers: BTreeMap<String, LauncherRecord>,
+    runtimes: BTreeMap<String, RuntimeRecord>,
 }
 
 impl PluginRegistry {
@@ -102,9 +135,11 @@ impl PluginRegistry {
         let mut registered_provider_ids = BTreeSet::new();
         let mut registered_system_ids = BTreeSet::new();
         let mut registered_launcher_ids = BTreeSet::new();
+        let mut registered_runtime_ids = BTreeSet::new();
         let mut providers = BTreeMap::new();
         let mut systems = BTreeMap::new();
         let mut launchers = BTreeMap::new();
+        let mut runtimes = BTreeMap::new();
 
         for plugin in by_id.values() {
             registered_provider_ids
@@ -112,6 +147,7 @@ impl PluginRegistry {
             registered_system_ids.extend(plugin.systems.values().map(|record| record.id.clone()));
             registered_launcher_ids
                 .extend(plugin.launchers.values().map(|record| record.id.clone()));
+            registered_runtime_ids.extend(plugin.runtimes.values().map(|record| record.id.clone()));
         }
 
         for plugin_id in &enabled_plugin_ids {
@@ -136,6 +172,13 @@ impl PluginRegistry {
                     record.clone(),
                 )?;
             }
+            for (local_id, record) in &plugin.runtimes {
+                insert_unique(
+                    &mut runtimes,
+                    plugin_record_id(plugin_id, local_id),
+                    record.clone(),
+                )?;
+            }
         }
 
         Ok(Self {
@@ -144,9 +187,11 @@ impl PluginRegistry {
             registered_provider_ids,
             registered_system_ids,
             registered_launcher_ids,
+            registered_runtime_ids,
             providers,
             systems,
             launchers,
+            runtimes,
         })
     }
 
@@ -170,6 +215,10 @@ impl PluginRegistry {
         self.registered_launcher_ids.contains(id)
     }
 
+    pub fn owns_registered_runtime_id(&self, id: &str) -> bool {
+        self.registered_runtime_ids.contains(id)
+    }
+
     pub fn providers(&self) -> &BTreeMap<String, ProviderRecord> {
         &self.providers
     }
@@ -180,6 +229,10 @@ impl PluginRegistry {
 
     pub fn launchers(&self) -> &BTreeMap<String, LauncherRecord> {
         &self.launchers
+    }
+
+    pub fn runtimes(&self) -> &BTreeMap<String, RuntimeRecord> {
+        &self.runtimes
     }
 }
 
@@ -236,6 +289,8 @@ struct PluginConfigContributions {
     systems: BTreeMap<String, SystemRecord>,
     #[serde(default)]
     launchers: BTreeMap<String, LauncherRecord>,
+    #[serde(default)]
+    runtimes: BTreeMap<String, RuntimeRecord>,
 }
 
 pub fn load_plugin_source(source: &str) -> Result<Plugin, PluginError> {
@@ -337,6 +392,44 @@ fn normalize_plugin(declaration: PluginDeclaration) -> Result<Plugin, PluginErro
                 kind: "launcher command",
             });
         }
+        if let Some(android) = &launcher.android {
+            if !is_android_identifier(&android.package_name, false)
+                || !is_android_identifier(&android.class_name, true)
+            {
+                return Err(PluginError::InvalidContribution {
+                    kind: "launcher",
+                    record_id: local_id.clone(),
+                    reason: "Android package and class names must be fully qualified identifiers"
+                        .to_owned(),
+                });
+            }
+        }
+    }
+
+    for (local_id, runtime) in &declaration.contributes.config.runtimes {
+        if local_id.is_empty() {
+            return Err(PluginError::EmptyContributionId { kind: "runtime" });
+        }
+        let expected_id = plugin_record_id(&id, local_id);
+        if runtime.id != expected_id {
+            return Err(PluginError::InvalidContribution {
+                kind: "runtime",
+                record_id: local_id.clone(),
+                reason: format!("record id {} must be {expected_id}", runtime.id),
+            });
+        }
+        if runtime.kind.is_empty()
+            || runtime.app.is_empty()
+            || !is_safe_absolute_path(&runtime.path)
+        {
+            return Err(PluginError::InvalidContribution {
+                kind: "runtime",
+                record_id: local_id.clone(),
+                reason:
+                    "runtime kind and app must be non-empty and path must be a safe absolute path"
+                        .to_owned(),
+            });
+        }
     }
 
     Ok(Plugin {
@@ -346,6 +439,7 @@ fn normalize_plugin(declaration: PluginDeclaration) -> Result<Plugin, PluginErro
         providers,
         systems: declaration.contributes.config.systems,
         launchers: declaration.contributes.config.launchers,
+        runtimes: declaration.contributes.config.runtimes,
     })
 }
 
@@ -382,6 +476,32 @@ fn is_provider_segment(value: &str) -> bool {
                 || character.is_ascii_digit()
                 || matches!(character, '.' | '_' | '-')
         })
+}
+
+fn is_android_identifier(value: &str, allow_dollar: bool) -> bool {
+    value.split('.').all(|segment| {
+        let mut chars = segment.chars();
+        matches!(chars.next(), Some(first) if first.is_ascii_alphabetic() || first == '_')
+            && chars.all(|character| {
+                character.is_ascii_alphanumeric()
+                    || character == '_'
+                    || (allow_dollar && character == '$')
+            })
+    }) && value.contains('.')
+}
+
+fn is_safe_absolute_path(value: &str) -> bool {
+    if value
+        .chars()
+        .any(|character| character.is_control() || matches!(character, '"' | '\\'))
+    {
+        return false;
+    }
+    let path = Path::new(value);
+    path.is_absolute()
+        && path
+            .components()
+            .all(|component| matches!(component, Component::RootDir | Component::Normal(_)))
 }
 
 fn deserialize_optional_non_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>

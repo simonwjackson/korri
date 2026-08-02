@@ -64,12 +64,12 @@ if ! grep -F -- '--expect-installed-route "$SERIAL"' "$ANDROID_APP_ROUTE" >/dev/
   exit 1
 fi
 # shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
-if ! grep -F 'CHECKPOINT_LIBRARY="${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-$ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml}"' "$ANDROID_APP_ROUTE" >/dev/null; then
+if ! grep -F 'CHECKPOINT_LIBRARY="${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-$ROOT/docs/research/retroarch-plugin-route/library.yaml}"' "$ANDROID_APP_ROUTE" >/dev/null; then
   echo 'android-app-route-check.sh must expose an override for the checkpoint library while keeping the canonical default' >&2
   exit 1
 fi
 # shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
-if ! grep -F 'CHECKPOINT_LIBRARY="${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-$ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml}"' "$ANDROID_SMOKE" >/dev/null; then
+if ! grep -F 'CHECKPOINT_LIBRARY="${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-$ROOT/docs/research/retroarch-plugin-route/library.yaml}"' "$ANDROID_SMOKE" >/dev/null; then
   echo 'android-smoke.sh must byte-check the same overrideable checkpoint library as the dedicated installed-route gate' >&2
   exit 1
 fi
@@ -1052,11 +1052,11 @@ case "$subcommand" in
     ;;
   exec-out)
     if [[ "${1:-}" == cat && "${2:-}" == /sdcard/korri-retro/config.yaml ]]; then
-      cat "$KORRI_ROOT/docs/research/android-app-plugin-schema-checkpoint/config.yaml"
+      cat "$KORRI_ROOT/docs/research/retroarch-plugin-route/config.yaml"
       exit 0
     fi
     if [[ "${1:-}" == cat && "${2:-}" == /sdcard/korri-retro/library.yaml ]]; then
-      cat "${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-$KORRI_ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml}"
+      cat "${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-$KORRI_ROOT/docs/research/retroarch-plugin-route/library.yaml}"
       exit 0
     fi
     exit 0
@@ -1076,7 +1076,7 @@ SMOKE="$TMP/smoke.sh"
 cat >"$SMOKE" <<'SMOKE'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'smoke:%s package=%s library=%s\n' "$*" "${KORRI_ANDROID_APP_PACKAGE:-}" "${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-}" >>"$KORRI_DEVICE_SCRIPT_REVIEW_CHILD_LOG"
+printf 'smoke:%s package=%s library=%s retro=%s\n' "$*" "${KORRI_ANDROID_APP_PACKAGE:-}" "${KORRI_ANDROID_APP_ROUTE_CHECKPOINT_LIBRARY:-}" "${KORRI_EXPECT_RETROARCH_ROUTE:-}" >>"$KORRI_DEVICE_SCRIPT_REVIEW_CHILD_LOG"
 exit 42
 SMOKE
 chmod +x "$SMOKE"
@@ -1136,15 +1136,15 @@ if [[ "$status" -ne 42 ]]; then
   cat "$TMP/route.err" >&2
   exit 1
 fi
-if ! grep -F -- 'smoke:--expect-installed-route device-1' "$CHILD_LOG" >/dev/null; then
-  echo 'android-app-route-check.sh did not invoke android-smoke.sh in installed-route mode' >&2
+if ! grep -F -- 'smoke:--expect-installed-route device-1 package= library= retro=true' "$CHILD_LOG" >/dev/null; then
+  echo 'android-app-route-check.sh did not invoke canonical smoke with the RetroArch route enabled' >&2
   exit 1
 fi
-if ! grep -F -- "push $ROOT/docs/research/android-app-plugin-schema-checkpoint/config.yaml /sdcard/korri-retro/config.yaml" "$ADB_LOG" >/dev/null; then
+if ! grep -F -- "push $ROOT/docs/research/retroarch-plugin-route/config.yaml /sdcard/korri-retro/config.yaml" "$ADB_LOG" >/dev/null; then
   echo 'android-app-route-check.sh did not provision checkpoint config.yaml in the dedicated gate' >&2
   exit 1
 fi
-if ! grep -F -- "push $ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml /sdcard/korri-retro/library.yaml" "$ADB_LOG" >/dev/null; then
+if ! grep -F -- "push $ROOT/docs/research/retroarch-plugin-route/library.yaml /sdcard/korri-retro/library.yaml" "$ADB_LOG" >/dev/null; then
   echo 'android-app-route-check.sh did not provision checkpoint library.yaml in the dedicated gate' >&2
   exit 1
 fi
@@ -1328,12 +1328,12 @@ if ! grep -F -- "push $ALT_CHECKPOINT_LIBRARY /sdcard/korri-retro/library.yaml" 
   echo 'android-app-route-check.sh did not provision the configured alternate checkpoint library path' >&2
   exit 1
 fi
-if grep -F -- "push $ROOT/docs/research/android-app-plugin-schema-checkpoint/library.yaml /sdcard/korri-retro/library.yaml" "$ADB_LOG" >/dev/null; then
+if grep -F -- "push $ROOT/docs/research/retroarch-plugin-route/library.yaml /sdcard/korri-retro/library.yaml" "$ADB_LOG" >/dev/null; then
   echo 'android-app-route-check.sh ignored the alternate checkpoint library path and pushed the canonical library' >&2
   exit 1
 fi
-if ! grep -F -- "smoke:--expect-installed-route device-1 package=review.android.game library=$ALT_CHECKPOINT_LIBRARY" "$CHILD_LOG" >/dev/null; then
-  echo 'android-app-route-check.sh did not propagate alternate package/library environment to android-smoke.sh' >&2
+if ! grep -F -- "smoke:--expect-installed-route device-1 package=review.android.game library=$ALT_CHECKPOINT_LIBRARY retro=false" "$CHILD_LOG" >/dev/null; then
+  echo 'android-app-route-check.sh did not isolate an alternate Android fixture from the canonical RetroArch route' >&2
   exit 1
 fi
 

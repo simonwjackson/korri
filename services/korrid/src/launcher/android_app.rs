@@ -129,6 +129,9 @@ mod tests {
             launcher_kind: "@korri:android-app".into(),
             integration_token: "android-app".into(),
             flattened_target: "@korri:android-app:org.example.game".into(),
+            android_component: None,
+            runtime: None,
+            file_target: None,
         }
     }
 

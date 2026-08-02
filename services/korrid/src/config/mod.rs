@@ -1016,13 +1016,6 @@ impl ReleaseLaunch {
                 "release launcher plugin selection is not executable in this slice",
             );
         }
-        if self.runtime.is_some() {
-            push_issue(
-                issues,
-                &format!("{path}.runtime"),
-                "release runtime override is not executable in this slice",
-            );
-        }
         if self.input.is_some() {
             push_issue(
                 issues,

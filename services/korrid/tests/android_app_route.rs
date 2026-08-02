@@ -9,7 +9,7 @@ use serde_json::json;
 const CHECKPOINT_CONFIG: &str =
     include_str!("../../../docs/research/android-app-plugin-schema-checkpoint/config.yaml");
 const CHECKPOINT_LIBRARY: &str =
-    include_str!("../../../docs/research/android-app-plugin-schema-checkpoint/library.yaml");
+    include_str!("../../../docs/research/retroarch-plugin-route/library.yaml");
 
 struct StopServer;
 
@@ -172,10 +172,7 @@ async fn protected_rpc_lists_and_launches_the_checkpoint_android_route_from_reta
         std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
 
         assert_eq!(unauthorized_list["outcome"]["_tag"], "Ok");
-        assert_eq!(
-            unauthorized_list["outcome"]["payload"]["games"][0]["id"],
-            "wl4"
-        );
+        assert_eq!(unauthorized_list["outcome"]["payload"]["games"], json!([]));
         assert_eq!(
             unauthorized_list["outcome"]["payload"]["failures"][0]["code"],
             "LocalConfigUnauthorized"

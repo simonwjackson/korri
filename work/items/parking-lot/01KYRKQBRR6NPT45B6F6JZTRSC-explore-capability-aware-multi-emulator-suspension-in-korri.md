@@ -37,6 +37,6 @@ Korri can make Dolphin, Switch, GBA, and other emulators feel embedded through s
 
 ## Related
 
-- `runtimes/retroarch/`
+- `plugins/retroarch/android/`
 - `services/korrid/src/launcher/`
 - `work/items/active/20260729-korri-retroarch-fork/plan.md`
