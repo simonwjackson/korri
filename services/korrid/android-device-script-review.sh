@@ -165,7 +165,17 @@ JOURNEY_REVIEW_BIN="$TMP/journey-bin"
 JOURNEY_REVIEW_ADB="$TMP/journey-adb"
 JOURNEY_REVIEW_TESSERACT="$TMP/journey-tesseract"
 JOURNEY_REVIEW_SLEEP="$JOURNEY_REVIEW_BIN/sleep"
-mkdir -p "$JOURNEY_REVIEW_BIN"
+# Seed the stale-screenshot hazard under this review's temp dir; the source
+# guard below keeps the deterministic review from reading the live external dir.
+AMBIENT_CONVENTIONAL_SHOTS="$TMP/ambient/korri-journey"
+AMBIENT_CONVENTIONAL_HOME="$AMBIENT_CONVENTIONAL_SHOTS/1-korri-home.png"
+mkdir -p "$JOURNEY_REVIEW_BIN" "$AMBIENT_CONVENTIONAL_SHOTS"
+printf 'stale black screenshot placeholder\n' >"$AMBIENT_CONVENTIONAL_HOME"
+external_shots_root="/tmp/korri""-journey"
+if sed '/^[[:space:]]*#/d' "${BASH_SOURCE[0]}" | grep -F "$external_shots_root" >/dev/null; then
+  echo 'android-device-script-review.sh must not inspect the live journey screenshot directory' >&2
+  exit 1
+fi
 cat >"$JOURNEY_REVIEW_SLEEP" <<'JOURNEY_SLEEP'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -175,6 +185,10 @@ chmod +x "$JOURNEY_REVIEW_SLEEP"
 cat >"$JOURNEY_REVIEW_TESSERACT" <<'JOURNEY_TESSERACT'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == "${KORRI_DEVICE_SCRIPT_REVIEW_AMBIENT_SCREENSHOT:-}" ]]; then
+  echo 'deterministic review attempted OCR on an ambient journey screenshot' >&2
+  exit 97
+fi
 printf '%s\n' "$*" >>"$KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG"
 printf '%s\n' "${KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT:-}"
 JOURNEY_TESSERACT
@@ -356,6 +370,7 @@ KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_ADB_LOG="$review_adb_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT="$review_ocr_with_banner" \
+KORRI_DEVICE_SCRIPT_REVIEW_AMBIENT_SCREENSHOT="$AMBIENT_CONVENTIONAL_HOME" \
 KORRI_DEVICE_SCRIPT_REVIEW_GAME="$review_game" \
 SHOTS="$review_shots" \
   "$JOURNEY_RESUME" device-1 "$review_game" >"$TMP/journey-success.out" 2>"$TMP/journey-success.err"
@@ -387,6 +402,7 @@ KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_ADB_LOG="$review_adb_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT="$review_title" \
+KORRI_DEVICE_SCRIPT_REVIEW_AMBIENT_SCREENSHOT="$AMBIENT_CONVENTIONAL_HOME" \
 KORRI_DEVICE_SCRIPT_REVIEW_GAME="$review_game" \
 SHOTS="$review_shots" \
   "$JOURNEY_RESUME" device-1 "$review_game" >"$TMP/journey-no-banner.out" 2>"$TMP/journey-no-banner.err"
@@ -404,6 +420,7 @@ KORRI_JOURNEY_EXPECTED_TITLE="$review_title" \
 KORRI_DEVICE_SCRIPT_REVIEW_JOURNEY_STATE="$review_state" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_LOG="$review_tesseract_log" \
 KORRI_DEVICE_SCRIPT_REVIEW_TESSERACT_TEXT='different review text' \
+KORRI_DEVICE_SCRIPT_REVIEW_AMBIENT_SCREENSHOT="$AMBIENT_CONVENTIONAL_HOME" \
 KORRI_DEVICE_SCRIPT_REVIEW_GAME="$review_game" \
 SHOTS="$review_shots" \
   "$JOURNEY_RESUME" device-1 "$review_game" >"$TMP/journey-failure.out" 2>"$TMP/journey-failure.err"
@@ -425,20 +442,9 @@ for evidence_path in \
   fi
 done
 
-observed_home=/tmp/korri-journey/1-korri-home.png
-if [[ -f "$observed_home" ]] && command -v tesseract >/dev/null 2>&1; then
-  observed_ocr="$TMP/observed-korri-home.ocr.txt"
-  default_title="$(awk -F'"' '/EXPECTED_PORTAL_TITLE="TMNT:/ { print $2; exit }' "$JOURNEY_RESUME")"
-  if [[ -z "$default_title" ]]; then
-    echo 'journey-resume.sh default expected portal title could not be recovered for observed screenshot review' >&2
-    exit 1
-  fi
-  tesseract "$observed_home" stdout >"$observed_ocr" 2>"$TMP/observed-korri-home.ocr.err"
-  if ! grep -F -- "$default_title" "$observed_ocr" >/dev/null; then
-    echo "observed portal screenshot OCR did not contain expected title: $observed_home" >&2
-    echo "        ocr: $observed_ocr" >&2
-    exit 1
-  fi
+if grep -F -- "$AMBIENT_CONVENTIONAL_HOME" "$TMP"/journey-*-tesseract.log >/dev/null; then
+  echo 'android-device-script-review.sh used an ambient journey screenshot instead of fresh review artifacts' >&2
+  exit 1
 fi
 
 # shellcheck source=/dev/null
