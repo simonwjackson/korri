@@ -1,8 +1,10 @@
 # Legacy configuration to plugin-backed Android launch
 
 - id: 01KYZ7E2VY1HA5F878BBJQFE6K
-- status: active
+- status: completed
 - created: 2026-08-01
+- completed: 2026-08-02
+- terminal reason: Implemented, independently reviewed, host-verified, and proven on an installed Android app route using the Pixel 3 Calculator target.
 - plan: plan.md
 - branch: feat/config-route-android-launch
 

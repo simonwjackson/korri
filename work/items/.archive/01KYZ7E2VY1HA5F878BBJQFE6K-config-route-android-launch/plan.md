@@ -1,7 +1,7 @@
 ---
 title: "feat: Load legacy configuration and launch plugin-backed Android apps"
 type: feat
-status: active
+status: completed
 date: 2026-08-01
 deepened: 2026-08-01
 verify_command: "nix run .#korrid-check"
