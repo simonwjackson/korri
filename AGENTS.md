@@ -10,6 +10,10 @@ the `legacy` branch apply here unless this file says so.
   never merge it wholesale.
 - Bring in as little as possible per slice. If a slice doesn't need it, it
   doesn't come over.
+- `main` carries no backward-compatibility baggage. Do not add aliases,
+  fallback reads, dual writes, compatibility branches, or runtime migrations
+  for superseded Korri behavior. Make one clean cut; preserve real user data
+  with an explicit, one-off operational migration when the cut is deployed.
 - The first platform target is Android (Artemis-based shell).
 - Read before you touch. Do exactly what was asked. No bonus refactors.
 
@@ -92,6 +96,9 @@ is no such concern, propose no schema change.
   toolchain composition lives in per-area Nix expressions; `devshell.nix`
   owns the interactive shell. No inline derivations or shells.
 - Project tasks are Nix apps; discover them with `nix run .#help`.
+- Android's user-visible Korri root is exactly
+  `/storage/emulated/0/korri`. Product code must not recognize older root
+  names; device cutovers are performed and verified outside the runtime.
 - Services are Rust. Wire types live in Rust and are exported through
   Typeshare into `contracts/generated/` — those files are read-only;
   regenerate them via `nix run .#korrid-check`, never edit by hand.
