@@ -9,6 +9,7 @@
  * That is what lets Korri swap surfaces without moving this logic.
  */
 import { SHELL_RESUMED_EVENT } from "@contracts/bridge/korri-native-bridge"
+import type { SurfaceSettingsStatus } from "@contracts/surface/korri-surface"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { LauncherBridge } from "../bridge/launcher-bridge"
 import type { KorridClient } from "../korrid/client"
@@ -35,6 +36,10 @@ export interface Launchables {
   readonly state: LaunchablesState
   /** What Korri knows about the device itself, as opposed to what it can play. */
   readonly facts: DeviceFacts
+  readonly settingsStatus: SurfaceSettingsStatus
+  changeSetting(settingId: string, value: string): void
+  dismissSettingsProblem(): void
+  runDeviceAction(actionId: string): void
   /** Act on one entry: launch, resume, pair, or open a system screen. */
   confirmEntry(entry: PortalEntry): void
   /** Ask the host to stop the running session and wait for it to be gone. */
@@ -54,9 +59,15 @@ export function useLaunchables(
   // the launchables ADT: settings is not a thing you can play, and folding it
   // into that state would make every list transition carry it.
   const [facts, setFacts] = useState<DeviceFacts>({})
+  const [settingsStatus, setSettingsStatus] = useState<SurfaceSettingsStatus>({
+    _tag: "Idle",
+  })
   const stateRef = useRef(state)
   stateRef.current = state
+  const factsRef = useRef(facts)
+  factsRef.current = facts
   const streamsRef = useRef<readonly StreamSource[]>([])
+  const settingsBusyRef = useRef(false)
 
   const loadSeq = useRef(0)
   const actionSeq = useRef(0)
@@ -86,8 +97,17 @@ export function useLaunchables(
     }
     // Overlapping loads: only the latest invocation may write state.
     const seq = ++loadSeq.current
-    const [games, localGames, hostsResult, session, storage, notice, health] =
-      await Promise.all([
+    const [
+      games,
+      localGames,
+      hostsResult,
+      session,
+      storage,
+      notice,
+      health,
+      settings,
+      systemInfo,
+    ] = await Promise.all([
         korrid.catalogSnapshot(),
         korrid.localGames(),
         bridge.queryStreamHosts(),
@@ -100,6 +120,8 @@ export function useLaunchables(
         bridge.backgroundNotice(),
         // Identity, not content: it names the software the user is running.
         korrid.health(),
+        korrid.settingsSnapshot(),
+        bridge.systemInfo(),
       ])
     const streams: readonly StreamSource[] =
       hostsResult._tag === "StreamHosts"
@@ -116,6 +138,8 @@ export function useLaunchables(
     streamsRef.current = streams
     setFacts({
       ...(health._tag === "Ok" ? { version: health.payload.version } : {}),
+      ...(settings._tag === "Ok" ? { settings: settings.payload } : {}),
+      systemInfo,
       storage,
       notice,
       ...(hostsResult._tag === "StreamHosts"
@@ -180,6 +204,87 @@ export function useLaunchables(
       publish(LaunchablesState.withNotice(now, message))
     },
     [publish],
+  )
+
+  const settingsProblem = useCallback((settingId: string, message: string) => {
+    setSettingsStatus({ _tag: "Problem", settingId, message })
+  }, [])
+
+  const runDeviceAction = useCallback(
+    (actionId: string) => {
+      if (actionId === "pairing") {
+        void bridge.openPairing().then(result => {
+          if (result._tag === "Unavailable") {
+            settingsProblem(actionId, result.message)
+          }
+        })
+        return
+      }
+      if (actionId === "storage-access") {
+        void bridge.openStorageAccessSettings().then(result => {
+          if (result._tag === "Unavailable") {
+            settingsProblem(actionId, result.message)
+          }
+        })
+        return
+      }
+      if (actionId === "background-notice") {
+        void (async () => {
+          if (factsRef.current.notice?._tag === "Visible") {
+            return bridge.openNotificationSettings()
+          }
+          const result = await bridge.requestBackgroundNotice()
+          return result._tag === "Unprompted"
+            ? bridge.openNotificationSettings()
+            : { _tag: "Opened" as const }
+        })().then(result => {
+          if (result._tag === "Unavailable") {
+            settingsProblem(actionId, result.message)
+          }
+        })
+        return
+      }
+      settingsProblem(actionId, "This setting is not available")
+    },
+    [bridge, settingsProblem],
+  )
+
+  const changeSetting = useCallback(
+    (settingId: string, value: string) => {
+      // React may defer the Saving render; close the same-frame double-confirm
+      // gap synchronously so two writes cannot turn one success into a conflict.
+      if (settingsBusyRef.current) return
+      settingsBusyRef.current = true
+      const revision = factsRef.current.settings?.revision
+      if (!revision) {
+        settingsBusyRef.current = false
+        settingsProblem(settingId, "Settings are not available")
+        return
+      }
+      setSettingsStatus({ _tag: "Saving", settingId })
+      void korrid.updateSetting(revision, settingId, value).then(result => {
+        settingsBusyRef.current = false
+        if (!mountedRef.current) return
+        if (result._tag === "Err") {
+          settingsProblem(settingId, result.payload.message)
+          if (result.payload.code === "SettingsConflict") void load()
+          return
+        }
+        const next = { ...factsRef.current, settings: result.payload }
+        factsRef.current = next
+        setFacts(next)
+        setSettingsStatus({ _tag: "Idle" })
+        // Plugin changes alter fulfillability; a successful save therefore
+        // refreshes the library rather than waiting for another screen visit.
+        void load()
+      })
+    },
+    [korrid, load, settingsProblem],
+  )
+
+  const dismissSettingsProblem = useCallback(
+    () => setSettingsStatus({ _tag: "Idle" }),
+    [],
   )
 
   const confirmEntry = useCallback(
@@ -432,5 +537,16 @@ export function useLaunchables(
 
   const reload = useCallback(() => void load(), [load])
 
-  return { state, facts, confirmEntry, stopSession, dismissNotice, reload }
+  return {
+    state,
+    facts,
+    settingsStatus,
+    changeSetting,
+    dismissSettingsProblem,
+    runDeviceAction,
+    confirmEntry,
+    stopSession,
+    dismissNotice,
+    reload,
+  }
 }

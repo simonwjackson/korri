@@ -45,6 +45,12 @@ export function createFixtureHost(
     runAction(actionId) {
       calls.push(`action:${actionId}`)
     },
+    changeSetting(settingId, value) {
+      calls.push(`setting:${settingId}:${value}`)
+    },
+    dismissSettingsProblem() {
+      calls.push("settings-dismiss")
+    },
     gameActions(gameId) {
       return gameActions[gameId] ?? []
     },
@@ -90,6 +96,7 @@ export const fixtureModel: SurfaceModel = {
     ],
   },
   status: { _tag: "Browsing" },
+  settingsStatus: { _tag: "Idle" },
   clockLabel: "4:24 PM",
   actions: [
     {
@@ -102,7 +109,32 @@ export const fixtureModel: SurfaceModel = {
   settings: [
     {
       title: "Device",
-      items: [{ id: "software", label: "Software", value: "korrid 0.4.1" }],
+      items: [
+        {
+          id: "device-name",
+          label: "Name",
+          value: "usu",
+          interaction: { kind: "text", maxLength: 64 },
+        },
+        { id: "software", label: "Software", value: "korrid 0.4.1" },
+      ],
+    },
+    {
+      title: "Plugins",
+      items: [
+        {
+          id: "@korri:mgba",
+          label: "mGBA",
+          value: "On",
+          interaction: {
+            kind: "choice",
+            choices: [
+              { value: "true", label: "On" },
+              { value: "false", label: "Off" },
+            ],
+          },
+        },
+      ],
     },
     {
       title: "Games",
@@ -122,7 +154,8 @@ export const fixtureModel: SurfaceModel = {
           id: "file-access",
           label: "File access",
           value: "Granted",
-          description: "Korri reads its configuration from shared storage",
+          description: "Managed by Android",
+          interaction: { kind: "action", actionId: "storage-access" },
         },
       ],
     },

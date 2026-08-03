@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     net::{Ipv4Addr, SocketAddrV4, TcpListener as StdTcpListener},
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
     thread::JoinHandle,
 };
 use tokio::sync::oneshot;
@@ -153,6 +153,56 @@ pub struct HealthRequest {}
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SettingsSnapshotRequest {}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginSetting {
+    pub id: String,
+    pub title: String,
+    pub enabled: bool,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsSnapshot {
+    pub revision: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_name: Option<String>,
+    pub plugins: Vec<PluginSetting>,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsUpdateRequest {
+    pub expected_revision: String,
+    pub setting_id: String,
+    /** Text transport keeps the surface treaty generic. Plugin values are
+     * exactly "true" or "false"; device-name values are the name itself. */
+    pub value: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
+pub enum SettingsSnapshotOutcome {
+    Ok(SettingsSnapshot),
+    Err(RpcFailure),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
+pub enum SettingsUpdateOutcome {
+    Ok(SettingsSnapshot),
+    Err(RpcFailure),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Health {
     pub version: String,
 }
@@ -222,6 +272,10 @@ pub enum RpcRequest {
     LocalGameLaunch(LocalGameLaunchRequest),
     #[serde(rename = "system.health")]
     Health(HealthRequest),
+    #[serde(rename = "system.settings.snapshot")]
+    SettingsSnapshot(SettingsSnapshotRequest),
+    #[serde(rename = "system.settings.update")]
+    SettingsUpdate(SettingsUpdateRequest),
 }
 
 #[typeshare]
@@ -242,6 +296,10 @@ pub enum RpcResponse {
     LocalGameLaunch(LocalGameLaunchOutcome),
     #[serde(rename = "system.health")]
     Health(HealthOutcome),
+    #[serde(rename = "system.settings.snapshot")]
+    SettingsSnapshot(SettingsSnapshotOutcome),
+    #[serde(rename = "system.settings.update")]
+    SettingsUpdate(SettingsUpdateOutcome),
 }
 
 #[derive(Clone)]
@@ -251,7 +309,9 @@ struct BrainRuntime {
     local_file_provision: launcher::FileProvisionMode,
     local_launch_signing_key: Vec<u8>,
     config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
-    plugin_registry: plugin::PluginRegistry,
+    /** Serialises revision-check + replace; external file-manager edits are
+     * detected by the revision inside this same critical section. */
+    settings_write_lock: Arc<Mutex<()>>,
 }
 
 #[derive(Clone)]
@@ -456,7 +516,18 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
         RpcRequest::LocalGamesList(_) => match &state.mode {
             ServerMode::Brain(brain) => {
                 let config_state = brain.config_snapshot.reload();
-                let catalog = launcher::local_games(&config_state, &brain.plugin_registry);
+                let registry = match plugin_policy::registry_for_snapshot(&config_state.snapshot) {
+                    Ok(registry) => registry,
+                    Err(error) => {
+                        return RpcResponse::LocalGamesList(LocalGamesListOutcome::Err(
+                            RpcFailure {
+                                code: "PluginPolicyInvalid".into(),
+                                message: error.to_string(),
+                            },
+                        ));
+                    }
+                };
+                let catalog = launcher::local_games(&config_state, &registry);
                 let mut failures = Vec::new();
                 if let Some(diagnostic) = &config_state.diagnostic {
                     failures.push(snapshot_diagnostic_failure(diagnostic));
@@ -477,12 +548,23 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
         RpcRequest::LocalGameLaunch(request) => match &state.mode {
             ServerMode::Brain(brain) => {
                 let config_state = brain.config_snapshot.reload();
+                let registry = match plugin_policy::registry_for_snapshot(&config_state.snapshot) {
+                    Ok(registry) => registry,
+                    Err(error) => {
+                        return RpcResponse::LocalGameLaunch(LocalGameLaunchOutcome::Err(
+                            RpcFailure {
+                                code: "PluginPolicyInvalid".into(),
+                                message: error.to_string(),
+                            },
+                        ));
+                    }
+                };
                 let outcome = launcher::launch_game(
                     &brain.local_storage_root,
                     &request.game_id,
                     brain.local_file_provision,
                     &config_state,
-                    &brain.plugin_registry,
+                    &registry,
                 )
                 .map(|spec| spec.sign(&brain.local_launch_signing_key))
                 .map(LocalGameLaunchOutcome::Ok)
@@ -499,6 +581,97 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
         RpcRequest::Health(_) => RpcResponse::Health(HealthOutcome::Ok(Health {
             version: VERSION.into(),
         })),
+        RpcRequest::SettingsSnapshot(_) => match &state.mode {
+            ServerMode::Brain(brain) => RpcResponse::SettingsSnapshot(
+                config::settings::read(&brain.local_storage_root)
+                    .map(settings_snapshot)
+                    .map(SettingsSnapshotOutcome::Ok)
+                    .unwrap_or_else(|error| SettingsSnapshotOutcome::Err(settings_failure(error))),
+            ),
+            ServerMode::Host(_) => {
+                RpcResponse::SettingsSnapshot(SettingsSnapshotOutcome::Err(RpcFailure {
+                    code: "OperationUnsupported".into(),
+                    message: "settings are available only from the Android brain".into(),
+                }))
+            }
+        },
+        RpcRequest::SettingsUpdate(request) => match &state.mode {
+            ServerMode::Brain(brain) => {
+                let _write = brain
+                    .settings_write_lock
+                    .lock()
+                    .expect("settings write lock poisoned");
+                let change = if request.setting_id == config::settings::DEVICE_NAME_SETTING_ID {
+                    Ok(config::settings::SettingChange::DeviceName(request.value))
+                } else {
+                    request
+                        .value
+                        .parse::<bool>()
+                        .map(|enabled| config::settings::SettingChange::PluginEnabled {
+                            id: request.setting_id,
+                            enabled,
+                        })
+                        .map_err(|_| {
+                            config::settings::SettingsError::Invalid(
+                                "plugin value must be true or false".into(),
+                            )
+                        })
+                };
+                let outcome = change.and_then(|change| {
+                    config::settings::update(
+                        &brain.local_storage_root,
+                        &request.expected_revision,
+                        change,
+                    )
+                });
+                if outcome.is_ok() {
+                    brain.config_snapshot.reload();
+                }
+                RpcResponse::SettingsUpdate(
+                    outcome
+                        .map(settings_snapshot)
+                        .map(SettingsUpdateOutcome::Ok)
+                        .unwrap_or_else(|error| {
+                            SettingsUpdateOutcome::Err(settings_failure(error))
+                        }),
+                )
+            }
+            ServerMode::Host(_) => {
+                RpcResponse::SettingsUpdate(SettingsUpdateOutcome::Err(RpcFailure {
+                    code: "OperationUnsupported".into(),
+                    message: "settings are available only from the Android brain".into(),
+                }))
+            }
+        },
+    }
+}
+
+fn settings_snapshot(settings: config::settings::ReadableSettings) -> SettingsSnapshot {
+    SettingsSnapshot {
+        revision: settings.revision,
+        device_name: settings.device_name,
+        plugins: settings
+            .plugins
+            .into_iter()
+            .map(|plugin| PluginSetting {
+                id: plugin.id,
+                title: plugin.title,
+                enabled: plugin.enabled,
+            })
+            .collect(),
+    }
+}
+
+fn settings_failure(error: config::settings::SettingsError) -> RpcFailure {
+    let code = match &error {
+        config::settings::SettingsError::Conflict => "SettingsConflict",
+        config::settings::SettingsError::Invalid(_) => "SettingsInvalid",
+        config::settings::SettingsError::Storage(_) => "SettingsStorageUnavailable",
+        config::settings::SettingsError::Candidate(_) => "SettingsCandidateInvalid",
+    };
+    RpcFailure {
+        code: code.into(),
+        message: error.to_string(),
     }
 }
 
@@ -568,7 +741,7 @@ fn router_with_capability_local_root_and_provision(
             local_file_provision,
             local_launch_signing_key,
             config_snapshot,
-            plugin_registry: default_plugin_registry(),
+            settings_write_lock: Arc::new(Mutex::new(())),
         }),
         rpc_capability: Some(rpc_capability.into()),
     };
@@ -604,16 +777,6 @@ pub fn generate_rpc_capability() -> String {
 fn generate_launch_signing_key() -> Vec<u8> {
     let bytes: [u8; 32] = rand::random();
     bytes.to_vec()
-}
-
-fn default_plugin_registry() -> plugin::PluginRegistry {
-    let plugins = plugin_policy::bundled_plugins().expect("bundled plugins must load");
-    let enabled_plugin_ids = plugin_policy::resolve_enabled_plugin_ids([
-        plugin_policy::bundled_plugin_policy_layer(),
-        plugin_policy::empty_user_plugin_policy_layer(),
-    ]);
-    plugin::PluginRegistry::new(plugins, enabled_plugin_ids)
-        .expect("bundled plugin policy must reference registered plugins")
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -841,13 +1004,13 @@ mod tests {
         );
     }
 
-    async fn rpc_body(app: Router, body: &'static str) -> serde_json::Value {
+    async fn rpc_body(app: Router, body: &str) -> serde_json::Value {
         rpc_body_authorized(app, body, None).await
     }
 
     async fn rpc_body_authorized(
         app: Router,
-        body: &'static str,
+        body: &str,
         capability: Option<&str>,
     ) -> serde_json::Value {
         let mut request = Request::builder()
@@ -858,7 +1021,7 @@ mod tests {
             request = request.header(header::AUTHORIZATION, format!("Bearer {capability}"));
         }
         let response = app
-            .oneshot(request.body(Body::from(body)).unwrap())
+            .oneshot(request.body(Body::from(body.to_owned())).unwrap())
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -1030,6 +1193,50 @@ command = ["sh", "-c", "sleep 1"]
         let body = String::from_utf8_lossy(&body);
         assert!(body.contains("app.local-games.list"));
         assert!(body.contains("Wario Land 4"));
+    }
+
+    #[tokio::test]
+    async fn settings_rpc_round_trips_a_conflict_safe_device_name_write() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("config.yaml"), "host:\n  title: old\n").unwrap();
+        std::fs::write(root.path().join("library.yaml"), "{}\n").unwrap();
+        let app = router_with_capability_and_local_root(
+            "right-token",
+            "https://portal.example",
+            root.path(),
+        );
+
+        let before = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"system.settings.snapshot","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(before["outcome"]["payload"]["deviceName"], "old");
+        assert_eq!(
+            before["outcome"]["payload"]["plugins"]
+                .as_array()
+                .unwrap()
+                .len(),
+            3
+        );
+        let revision = before["outcome"]["payload"]["revision"].as_str().unwrap();
+        let request = serde_json::json!({
+            "_tag": "system.settings.update",
+            "payload": {
+                "expectedRevision": revision,
+                "settingId": "device-name",
+                "value": "usu"
+            }
+        })
+        .to_string();
+        let updated = rpc_body_authorized(app, &request, Some("right-token")).await;
+
+        assert_eq!(updated["outcome"]["_tag"], "Ok");
+        assert_eq!(updated["outcome"]["payload"]["deviceName"], "usu");
+        assert!(std::fs::read_to_string(root.path().join("config.yaml"))
+            .unwrap()
+            .contains("title: usu"));
     }
 
     #[tokio::test]

@@ -10,10 +10,14 @@
  * band on the same spring the rail uses to keep a tile centered — settings
  * scrolls exactly the way home scrolls, rather than introducing a second feel.
  *
- * Rows are read-only (see `ShiftSettingRow`), so the legend offers Back alone.
- * When Korri may change a setting, Select appears with it.
+ * Read-only facts offer Back alone. A row becomes a real button, and advertises
+ * Select, only when Korri publishes a real interaction for it.
  */
-import type { SurfaceSettingGroup } from "@contracts/surface/korri-surface"
+import type {
+  SurfaceSettingGroup,
+  SurfaceSettingItem,
+  SurfaceSettingsStatus,
+} from "@contracts/surface/korri-surface"
 import { motion } from "framer-motion"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSurfaceAction } from "../host/surface-host"
@@ -23,6 +27,7 @@ import { ShiftCineTitle } from "../ui/atoms/ShiftCineTitle"
 import { ShiftCineBackdrop } from "../ui/molecules/ShiftCineBackdrop"
 import { ShiftCineLegend } from "../ui/molecules/ShiftCineLegend"
 import { ShiftSettingRow } from "../ui/molecules/ShiftSettingRow"
+import { ShiftSettingSheet } from "../ui/organisms/ShiftSettingSheet"
 import {
   ShiftStatusBar,
   type ShiftStatusBarProps,
@@ -40,6 +45,10 @@ export interface ShiftSettingsProps {
   readonly network?: ShiftStatusBarProps["network"]
   /** Ambient art carried over from the home so the scene stays continuous. */
   readonly backdropArtUrl?: string
+  readonly status: SurfaceSettingsStatus
+  readonly onChange: (settingId: string, value: string) => void
+  readonly onAction: (actionId: string) => void
+  readonly onDismissProblem: () => void
   /** Leave settings (B, or the surface's back action). */
   readonly onClose?: () => void
 }
@@ -61,16 +70,39 @@ export function ShiftSettings({
   battery,
   network,
   backdropArtUrl,
+  status,
+  onChange,
+  onAction,
+  onDismissProblem,
   onClose,
 }: ShiftSettingsProps) {
   const [index, setIndex] = useState(0)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [trackY, setTrackY] = useState(0)
   const viewportRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
+  const closeEditor = useCallback(() => {
+    setEditingId(null)
+    requestAnimationFrame(() => {
+      trackRef.current
+        ?.querySelector<HTMLElement>(`[data-setting-index="${index}"]`)
+        ?.focus({ preventScroll: true })
+    })
+  }, [index])
 
   const rows = useMemo(() => shiftSettingRowIndex(groups), [groups])
+  const items = useMemo(
+    () => groups.flatMap(group => group.items),
+    [groups],
+  )
+  const focusedItem = items[index]
+  const editingItem: SurfaceSettingItem | null =
+    items.find(item => item.id === editingId) ?? null
 
-  useSurfaceAction("back", () => onClose?.())
+  useSurfaceAction("back", () => {
+    if (editingId) closeEditor()
+    else onClose?.()
+  })
 
   // Keep the focused row in the reading band: shift the whole list so the
   // focused row's center lands at the viewport's center (the band is fixed,
@@ -147,12 +179,27 @@ export function ShiftSettings({
                         index={slot}
                         label={item.label}
                         focused={slot === index}
+                        saving={
+                          status._tag === "Saving" &&
+                          status.settingId === item.id
+                        }
                         {...(item.value === undefined
                           ? {}
                           : { value: item.value })}
                         {...(item.description === undefined
                           ? {}
                           : { description: item.description })}
+                        {...(item.interaction === undefined
+                          ? {}
+                          : {
+                              onSelect: () => {
+                                if (item.interaction?.kind === "action") {
+                                  onAction(item.interaction.actionId)
+                                } else {
+                                  setEditingId(item.id)
+                                }
+                              },
+                            })}
                         onFocus={() => focusRow(slot)}
                       />
                     )
@@ -164,11 +211,39 @@ export function ShiftSettings({
         </div>
 
         <div className="shift-settings-footer">
+          {status._tag === "Problem" && !editingId ? (
+            <button
+              type="button"
+              className="shift-settings-problem"
+              onClick={onDismissProblem}
+            >
+              {status.message}
+            </button>
+          ) : null}
           <ShiftCineLegend
-            hints={[{ glyph: "B", label: "Back", primary: true }]}
+            hints={[
+              ...(focusedItem?.interaction
+                ? [{ glyph: "A", label: "Select", primary: true }]
+                : []),
+              {
+                glyph: "B",
+                label: "Back",
+                primary: !focusedItem?.interaction,
+              },
+            ]}
           />
         </div>
       </div>
+
+      <ShiftSettingSheet
+        item={editingItem}
+        status={status}
+        onChange={value => {
+          if (editingItem) onChange(editingItem.id, value)
+        }}
+        onDismissProblem={onDismissProblem}
+        onClose={closeEditor}
+      />
 
       {rows.length === 0 ? (
         <div className="shift-settings-empty">

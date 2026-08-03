@@ -61,7 +61,18 @@ describe("createKorriNativeLauncherBridge", () => {
     backgroundNotice: () => JSON.stringify({ _tag: "Visible" }),
     requestBackgroundNotice: () => JSON.stringify({ _tag: "Granted" }),
     openNotificationSettings: () => JSON.stringify({ _tag: "Opened" }),
-    bridgeVersion: () => 10,
+    systemInfo: () =>
+      JSON.stringify({
+        _tag: "SystemInfo",
+        payload: {
+          device: "RG405M",
+          manufacturer: "Anbernic",
+          androidRelease: "14",
+          sdk: 34,
+          appVersion: "1.0",
+        },
+      }),
+    bridgeVersion: () => 11,
     ...overrides,
   })
 
@@ -163,6 +174,21 @@ describe("createKorriNativeLauncherBridge", () => {
       )
       expect(await bridge.openPairing()).toEqual(expected)
     }
+  })
+
+  it("decodes Android system information", async () => {
+    const bridge = createKorriNativeLauncherBridge(surface({}))
+
+    expect(await bridge.systemInfo()).toEqual({
+      _tag: "SystemInfo",
+      payload: {
+        device: "RG405M",
+        manufacturer: "Anbernic",
+        androidRelease: "14",
+        sdk: 34,
+        appVersion: "1.0",
+      },
+    })
   })
 
   it("converts stream bridge explosions into tagged failures", async () => {

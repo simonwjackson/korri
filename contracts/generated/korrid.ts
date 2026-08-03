@@ -80,6 +80,12 @@ export interface LocalGames {
 export interface LocalGamesListRequest {
 }
 
+export interface PluginSetting {
+	id: string;
+	title: string;
+	enabled: boolean;
+}
+
 export interface SessionPrepareRequest {
 	gameId: string;
 	host?: string;
@@ -109,6 +115,23 @@ export interface SessionStopResult {
 	phase: SessionStopPhase;
 }
 
+export interface SettingsSnapshot {
+	revision: string;
+	deviceName?: string;
+	plugins: PluginSetting[];
+}
+
+export interface SettingsSnapshotRequest {
+}
+
+export interface SettingsUpdateRequest {
+	expectedRevision: string;
+	settingId: string;
+	/** Text transport keeps the surface treaty generic. Plugin values are
+     * exactly "true" or "false"; device-name values are the name itself. */
+	value: string;
+}
+
 export type CatalogSnapshotOutcome =
 	| { _tag: "Ok", payload: CatalogSnapshot }
 	| { _tag: "Err", payload: RpcFailure };
@@ -132,7 +155,9 @@ export type RpcRequest =
 	| { _tag: "app.session.stop", payload: SessionStopRequest }
 	| { _tag: "app.local-games.list", payload: LocalGamesListRequest }
 	| { _tag: "app.local-games.launch", payload: LocalGameLaunchRequest }
-	| { _tag: "system.health", payload: HealthRequest };
+	| { _tag: "system.health", payload: HealthRequest }
+	| { _tag: "system.settings.snapshot", payload: SettingsSnapshotRequest }
+	| { _tag: "system.settings.update", payload: SettingsUpdateRequest };
 
 export type RpcResponse =
 	| { _tag: "app.catalog.snapshot", outcome: CatalogSnapshotOutcome }
@@ -141,7 +166,9 @@ export type RpcResponse =
 	| { _tag: "app.session.stop", outcome: SessionStopOutcome }
 	| { _tag: "app.local-games.list", outcome: LocalGamesListOutcome }
 	| { _tag: "app.local-games.launch", outcome: LocalGameLaunchOutcome }
-	| { _tag: "system.health", outcome: HealthOutcome };
+	| { _tag: "system.health", outcome: HealthOutcome }
+	| { _tag: "system.settings.snapshot", outcome: SettingsSnapshotOutcome }
+	| { _tag: "system.settings.update", outcome: SettingsUpdateOutcome };
 
 export type SessionPrepareOutcome =
 	| { _tag: "Ok", payload: SessionPrepared }
@@ -153,4 +180,12 @@ export type SessionStatusOutcome =
 
 export type SessionStopOutcome =
 	| { _tag: "Ok", payload: SessionStopResult }
+	| { _tag: "Err", payload: RpcFailure };
+
+export type SettingsSnapshotOutcome =
+	| { _tag: "Ok", payload: SettingsSnapshot }
+	| { _tag: "Err", payload: RpcFailure };
+
+export type SettingsUpdateOutcome =
+	| { _tag: "Ok", payload: SettingsSnapshot }
 	| { _tag: "Err", payload: RpcFailure };

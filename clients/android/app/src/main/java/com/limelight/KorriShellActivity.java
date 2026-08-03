@@ -276,7 +276,28 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public int bridgeVersion() {
             // Mirrors BRIDGE_VERSION in contracts/bridge/korri-native-bridge.ts.
-            return 10;
+            return 11;
+        }
+
+        @JavascriptInterface
+        public String systemInfo() {
+            try {
+                String appVersion = getPackageManager()
+                        .getPackageInfo(getPackageName(), 0).versionName;
+                JSONObject payload = new JSONObject();
+                payload.put("device", Build.MODEL);
+                payload.put("manufacturer", Build.MANUFACTURER);
+                payload.put("androidRelease", Build.VERSION.RELEASE);
+                payload.put("sdk", Build.VERSION.SDK_INT);
+                payload.put("appVersion", appVersion == null ? "Unknown" : appVersion);
+                JSONObject result = new JSONObject();
+                result.put("_tag", "SystemInfo");
+                result.put("payload", payload);
+                return result.toString();
+            } catch (Exception error) {
+                return "{\"_tag\":\"Unavailable\",\"message\":"
+                        + JSONObject.quote(error.toString()) + "}";
+            }
         }
 
         /**

@@ -2977,3 +2977,73 @@
 		transition: none;
 	}
 }
+
+/* Editable settings build on the same row rather than introducing a second
+ * visual language. Only rows backed by a real command become buttons. */
+[data-shift-settings] button.shift-setting-row {
+	border: 0;
+	font: inherit;
+	text-align: left;
+	color: inherit;
+	cursor: pointer;
+}
+
+[data-shift-settings] .shift-setting-row-tail {
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: var(--shift-space-2);
+	min-width: 0;
+}
+
+[data-shift-settings] .shift-setting-row-chevron,
+[data-shift-settings] .shift-setting-row-spinner {
+	flex: 0 0 auto;
+	width: 1.1em;
+	height: 1.1em;
+	color: var(--shift-ink-faint);
+}
+
+[data-shift-settings] .shift-setting-row-spinner {
+	animation: shift-setting-spin 800ms linear infinite;
+}
+
+.shift-setting-input {
+	width: 100%;
+	border: 1px solid var(--shift-rule);
+	border-radius: var(--shift-radius-panel);
+	padding: var(--shift-space-3);
+	font: inherit;
+	font-size: var(--shift-text-body);
+	color: var(--shift-ink);
+	background: var(--shift-pill-bg);
+	outline: none;
+}
+
+.shift-setting-input:focus {
+	border-color: var(--shift-accent);
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+.shift-setting-problem,
+.shift-settings-problem {
+	font: inherit;
+	font-size: var(--shift-text-fine);
+	color: var(--shift-danger);
+	background: transparent;
+	border: 0;
+}
+
+.shift-settings-problem {
+	max-width: 60%;
+	text-align: left;
+}
+
+[data-shift-settings] .shift-settings-footer {
+	align-items: center;
+	justify-content: space-between;
+}
+
+@keyframes shift-setting-spin {
+	to { transform: rotate(360deg); }
+}

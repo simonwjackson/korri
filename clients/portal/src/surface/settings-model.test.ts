@@ -1,99 +1,144 @@
 import { describe, expect, it } from "bun:test"
+import type { SettingsSnapshot } from "@contracts/generated/korrid"
 import { type DeviceFacts, settingsFrom } from "./settings-model"
 
-const titles = (facts: DeviceFacts) =>
-  settingsFrom(facts).map(group => group.title)
+const configuration: SettingsSnapshot = {
+  revision: "r1",
+  deviceName: "usu",
+  plugins: [
+    { id: "@korri:mgba", title: "mGBA", enabled: true },
+    { id: "@korri:retroarch", title: "RetroArch", enabled: false },
+  ],
+}
 
-const items = (facts: DeviceFacts, title: string) =>
-  settingsFrom(facts)
-    .find(group => group.title === title)
-    ?.items.map(item => [item.label, item.value])
+const group = (facts: DeviceFacts, title: string) =>
+  settingsFrom(facts).find(candidate => candidate.title === title)
 
 describe("settingsFrom", () => {
-  it("says nothing at all when Korri has learned nothing", () => {
-    // A settings screen full of "Unknown" is worse than no screen: it looks
-    // broken rather than early.
-    expect(settingsFrom({})).toEqual([])
+  it("always provides the native pairing entry point", () => {
+    const pairing = group({}, "Streaming")?.items.at(-1)
+    expect(pairing).toMatchObject({
+      label: "Pair or manage devices",
+      interaction: { kind: "action", actionId: "pairing" },
+    })
   })
 
-  it("omits a group whose only fact is missing", () => {
-    expect(titles({ version: "korrid 0.4.1" })).toEqual(["Device"])
+  it("makes the device name a bounded text setting", () => {
+    expect(group({ settings: configuration }, "Device")?.items[0]).toMatchObject({
+      id: "device-name",
+      value: "usu",
+      interaction: { kind: "text", maxLength: 64 },
+    })
   })
 
-  it("states permissions in the user's terms, not the shell's", () => {
-    expect(
-      items({ storage: { _tag: "Denied" }, notice: { _tag: "Hidden" } },
-        "Permissions"),
-    ).toEqual([
-      ["File access", "Not granted"],
-      ["Background notice", "Hidden"],
-    ])
-  })
-
-  it("reports a failed permission query as unknown rather than denied", () => {
-    // Claiming "Not granted" when the question failed would send the user to
-    // a settings screen to fix something that may not be broken.
-    expect(
-      items({ storage: { _tag: "QueryFailed", message: "boom" } },
-        "Permissions"),
-    ).toEqual([["File access", "Unknown"]])
-  })
-
-  it("counts only paired devices, and names each one", () => {
-    expect(
-      items(
-        {
-          hosts: [
-            { uuid: "a", name: "zao", paired: true },
-            { uuid: "b", name: "aka", paired: true },
-            { uuid: "c", name: "stranger", paired: false },
+  it("makes plugin enablement an On/Off choice", () => {
+    expect(group({ settings: configuration }, "Plugins")?.items).toEqual([
+      {
+        id: "@korri:mgba",
+        label: "mGBA",
+        value: "On",
+        interaction: {
+          kind: "choice",
+          choices: [
+            { value: "true", label: "On" },
+            { value: "false", label: "Off" },
           ],
         },
-        "Streaming",
-      ),
+      },
+      {
+        id: "@korri:retroarch",
+        label: "RetroArch",
+        value: "Off",
+        interaction: {
+          kind: "choice",
+          choices: [
+            { value: "true", label: "On" },
+            { value: "false", label: "Off" },
+          ],
+        },
+      },
+    ])
+  })
+
+  it("states permissions and links each one to Android", () => {
+    expect(
+      group(
+        { storage: { _tag: "Denied" }, notice: { _tag: "Hidden" } },
+        "Permissions",
+      )?.items,
     ).toEqual([
-      ["Paired devices", "2 devices"],
+      {
+        id: "file-access",
+        label: "File access",
+        value: "Not granted",
+        description: "Managed by Android",
+        interaction: { kind: "action", actionId: "storage-access" },
+      },
+      {
+        id: "background-notice",
+        label: "Background notice",
+        value: "Hidden",
+        description: "Managed by Android",
+        interaction: { kind: "action", actionId: "background-notice" },
+      },
+    ])
+  })
+
+  it("does not call a failed permission query denied", () => {
+    expect(
+      group(
+        { storage: { _tag: "QueryFailed", message: "boom" } },
+        "Permissions",
+      )?.items[0]?.value,
+    ).toBe("Unknown")
+  })
+
+  it("counts paired devices, names them, and keeps management last", () => {
+    const streaming = group(
+      {
+        hosts: [
+          { uuid: "a", name: "zao", paired: true },
+          { uuid: "b", name: "stranger", paired: false },
+        ],
+      },
+      "Streaming",
+    )
+    expect(streaming?.items.map(item => [item.label, item.value])).toEqual([
+      ["Paired devices", "1 device"],
       ["zao", "Paired"],
-      ["aka", "Paired"],
+      ["Pair or manage devices", undefined],
     ])
   })
 
-  it("says None rather than 0 when nothing is paired", () => {
-    expect(items({ hosts: [] }, "Streaming")).toEqual([
-      ["Paired devices", "None"],
-    ])
+  it("explains that game count comes from library.yaml", () => {
+    const game = group({ localGameCount: 1 }, "Games")?.items[0]
+    expect(game?.value).toBe("1 game")
+    expect(game?.description).toBe("Declared in library.yaml")
   })
 
-  it("explains where the game count comes from, since Korri does not scan", () => {
-    const group = settingsFrom({ localGameCount: 1 }).find(
-      entry => entry.title === "Games",
+  it("publishes Android, app, and korrid identity as read-only facts", () => {
+    const system = group(
+      {
+        version: "korrid-v0",
+        systemInfo: {
+          _tag: "SystemInfo",
+          payload: {
+            device: "RG405M",
+            manufacturer: "Anbernic",
+            androidRelease: "14",
+            sdk: 34,
+            appVersion: "1.2.3",
+          },
+        },
+      },
+      "System information",
     )
-    expect(group?.items[0]?.value).toBe("1 game")
-    expect(group?.items[0]?.description).toBe("Declared in library.yaml")
-  })
-
-  it("pluralises counts", () => {
-    expect(items({ localGameCount: 0 }, "Games")).toEqual([
-      ["On this device", "0 games"],
+    expect(system?.items.map(item => [item.label, item.value])).toEqual([
+      ["Device", "Anbernic RG405M"],
+      ["Android", "14 · SDK 34"],
+      ["Korri app", "1.2.3"],
+      ["korrid", "korrid-v0"],
     ])
-    expect(items({ localGameCount: 3 }, "Games")).toEqual([
-      ["On this device", "3 games"],
-    ])
-  })
-
-  it("offers no way to change anything", () => {
-    // Read-only is the contract, not an accident of the current data: no item
-    // may carry a command until Korri may write the user's configuration.
-    const everything = settingsFrom({
-      version: "korrid 0.4.1",
-      storage: { _tag: "Granted" },
-      notice: { _tag: "Visible" },
-      hosts: [{ uuid: "a", name: "zao", paired: true }],
-      localGameCount: 2,
-    })
-    const keys = new Set(
-      everything.flatMap(group => group.items.flatMap(Object.keys)),
-    )
-    expect([...keys].sort()).toEqual(["description", "id", "label", "value"])
+    expect(system?.items.every(item => item.interaction === undefined)).toBe(true)
   })
 })

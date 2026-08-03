@@ -1,4 +1,5 @@
 pub mod resolver;
+pub mod settings;
 pub mod snapshot;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -488,12 +489,16 @@ impl HostPayload {
                 "host preferences are not executable in this slice",
             );
         }
-        if self.plugin.is_some() {
-            push_issue(
-                issues,
-                &format!("{path}.plugin"),
-                "host plugin policy is not executable in this slice",
-            );
+        if let Some(plugin) = &self.plugin {
+            for (id, value) in plugin {
+                if !value.is_boolean() {
+                    push_issue(
+                        issues,
+                        &format!("{path}.plugin.{}", id.0),
+                        "plugin enablement must be true or false",
+                    );
+                }
+            }
         }
         if self.env.is_some() {
             push_issue(

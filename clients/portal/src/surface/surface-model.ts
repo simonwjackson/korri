@@ -13,6 +13,7 @@ import type {
   SurfaceGame,
   SurfaceModel,
   SurfaceSettingGroup,
+  SurfaceSettingsStatus,
   SurfaceStatus,
 } from "@contracts/surface/korri-surface"
 import {
@@ -168,6 +169,7 @@ export function surfaceModelFrom(
     readonly clockLabel?: string
     readonly buildLabel?: string
     readonly settings?: readonly SurfaceSettingGroup[]
+    readonly settingsStatus?: SurfaceSettingsStatus
   } = {},
 ): SurfaceModel {
   const actions =
@@ -182,6 +184,7 @@ export function surfaceModelFrom(
     status: statusFrom(state),
     actions,
     settings: options.settings ?? [],
+    settingsStatus: options.settingsStatus ?? { _tag: "Idle" },
     ...(options.clockLabel === undefined
       ? {}
       : { clockLabel: options.clockLabel }),

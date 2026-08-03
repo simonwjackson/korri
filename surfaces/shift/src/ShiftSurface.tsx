@@ -78,27 +78,17 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
 
   const closeSheet = useCallback(() => setSheetGameId(null), [])
 
-  // Settings appears in the rail only when Korri has something to state; an
-  // empty screen is not worth a destination.
+  // Setup commands now live with their current values in Settings; the home
+  // rail is for things to play plus this one destination, never a debug list of
+  // permissions and pairing actions.
   const railActions = useMemo<readonly SurfaceAction[]>(
-    () =>
-      model.settings.length > 0
-        ? [...model.actions, SETTINGS_AFFORDANCE]
-        : model.actions,
-    [model.actions, model.settings],
+    () => (model.settings.length > 0 ? [SETTINGS_AFFORDANCE] : []),
+    [model.settings],
   )
 
-  // Shift's own destination is consumed here; everything else is Korri's.
-  const runRailAction = useCallback(
-    (actionId: string) => {
-      if (actionId === SHIFT_SETTINGS_ACTION_ID) {
-        setScreen("settings")
-        return
-      }
-      host.runAction(actionId)
-    },
-    [host],
-  )
+  const runRailAction = useCallback((actionId: string) => {
+    if (actionId === SHIFT_SETTINGS_ACTION_ID) setScreen("settings")
+  }, [])
 
   const sheetGame = games.find(game => game.id === sheetGameId)
   // Ask the host only while the sheet is actually about a game, so a host that
@@ -114,6 +104,10 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
     screen === "settings" ? (
       <ShiftSettings
         groups={model.settings}
+        status={model.settingsStatus}
+        onChange={(settingId, value) => host.changeSetting(settingId, value)}
+        onAction={actionId => host.runAction(actionId)}
+        onDismissProblem={() => host.dismissSettingsProblem()}
         {...(model.clockLabel === undefined ? {} : { time: model.clockLabel })}
         onClose={() => setScreen("home")}
       />
@@ -123,6 +117,19 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
       <ShiftHomeLoadErrorBody
         message={model.catalog.message}
         onRetry={() => host.reload()}
+      />
+    ) : model.catalog._tag === "Empty" && railActions.length > 0 ? (
+      // A plugin can make the playable catalog empty. Settings must remain
+      // reachable so the user can turn it back on rather than trapping the
+      // device on an empty page.
+      <ShiftCinematicHome
+        games={[]}
+        {...(model.clockLabel === undefined ? {} : { time: model.clockLabel })}
+        status={model.status}
+        actions={railActions}
+        onAction={runRailAction}
+        onRetry={() => host.retry()}
+        onDismiss={() => host.dismiss()}
       />
     ) : model.catalog._tag === "Empty" ? (
       <ShiftHomeEmptyBody />

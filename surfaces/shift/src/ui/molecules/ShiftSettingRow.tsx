@@ -1,16 +1,6 @@
-/**
- * Shift settings Row — one readable fact, label left and value right.
- *
- * Anatomy and focus behaviour come from the sheet's action row (full width,
- * pill lift on focus), but this row is deliberately NOT a button: settings are
- * read-only today, and a control that depresses without doing anything promises
- * something Korri cannot deliver.
- *
- * It is still focusable, because focus is how a handheld reads a list longer
- * than its screen: moving focus is the reading position, and the page scrolls
- * to follow it. The legend on the settings page therefore offers Back only —
- * no Select — so no button is advertised that does nothing.
- */
+/** Shift settings Row — one fact, optionally actionable. */
+import { ChevronRight, LoaderCircle } from "lucide-react"
+import type { ReactNode } from "react"
 import {
   SHIFT_DESIGN_PARTS,
   shiftDesignPartAttrs,
@@ -18,15 +8,43 @@ import {
 
 export interface ShiftSettingRowProps {
   readonly label: string
-  /** Position in the page's flat focus order; drives the scroll math. */
   readonly index: number
-  /** Current state as display text. Absent renders the label alone. */
   readonly value?: string
-  /** One-line explanation, shown under the label. */
   readonly description?: string
-  /** The row currently under the reading band. */
   readonly focused?: boolean
+  readonly saving?: boolean
   readonly onFocus?: () => void
+  /** Present makes this a real button. Absent keeps it a readable focus anchor. */
+  readonly onSelect?: () => void
+}
+
+function content(
+  label: string,
+  value: string | undefined,
+  description: string | undefined,
+  actionable: boolean,
+  saving: boolean,
+): ReactNode {
+  return (
+    <>
+      <span className="shift-setting-row-text">
+        <span className="shift-setting-row-label">{label}</span>
+        {description ? (
+          <span className="shift-setting-row-description">{description}</span>
+        ) : null}
+      </span>
+      <span className="shift-setting-row-tail">
+        {value === undefined ? null : (
+          <span className="shift-setting-row-value">{value}</span>
+        )}
+        {saving ? (
+          <LoaderCircle className="shift-setting-row-spinner" aria-hidden />
+        ) : actionable ? (
+          <ChevronRight className="shift-setting-row-chevron" aria-hidden />
+        ) : null}
+      </span>
+    </>
+  )
 }
 
 export function ShiftSettingRow({
@@ -35,28 +53,28 @@ export function ShiftSettingRow({
   value,
   description,
   focused = false,
+  saving = false,
   onFocus,
+  onSelect,
 }: ShiftSettingRowProps) {
-  return (
-    <div
-      className="shift-setting-row"
-      data-setting-index={index}
-      data-focused={focused || undefined}
-      tabIndex={0}
-      role="group"
-      aria-label={value === undefined ? label : `${label}: ${value}`}
-      onFocus={onFocus}
-      {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.settingRow, label)}
-    >
-      <span className="shift-setting-row-text">
-        <span className="shift-setting-row-label">{label}</span>
-        {description ? (
-          <span className="shift-setting-row-description">{description}</span>
-        ) : null}
-      </span>
-      {value === undefined ? null : (
-        <span className="shift-setting-row-value">{value}</span>
-      )}
+  const common = {
+    className: "shift-setting-row",
+    "data-setting-index": index,
+    "data-focused": focused || undefined,
+    "data-actionable": Boolean(onSelect) || undefined,
+    "aria-label": value === undefined ? label : `${label}: ${value}`,
+    onFocus,
+    ...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.settingRow, label),
+  }
+  const body = content(label, value, description, Boolean(onSelect), saving)
+
+  return onSelect ? (
+    <button type="button" onClick={onSelect} {...common}>
+      {body}
+    </button>
+  ) : (
+    <div tabIndex={0} role="group" {...common}>
+      {body}
     </div>
   )
 }

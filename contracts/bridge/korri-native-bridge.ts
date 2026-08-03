@@ -23,8 +23,9 @@ import type { LaunchSpec as GeneratedLaunchSpec } from "../generated/korrid"
 // at 1. 4 introduced the session lifecycle; 5 adds the per-server korrid
 // capability required to protect localhost session-control RPCs. 6 adds the
 // launcher-neutral local launch instruction. 10 removes direct Android app
-// enumeration/launch and makes notification prompt semantics explicit.
-export const BRIDGE_VERSION = 10
+// enumeration/launch and makes notification prompt semantics explicit. 11 adds
+// the shell-owned Android/app identity used by System information.
+export const BRIDGE_VERSION = 11
 
 // ── Local launches (JS -> Kotlin) ───────────────────────────────────────
 
@@ -197,9 +198,25 @@ export interface KorriNativeBridgeSurface {
    * for the user — so turning it off always means going here.
    */
   openNotificationSettings(): string
+  /** Android and app identity for the read-only System information group. */
+  systemInfo(): string
   /** Returns `BRIDGE_VERSION` of the shell build. */
   bridgeVersion(): number
 }
+
+// ── System information (v11) ────────────────────────────────────────
+
+export interface AndroidSystemInfo {
+  readonly device: string
+  readonly manufacturer: string
+  readonly androidRelease: string
+  readonly sdk: number
+  readonly appVersion: string
+}
+
+export type SystemInfoResult =
+  | { readonly _tag: "SystemInfo"; readonly payload: AndroidSystemInfo }
+  | { readonly _tag: "Unavailable"; readonly message: string }
 
 // ── Background notice (v10) ──────────────────────────────────────────
 

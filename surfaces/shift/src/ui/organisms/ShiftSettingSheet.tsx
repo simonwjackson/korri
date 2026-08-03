@@ -1,0 +1,89 @@
+/** Editor for one Shift setting, using the existing contextual side sheet. */
+import type {
+  SurfaceSettingItem,
+  SurfaceSettingsStatus,
+} from "@contracts/surface/korri-surface"
+import { useEffect, useRef, useState } from "react"
+import { ShiftSheetAction } from "../molecules/ShiftSheetAction"
+import { ShiftSheetBody } from "./ShiftSheetBody"
+import { ShiftSheetGroup } from "./ShiftSheetGroup"
+import { ShiftSheetHeader } from "./ShiftSheetHeader"
+import { ShiftSheetPanel } from "./ShiftSheetPanel"
+import { ShiftSheetRoot } from "./ShiftSheetRoot"
+import { ShiftSheetTitle } from "./ShiftSheetTitle"
+
+export function ShiftSettingSheet({
+  item,
+  status,
+  onChange,
+  onDismissProblem,
+  onClose,
+}: {
+  readonly item: SurfaceSettingItem | null
+  readonly status: SurfaceSettingsStatus
+  readonly onChange: (value: string) => void
+  readonly onDismissProblem: () => void
+  readonly onClose: () => void
+}) {
+  const [text, setText] = useState(item?.value ?? "")
+  const wasSaving = useRef(false)
+  useEffect(() => setText(item?.value ?? ""), [item])
+  useEffect(() => {
+    if (status._tag === "Saving") {
+      wasSaving.current = true
+    } else if (status._tag === "Idle" && wasSaving.current) {
+      wasSaving.current = false
+      onClose()
+    }
+  }, [status, onClose])
+
+  if (!item?.interaction || item.interaction.kind === "action") return null
+  const saving = status._tag === "Saving" && status.settingId === item.id
+  const problem = status._tag === "Problem" && status.settingId === item.id
+
+  return (
+    <ShiftSheetRoot open onClose={onClose} label={`Change ${item.label}`}>
+      <ShiftSheetPanel>
+        <ShiftSheetHeader>
+          <ShiftSheetTitle>{item.label}</ShiftSheetTitle>
+        </ShiftSheetHeader>
+        <ShiftSheetBody>
+          {problem ? (
+            <ShiftSheetGroup title="Couldn't save">
+              <p className="shift-setting-problem">{status.message}</p>
+              <ShiftSheetAction label="Dismiss" onSelect={onDismissProblem} />
+            </ShiftSheetGroup>
+          ) : item.interaction.kind === "choice" ? (
+            <ShiftSheetGroup title="Choose">
+              {item.interaction.choices.map(choice => (
+                <ShiftSheetAction
+                  key={choice.value}
+                  label={`${choice.label}${choice.label === item.value ? " · Current" : ""}`}
+                  disabled={saving}
+                  onSelect={() => onChange(choice.value)}
+                />
+              ))}
+            </ShiftSheetGroup>
+          ) : (
+            <ShiftSheetGroup title="Name">
+              <input
+                className="shift-setting-input"
+                value={text}
+                placeholder={item.interaction.placeholder}
+                maxLength={item.interaction.maxLength}
+                disabled={saving}
+                onChange={event => setText(event.currentTarget.value)}
+                aria-label={item.label}
+              />
+              <ShiftSheetAction
+                label={saving ? "Saving…" : "Save"}
+                disabled={saving || text.trim().length === 0}
+                onSelect={() => onChange(text)}
+              />
+            </ShiftSheetGroup>
+          )}
+        </ShiftSheetBody>
+      </ShiftSheetPanel>
+    </ShiftSheetRoot>
+  )
+}

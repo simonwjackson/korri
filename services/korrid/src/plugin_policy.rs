@@ -6,7 +6,10 @@
 
 use std::collections::BTreeMap;
 
-use crate::plugin::{load_plugin_source, Plugin, PluginError};
+use crate::{
+    config::ConfigSnapshot,
+    plugin::{load_plugin_source, Plugin, PluginError, PluginRegistry},
+};
 
 pub const ANDROID_APP_PLUGIN_ID: &str = "@korri:android-app";
 pub const ANDROID_APP_PLUGIN_SOURCE: &str = include_str!("../plugins/android-app.plugin.ts");
@@ -49,6 +52,52 @@ pub fn bundled_plugin_policy_layer() -> PluginPolicyLayer {
 
 pub fn empty_user_plugin_policy_layer() -> PluginPolicyLayer {
     PluginPolicyLayer::default()
+}
+
+/** The legacy-readable `host.plugin` record is now the user policy layer when
+ * its values are booleans. Schema/support validation rejects every other shape
+ * before this point. */
+pub fn user_plugin_policy_layer(snapshot: &ConfigSnapshot) -> PluginPolicyLayer {
+    let entries = snapshot
+        .host
+        .as_ref()
+        .and_then(|host| host.plugin.as_ref())
+        .into_iter()
+        .flat_map(|plugins| plugins.iter())
+        .filter_map(|(id, value)| value.as_bool().map(|enabled| (id.0.as_str(), enabled)));
+    PluginPolicyLayer::from_enabled(entries)
+}
+
+pub fn enabled_plugin_ids_for_snapshot(
+    snapshot: &ConfigSnapshot,
+) -> Result<Vec<String>, PluginError> {
+    let plugins = bundled_plugins()?;
+    let enabled = resolve_enabled_plugin_ids([
+        bundled_plugin_policy_layer(),
+        user_plugin_policy_layer(snapshot),
+    ]);
+    // Validation belongs at the policy edge: disabled unknown ids are invalid
+    // too, even though PluginRegistry only observes enabled ids.
+    let known: std::collections::BTreeSet<&str> =
+        plugins.iter().map(|plugin| plugin.id()).collect();
+    if let Some(unknown) = snapshot
+        .host
+        .as_ref()
+        .and_then(|host| host.plugin.as_ref())
+        .into_iter()
+        .flat_map(|values| values.keys())
+        .find(|id| !known.contains(id.0.as_str()))
+    {
+        return Err(PluginError::UnknownEnabledPlugin(unknown.0.clone()));
+    }
+    Ok(enabled)
+}
+
+pub fn registry_for_snapshot(snapshot: &ConfigSnapshot) -> Result<PluginRegistry, PluginError> {
+    PluginRegistry::new(
+        bundled_plugins()?,
+        enabled_plugin_ids_for_snapshot(snapshot)?,
+    )
 }
 
 pub fn resolve_enabled_plugin_ids(

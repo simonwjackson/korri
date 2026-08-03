@@ -19,6 +19,9 @@ import type {
   SessionPrepareOutcome,
   SessionStatusOutcome,
   SessionStopOutcome,
+  SettingsSnapshot,
+  SettingsSnapshotOutcome,
+  SettingsUpdateOutcome,
 } from "@contracts/generated/korrid"
 import { SessionStopPhase } from "@contracts/generated/korrid"
 
@@ -29,6 +32,12 @@ export type RpcResponseFor<Request extends RpcRequest> = Extract<
 
 export interface KorridClient {
   health(): Promise<HealthOutcome>
+  settingsSnapshot(): Promise<SettingsSnapshotOutcome>
+  updateSetting(
+    expectedRevision: string,
+    settingId: string,
+    value: string,
+  ): Promise<SettingsUpdateOutcome>
   catalogSnapshot(): Promise<CatalogSnapshotOutcome>
   localGames(): Promise<LocalGamesListOutcome>
   localGameLaunch(gameId: string): Promise<LocalGameLaunchOutcome>
@@ -87,6 +96,28 @@ export function createHttpKorridClient(
         const response = await callKorrid(baseUrl, capability, {
           _tag: "system.health",
           payload: {},
+        })
+        return response.outcome
+      } catch (error) {
+        return unreachable(error)
+      }
+    },
+    async settingsSnapshot() {
+      try {
+        const response = await callKorrid(baseUrl, capability, {
+          _tag: "system.settings.snapshot",
+          payload: {},
+        })
+        return response.outcome
+      } catch (error) {
+        return unreachable(error)
+      }
+    },
+    async updateSetting(expectedRevision, settingId, value) {
+      try {
+        const response = await callKorrid(baseUrl, capability, {
+          _tag: "system.settings.update",
+          payload: { expectedRevision, settingId, value },
         })
         return response.outcome
       } catch (error) {
@@ -198,9 +229,42 @@ export function createInMemoryKorridClient(
   const localLaunchSpecs = config.localLaunchSpecs ?? {}
   const localFailures = config.localFailures
   let activeSession = config.activeSession
+  let settings: SettingsSnapshot = {
+    revision: "in-memory-0",
+    deviceName: "Browser",
+    plugins: [
+      { id: "@korri:android-app", title: "Android", enabled: true },
+      { id: "@korri:mgba", title: "mGBA", enabled: true },
+      { id: "@korri:retroarch", title: "RetroArch", enabled: true },
+    ],
+  }
+  let settingsRevision = 0
   return {
     async health() {
       return { _tag: "Ok", payload: { version: "korrid-in-memory" } }
+    },
+    async settingsSnapshot() {
+      return { _tag: "Ok", payload: settings }
+    },
+    async updateSetting(expectedRevision, settingId, value) {
+      if (expectedRevision !== settings.revision) {
+        return {
+          _tag: "Err",
+          payload: { code: "SettingsConflict", message: "reload and try again" },
+        }
+      }
+      settingsRevision += 1
+      settings = {
+        ...settings,
+        revision: `in-memory-${settingsRevision}`,
+        ...(settingId === "device-name" ? { deviceName: value.trim() } : {}),
+        plugins: settings.plugins.map(plugin =>
+          plugin.id === settingId
+            ? { ...plugin, enabled: value === "true" }
+            : plugin,
+        ),
+      }
+      return { _tag: "Ok", payload: settings }
     },
     async catalogSnapshot() {
       if (behavior === "catalog-fail") {

@@ -11,6 +11,7 @@ import type {
   QueryStreamHostsResult,
   StartStreamResult,
   StorageAccessResult,
+  SystemInfoResult,
   StreamApp,
   StreamHost,
 } from "@contracts/bridge/korri-native-bridge"
@@ -41,6 +42,8 @@ export interface LauncherBridge {
   openNotificationSettings(): Promise<OpenNotificationSettingsResult>
   /** Take the user to the native pairing screen. */
   openPairing(): Promise<OpenPairingResult>
+  /** Android and app identity for System information. */
+  systemInfo(): Promise<SystemInfoResult>
 }
 
 export function createKorriNativeLauncherBridge(
@@ -132,6 +135,13 @@ export function createKorriNativeLauncherBridge(
     async openPairing() {
       try {
         return decodeOpenPairing(JSON.parse(surface.openPairing()))
+      } catch (error) {
+        return { _tag: "Unavailable", message: describe(error) }
+      }
+    },
+    async systemInfo() {
+      try {
+        return decodeSystemInfo(JSON.parse(surface.systemInfo()))
       } catch (error) {
         return { _tag: "Unavailable", message: describe(error) }
       }
@@ -250,6 +260,19 @@ export function createInMemoryLauncherBridge(
         ? { _tag: "Unavailable", message: "no settings screen in browser dev" }
         : { _tag: "Opened" }
     },
+    async systemInfo() {
+      await delay()
+      return {
+        _tag: "SystemInfo",
+        payload: {
+          device: "Browser",
+          manufacturer: "Korri",
+          androidRelease: "Not Android",
+          sdk: 0,
+          appVersion: "development",
+        },
+      }
+    },
   }
 }
 
@@ -318,6 +341,27 @@ function decodeOpenNotificationSettings(
       return { _tag: payload._tag, message: stringField(payload, "message") }
     default:
       throw new Error("malformed OpenNotificationSettingsResult")
+  }
+}
+
+function decodeSystemInfo(value: unknown): SystemInfoResult {
+  const result = record(value, "SystemInfoResult")
+  if (result._tag === "Unavailable") {
+    return { _tag: "Unavailable", message: stringField(result, "message") }
+  }
+  if (result._tag !== "SystemInfo") throw new Error("malformed SystemInfoResult")
+  const payload = record(result.payload, "AndroidSystemInfo")
+  const sdk = payload.sdk
+  if (typeof sdk !== "number") throw new Error("malformed sdk")
+  return {
+    _tag: "SystemInfo",
+    payload: {
+      device: stringField(payload, "device"),
+      manufacturer: stringField(payload, "manufacturer"),
+      androidRelease: stringField(payload, "androidRelease"),
+      sdk,
+      appVersion: stringField(payload, "appVersion"),
+    },
   }
 }
 

@@ -1,34 +1,23 @@
-/**
- * Device facts, grouped for a surface to read.
- *
- * Read-only by construction: every value here is something Korri already knows
- * because it asked the shell or korrid a question it can answer. Korri has
- * never written the user's configuration, so nothing in this file offers a way
- * to change anything — the screen states what is true and stops there.
- *
- * A group with nothing to say is omitted entirely rather than rendered empty,
- * so the surface never has to decide how to draw a heading over nothing.
- */
+/** Device facts and the narrow settings Korri can honestly change today. */
 import type {
   SurfaceSettingGroup,
   SurfaceSettingItem,
 } from "@contracts/surface/korri-surface"
-import type { StreamHost } from "@contracts/bridge/korri-native-bridge"
 import type {
   BackgroundNoticeResult,
   StorageAccessResult,
+  StreamHost,
+  SystemInfoResult,
 } from "@contracts/bridge/korri-native-bridge"
+import type { SettingsSnapshot } from "@contracts/generated/korrid"
 
-/** Everything the portal has learned about the device itself, as opposed to
- * the things it can play. Every field is optional: a source that failed or has
- * not answered yet simply contributes no row. */
 export interface DeviceFacts {
-  /** korrid's reported version, from `system.health`. */
   readonly version?: string
+  readonly settings?: SettingsSnapshot
   readonly storage?: StorageAccessResult
   readonly notice?: BackgroundNoticeResult
   readonly hosts?: readonly StreamHost[]
-  /** Games declared for this device in `library.yaml`. */
+  readonly systemInfo?: SystemInfoResult
   readonly localGameCount?: number
 }
 
@@ -48,7 +37,6 @@ const storageValue = (result: StorageAccessResult): string => {
 const countLabel = (count: number, noun: string): string =>
   count === 1 ? `1 ${noun}` : `${count} ${noun}s`
 
-/** Drop groups whose items all resolved to nothing. */
 const group = (
   title: string,
   items: readonly (SurfaceSettingItem | undefined)[],
@@ -59,15 +47,42 @@ const group = (
   return present.length > 0 ? { title, items: present } : undefined
 }
 
+const onOff = [
+  { value: "true", label: "On" },
+  { value: "false", label: "Off" },
+] as const
+
 export function settingsFrom(facts: DeviceFacts): readonly SurfaceSettingGroup[] {
   const paired = facts.hosts?.filter(host => host.paired) ?? []
+  const android =
+    facts.systemInfo?._tag === "SystemInfo"
+      ? facts.systemInfo.payload
+      : undefined
 
   const groups = [
     group("Device", [
-      facts.version === undefined
+      facts.settings === undefined
         ? undefined
-        : { id: "software", label: "Software", value: facts.version },
+        : {
+            id: "device-name",
+            label: "Name",
+            value: facts.settings.deviceName ?? "Unnamed",
+            interaction: {
+              kind: "text" as const,
+              placeholder: "This device",
+              maxLength: 64,
+            },
+          },
     ]),
+    group(
+      "Plugins",
+      facts.settings?.plugins.map(plugin => ({
+        id: plugin.id,
+        label: plugin.title,
+        value: plugin.enabled ? "On" : "Off",
+        interaction: { kind: "choice" as const, choices: onOff },
+      })) ?? [],
+    ),
     group("Games", [
       facts.localGameCount === undefined
         ? undefined
@@ -75,8 +90,6 @@ export function settingsFrom(facts: DeviceFacts): readonly SurfaceSettingGroup[]
             id: "local-games",
             label: "On this device",
             value: countLabel(facts.localGameCount, "game"),
-            // Names the reason an empty library is empty, since Korri does not
-            // scan yet and nothing else on screen would say so.
             description: "Declared in library.yaml",
           },
     ]),
@@ -96,6 +109,12 @@ export function settingsFrom(facts: DeviceFacts): readonly SurfaceSettingGroup[]
         label: host.name,
         value: "Paired",
       })),
+      {
+        id: "manage-pairing",
+        label: "Pair or manage devices",
+        description: "Opens Moonlight's secure pairing screen",
+        interaction: { kind: "action" as const, actionId: "pairing" },
+      },
     ]),
     group("Permissions", [
       facts.storage === undefined
@@ -104,7 +123,11 @@ export function settingsFrom(facts: DeviceFacts): readonly SurfaceSettingGroup[]
             id: "file-access",
             label: "File access",
             value: storageValue(facts.storage),
-            description: "Korri reads its configuration from shared storage",
+            description: "Managed by Android",
+            interaction: {
+              kind: "action" as const,
+              actionId: "storage-access",
+            },
           },
       facts.notice === undefined
         ? undefined
@@ -112,8 +135,34 @@ export function settingsFrom(facts: DeviceFacts): readonly SurfaceSettingGroup[]
             id: "background-notice",
             label: "Background notice",
             value: facts.notice._tag === "Visible" ? "Visible" : "Hidden",
-            description: "Shows that Korri is still running behind a game",
+            description: "Managed by Android",
+            interaction: {
+              kind: "action" as const,
+              actionId: "background-notice",
+            },
           },
+    ]),
+    group("System information", [
+      android === undefined
+        ? undefined
+        : {
+            id: "device-model",
+            label: "Device",
+            value: `${android.manufacturer} ${android.device}`,
+          },
+      android === undefined
+        ? undefined
+        : {
+            id: "android-version",
+            label: "Android",
+            value: `${android.androidRelease} · SDK ${android.sdk}`,
+          },
+      android === undefined
+        ? undefined
+        : { id: "app-version", label: "Korri app", value: android.appVersion },
+      facts.version === undefined
+        ? undefined
+        : { id: "korrid-version", label: "korrid", value: facts.version },
     ]),
   ]
 

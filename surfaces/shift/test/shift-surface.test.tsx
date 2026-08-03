@@ -35,10 +35,11 @@ describe("ShiftSurface", () => {
     expect(container.querySelectorAll(".shift-monogram").length).toBe(3)
   })
 
-  test("host actions become rail entries, not games", () => {
+  test("setup actions do not pollute the game rail", () => {
     render(<ShiftSurface model={model()} host={createFixtureHost()} />)
 
-    expect(screen.getByRole("button", { name: "Pair a device" })).toBeDefined()
+    expect(screen.queryByRole("button", { name: "Pair a device" })).toBeNull()
+    expect(screen.getByRole("button", { name: "Settings" })).toBeDefined()
   })
 
   test("confirming a tile asks the host to launch that game", () => {
@@ -48,17 +49,6 @@ describe("ShiftSurface", () => {
     // The first tile is focused at mount, so a single activation launches it.
     fireEvent.click(screen.getByRole("button", { name: "Skate 3" }))
     expect(host.calls).toEqual(["launch:now-playing:L1"])
-  })
-
-  test("activating a rail action asks the host to run it", () => {
-    const host = createFixtureHost()
-    render(<ShiftSurface model={model()} host={host} />)
-
-    // The host's focus controller moves DOM focus; confirm then activates it.
-    const pair = screen.getByRole("button", { name: "Pair a device" })
-    fireEvent.focus(pair)
-    fireEvent.click(pair)
-    expect(host.calls).toEqual(["action:pairing"])
   })
 
   test("busy work shows the host's words, never an error", () => {
@@ -124,7 +114,10 @@ describe("ShiftSurface", () => {
     loading.unmount()
 
     const empty = render(
-      <ShiftSurface model={model({ catalog: { _tag: "Empty" } })} host={host} />,
+      <ShiftSurface
+        model={model({ catalog: { _tag: "Empty" }, settings: [] })}
+        host={host}
+      />,
     )
     expect(screen.getByText("No games found.")).toBeDefined()
     empty.unmount()
@@ -183,6 +176,17 @@ describe("Shift settings", () => {
     expect(screen.getByRole("button", { name: "Settings" })).toBeDefined()
   })
 
+  test("Settings stays reachable when plugin choices leave no games", () => {
+    render(
+      <ShiftSurface
+        model={model({ catalog: { _tag: "Empty" } })}
+        host={createFixtureHost()}
+      />,
+    )
+
+    expect(screen.getByRole("button", { name: "Settings" })).toBeDefined()
+  })
+
   test("no Settings destination when Korri can state nothing", () => {
     // A surface must not advertise a screen that would open empty.
     render(
@@ -213,23 +217,17 @@ describe("Shift settings", () => {
     expect(screen.getByText("Granted")).toBeDefined()
   })
 
-  test("settings rows are readable, never pressable", () => {
-    // Read-only is the whole point: a row that looks like a control would
-    // promise a capability Korri does not have.
+  test("only settings backed by a real interaction become buttons", () => {
     const { container } = render(
       <ShiftSurface model={model()} host={createFixtureHost()} />,
     )
     openSettings()
 
-    const rows = container.querySelectorAll(".shift-setting-row")
-    expect(rows.length).toBe(3)
-    for (const row of rows) {
-      expect(row.tagName).toBe("DIV")
-      expect(row.getAttribute("tabindex")).toBe("0")
-    }
+    expect(container.querySelectorAll("button.shift-setting-row").length).toBe(3)
+    expect(container.querySelectorAll("div.shift-setting-row").length).toBe(2)
   })
 
-  test("settings offers Back only, since nothing can be selected", () => {
+  test("an actionable row advertises Select and Back", () => {
     const { container } = render(
       <ShiftSurface model={model()} host={createFixtureHost()} />,
     )
@@ -238,7 +236,42 @@ describe("Shift settings", () => {
     const hints = Array.from(
       container.querySelectorAll(".shift-cine-hint"),
     ).map(hint => hint.textContent)
-    expect(hints).toEqual(["BBack"])
+    expect(hints).toEqual(["ASelect", "BBack"])
+  })
+
+  test("text editing saves through the side sheet", () => {
+    const host = createFixtureHost()
+    render(<ShiftSurface model={model()} host={host} />)
+    openSettings()
+
+    fireEvent.click(screen.getByRole("button", { name: "Name: usu" }))
+    fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
+      target: { value: "pocket" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(host.calls).toEqual(["setting:device-name:pocket"])
+  })
+
+  test("a choice opens the side sheet and publishes the chosen value", () => {
+    const host = createFixtureHost()
+    render(<ShiftSurface model={model()} host={host} />)
+    openSettings()
+
+    fireEvent.click(screen.getByRole("button", { name: "mGBA: On" }))
+    fireEvent.click(screen.getByRole("button", { name: "Off" }))
+
+    expect(host.calls).toEqual(["setting:@korri:mgba:false"])
+  })
+
+  test("an Android-owned row runs its native action", () => {
+    const host = createFixtureHost()
+    render(<ShiftSurface model={model()} host={host} />)
+    openSettings()
+
+    fireEvent.click(screen.getByRole("button", { name: "File access: Granted" }))
+
+    expect(host.calls).toEqual(["action:storage-access"])
   })
 
   test("back returns to the games without touching the host", () => {

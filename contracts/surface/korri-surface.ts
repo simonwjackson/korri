@@ -71,16 +71,30 @@ export interface SurfaceAction {
   readonly destructive?: boolean
 }
 
-/**
- * One readable fact about this device: what it is called, whether a permission
- * is granted, which peers are paired.
- *
- * Deliberately read-only. Korri has never written the user's configuration —
- * those files are authored by hand — so a settings row states what is true and
- * offers no switch. When Korri may change a setting, this gains a command; it
- * does not gain one before then, because a row that looks actionable and is not
- * is worse than no row.
- */
+/** One value offered by a choice setting. Values are opaque to the surface. */
+export interface SurfaceSettingChoice {
+  readonly value: string
+  readonly label: string
+}
+
+/** How a user may interact with a setting. Absent means read-only. */
+export type SurfaceSettingInteraction =
+  | {
+      readonly kind: "action"
+      /** Device action from `SurfaceModel.actions`. */
+      readonly actionId: string
+    }
+  | {
+      readonly kind: "choice"
+      readonly choices: readonly SurfaceSettingChoice[]
+    }
+  | {
+      readonly kind: "text"
+      readonly placeholder?: string
+      readonly maxLength?: number
+    }
+
+/** One device fact or setting. Korri owns truth and allowed interactions. */
 export interface SurfaceSettingItem {
   readonly id: string
   readonly label: string
@@ -88,6 +102,8 @@ export interface SurfaceSettingItem {
   readonly value?: string
   /** One-line explanation. Surfaces may show it or not. */
   readonly description?: string
+  /** Absent means this row is genuinely read-only. */
+  readonly interaction?: SurfaceSettingInteraction
 }
 
 /** A titled run of settings items. Korri omits groups it has nothing to say
@@ -96,6 +112,15 @@ export interface SurfaceSettingGroup {
   readonly title: string
   readonly items: readonly SurfaceSettingItem[]
 }
+
+export type SurfaceSettingsStatus =
+  | { readonly _tag: "Idle" }
+  | { readonly _tag: "Saving"; readonly settingId: string }
+  | {
+      readonly _tag: "Problem"
+      readonly settingId: string
+      readonly message: string
+    }
 
 /** What Korri currently knows about the things that can be played. */
 export type SurfaceCatalog =
@@ -143,8 +168,9 @@ export interface SurfaceModel {
   readonly clockLabel?: string
   /** Device-level actions (pairing, permissions, stop). May be empty. */
   readonly actions: readonly SurfaceAction[]
-  /** Readable device facts, grouped. Empty when Korri can state nothing. */
+  /** Device facts and settings, grouped. Empty when Korri can state nothing. */
   readonly settings: readonly SurfaceSettingGroup[]
+  readonly settingsStatus: SurfaceSettingsStatus
   /** Free-form build/identity stamp a surface may display. */
   readonly buildLabel?: string
 }
@@ -156,6 +182,10 @@ export interface SurfaceHost {
   launchGame(gameId: string): void
   /** Run a device-level action from `SurfaceModel.actions`. */
   runAction(actionId: string): void
+  /** Change an editable setting. Korri validates and republishes the result. */
+  changeSetting(settingId: string, value: string): void
+  /** Dismiss the current settings failure without changing its value. */
+  dismissSettingsProblem(): void
   /** Actions available for one game. Empty when Korri supports none yet. */
   gameActions(gameId: string): readonly SurfaceAction[]
   runGameAction(gameId: string, actionId: string): void

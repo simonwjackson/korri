@@ -49,8 +49,18 @@ export interface SurfaceRootProps {
 export function SurfaceRoot({ bus, bridge, korrid }: SurfaceRootProps) {
   const launchables = useLaunchables(bridge, korrid)
   const clockLabel = useClockLabel()
-  const { state, facts, confirmEntry, stopSession, dismissNotice, reload } =
-    launchables
+  const {
+    state,
+    facts,
+    settingsStatus,
+    changeSetting,
+    dismissSettingsProblem,
+    runDeviceAction,
+    confirmEntry,
+    stopSession,
+    dismissNotice,
+    reload,
+  } = launchables
 
   // Commands are issued against whatever is true when the user presses, not
   // when the host object was built.
@@ -60,8 +70,9 @@ export function SurfaceRoot({ bus, bridge, korrid }: SurfaceRootProps) {
   const settings = useMemo(() => settingsFrom(facts), [facts])
 
   const model = useMemo(
-    () => surfaceModelFrom(state, { clockLabel, settings }),
-    [state, clockLabel, settings],
+    () =>
+      surfaceModelFrom(state, { clockLabel, settings, settingsStatus }),
+    [state, clockLabel, settings, settingsStatus],
   )
 
   // The host object is stable: it reads the latest state through the closures
@@ -77,10 +88,9 @@ export function SurfaceRoot({ bus, bridge, korrid }: SurfaceRootProps) {
         const entry = entryForId(stateRef.current, id)
         if (entry) confirmEntry(entry)
       },
-      runAction: id => {
-        const entry = entryForId(stateRef.current, id)
-        if (entry) confirmEntry(entry)
-      },
+      runAction: runDeviceAction,
+      changeSetting,
+      dismissSettingsProblem,
       gameActions: id => gameActionsForEntry(entryForId(stateRef.current, id)),
       runGameAction: (gameId, actionId) => {
         const entry = entryForId(stateRef.current, gameId)
@@ -94,7 +104,16 @@ export function SurfaceRoot({ bus, bridge, korrid }: SurfaceRootProps) {
       dismiss: dismissNotice,
       reload,
     }),
-    [bus, confirmEntry, dismissNotice, reload, stopSession],
+    [
+      bus,
+      changeSetting,
+      confirmEntry,
+      dismissNotice,
+      dismissSettingsProblem,
+      reload,
+      runDeviceAction,
+      stopSession,
+    ],
   )
 
   return <ShiftSurface model={model} host={host} />
