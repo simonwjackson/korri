@@ -204,6 +204,22 @@ export const SHIFT_DESIGN_PARTS = {
     layer: "organism",
     name: "Game Actions Sheet",
   },
+  // Settings: a readable page of device facts.
+  settingsTemplate: {
+    id: "shift.settings-template",
+    layer: "template",
+    name: "Settings",
+  },
+  settingGroup: {
+    id: "shift.setting-group",
+    layer: "molecule",
+    name: "Setting Group",
+  },
+  settingRow: {
+    id: "shift.setting-row",
+    layer: "molecule",
+    name: "Setting Row",
+  },
   // Reel internals.
   reelTitle: {
     id: "shift.reel-title",

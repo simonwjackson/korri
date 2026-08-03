@@ -99,4 +99,32 @@ export const fixtureModel: SurfaceModel = {
       enabled: true,
     },
   ],
+  settings: [
+    {
+      title: "Device",
+      items: [{ id: "software", label: "Software", value: "korrid 0.4.1" }],
+    },
+    {
+      title: "Games",
+      items: [
+        {
+          id: "local-games",
+          label: "On this device",
+          value: "1 game",
+          description: "Declared in library.yaml",
+        },
+      ],
+    },
+    {
+      title: "Permissions",
+      items: [
+        {
+          id: "file-access",
+          label: "File access",
+          value: "Granted",
+          description: "Korri reads its configuration from shared storage",
+        },
+      ],
+    },
+  ],
 }

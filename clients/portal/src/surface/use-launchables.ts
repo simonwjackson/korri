@@ -12,6 +12,7 @@ import { SHELL_RESUMED_EVENT } from "@contracts/bridge/korri-native-bridge"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { LauncherBridge } from "../bridge/launcher-bridge"
 import type { KorridClient } from "../korrid/client"
+import type { DeviceFacts } from "./settings-model"
 import {
   entryKey,
   entryLabel,
@@ -32,6 +33,8 @@ const STOP_POLL_DEADLINE_MS = 8000
 
 export interface Launchables {
   readonly state: LaunchablesState
+  /** What Korri knows about the device itself, as opposed to what it can play. */
+  readonly facts: DeviceFacts
   /** Act on one entry: launch, resume, pair, or open a system screen. */
   confirmEntry(entry: PortalEntry): void
   /** Ask the host to stop the running session and wait for it to be gone. */
@@ -47,6 +50,10 @@ export function useLaunchables(
   korrid: KorridClient,
 ): Launchables {
   const [state, setState] = useState<LaunchablesState>(LaunchablesState.loading)
+  // Device facts ride along with each load but are deliberately not part of
+  // the launchables ADT: settings is not a thing you can play, and folding it
+  // into that state would make every list transition carry it.
+  const [facts, setFacts] = useState<DeviceFacts>({})
   const stateRef = useRef(state)
   stateRef.current = state
   const streamsRef = useRef<readonly StreamSource[]>([])
@@ -79,7 +86,7 @@ export function useLaunchables(
     }
     // Overlapping loads: only the latest invocation may write state.
     const seq = ++loadSeq.current
-    const [games, localGames, hostsResult, session, storage, notice] =
+    const [games, localGames, hostsResult, session, storage, notice, health] =
       await Promise.all([
         korrid.catalogSnapshot(),
         korrid.localGames(),
@@ -91,6 +98,8 @@ export function useLaunchables(
         // Same reason: returning from the notification screen should be
         // reflected without a restart.
         bridge.backgroundNotice(),
+        // Identity, not content: it names the software the user is running.
+        korrid.health(),
       ])
     const streams: readonly StreamSource[] =
       hostsResult._tag === "StreamHosts"
@@ -105,6 +114,17 @@ export function useLaunchables(
         : []
     if (!mountedRef.current || seq !== loadSeq.current) return
     streamsRef.current = streams
+    setFacts({
+      ...(health._tag === "Ok" ? { version: health.payload.version } : {}),
+      storage,
+      notice,
+      ...(hostsResult._tag === "StreamHosts"
+        ? { hosts: hostsResult.items }
+        : {}),
+      ...(localGames._tag === "Ok"
+        ? { localGameCount: localGames.payload.games.length }
+        : {}),
+    })
     const current = stateRef.current
     const loaded = LaunchablesState.fromSources(
       streams,
@@ -412,5 +432,5 @@ export function useLaunchables(
 
   const reload = useCallback(() => void load(), [load])
 
-  return { state, confirmEntry, stopSession, dismissNotice, reload }
+  return { state, facts, confirmEntry, stopSession, dismissNotice, reload }
 }

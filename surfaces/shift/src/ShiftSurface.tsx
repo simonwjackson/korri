@@ -8,6 +8,7 @@
  * the semantic-input hook.
  */
 import type {
+  SurfaceAction,
   SurfaceGame,
   SurfaceHost,
   SurfaceModel,
@@ -21,6 +22,7 @@ import {
 import { ShiftHomeEmptyBody } from "./pages/ShiftHomeEmptyBody"
 import { ShiftHomeLoadErrorBody } from "./pages/ShiftHomeLoadErrorBody"
 import { ShiftHomeLoadingBody } from "./pages/ShiftHomeLoadingBody"
+import { ShiftSettings } from "./pages/ShiftSettings"
 import { ShiftGameActionsSheet } from "./ui/organisms/ShiftGameActionsSheet"
 
 export interface ShiftSurfaceProps {
@@ -47,8 +49,24 @@ export function shiftGameFromSurfaceGame(
   }
 }
 
+/**
+ * The rail's Settings destination. Shift owns it, not Korri: which screens a
+ * surface has, and how you reach them, is the surface's business — Korri only
+ * says what the settings themselves are. It joins the host's own rail actions
+ * as an ordinary affordance, so the rail learns nothing new.
+ */
+export const SHIFT_SETTINGS_ACTION_ID = "shift:settings"
+
+const SETTINGS_AFFORDANCE: SurfaceAction = {
+  id: SHIFT_SETTINGS_ACTION_ID,
+  label: "Settings",
+  description: "What this device is, and what it can currently reach.",
+  enabled: true,
+}
+
 export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
   const [sheetGameId, setSheetGameId] = useState<string | null>(null)
+  const [screen, setScreen] = useState<"home" | "settings">("home")
 
   const games = useMemo(
     () =>
@@ -59,6 +77,29 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
   )
 
   const closeSheet = useCallback(() => setSheetGameId(null), [])
+
+  // Settings appears in the rail only when Korri has something to state; an
+  // empty screen is not worth a destination.
+  const railActions = useMemo<readonly SurfaceAction[]>(
+    () =>
+      model.settings.length > 0
+        ? [...model.actions, SETTINGS_AFFORDANCE]
+        : model.actions,
+    [model.actions, model.settings],
+  )
+
+  // Shift's own destination is consumed here; everything else is Korri's.
+  const runRailAction = useCallback(
+    (actionId: string) => {
+      if (actionId === SHIFT_SETTINGS_ACTION_ID) {
+        setScreen("settings")
+        return
+      }
+      host.runAction(actionId)
+    },
+    [host],
+  )
+
   const sheetGame = games.find(game => game.id === sheetGameId)
   // Ask the host only while the sheet is actually about a game, so a host that
   // computes actions lazily is not polled on every render.
@@ -70,7 +111,13 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
     model.catalog.games.some(game => host.gameActions(game.id).length > 0)
 
   const body =
-    model.catalog._tag === "Loading" ? (
+    screen === "settings" ? (
+      <ShiftSettings
+        groups={model.settings}
+        {...(model.clockLabel === undefined ? {} : { time: model.clockLabel })}
+        onClose={() => setScreen("home")}
+      />
+    ) : model.catalog._tag === "Loading" ? (
       <ShiftHomeLoadingBody />
     ) : model.catalog._tag === "Error" ? (
       <ShiftHomeLoadErrorBody
@@ -84,9 +131,9 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
         games={games}
         {...(model.clockLabel === undefined ? {} : { time: model.clockLabel })}
         status={model.status}
-        actions={model.actions}
+        actions={railActions}
         onLaunch={gameId => host.launchGame(gameId)}
-        onAction={actionId => host.runAction(actionId)}
+        onAction={runRailAction}
         onRetry={() => host.retry()}
         onDismiss={() => host.dismiss()}
         {...(hasGameActions ? { onOptions: setSheetGameId } : {})}

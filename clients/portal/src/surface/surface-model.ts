@@ -12,6 +12,7 @@ import type {
   SurfaceCatalog,
   SurfaceGame,
   SurfaceModel,
+  SurfaceSettingGroup,
   SurfaceStatus,
 } from "@contracts/surface/korri-surface"
 import {
@@ -163,7 +164,11 @@ function catalogFrom(state: LaunchablesState): SurfaceCatalog {
 
 export function surfaceModelFrom(
   state: LaunchablesState,
-  options: { readonly clockLabel?: string; readonly buildLabel?: string } = {},
+  options: {
+    readonly clockLabel?: string
+    readonly buildLabel?: string
+    readonly settings?: readonly SurfaceSettingGroup[]
+  } = {},
 ): SurfaceModel {
   const actions =
     state._tag === "Loading"
@@ -176,6 +181,7 @@ export function surfaceModelFrom(
     catalog: catalogFrom(state),
     status: statusFrom(state),
     actions,
+    settings: options.settings ?? [],
     ...(options.clockLabel === undefined
       ? {}
       : { clockLabel: options.clockLabel }),

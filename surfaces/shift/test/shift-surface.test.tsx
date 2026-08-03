@@ -169,3 +169,86 @@ describe("ShiftSurface", () => {
     expect(screen.queryByRole("dialog")).toBeNull()
   })
 })
+
+describe("Shift settings", () => {
+  const openSettings = () => {
+    const cap = screen.getByRole("button", { name: "Settings" })
+    fireEvent.focus(cap)
+    fireEvent.click(cap)
+  }
+
+  test("the rail offers Settings once Korri has facts to state", () => {
+    render(<ShiftSurface model={model()} host={createFixtureHost()} />)
+
+    expect(screen.getByRole("button", { name: "Settings" })).toBeDefined()
+  })
+
+  test("no Settings destination when Korri can state nothing", () => {
+    // A surface must not advertise a screen that would open empty.
+    render(
+      <ShiftSurface model={model({ settings: [] })} host={createFixtureHost()} />,
+    )
+
+    expect(screen.queryByRole("button", { name: "Settings" })).toBeNull()
+  })
+
+  test("opening settings is Shift's own business, not a host action", () => {
+    const host = createFixtureHost()
+    render(<ShiftSurface model={model()} host={host} />)
+
+    openSettings()
+
+    // Korri never hears about it: which screens exist is the surface's call.
+    expect(host.calls).toEqual([])
+    expect(screen.getByText("This device")).toBeDefined()
+  })
+
+  test("settings shows each group's facts as label and value", () => {
+    render(<ShiftSurface model={model()} host={createFixtureHost()} />)
+    openSettings()
+
+    expect(screen.getByText("Software")).toBeDefined()
+    expect(screen.getByText("korrid 0.4.1")).toBeDefined()
+    expect(screen.getByText("File access")).toBeDefined()
+    expect(screen.getByText("Granted")).toBeDefined()
+  })
+
+  test("settings rows are readable, never pressable", () => {
+    // Read-only is the whole point: a row that looks like a control would
+    // promise a capability Korri does not have.
+    const { container } = render(
+      <ShiftSurface model={model()} host={createFixtureHost()} />,
+    )
+    openSettings()
+
+    const rows = container.querySelectorAll(".shift-setting-row")
+    expect(rows.length).toBe(3)
+    for (const row of rows) {
+      expect(row.tagName).toBe("DIV")
+      expect(row.getAttribute("tabindex")).toBe("0")
+    }
+  })
+
+  test("settings offers Back only, since nothing can be selected", () => {
+    const { container } = render(
+      <ShiftSurface model={model()} host={createFixtureHost()} />,
+    )
+    openSettings()
+
+    const hints = Array.from(
+      container.querySelectorAll(".shift-cine-hint"),
+    ).map(hint => hint.textContent)
+    expect(hints).toEqual(["BBack"])
+  })
+
+  test("back returns to the games without touching the host", () => {
+    const host = createFixtureHost()
+    render(<ShiftSurface model={model()} host={host} />)
+    openSettings()
+
+    act(() => host.press("back"))
+
+    expect(screen.getByRole("button", { name: "Wario Land 4" })).toBeDefined()
+    expect(host.calls).toEqual([])
+  })
+})

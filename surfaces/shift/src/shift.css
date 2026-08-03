@@ -46,6 +46,7 @@
 
 [data-shift-surface],
 [data-shift-home],
+[data-shift-settings],
 [data-shift-detail],
 [data-shift-library],
 [data-shift-store] {
@@ -212,6 +213,7 @@
 
 [data-shift-surface],
 [data-shift-home],
+[data-shift-settings],
 [data-shift-detail] {
 	/* container-type: size (not inline-size) so BOTH cqi and cqh resolve
 	 * against the surface — the rail's bounded-media cqh cap and the launch
@@ -257,6 +259,8 @@
  */
 [data-shift-home] :focus,
 [data-shift-home] :focus-visible,
+[data-shift-settings] :focus,
+[data-shift-settings] :focus-visible,
 [data-shift-detail] :focus,
 [data-shift-detail] :focus-visible,
 [data-shift-store] :focus,
@@ -402,7 +406,7 @@
  * per-identity --shift-accent still tints the kicker, focus ring, and A button.
  * ========================================================================== */
 
-[data-shift-home].shift-cine {
+:is([data-shift-home], [data-shift-settings]).shift-cine {
 	background-color: #000000;
 	color: var(--shift-on-media-ink);
 	font-family: "Geist Variable", system-ui, sans-serif;
@@ -412,7 +416,7 @@
 	--cine-tile: min(28cqh, calc(var(--intrinsic-base) * 6.5));
 }
 
-[data-shift-home] .shift-cine-bg {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-bg {
 	position: absolute;
 	inset: 0;
 	z-index: 0;
@@ -421,7 +425,7 @@
 	will-change: transform, opacity;
 }
 
-[data-shift-home] .shift-cine-scrim {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-scrim {
 	position: absolute;
 	inset: 0;
 	z-index: 1;
@@ -442,7 +446,7 @@
 		);
 }
 
-[data-shift-home] .shift-cine-top {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-top {
 	position: absolute;
 	top: 0;
 	left: 0;
@@ -455,33 +459,33 @@
 	font-size: var(--shift-text-body);
 }
 
-[data-shift-home] .shift-cine-clock {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-clock {
 	font-weight: 700;
 	letter-spacing: 0.02em;
 	opacity: 0.92;
 	text-shadow: 0 1px 10px rgba(0, 0, 0, 0.5);
 }
 
-[data-shift-home] .shift-cine-status {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-status {
 	display: inline-flex;
 	align-items: center;
 	gap: var(--shift-space-3);
 	opacity: 0.92;
 }
 
-[data-shift-home] .shift-cine-status-icon {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-status-icon {
 	width: 1.3em;
 	height: 1.3em;
 }
 
-[data-shift-home] .shift-cine-network {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-network {
 	display: inline-flex;
 	align-items: center;
 	gap: var(--shift-space-1);
 	white-space: nowrap;
 }
 
-[data-shift-home] .shift-cine-network-signal {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-network-signal {
 	display: inline-flex;
 	align-items: end;
 	gap: 0.12em;
@@ -489,22 +493,22 @@
 	height: 1.1em;
 }
 
-[data-shift-home] .shift-cine-network-bar {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-network-bar {
 	width: 0.2em;
 	border-radius: var(--shift-radius-pill);
 	background: currentColor;
 	opacity: 0.28;
 }
 
-[data-shift-home] .shift-cine-network-bar-1 {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-network-bar-1 {
 	height: 0.36em;
 }
 
-[data-shift-home] .shift-cine-network-bar-2 {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-network-bar-2 {
 	height: 0.66em;
 }
 
-[data-shift-home] .shift-cine-network-bar-3 {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-network-bar-3 {
 	height: 0.96em;
 }
 
@@ -523,20 +527,20 @@
 	opacity: 1;
 }
 
-[data-shift-home] .shift-cine-network-name {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-network-name {
 	font-size: var(--shift-text-fine);
 	font-weight: 700;
 	letter-spacing: 0.02em;
 }
 
-[data-shift-home] .shift-cine-battery {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-battery {
 	display: inline-flex;
 	align-items: center;
 	gap: var(--shift-space-1);
 	white-space: nowrap;
 }
 
-[data-shift-home] .shift-cine-battery-percent {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-battery-percent {
 	font-size: var(--shift-text-fine);
 	font-weight: 700;
 	letter-spacing: 0.02em;
@@ -606,7 +610,7 @@
 	max-width: 70cqi;
 }
 
-[data-shift-home] .shift-cine-kicker {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-kicker {
 	font-size: var(--shift-text-fine);
 	font-weight: 800;
 	letter-spacing: 0.18em;
@@ -615,7 +619,7 @@
 	text-shadow: 0 1px 12px rgba(0, 0, 0, 0.55);
 }
 
-[data-shift-home] .shift-cine-title {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-title {
 	margin: 0;
 	font-size: var(--shift-text-display);
 	font-weight: 800;
@@ -669,7 +673,7 @@
 	border-color: color-mix(in srgb, var(--shift-accent) 50%, transparent);
 }
 
-[data-shift-home] .shift-cine-legend {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-legend {
 	/* Right side of the hero band: keeps its intrinsic width and is pushed to
 	 * the right edge (margin-left:auto), so on a wrapped narrow frame it stays
 	 * right-aligned on its own line under the hero. */
@@ -683,7 +687,7 @@
 	gap: var(--shift-space-2) var(--shift-space-4);
 }
 
-[data-shift-home] .shift-cine-hint {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-hint {
 	display: inline-flex;
 	align-items: center;
 	gap: var(--shift-space-2);
@@ -692,7 +696,7 @@
 	color: rgba(255, 255, 255, 0.85);
 }
 
-[data-shift-home] .shift-cine-hint-glyph {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-hint-glyph {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -707,7 +711,7 @@
 	line-height: 1;
 }
 
-[data-shift-home] .shift-cine-hint[data-primary] .shift-cine-hint-glyph {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-hint[data-primary] .shift-cine-hint-glyph {
 	background: var(--shift-accent);
 	color: var(--shift-on-accent);
 }
@@ -891,20 +895,20 @@
 
 /* ----- Cinematic launch feedback (in-scene; see launch-failure-copy.ts) ----- */
 /* The world cools when a launch fails — the game didn't come up. */
-[data-shift-home] .shift-cine-bg[data-cooled] {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-bg[data-cooled] {
 	filter: saturate(0.32) brightness(0.5);
 	transition: filter 0.5s ease-out;
 }
 
-[data-shift-home] .shift-cine-kicker[data-tone="failed"] {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-kicker[data-tone="failed"] {
 	color: var(--shift-danger);
 }
 
-[data-shift-home] .shift-cine-kicker[data-tone="launching"],
-[data-shift-home] .shift-cine-kicker[data-tone="launched"],
-[data-shift-home] .shift-cine-kicker[data-tone="preparing"],
-[data-shift-home] .shift-cine-kicker[data-tone="cooling"],
-[data-shift-home] .shift-cine-kicker[data-tone="recovering"] {
+:is([data-shift-home], [data-shift-settings]) .shift-cine-kicker[data-tone="launching"],
+:is([data-shift-home], [data-shift-settings]) .shift-cine-kicker[data-tone="launched"],
+:is([data-shift-home], [data-shift-settings]) .shift-cine-kicker[data-tone="preparing"],
+:is([data-shift-home], [data-shift-settings]) .shift-cine-kicker[data-tone="cooling"],
+:is([data-shift-home], [data-shift-settings]) .shift-cine-kicker[data-tone="recovering"] {
 	opacity: 0.92;
 }
 
@@ -2821,5 +2825,151 @@
 	.shift-sheet-panel[data-side="right"],
 	.shift-sheet-panel[data-side="left"] {
 		animation: none;
+	}
+}
+
+/* ========================================================================== *
+ * Settings — a readable page of device facts.
+ *
+ * Shares the home's chrome (backdrop, status bar, kicker/title, legend) and
+ * adds only what a list of facts needs: a viewport the list moves inside, and
+ * a row whose value sits opposite its label. Rows read as text, not controls:
+ * the focus treatment marks the reading position without the pill-press look
+ * of an action row, because nothing here can be pressed yet.
+ * ========================================================================== */
+[data-shift-settings] .shift-settings-stage {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-2);
+	/* Settings reads top-down, so unlike the bottom-aligned home its heading
+	 * has to start BELOW the overlaid status bar rather than merely clear it. */
+	padding: calc(var(--shift-space-6) + var(--shift-space-6))
+		var(--shift-space-5) var(--shift-space-5);
+}
+
+[data-shift-settings] .shift-settings-head {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-1);
+	flex: 0 0 auto;
+}
+
+/* The list moves inside this box; the box itself never scrolls, so the reading
+ * band stays put exactly like the rail's fixed center. */
+[data-shift-settings] .shift-settings-viewport {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+	margin-top: var(--shift-space-2);
+}
+
+[data-shift-settings] .shift-settings-track {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-4);
+	will-change: transform;
+}
+
+[data-shift-settings] .shift-settings-footer {
+	display: flex;
+	justify-content: flex-end;
+	flex: 0 0 auto;
+}
+
+[data-shift-settings] .shift-settings-empty {
+	position: absolute;
+	inset: auto var(--shift-space-5) var(--shift-space-5);
+	z-index: 3;
+	font-size: var(--shift-text-body);
+	color: var(--shift-ink-faint);
+}
+
+/* Titled run of facts. Matches the sheet's group caption so the two list
+ * idioms in Shift read as one family. */
+[data-shift-settings] .shift-setting-group {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-1);
+}
+
+[data-shift-settings] .shift-setting-group-title {
+	padding: 0 var(--shift-space-3);
+	font-size: var(--shift-text-fine);
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--shift-accent);
+	text-shadow: 0 1px 12px rgba(0, 0, 0, 0.55);
+}
+
+[data-shift-settings] .shift-setting-group-rows {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-1);
+}
+
+[data-shift-settings] .shift-setting-row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--shift-space-3);
+	width: 100%;
+	border-radius: var(--shift-radius-panel);
+	padding: var(--shift-space-2) var(--shift-space-3);
+	outline: none;
+	transition:
+		background 140ms ease,
+		box-shadow 140ms ease;
+}
+
+/* Reading position, not a pressable state: a quiet wash and the surface's
+ * focus halo, without the action row's raised pill. */
+[data-shift-settings]
+	.shift-setting-row:is(:focus, [data-focused], [data-korri-active-focus]) {
+	background: var(--shift-pill-bg);
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+[data-shift-settings] .shift-setting-row-text {
+	display: flex;
+	flex-direction: column;
+	gap: 0.15em;
+	min-width: 0;
+}
+
+[data-shift-settings] .shift-setting-row-label {
+	font-size: var(--shift-text-body);
+	font-weight: 600;
+	color: var(--shift-ink);
+	text-shadow: 0 1px 10px rgba(0, 0, 0, 0.45);
+}
+
+[data-shift-settings] .shift-setting-row-description {
+	font-size: var(--shift-text-fine);
+	font-weight: 500;
+	color: var(--shift-ink-faint);
+}
+
+/* The fact itself. Right-aligned and dimmer than the label: you scan labels
+ * to find the row, then read across for its state. */
+[data-shift-settings] .shift-setting-row-value {
+	flex: 0 0 auto;
+	max-width: 55%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--shift-text-body);
+	font-weight: 600;
+	color: var(--shift-ink-dim);
+	text-shadow: 0 1px 10px rgba(0, 0, 0, 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	[data-shift-settings] .shift-setting-row {
+		transition: none;
 	}
 }

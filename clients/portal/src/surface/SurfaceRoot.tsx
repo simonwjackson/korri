@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import type { LauncherBridge } from "../bridge/launcher-bridge"
 import type { InputBus } from "../input/bus"
 import type { KorridClient } from "../korrid/client"
+import { settingsFrom } from "./settings-model"
 import {
   entryForId,
   gameActionsForEntry,
@@ -48,7 +49,7 @@ export interface SurfaceRootProps {
 export function SurfaceRoot({ bus, bridge, korrid }: SurfaceRootProps) {
   const launchables = useLaunchables(bridge, korrid)
   const clockLabel = useClockLabel()
-  const { state, confirmEntry, stopSession, dismissNotice, reload } =
+  const { state, facts, confirmEntry, stopSession, dismissNotice, reload } =
     launchables
 
   // Commands are issued against whatever is true when the user presses, not
@@ -56,9 +57,11 @@ export function SurfaceRoot({ bus, bridge, korrid }: SurfaceRootProps) {
   const stateRef = useRef(state)
   stateRef.current = state
 
+  const settings = useMemo(() => settingsFrom(facts), [facts])
+
   const model = useMemo(
-    () => surfaceModelFrom(state, { clockLabel }),
-    [state, clockLabel],
+    () => surfaceModelFrom(state, { clockLabel, settings }),
+    [state, clockLabel, settings],
   )
 
   // The host object is stable: it reads the latest state through the closures
