@@ -2,16 +2,37 @@ name: RetroArch distribution
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/retroarch-distribution.yml"
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/android-sdk-env.sh"
+      - "nix/tasks.nix"
+      - "plugins/mgba/android/**"
+      - "plugins/retroarch/android/**"
   push:
+    branches:
+      - main
     tags:
       - "retroarch-v*"
+    paths:
+      - ".github/workflows/retroarch-distribution.yml"
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/android-sdk-env.sh"
+      - "nix/tasks.nix"
+      - "plugins/mgba/android/**"
+      - "plugins/retroarch/android/**"
 
 permissions:
   contents: read
 
 concurrency:
   group: retroarch-distribution-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -43,7 +64,7 @@ jobs:
 
   sign:
     name: Sign and verify arm64 distribution
-    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
+    if: startsWith(github.ref, 'refs/tags/retroarch-v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     needs: build
     runs-on: ubuntu-24.04
     environment: retroarch-release

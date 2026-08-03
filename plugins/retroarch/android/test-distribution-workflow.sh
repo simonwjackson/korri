@@ -10,8 +10,25 @@ for path in "$WORKFLOW" "$STAGE"; do
 done
 [[ -x "$STAGE" ]] || { echo 'RetroArch candidate staging script must be executable' >&2; exit 1; }
 
+grep -F '  pull_request:' "$WORKFLOW" >/dev/null
+grep -F '      - "retroarch-v*"' "$WORKFLOW" >/dev/null
+grep -F '  cancel-in-progress: true' "$WORKFLOW" >/dev/null
+for path_filter in \
+  '.github/workflows/retroarch-distribution.yml' \
+  'flake.nix' \
+  'flake.lock' \
+  'nix/android-sdk-env.sh' \
+  'nix/tasks.nix' \
+  'plugins/mgba/android/**' \
+  'plugins/retroarch/android/**'; do
+  [[ "$(grep -Fc "      - \"$path_filter\"" "$WORKFLOW")" == 2 ]] || {
+    echo "RetroArch distribution workflow must filter pull requests and main pushes on $path_filter" >&2
+    exit 1
+  }
+done
+
 grep -F 'environment: retroarch-release' "$WORKFLOW" >/dev/null
-grep -F "if: github.event_name == 'push' || github.ref == 'refs/heads/main'" "$WORKFLOW" >/dev/null
+grep -F "if: startsWith(github.ref, 'refs/tags/retroarch-v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')" "$WORKFLOW" >/dev/null
 grep -F "startsWith(github.ref_name, 'retroarch-v')" "$WORKFLOW" >/dev/null
 grep -F 'persist-credentials: false' "$WORKFLOW" >/dev/null
 # shellcheck disable=SC2016 # Literal workflow contract; variables expand in Actions.
