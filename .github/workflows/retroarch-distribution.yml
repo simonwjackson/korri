@@ -64,7 +64,7 @@ jobs:
 
   sign:
     name: Sign and verify arm64 distribution
-    if: startsWith(github.ref, 'refs/tags/retroarch-v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/retroarch-v'))
     needs: build
     runs-on: ubuntu-24.04
     environment: retroarch-release
@@ -110,6 +110,14 @@ jobs:
           core_sideload_activity="$(grep -A2 'CoreSideloadActivity' <<<"$manifest")"
           grep -q 'android:exported.*0x0' <<<"$core_sideload_activity"
 
+          version_name="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<<"$badging" | head -n1)"
+          if [[ "$version_name" =~ ^([0-9]+\.[0-9]+\.[0-9]+)($|[^0-9].*) ]]; then
+            upstream_version="${BASH_REMATCH[1]}"
+          else
+            echo "RetroArch candidate has an unsupported upstream version: $version_name" >&2
+            exit 1
+          fi
+          printf 'RETROARCH_UPSTREAM_VERSION=%s\n' "$upstream_version" >> "$GITHUB_ENV"
           printf 'APKSIGNER=%s\n' "$apksigner" >> "$GITHUB_ENV"
 
       - name: Materialize release keystore
@@ -165,6 +173,8 @@ jobs:
 
           mv "$temporary" "$artifact"
           (cd dist && sha256sum korri-retroarch-arm64.apk > korri-retroarch-arm64.apk.sha256)
+          printf 'retroarch-v%s-korri\n' "$RETROARCH_UPSTREAM_VERSION" > dist/retroarch-release-tag.txt
+          printf '%s\n' "$GITHUB_SHA" > dist/korri-revision.txt
 
       - name: Remove release keystore and temporary output
         if: always()
@@ -179,8 +189,8 @@ jobs:
           retention-days: 30
 
   release:
-    name: Publish tagged GitHub release
-    if: ${{ github.ref_type == 'tag' && startsWith(github.ref_name, 'retroarch-v') }}
+    name: Publish GitHub release
+    if: ${{ needs.sign.result == 'success' && (github.ref == 'refs/heads/main' || (github.ref_type == 'tag' && startsWith(github.ref_name, 'retroarch-v'))) }}
     needs: sign
     runs-on: ubuntu-24.04
     permissions:
@@ -200,12 +210,62 @@ jobs:
         run: |
           set -euo pipefail
           artifact="dist/korri-retroarch-arm64.apk"
-          [[ -f "$artifact" && -f "$artifact.sha256" ]] || {
+          checksum="$artifact.sha256"
+          tag_file="dist/retroarch-release-tag.txt"
+          revision_file="dist/korri-revision.txt"
+          [[ -f "$artifact" && -f "$checksum" && -f "$tag_file" && -f "$revision_file" ]] || {
             echo 'signed RetroArch distribution is incomplete' >&2
             exit 1
           }
           (cd dist && sha256sum -c korri-retroarch-arm64.apk.sha256)
-          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+
+          rolling_tag="$(<"$tag_file")"
+          recorded_revision="$(<"$revision_file")"
+          [[ "$rolling_tag" =~ ^retroarch-v[0-9]+\.[0-9]+\.[0-9]+-korri$ ]] || {
+            echo "invalid rolling RetroArch release tag: $rolling_tag" >&2
+            exit 1
+          }
+          [[ "$recorded_revision" == "$GITHUB_SHA" ]] || {
+            echo 'signed RetroArch distribution revision does not match this run' >&2
+            exit 1
+          }
+
+          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            release_tag="$rolling_tag"
+            upstream_version="${rolling_tag#retroarch-v}"
+            upstream_version="${upstream_version%-korri}"
+            title="Korri RetroArch $upstream_version (rolling)"
+            notes="$RUNNER_TEMP/retroarch-release-notes.md"
+            cat > "$notes" <<NOTES
+          Rolling Korri build of RetroArch $upstream_version.
+
+          - Upstream: RetroArch $upstream_version
+          - Korri revision: [$GITHUB_SHA]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA)
+          - Android package: \`com.korri.retroarch\`
+          NOTES
+
+            if gh api "repos/$GH_REPO/git/ref/tags/$release_tag" >/dev/null 2>&1; then
+              gh api --method PATCH "repos/$GH_REPO/git/refs/tags/$release_tag" \
+                -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            else
+              gh api --method POST "repos/$GH_REPO/git/refs" \
+                -f ref="refs/tags/$release_tag" -f sha="$GITHUB_SHA" >/dev/null
+            fi
+
+            if gh release view "$release_tag" >/dev/null 2>&1; then
+              gh release edit "$release_tag" --title "$title" --prerelease --notes-file "$notes"
+            else
+              gh release create "$release_tag" --verify-tag --prerelease --title "$title" --notes-file "$notes"
+            fi
+          else
+            release_tag="$GITHUB_REF_NAME"
+            [[ "$release_tag" == "$rolling_tag".* ]] || {
+              echo "versioned RetroArch tag must begin with $rolling_tag." >&2
+              exit 1
+            }
+            if ! gh release view "$release_tag" >/dev/null 2>&1; then
+              gh release create "$release_tag" --verify-tag --generate-notes --title "$release_tag"
+            fi
           fi
-          gh release upload "$GITHUB_REF_NAME" "$artifact" "$artifact.sha256" --clobber
+
+          gh release upload "$release_tag" "$artifact" "$checksum" --clobber

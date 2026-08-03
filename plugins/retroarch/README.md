@@ -17,10 +17,13 @@ bridge does not make mGBA part of the RetroArch plugin.
 ## Distribution builds
 
 `.github/workflows/retroarch-distribution.yml` builds and stages the custom
-arm64 APK with `nix run .#ra-dist`, then signs it in a protected, checkout-free
-Actions job. Manual runs are accepted only from `main` and upload a workflow
-artifact; pushed tags matching `retroarch-v*` also publish the APK and its
-SHA-256 to a GitHub Release.
+arm64 APK with `nix run .#ra-dist`. Relevant pull requests build an unsigned
+candidate without secrets. Relevant `main` changes and manual `main` runs then
+sign in a protected, checkout-free job and update a rolling prerelease named
+from the APK's upstream version, such as `retroarch-v1.22.2-korri`. The rolling
+tag moves forward as Korri patches change. Immutable release tags use the same
+upstream-aware prefix plus a revision, such as
+`retroarch-v1.22.2-korri.1`.
 
 Configure these repository secrets before running the workflow:
 
@@ -37,6 +40,7 @@ outside the Nix store; Nix owns compilation, validation, and candidate staging.
 Release secrets are materialized only in the checkout-free signing job after
 compilation and an independent package, Activity, ABI, and bundled-core check.
 
-Protect the `retroarch-release` GitHub Environment with required reviewers and
-restrict creation of `retroarch-v*` tags. The workflow removes the keystore
-before invoking artifact-upload code.
+Restrict the `retroarch-release` GitHub Environment to `main` and
+`retroarch-v*` tags, protect `main`, and restrict creation of release tags.
+Automatic rolling publication intentionally has no required-review pause. The
+workflow removes the keystore before invoking artifact-upload code.

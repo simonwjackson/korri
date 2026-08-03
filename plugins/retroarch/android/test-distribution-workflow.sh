@@ -28,7 +28,8 @@ for path_filter in \
 done
 
 grep -F 'environment: retroarch-release' "$WORKFLOW" >/dev/null
-grep -F "if: startsWith(github.ref, 'refs/tags/retroarch-v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')" "$WORKFLOW" >/dev/null
+grep -F "if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/retroarch-v'))" "$WORKFLOW" >/dev/null
+grep -F "needs.sign.result == 'success'" "$WORKFLOW" >/dev/null
 grep -F "startsWith(github.ref_name, 'retroarch-v')" "$WORKFLOW" >/dev/null
 grep -F 'persist-credentials: false' "$WORKFLOW" >/dev/null
 # shellcheck disable=SC2016 # Literal workflow contract; variables expand in Actions.
@@ -53,8 +54,16 @@ grep -F '[[ -n "$actual_cert" && "$actual_cert" == "$expected_cert" ]]' "$WORKFL
 grep -F "s/^V[0-9.]* Signer: certificate SHA-256 digest: //p" "$WORKFLOW" >/dev/null
 grep -F 'uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4' "$WORKFLOW" >/dev/null
 grep -F '(cd dist && sha256sum -c korri-retroarch-arm64.apk.sha256)' "$WORKFLOW" >/dev/null
+grep -F "versionName='\\([^']*\\)'" "$WORKFLOW" >/dev/null
+grep -F "printf 'retroarch-v%s-korri\\n'" "$WORKFLOW" >/dev/null
 # shellcheck disable=SC2016 # Literal workflow contract; variables expand in Actions.
-grep -F 'gh release upload "$GITHUB_REF_NAME" "$artifact" "$artifact.sha256" --clobber' "$WORKFLOW" >/dev/null
+grep -F '[[ "$rolling_tag" =~ ^retroarch-v[0-9]+\.[0-9]+\.[0-9]+-korri$ ]]' "$WORKFLOW" >/dev/null
+# shellcheck disable=SC2016 # Literal workflow contract; variables expand in Actions.
+grep -F 'git/refs/tags/$release_tag' "$WORKFLOW" >/dev/null
+# shellcheck disable=SC2016 # Literal workflow contract; variables expand in Actions.
+grep -F 'gh release edit "$release_tag" --title "$title" --prerelease' "$WORKFLOW" >/dev/null
+# shellcheck disable=SC2016 # Literal workflow contract; variables expand in Actions.
+grep -F 'gh release upload "$release_tag" "$artifact" "$checksum" --clobber' "$WORKFLOW" >/dev/null
 # shellcheck disable=SC2016 # Literal staging-script contract.
 grep -F 'sha256sum "$CANDIDATE_NAME" > "$CANDIDATE_NAME.sha256"' "$STAGE" >/dev/null
 
