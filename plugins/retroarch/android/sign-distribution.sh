@@ -41,7 +41,7 @@ trap 'rm -f "$TEMP_ARTIFACT"' EXIT
 signer_report="$("$APKSIGNER" verify --verbose --print-certs "$TEMP_ARTIFACT")"
 printf '%s\n' "$signer_report"
 signer_count="$(sed -n 's/^Number of signers: //p' <<<"$signer_report" | head -n1 | tr -d '[:space:]')"
-actual_cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' <<<"$signer_report" | head -n1 | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+actual_cert="$(sed -n -e 's/^Signer #1 certificate SHA-256 digest: //p' -e 's/^V[0-9.]* Signer: certificate SHA-256 digest: //p' <<<"$signer_report" | tr '[:upper:]' '[:lower:]' | sed 's/://g; s/[[:space:]]//g' | sort -u)"
 expected_cert="$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
 if [[ "$signer_count" != 1 ]]; then
   echo "RetroArch APK must have exactly one signer" >&2

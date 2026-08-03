@@ -33,6 +33,7 @@ grep -F '"$APKSIGNER" verify --verbose --print-certs "$temporary"' "$WORKFLOW" >
 grep -F '[[ "$signer_count" == 1 ]]' "$WORKFLOW" >/dev/null
 # shellcheck disable=SC2016 # Literal workflow contract; variables expand in Actions.
 grep -F '[[ -n "$actual_cert" && "$actual_cert" == "$expected_cert" ]]' "$WORKFLOW" >/dev/null
+grep -F "s/^V[0-9.]* Signer: certificate SHA-256 digest: //p" "$WORKFLOW" >/dev/null
 grep -F 'uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4' "$WORKFLOW" >/dev/null
 grep -F '(cd dist && sha256sum -c korri-retroarch-arm64.apk.sha256)' "$WORKFLOW" >/dev/null
 # shellcheck disable=SC2016 # Literal workflow contract; variables expand in Actions.
