@@ -12,13 +12,13 @@ import {
 import { createInputBus } from "./input/bus"
 import { createKeyboardAdapter } from "./input/keyboard-adapter"
 import { createKorriNativeAdapter } from "./input/korri-native-adapter"
-import { createPointerAdapter } from "./input/pointer-adapter"
+import { createSpatialFocusController } from "./input/spatial-focus"
 import {
   createHttpKorridClient,
   createInMemoryKorridClient,
 } from "./korrid/client"
-import { LaunchablesRoot } from "./launchables/LaunchablesRoot"
 import { createSessionLifecycleAdapter } from "./session/lifecycle-adapter"
+import { SurfaceRoot } from "./surface/SurfaceRoot"
 import {
   createFixtureLifecycleAdapter,
   SessionScreen,
@@ -38,7 +38,10 @@ declare global {
 const bus = createInputBus()
 bus.use(createKeyboardAdapter())
 bus.use(createKorriNativeAdapter())
-bus.use(createPointerAdapter())
+
+// Surfaces render focusable controls and react to focus; translating semantic
+// directions into real DOM focus is the host's job, not theirs.
+createSpatialFocusController(bus)
 
 const bridge = window.KorriNative
   ? createKorriNativeLauncherBridge(window.KorriNative)
@@ -81,6 +84,6 @@ if (isSessionScreen) {
   )
 } else {
   ReactDOM.createRoot(rootElement).render(
-    <LaunchablesRoot bus={bus} bridge={bridge} korrid={korrid} />,
+    <SurfaceRoot bus={bus} bridge={bridge} korrid={korrid} />,
   )
 }

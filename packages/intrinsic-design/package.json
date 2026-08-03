@@ -1,0 +1,32 @@
+{
+	"name": "@korri/intrinsic-design",
+	"version": "0.1.0",
+	"description": "Shared intrinsic design core — the container-adaptive token generator (Tailwind v4 @theme). Set a few knobs; the whole fluid scale derives from them.",
+	"license": "MIT",
+	"type": "module",
+	"exports": {
+		".": "./intrinsic.css",
+		"./intrinsic.css": "./intrinsic.css",
+		"./recipe.css": "./recipe.css"
+	},
+	"files": [
+		"intrinsic.css",
+		"recipe.css",
+		"README.md"
+	],
+	"keywords": [
+		"korri",
+		"design-system",
+		"intrinsic",
+		"tailwind",
+		"container-queries"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/simonwjackson/korri.git",
+		"directory": "packages/intrinsic-design"
+	},
+	"scripts": {
+		"check": "node build-check.mjs"
+	}
+}

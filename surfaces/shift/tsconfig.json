@@ -13,14 +13,8 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["@types/bun"],
     "paths": {
-      "@contracts/*": ["../../contracts/*"],
-      "@korri/shift": ["../../surfaces/shift/src/index.ts"]
+      "@contracts/*": ["../../contracts/*"]
     }
   },
-  "include": [
-    "src",
-    "vite.config.ts",
-    "../../contracts",
-    "../../surfaces/shift/src"
-  ]
+  "include": ["src", "test", "../../contracts/surface"]
 }

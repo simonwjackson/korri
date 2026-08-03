@@ -373,6 +373,16 @@ let
       '';
     };
 
+    shift-check = {
+      description = "Run the Shift surface unit tests and typecheck.";
+      runtimeInputs = [ pkgs.bun ];
+      script = ''
+        cd "$KORRI_ROOT/surfaces/shift"
+        bun test
+        bun run typecheck
+      '';
+    };
+
     portal-dev = {
       description = "Serve the portal on the local network.";
       runtimeInputs = [ pkgs.bun ];

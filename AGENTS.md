@@ -22,13 +22,19 @@ the `legacy` branch apply here unless this file says so.
 ```
 clients/android/   Kotlin/Java shell: Artemis streaming core, native pairing,
                    WebView host, bridge implementation (all hardware truth)
-clients/portal/    TS launcher UI, runs in the shell's WebView; talks to the
-                   korrid brain over localhost RPC; browser dev via in-memory
-                   bridge + keyboard input
+clients/portal/    TS host: talks to the korrid brain over localhost RPC and to
+                   the shell over the bridge, then publishes one surface model
+                   and mounts a surface; browser dev via in-memory bridge +
+                   keyboard input
+surfaces/          presentation surfaces. One per directory, each self-contained
+                   and free to move to its own repository: a surface may import
+                   contracts/surface/ (types only) and nothing else from Korri
+packages/          shared, product-agnostic packages consumable by surfaces
 contracts/         treaties between deployables; imports nothing outside
                    contracts/; when sides disagree, the contract file wins.
-                   contracts/bridge/ is hand-written; contracts/generated/ is
-                   Typeshare output from Rust (read-only)
+                   contracts/bridge/ and contracts/surface/ are hand-written;
+                   contracts/generated/ is Typeshare output from Rust
+                   (read-only)
 services/korrid/   Rust brain, one per device. Ships as a standalone binary
                    with a configured bind, and as a cdylib embedded in Android
                    serving capability-bound RPC on localhost
@@ -102,6 +108,15 @@ is no such concern, propose no schema change.
 - Services are Rust. Wire types live in Rust and are exported through
   Typeshare into `contracts/generated/` — those files are read-only;
   regenerate them via `nix run .#korrid-check`, never edit by hand.
+- A surface is a deployable, not a theme. It receives one `SurfaceModel` and one
+  `SurfaceHost` through `contracts/surface/` and may import nothing else from
+  Korri — no korrid client, no generated Rust types, no bridge, no host state.
+  The host owns facts, effects, and input delivery; the surface owns every
+  pixel, including how it presents data Korri does not have. Keep the treaty
+  small enough that a surface could ship from another repository unchanged.
+- Surfaces are focus-driven. They render native focusable controls and react to
+  focus; translating devices into directional movement and confirmation is the
+  host's job (`clients/portal/src/input/`), never the surface's.
 - The portal's brain is always the korrid on its own device at
   `http://127.0.0.1:<port>`; the portal never talks to another device's korrid
   or any other backend directly. On Android the shell embeds korrid as a

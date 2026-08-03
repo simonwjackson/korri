@@ -26,6 +26,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@contracts": resolve(__dirname, "../../contracts"),
+      // Surfaces are compiled from source by their host. The alias is the only
+      // thing that would change if Shift moved to its own package registry.
+      "@korri/shift": resolve(__dirname, "../../surfaces/shift/src/index.ts"),
     },
   },
   server: {

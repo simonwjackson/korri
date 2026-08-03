@@ -8,6 +8,15 @@ import type {
 import { SessionStopPhase } from "@contracts/generated/korrid"
 import type { BackgroundNoticeResult } from "@contracts/bridge/korri-native-bridge"
 import { entryKey, entryLabel, LaunchablesState } from "./state"
+import type { LaunchablesState as State, PortalEntry } from "./state"
+
+/** The banner entry a stop is about. Surfaces name it; this ADT never guesses. */
+const nowPlayingEntry = (state: State): PortalEntry => {
+  if (state._tag === "Loading") throw new Error("unreachable")
+  const entry = state.entries.find(candidate => candidate.kind === "now-playing")
+  if (!entry) throw new Error("expected a now-playing entry")
+  return entry
+}
 
 const officeHost = { uuid: "h1", name: "Office PC", paired: true } as const
 
@@ -262,33 +271,6 @@ describe("LaunchablesState stream targets", () => {
   })
 })
 
-describe("LaunchablesState selection", () => {
-  it("moves across source boundaries as one flat list", () => {
-    let state = ready
-    state = LaunchablesState.moveSelection(state, "down")
-    state = LaunchablesState.moveSelection(state, "down")
-    expect(LaunchablesState.selected(state)).toMatchObject({
-      _tag: "Some",
-      value: { kind: "stream", app: { name: "Desktop" } },
-    })
-  })
-
-  it("locks selection while any asynchronous launch is in flight", () => {
-    const launching = LaunchablesState.beginLaunching(ready, "Desktop")
-    expect(launching).toMatchObject({ _tag: "Launching", title: "Desktop" })
-    expect(LaunchablesState.selected(launching)).toEqual({ _tag: "None" })
-  })
-
-  it("clamps at the ends and ignores horizontal movement", () => {
-    expect(LaunchablesState.moveSelection(ready, "up")).toMatchObject({
-      selectedIndex: 0,
-    })
-    expect(LaunchablesState.moveSelection(ready, "left")).toBe(ready)
-    const loading = LaunchablesState.loading()
-    expect(LaunchablesState.moveSelection(loading, "down")).toBe(loading)
-  })
-})
-
 describe("LaunchablesState action results", () => {
   it("surfaces local brain and native launch failures as notices", () => {
     const launching = LaunchablesState.beginLaunching(ready, "Wario Land 4")
@@ -355,9 +337,6 @@ describe("LaunchablesState action results", () => {
         payload: { gameId: "skate3" },
       }),
     ).toMatchObject({ _tag: "Preparing", notice: null })
-    expect(LaunchablesState.moveSelection(failed, "down")).toMatchObject({
-      notice: null,
-    })
   })
 })
 
@@ -393,9 +372,6 @@ describe("LaunchablesState now playing", () => {
         phase: "running",
       },
     })
-    expect(state.selectedIndex).toBe(0)
-    const selected = LaunchablesState.selected(state)
-    expect(selected._tag).toBe("Some")
   })
 
   it("shows no banner when nothing is playing", () => {
@@ -432,12 +408,13 @@ describe("LaunchablesState now playing", () => {
       _tag: "Ok",
       payload: { phase: SessionStopPhase.Stopped },
     }
-    const stopRequested = LaunchablesState.beginStopping(withBanner)
+    const stopRequested = LaunchablesState.beginStopping(
+      withBanner,
+      nowPlayingEntry(withBanner),
+    )
     expect(stopRequested._tag).toBe("Stopping")
-    expect(LaunchablesState.selected(stopRequested)).toEqual({ _tag: "None" })
     const stopping = LaunchablesState.withStopOutcome(stopRequested, ok)
     expect(stopping._tag).toBe("Stopping")
-    expect(LaunchablesState.selected(stopping)).toEqual({ _tag: "None" })
 
     const stillActive = LaunchablesState.withStatusAfterStop(
       stopping,
@@ -475,7 +452,7 @@ describe("LaunchablesState now playing", () => {
       sessionActive,
     )
     const stopping = LaunchablesState.withStopOutcome(
-      LaunchablesState.beginStopping(withBanner),
+      LaunchablesState.beginStopping(withBanner, nowPlayingEntry(withBanner)),
       {
       _tag: "Ok",
       payload: { phase: SessionStopPhase.Pending },
@@ -494,7 +471,6 @@ describe("LaunchablesState preparing", () => {
     const preparing = LaunchablesState.beginPreparing(ready, "Skate 3")
     if (preparing._tag !== "Preparing") throw new Error("unreachable")
     expect(preparing.title).toBe("Skate 3")
-    expect(LaunchablesState.selected(preparing)).toEqual({ _tag: "None" })
   })
 
   it("prepare Err restores the list with a notice", () => {
@@ -529,21 +505,6 @@ describe("LaunchablesState preparing", () => {
   })
 })
 
-describe("LaunchablesState.sections", () => {
-  it("groups the flat list into titled sections preserving indices", () => {
-    if (ready._tag !== "Ready") throw new Error("unreachable")
-    const sections = LaunchablesState.sections(ready)
-    expect(sections.map(s => [s.title, s.startIndex, s.entries.length])).toEqual([
-      ["Games", 0, 2],
-      ["Office PC", 2, 2],
-      ["Devices", 4, 1],
-      // The setting closes the list, in its own section rather than among
-      // the things you can play.
-      ["Settings", 5, 1],
-    ])
-  })
-})
-
 describe("storage access prompt", () => {
   const denied = { _tag: "Denied" } as const
 
@@ -557,10 +518,8 @@ describe("storage access prompt", () => {
       denied,
     )
     if (state._tag !== "Ready") throw new Error("unreachable")
+    // It leads the list so a surface cannot bury it below things to play.
     expect(state.entries[0]).toEqual({ kind: "storage-access" })
-    // It must be reachable by controller, so it takes the initial selection.
-    expect(state.selectedIndex).toBe(0)
-    expect(LaunchablesState.sections(state)[0]?.title).toBe("Needs your attention")
   })
 
   it("shows nothing when access is granted", () => {
@@ -608,31 +567,6 @@ describe("storage access prompt", () => {
     expect(entryKey({ kind: "storage-access" })).toBe("storage-access")
   })
 })
-
-describe("LaunchablesState.selectIndex", () => {
-  it("moves selection to the tapped entry", () => {
-    if (ready._tag !== "Ready") throw new Error("unreachable")
-    const next = LaunchablesState.selectIndex(ready, 3)
-    if (next._tag !== "Ready") throw new Error("unreachable")
-    expect(next.selectedIndex).toBe(3)
-  })
-
-  it("ignores a stale index rather than activating a neighbour", () => {
-    // A list that changed under the user must not launch the wrong thing.
-    if (ready._tag !== "Ready") throw new Error("unreachable")
-    expect(LaunchablesState.selectIndex(ready, 99)).toBe(ready)
-    expect(LaunchablesState.selectIndex(ready, -1)).toBe(ready)
-  })
-
-  it("clears a stale notice when selection moves", () => {
-    if (ready._tag !== "Ready") throw new Error("unreachable")
-    const withNotice = LaunchablesState.withNotice(ready, "old failure")
-    const next = LaunchablesState.selectIndex(withNotice, 2)
-    if (next._tag !== "Ready") throw new Error("unreachable")
-    expect(next.notice).toBeNull()
-  })
-})
-
 describe("background notice setting", () => {
   const build = (notice?: BackgroundNoticeResult) =>
     LaunchablesState.fromSources(
@@ -670,41 +604,3 @@ describe("background notice setting", () => {
   })
 })
 
-describe("selection across reloads", () => {
-  const load = (keep?: string) =>
-    LaunchablesState.fromSources(
-      [],
-      {
-        _tag: "Ok",
-        payload: {
-          games: [
-            { id: "a", title: "A" },
-            { id: "b", title: "B" },
-          ],
-        },
-      } as CatalogSnapshotOutcome,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      keep,
-    )
-
-  it("keeps the cursor where the user left it when the list reloads", () => {
-    const first = load()
-    if (first._tag !== "Ready") throw new Error("unreachable")
-    const chosen = entryKey(first.entries[1]!)
-    const again = load(chosen)
-    if (again._tag !== "Ready") throw new Error("unreachable")
-    // Without this, a background refresh mid-navigation drops the cursor to
-    // index 0 and Confirm fires on whatever now sits at the top.
-    expect(entryKey(again.entries[again.selectedIndex]!)).toBe(chosen)
-  })
-
-  it("falls back to the top when the selected entry is gone", () => {
-    const again = load("game:vanished")
-    if (again._tag !== "Ready") throw new Error("unreachable")
-    expect(again.selectedIndex).toBe(0)
-  })
-})

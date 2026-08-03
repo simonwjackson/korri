@@ -1,0 +1,98 @@
+/**
+ * Where Korri meets a surface.
+ *
+ * The portal owns the facts and the effects; the surface owns the pixels. This
+ * component is the only place that knows both, and it knows the surface only
+ * through the treaty — swapping Shift for another surface is a change to the
+ * import below and nothing else.
+ */
+import type {
+  SurfaceHost,
+  SurfaceInputAction,
+} from "@contracts/surface/korri-surface"
+import { ShiftSurface } from "@korri/shift"
+import { useEffect, useMemo, useRef, useState } from "react"
+import type { LauncherBridge } from "../bridge/launcher-bridge"
+import type { InputBus } from "../input/bus"
+import type { KorridClient } from "../korrid/client"
+import {
+  entryForId,
+  gameActionsForEntry,
+  surfaceModelFrom,
+} from "./surface-model"
+import { useLaunchables } from "./use-launchables"
+
+/** Local time as the surface should print it, refreshed on the minute. */
+function useClockLabel(): string {
+  const [label, setLabel] = useState(formatClock)
+  useEffect(() => {
+    const tick = setInterval(() => setLabel(formatClock()), 30_000)
+    return () => clearInterval(tick)
+  }, [])
+  return label
+}
+
+function formatClock(): string {
+  return new Date().toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+
+export interface SurfaceRootProps {
+  readonly bus: InputBus
+  readonly bridge: LauncherBridge
+  readonly korrid: KorridClient
+}
+
+export function SurfaceRoot({ bus, bridge, korrid }: SurfaceRootProps) {
+  const launchables = useLaunchables(bridge, korrid)
+  const clockLabel = useClockLabel()
+  const { state, confirmEntry, stopSession, dismissNotice, reload } =
+    launchables
+
+  // Commands are issued against whatever is true when the user presses, not
+  // when the host object was built.
+  const stateRef = useRef(state)
+  stateRef.current = state
+
+  const model = useMemo(
+    () => surfaceModelFrom(state, { clockLabel }),
+    [state, clockLabel],
+  )
+
+  // The host object is stable: it reads the latest state through the closures
+  // above rather than capturing a snapshot, so re-creating it on every model
+  // change would only churn the surface's subscriptions.
+  const host = useMemo<SurfaceHost>(
+    () => ({
+      input: {
+        on: (action: SurfaceInputAction, handler: () => void) =>
+          bus.onAction(action, handler),
+      },
+      launchGame: id => {
+        const entry = entryForId(stateRef.current, id)
+        if (entry) confirmEntry(entry)
+      },
+      runAction: id => {
+        const entry = entryForId(stateRef.current, id)
+        if (entry) confirmEntry(entry)
+      },
+      gameActions: id => gameActionsForEntry(entryForId(stateRef.current, id)),
+      runGameAction: (gameId, actionId) => {
+        const entry = entryForId(stateRef.current, gameId)
+        if (!entry) return
+        if (actionId === "stop") stopSession(entry)
+        else confirmEntry(entry)
+      },
+      // Korri has nothing new to try after a failed launch, so retrying means
+      // re-reading the world rather than repeating the same request.
+      retry: reload,
+      dismiss: dismissNotice,
+      reload,
+    }),
+    [bus, confirmEntry, dismissNotice, reload, stopSession],
+  )
+
+  return <ShiftSurface model={model} host={host} />
+}

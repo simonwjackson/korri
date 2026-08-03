@@ -1,0 +1,44 @@
+/**
+ * @korri/intrinsic-design — the intrinsic generator recipe, shared (Tailwind v4).
+ *
+ * One container-adaptive token scale, DERIVED from a handful of knobs a theme or
+ * app sets. Nothing re-implements the math: set the inputs, get the whole scale.
+ * Container-query units (`cqi`/`cqh`) make it adapt to any *container* — any size,
+ * any aspect ratio — with no breakpoints and no per-surface special-casing.
+ *
+ * This entry = the framework-agnostic recipe (recipe.css) + the Tailwind v4
+ * utilities. Consume it after Tailwind:
+ *
+ *     @import "tailwindcss";
+ *     @import "@korri/intrinsic-design";
+ *
+ * For tokens WITHOUT Tailwind (e.g. the workshop chrome), import the recipe
+ * directly: `@import "@korri/intrinsic-design/recipe.css"`.
+ *
+ * The recipe is the one documented in tools/theme-workshop/device-lab/AGENTS.md
+ * ("the default for every Korri theme"), promoted from prose into shared code.
+ */
+@import "./recipe.css";
+
+/* ── Tailwind v4 utilities ───────────────────────────────────────────────
+ * `@theme inline` + a bare var() ref to the precomputed token is the
+ * spike-verified safe pattern (sidesteps Tailwind #16396 where calc(var())
+ * inside @theme inline mis-emits). Utilities stay live / container-adaptive:
+ *   font-size → text-dn3 … text-0 … text-up3
+ *   spacing   → p-i1 / m-i2 / gap-i3 / size-i4 … (i = intrinsic) */
+@theme inline {
+  --text-dn3: var(--intrinsic-text-dn3);
+  --text-dn2: var(--intrinsic-text-dn2);
+  --text-dn1: var(--intrinsic-text-dn1);
+  --text-0: var(--intrinsic-text-0);
+  --text-up1: var(--intrinsic-text-up1);
+  --text-up2: var(--intrinsic-text-up2);
+  --text-up3: var(--intrinsic-text-up3);
+
+  --spacing-i1: var(--intrinsic-space-1);
+  --spacing-i2: var(--intrinsic-space-2);
+  --spacing-i3: var(--intrinsic-space-3);
+  --spacing-i4: var(--intrinsic-space-4);
+  --spacing-i5: var(--intrinsic-space-5);
+  --spacing-i6: var(--intrinsic-space-6);
+}

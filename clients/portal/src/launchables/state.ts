@@ -18,7 +18,6 @@ import type {
   SessionStatusOutcome,
   SessionStopOutcome,
 } from "@contracts/generated/korrid"
-import type { Direction } from "../input/types"
 
 /**
  * Launchables screen state. Raw bridge results are converted into this ADT
@@ -66,7 +65,6 @@ export interface StreamSource {
 
 interface LaunchablesContent {
   readonly entries: readonly PortalEntry[]
-  readonly selectedIndex: number
   readonly notice: string | null
 }
 
@@ -96,12 +94,6 @@ export type Maybe<A> =
   | { readonly _tag: "Some"; readonly value: A }
   | { readonly _tag: "None" }
 
-export interface Section {
-  readonly title: string
-  readonly startIndex: number
-  readonly entries: readonly PortalEntry[]
-}
-
 export const KORRI_STREAM_APP = "Korri Stream"
 
 interface StreamTarget {
@@ -115,7 +107,6 @@ const readyFrom = (
 ): ReadyState => ({
   _tag: "Ready",
   entries: state.entries,
-  selectedIndex: state.selectedIndex,
   notice,
 })
 
@@ -172,8 +163,6 @@ export const LaunchablesState = {
     localGames?: LocalGamesListOutcome,
     storage?: StorageAccessResult,
     notice?: BackgroundNoticeResult,
-    /** Key of the entry the user had selected, so a reload does not steal it. */
-    keepSelection?: string,
   ): LaunchablesState => {
     const entries: PortalEntry[] = []
     const failures: string[] = []
@@ -240,27 +229,14 @@ export const LaunchablesState = {
     // it is a setting, not something to play.
     entries.push({ kind: "background-notice", visible: notice?._tag === "Visible" })
 
-    // Keep the cursor on whatever the user had chosen. The list reloads in
-    // the background -- on resume, on a poll -- and resetting to the top
-    // mid-navigation makes Confirm activate whatever now sits at index 0.
-    // Matched by identity, not position: entries appear and disappear, and
-    // an index that survives a reshuffle points at the wrong thing.
-    const keptIndex =
-      keepSelection === undefined
-        ? 0
-        : Math.max(
-            0,
-            entries.findIndex(entry => entryKey(entry) === keepSelection),
-          )
     return {
       _tag: "Ready",
       entries,
-      selectedIndex: keptIndex,
       notice: failures.length > 0 ? failures.join(" · ") : null,
     }
   },
 
-  /** Replace the notice on a Ready state, leaving entries and selection alone. */
+  /** Replace the notice on a Ready state, leaving its entries alone. */
   withNotice: (state: ReadyState, notice: string): ReadyState => ({
     ...state,
     notice,
@@ -299,41 +275,6 @@ export const LaunchablesState = {
     state._tag === "Ready"
       ? { ...state, _tag: "Launching", title, notice: null }
       : state,
-
-  moveSelection: (
-    state: LaunchablesState,
-    direction: Direction,
-  ): LaunchablesState => {
-    if (state._tag !== "Ready" || state.entries.length === 0) return state
-    const delta = direction === "down" ? 1 : direction === "up" ? -1 : 0
-    if (delta === 0) return state
-    const last = state.entries.length - 1
-    const next = Math.min(last, Math.max(0, state.selectedIndex + delta))
-    return next === state.selectedIndex
-      ? state
-      : { ...state, selectedIndex: next, notice: null }
-  },
-
-  /**
-   * Move selection to an exact entry, as a pointer does. Out-of-range indices
-   * are ignored rather than clamped: a stale index from a list that changed
-   * under the user should do nothing, not activate a neighbour.
-   */
-  selectIndex: (state: LaunchablesState, index: number): LaunchablesState => {
-    if (state._tag !== "Ready") return state
-    if (index < 0 || index >= state.entries.length) return state
-    return index === state.selectedIndex
-      ? state
-      : { ...state, selectedIndex: index, notice: null }
-  },
-
-  selected: (state: LaunchablesState): Maybe<PortalEntry> => {
-    if (state._tag !== "Ready") return { _tag: "None" }
-    const entry = state.entries[state.selectedIndex]
-    return entry === undefined
-      ? { _tag: "None" }
-      : { _tag: "Some", value: entry }
-  },
 
   withLocalLaunchOutcome: (
     state: LaunchablesState,
@@ -379,15 +320,20 @@ export const LaunchablesState = {
     )
   },
 
-  /** Lock input before the asynchronous stop request leaves the portal. */
-  beginStopping: (state: LaunchablesState): LaunchablesState => {
-    if (state._tag !== "Ready") return state
-    const selected = state.entries[state.selectedIndex]
-    if (selected?.kind !== "now-playing") return state
+  /**
+   * Lock input before the asynchronous stop request leaves the portal. The
+   * target session is named by the caller rather than inferred from a cursor:
+   * which session a surface means is the surface's business, not this ADT's.
+   */
+  beginStopping: (
+    state: LaunchablesState,
+    target: PortalEntry,
+  ): LaunchablesState => {
+    if (state._tag !== "Ready" || target.kind !== "now-playing") return state
     return {
       ...state,
       _tag: "Stopping",
-      launchId: selected.session.launchId,
+      launchId: target.session.launchId,
       notice: null,
     }
   },
@@ -434,35 +380,4 @@ export const LaunchablesState = {
     state._tag === "Stopping"
       ? readyFrom(state, "StopPending: session is still stopping")
       : state,
-
-  /** Group the flat entry list into titled sections for rendering. */
-  sections: (
-    state: Extract<LaunchablesState, { _tag: "Ready" }>,
-  ): readonly Section[] => {
-    const sections: Section[] = []
-    let current: { title: string; startIndex: number; entries: PortalEntry[] } | null =
-      null
-    state.entries.forEach((entry, index) => {
-      const title =
-        entry.kind === "storage-access"
-          ? "Needs your attention"
-          : entry.kind === "background-notice"
-          ? "Settings"
-          : entry.kind === "pairing"
-          ? "Devices"
-          : entry.kind === "now-playing"
-          ? "Now playing"
-          : entry.kind === "local-game"
-            ? "Local games"
-            : entry.kind === "game"
-              ? "Games"
-              : entry.hostName
-      if (current === null || current.title !== title) {
-        current = { title, startIndex: index, entries: [] }
-        sections.push(current)
-      }
-      current.entries.push(entry)
-    })
-    return sections
-  },
 }
