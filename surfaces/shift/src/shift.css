@@ -2872,6 +2872,10 @@
 	flex-direction: column;
 	gap: var(--shift-space-4);
 	will-change: transform;
+	/* A focused row's halo is drawn OUTSIDE its box, and the viewport clips.
+	 * Without a ring's width of room here the halo is sliced flat against the
+	 * screen edges — most visibly on the first and last rows. */
+	padding: 3px;
 }
 
 [data-shift-settings] .shift-settings-footer {
