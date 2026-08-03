@@ -62,6 +62,25 @@ Guard: the capability model is deliberately unbuilt. Do not invent it ahead of
 real cases. Today that is three devices and one genuinely multi-route piece of
 content — shape for federation, build no more than the cases demand.
 
+The same guard applies to every persisted-data and configuration schema.
+Schemas are architecture, including examples proposed in conversation. Do not
+invent paths, filenames, collection names, field names, nesting, variants,
+defaults, identity rules, migrations, or fallback behavior to make a proposal
+look concrete. A thin slice narrows behavior; it does not pre-decide its data
+model. Introduce schema only by extracting it from an existing producer,
+consumer, treaty, or observed real record, or after the user explicitly chooses
+it. Cite that grounding when proposing or implementing the schema. If no such
+grounding exists, state that the schema is unresolved and ask which real case
+or existing data should define it; do not fill the gap with illustrative YAML,
+JSON, types, or pseudo-records.
+
+Legacy's schema design is the presumptive baseline when it covers the case at
+hand. Extract and preserve it deliberately; do not restate, simplify, rename,
+or redesign it as part of moving it to `main`. In design discussion, present
+only specific alterations for which there is a concrete idea or concern. Name
+the legacy element, the proposed delta, and why it may be warranted. When there
+is no such concern, propose no schema change.
+
 ## Standing decisions
 
 - WebViews are hardware-blind: they receive semantic input actions
@@ -72,9 +91,7 @@ content — shape for federation, build no more than the cases demand.
 - `flake.nix` is an index: inputs + per-area composition only. Shared
   toolchain composition lives in per-area Nix expressions; `devshell.nix`
   owns the interactive shell. No inline derivations or shells.
-- Nix apps are the scripted task surface; run `nix run .#help` to discover
-  them. Definitions and cross-area glue live in `nix/tasks.nix`; per-area
-  behavior stays in scripts beside the code it serves.
+- Project tasks are Nix apps; discover them with `nix run .#help`.
 - Services are Rust. Wire types live in Rust and are exported through
   Typeshare into `contracts/generated/` — those files are read-only;
   regenerate them via `nix run .#korrid-check`, never edit by hand.
