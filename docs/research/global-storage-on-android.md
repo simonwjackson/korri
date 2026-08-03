@@ -1,7 +1,9 @@
 # User-visible config storage on Android — spike findings, 2026-07-30
 
 Requirement being tested: Korri's config must live outside the app's private
-domain, somewhere the user can find and edit it in a file manager.
+domain, somewhere the user can find and edit it in a file manager. The product
+root is now `/storage/emulated/0/korri`; the older names below are retained as
+the paths measured during this spike.
 
 Device: SM-F966U1 (usu), Android 16, SDK 36. App: `com.simonwjackson.korri.debug`,
 `targetSdk 34`. The probe ran korrid's own Rust `fs` calls **inside the app

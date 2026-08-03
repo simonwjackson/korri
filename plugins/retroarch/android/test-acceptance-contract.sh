@@ -20,7 +20,7 @@ grep -F 'wl4.state.auto' "$ACCEPTANCE" >/dev/null
 grep -F 'wl4.srm' "$ACCEPTANCE" >/dev/null
 grep -F 'must be stopped before acceptance can back up save state' "$ACCEPTANCE" >/dev/null
 grep -F 'could not quiesce the target; backup and lock retained' "$ACCEPTANCE" >/dev/null
-grep -F 'rm -f /sdcard/korri-retro-acceptance.png' "$ACCEPTANCE" >/dev/null
+grep -F 'rm -f /sdcard/korri-acceptance.png' "$ACCEPTANCE" >/dev/null
 grep -F '"gameId":"wl4"' "$ACCEPTANCE" >/dev/null
 grep -F 'reset_portal_selection_to_top' "$ACCEPTANCE" >/dev/null
 grep -F 'portal_shot_focuses_wario' "$ACCEPTANCE" >/dev/null

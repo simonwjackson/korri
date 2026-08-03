@@ -523,7 +523,7 @@ async fn rpc(
 fn default_local_storage_root() -> PathBuf {
     std::env::var_os("KORRI_LOCAL_STORAGE_ROOT")
         .map(PathBuf::from)
-        .unwrap_or_else(|| std::env::temp_dir().join("korri-retro"))
+        .unwrap_or_else(|| std::env::temp_dir().join("korri"))
 }
 
 /// Build the localhost router protected by a per-server bearer capability.

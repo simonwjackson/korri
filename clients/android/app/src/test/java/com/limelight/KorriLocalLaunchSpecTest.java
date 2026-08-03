@@ -17,7 +17,7 @@ import static org.junit.Assert.fail;
 
 @RunWith(RobolectricTestRunner.class)
 public class KorriLocalLaunchSpecTest {
-    private static final File ROOT = new File("/storage/emulated/0/korri-retro");
+    private static final File ROOT = new File("/storage/emulated/0/korri");
 
     private static JSONObject validSpec() throws Exception {
         return new JSONObject()
@@ -27,18 +27,18 @@ public class KorriLocalLaunchSpecTest {
                         .put("className",
                                 "com.retroarch.browser.retroactivity.RetroActivityFuture"))
                 .put("extras", new JSONObject()
-                        .put("ROM", "/storage/emulated/0/korri-retro/roms/wl4.gba")
+                        .put("ROM", "/storage/emulated/0/korri/roms/wl4.gba")
                         .put("LIBRETRO",
                                 "/data/data/com.korri.retroarch/cores/mgba_libretro_android.so")
                         .put("CONFIGFILE",
-                                "/storage/emulated/0/korri-retro/retroarch.cfg"))
+                                "/storage/emulated/0/korri/retroarch.cfg"))
                 .put("directories", new JSONArray()
-                        .put("/storage/emulated/0/korri-retro/system")
-                        .put("/storage/emulated/0/korri-retro/saves")
-                        .put("/storage/emulated/0/korri-retro/states")
-                        .put("/storage/emulated/0/korri-retro/screenshots"))
+                        .put("/storage/emulated/0/korri/system")
+                        .put("/storage/emulated/0/korri/saves")
+                        .put("/storage/emulated/0/korri/states")
+                        .put("/storage/emulated/0/korri/screenshots"))
                 .put("files", new JSONArray().put(new JSONObject()
-                        .put("path", "/storage/emulated/0/korri-retro/retroarch.cfg")
+                        .put("path", "/storage/emulated/0/korri/retroarch.cfg")
                         .put("content", "video_driver = \"gl\"")))
                 .put("integrity", "verified by Rust before parsing");
     }
@@ -59,7 +59,7 @@ public class KorriLocalLaunchSpecTest {
     public void acceptsTheGeneratedLauncherTemplate() throws Exception {
         KorriLocalLaunchSpec.Parsed parsed =
                 KorriLocalLaunchSpec.parse(validSpec().toString(), ROOT);
-        assertEquals("/storage/emulated/0/korri-retro/roms/wl4.gba",
+        assertEquals("/storage/emulated/0/korri/roms/wl4.gba",
                 parsed.extras.get("ROM"));
         assertEquals(4, parsed.directories.size());
         assertEquals(1, parsed.files.size());
@@ -113,12 +113,12 @@ public class KorriLocalLaunchSpecTest {
 
         JSONObject withDirectories = androidAppSpec();
         withDirectories.getJSONArray("directories")
-                .put("/storage/emulated/0/korri-retro/saves");
+                .put("/storage/emulated/0/korri/saves");
         assertInvalid(withDirectories, "InvalidSpec");
 
         JSONObject withFiles = androidAppSpec();
         withFiles.getJSONArray("files").put(new JSONObject()
-                .put("path", "/storage/emulated/0/korri-retro/config.ini")
+                .put("path", "/storage/emulated/0/korri/config.ini")
                 .put("content", "setting=true"));
         assertInvalid(withFiles, "InvalidSpec");
     }

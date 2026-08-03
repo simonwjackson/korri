@@ -184,7 +184,7 @@ public class KorriShellActivity extends AppCompatActivity {
 
     /** Android supplies storage location; korrid owns everything beneath it. */
     private static String localStorageRoot() {
-        return new File(Environment.getExternalStorageDirectory(), "korri-retro")
+        return KorriStorageRoot.resolve(Environment.getExternalStorageDirectory())
                 .getAbsolutePath();
     }
 

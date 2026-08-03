@@ -8,16 +8,16 @@ KORRI_PACKAGE="${KORRI_PACKAGE:-com.simonwjackson.korri.debug}"
 KORRI_ACTIVITY="$KORRI_PACKAGE/com.limelight.KorriShellActivity"
 FORK_PACKAGE="com.korri.retroarch"
 STOCK_PACKAGE="com.retroarch.aarch64"
-SYSTEM_DIR="/storage/emulated/0/korri-retro/system"
-STATES_ROOT_DIR="/storage/emulated/0/korri-retro/states"
+SYSTEM_DIR="/storage/emulated/0/korri/system"
+STATES_ROOT_DIR="/storage/emulated/0/korri/states"
 STATE_DIR="$STATES_ROOT_DIR/mGBA"
 STATE_FILE="$STATE_DIR/wl4.state.auto"
-SAVE_DIR="/storage/emulated/0/korri-retro/saves"
+SAVE_DIR="/storage/emulated/0/korri/saves"
 SAVE_FILE="$SAVE_DIR/wl4.srm"
-SCREENSHOTS_DIR="/storage/emulated/0/korri-retro/screenshots"
+SCREENSHOTS_DIR="/storage/emulated/0/korri/screenshots"
 HOST_PORT="${KORRI_ACCEPTANCE_HOST_PORT:-43119}"
 ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
-ANDROID_STORAGE_ROOT="/sdcard/korri-retro"
+ANDROID_STORAGE_ROOT="/sdcard/korri"
 CONFIG_REMOTE="$ANDROID_STORAGE_ROOT/config.yaml"
 LIBRARY_REMOTE="$ANDROID_STORAGE_ROOT/library.yaml"
 RETROARCH_CONFIG_REMOTE="$ANDROID_STORAGE_ROOT/retroarch.cfg"
@@ -196,7 +196,7 @@ cleanup() {
   if [[ "$FORWARD_ACTIVE" == true ]]; then
     "${ADB[@]}" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
   fi
-  "${ADB[@]}" shell rm -f /sdcard/korri-retro-acceptance.png >/dev/null 2>&1 || true
+  "${ADB[@]}" shell rm -f /sdcard/korri-acceptance.png >/dev/null 2>&1 || true
   if [[ "$TARGET_STARTED_BY_GATE" == true ]]; then
     if ! "${ADB[@]}" shell am force-stop "$FORK_PACKAGE" >/dev/null 2>&1; then
       safe_to_restore=false
@@ -400,8 +400,8 @@ portal_shot_focuses_wario() {
   local sample_x
   local sample_y
   local brightness
-  "${ADB[@]}" shell screencap -p /sdcard/korri-retro-acceptance.png >/dev/null
-  "${ADB[@]}" pull /sdcard/korri-retro-acceptance.png "$image" >/dev/null
+  "${ADB[@]}" shell screencap -p /sdcard/korri-acceptance.png >/dev/null
+  "${ADB[@]}" pull /sdcard/korri-acceptance.png "$image" >/dev/null
   magick "$image" -deskew 40% "$deskewed"
   tesseract "$deskewed" stdout --psm 6 >"$text" 2>/dev/null
   tesseract "$deskewed" stdout --psm 6 tsv >"$tsv" 2>/dev/null
