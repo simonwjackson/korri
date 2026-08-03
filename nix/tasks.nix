@@ -48,6 +48,12 @@ let
     pkgs.unzip
     pkgs.which
   ];
+  retroarchSigningInputs = [
+    retroarch.jdk
+    retroarch.androidSdk
+    pkgs.coreutils
+    pkgs.gnused
+  ];
   retroarchEnv = {
     JAVA_HOME = "${retroarch.jdk}";
     GRADLE_OPTS = retroarch.gradleOpts;
@@ -420,7 +426,35 @@ let
         "$KORRI_ROOT/plugins/retroarch/android/test-build.sh"
         "$KORRI_ROOT/plugins/retroarch/android/test-install-device.sh"
         "$KORRI_ROOT/plugins/retroarch/android/test-acceptance-contract.sh"
+        "$KORRI_ROOT/plugins/retroarch/android/test-distribution.sh"
+        "$KORRI_ROOT/plugins/retroarch/android/test-distribution-workflow.sh"
         exec ${packages.ra-build}/bin/ra-build
+      '';
+    };
+
+    ra-dist = {
+      description = "Build, verify, and stage the custom RetroArch distribution candidate.";
+      runtimeInputs = [ pkgs.coreutils ];
+      usageSuffix = " -- <output-directory>";
+      script = ''
+        output_dir="''${1:?usage: ra-dist <output-directory>}"
+        shift
+        ${packages.ra-check}/bin/ra-check
+        exec "$KORRI_ROOT/plugins/retroarch/android/stage-distribution.sh" "$output_dir" "$@"
+      '';
+    };
+
+    ra-sign = {
+      description = "Sign and verify a staged RetroArch distribution candidate.";
+      runtimeInputs = retroarchSigningInputs;
+      env = retroarchEnv;
+      usageSuffix = " -- <candidate-apk> <output-directory>";
+      script = ''
+        candidate="''${1:?usage: ra-sign <candidate-apk> <output-directory>}"
+        output_dir="''${2:?usage: ra-sign <candidate-apk> <output-directory>}"
+        shift 2
+        ${retroarchSetup}
+        exec "$KORRI_ROOT/plugins/retroarch/android/sign-distribution.sh" "$candidate" "$output_dir" "$@"
       '';
     };
 

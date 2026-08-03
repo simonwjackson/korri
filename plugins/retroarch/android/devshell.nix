@@ -30,7 +30,7 @@ pkgs.mkShell {
     export KORRI_ANDROID_SDK_NAME="retroarch"
     export KORRI_ROOT="''${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
     # shellcheck source=/dev/null
-    source ${../../nix/android-sdk-env.sh} || exit 1
+    source ${../../../nix/android-sdk-env.sh} || exit 1
 
     echo "RetroArch Android build environment"
     echo "  JAVA_HOME:  $JAVA_HOME"
