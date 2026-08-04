@@ -1208,8 +1208,10 @@ pub fn router_with_capability_and_local_root(
     )
 }
 
-/** Build the embedded Android/JNI brain router with the Artemis native edge. */
-pub fn android_router_with_capability_and_local_root(
+/** Test-only Android router. Production selects this platform only through
+ * the Android-gated JNI server entrypoint. */
+#[cfg(test)]
+fn android_router_with_capability_and_local_root(
     rpc_capability: &str,
     allowed_origin: &str,
     local_storage_root: impl AsRef<Path>,
@@ -1339,10 +1341,37 @@ pub fn korrid_version() -> String {
     VERSION.into()
 }
 
-/// Starts the exact same Axum router used by the Linux binary on localhost.
+/// Starts the standalone localhost brain. Platform-native integrations are
+/// unavailable through this public host entrypoint.
 pub fn start_local_server(
     allowed_origin: &str,
     local_storage_root: &str,
+) -> Result<u16, ServerError> {
+    start_local_server_for_platform(
+        allowed_origin,
+        local_storage_root,
+        NativePlatform::Standalone,
+    )
+}
+
+/** Android production reaches Artemis only through this target-gated JNI
+ * entrypoint, never through caller-provided platform data. */
+#[cfg(target_os = "android")]
+pub(crate) fn start_embedded_android_server(
+    allowed_origin: &str,
+    local_storage_root: &str,
+) -> Result<u16, ServerError> {
+    start_local_server_for_platform(
+        allowed_origin,
+        local_storage_root,
+        NativePlatform::EmbeddedAndroid,
+    )
+}
+
+fn start_local_server_for_platform(
+    allowed_origin: &str,
+    local_storage_root: &str,
+    native_platform: NativePlatform,
 ) -> Result<u16, ServerError> {
     let mut slot = server_slot().lock().expect("server mutex poisoned");
     if slot.is_some() {
@@ -1396,7 +1425,7 @@ pub fn start_local_server(
                         launcher::FileProvisionMode::Deferred,
                         server_signing_key,
                         server_moonlight_launch_authority,
-                        NativePlatform::EmbeddedAndroid,
+                        native_platform,
                         server_config_snapshot,
                     ),
                 )
@@ -1417,7 +1446,7 @@ pub fn start_local_server(
         launch_signing_key,
         moonlight_launch_authority,
         moonlight_config_snapshot,
-        native_platform: NativePlatform::EmbeddedAndroid,
+        native_platform,
         stop,
         thread,
     });
@@ -1595,6 +1624,73 @@ mod tests {
             authorize_moonlight_launch_against_current_policy(&mut authority, &spec, original)
                 .is_ok()
         );
+    }
+
+    #[tokio::test]
+    async fn embedded_android_test_router_resolves_artemis_and_honors_current_user_policy() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("config.yaml"), "{}\n").unwrap();
+        std::fs::write(root.path().join("library.yaml"), "{}\n").unwrap();
+        let app = android_router_with_capability_and_local_root(
+            "right-token",
+            "https://portal.example",
+            root.path(),
+        );
+        let request = || {
+            Request::builder()
+                .method("POST")
+                .uri("/rpc")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, "Bearer right-token")
+                .body(Body::from(
+                    r#"{"_tag":"app.moonlight.resolve","payload":{}}"#,
+                ))
+                .unwrap()
+        };
+        let outcome =
+            |body: axum::body::Bytes| serde_json::from_slice::<serde_json::Value>(&body).unwrap();
+
+        let response = app.clone().oneshot(request()).await.unwrap();
+        let body = outcome(to_bytes(response.into_body(), usize::MAX).await.unwrap());
+        assert_eq!(body["outcome"]["_tag"], "Available");
+        assert_eq!(body["outcome"]["payload"]["implementation"], "artemis");
+
+        for payload in [
+            r#"{"hostUuid":"","appId":7}"#,
+            r#"{"hostUuid":"host-uuid","appId":0}"#,
+            r#"{"hostUuid":"host-uuid","appId":2147483648}"#,
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/rpc")
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .header(header::AUTHORIZATION, "Bearer right-token")
+                        .body(Body::from(format!(
+                            r#"{{"_tag":"app.moonlight.launch.prepare","payload":{payload}}}"#
+                        )))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let body = outcome(to_bytes(response.into_body(), usize::MAX).await.unwrap());
+            assert_eq!(body["outcome"]["_tag"], "Err");
+            assert_eq!(
+                body["outcome"]["payload"]["code"],
+                "InvalidMoonlightLaunchTarget"
+            );
+        }
+
+        std::fs::write(
+            root.path().join("config.yaml"),
+            "host:\n  plugin:\n    '@korri:moonlight': false\n",
+        )
+        .unwrap();
+        let response = app.oneshot(request()).await.unwrap();
+        let body = outcome(to_bytes(response.into_body(), usize::MAX).await.unwrap());
+        assert_eq!(body["outcome"]["_tag"], "Unavailable");
     }
 
     #[test]
@@ -2311,6 +2407,31 @@ command = ["sh", "-c", "sleep 1"]
         let capability = local_server_capability().unwrap();
         let client = reqwest::Client::new();
         let url = format!("http://127.0.0.1:{port}/rpc");
+        let moonlight = client
+            .post(&url)
+            .bearer_auth(&capability)
+            .json(&serde_json::json!({
+                "_tag": "app.moonlight.resolve",
+                "payload": {}
+            }))
+            .send()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        assert_eq!(moonlight["outcome"]["_tag"], "Unavailable");
+
+        stop_local_server().unwrap();
+        let port = start_local_server_for_platform(
+            "https://portal.example",
+            root.path().to_str().expect("UTF-8 temp path"),
+            NativePlatform::EmbeddedAndroid,
+        )
+        .unwrap();
+        let capability = local_server_capability().unwrap();
+        let url = format!("http://127.0.0.1:{port}/rpc");
+
         let mut response = None;
         for _ in 0..20 {
             match client

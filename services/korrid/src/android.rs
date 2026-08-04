@@ -2,8 +2,9 @@
 //! clients/android/.../korrid/KorridServer.java.
 
 use crate::{
-    authorize_moonlight_launch_spec, korrid_version, local_server_capability, start_local_server,
-    stop_local_server, verify_local_launch_spec, MoonlightLaunchAuthorization,
+    authorize_moonlight_launch_spec, korrid_version, local_server_capability,
+    start_embedded_android_server, stop_local_server, verify_local_launch_spec,
+    MoonlightLaunchAuthorization,
 };
 use jni::{
     objects::{JClass, JString},
@@ -47,7 +48,7 @@ pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_start(
             return -1;
         }
     };
-    match start_local_server(&allowed_origin, &local_storage_root) {
+    match start_embedded_android_server(&allowed_origin, &local_storage_root) {
         Ok(port) => port.into(),
         Err(error) => {
             let _ = env.throw_new("java/lang/IllegalStateException", error.to_string());
