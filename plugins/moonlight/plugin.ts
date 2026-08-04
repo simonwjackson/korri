@@ -63,8 +63,15 @@ const declaration = {
         interaction: {
           kind: "choice",
           options: [
-            { value: "trackpad", label: "Trackpad" },
-            { value: "direct", label: "Direct touchscreen" },
+            { value: "0", label: "Multi touch" },
+            { value: "1", label: "Absolute touch" },
+            { value: "2", label: "Track pad(Natural/Double tap to drag)" },
+            { value: "3", label: "Track pad(Gaming/Long press to drag)" },
+            { value: "4", label: "Disabled" },
+            {
+              value: "5",
+              label: "Absolute touch (left/right click swapped)",
+            },
           ],
         },
         effect: "@korri:moonlight/set-mouse-mode",

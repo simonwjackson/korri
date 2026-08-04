@@ -1,4 +1,7 @@
-use korrid::plugin::{decode_plugin_declaration, load_plugin_source, PluginRegistry};
+use korrid::plugin::{
+    decode_plugin_declaration, load_plugin_source, PluginRegistry,
+    SessionControlDeclarationInteraction,
+};
 
 const ANDROID_PLUGIN: &str = include_str!("../plugins/android-app.plugin.ts");
 const MGBA_PLUGIN: &str = include_str!("../../../plugins/mgba/plugin.ts");
@@ -97,6 +100,29 @@ fn enabled_moonlight_plugin_declares_artemis_streaming_and_the_full_control_inve
     let android = transport.android.as_ref().expect("Android implementation");
     assert_eq!(android.implementation.as_str(), "artemis");
     assert_eq!(android.sunshine_app, "Korri Stream");
+    let mouse_modes = match &registry
+        .session_controls()
+        .get("@korri:moonlight/mouse-mode")
+        .expect("mouse mode control")
+        .interaction
+    {
+        SessionControlDeclarationInteraction::Choice { options } => options,
+        other => panic!("expected mouse choices, got {other:?}"),
+    };
+    assert_eq!(
+        mouse_modes
+            .iter()
+            .map(|option| (option.value.as_str(), option.label.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("0", "Multi touch"),
+            ("1", "Absolute touch"),
+            ("2", "Track pad(Natural/Double tap to drag)"),
+            ("3", "Track pad(Gaming/Long press to drag)"),
+            ("4", "Disabled"),
+            ("5", "Absolute touch (left/right click swapped)"),
+        ]
+    );
     assert_eq!(
         registry
             .session_controls()
