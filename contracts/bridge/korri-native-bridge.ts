@@ -110,6 +110,8 @@ export type BridgeInputEvent =
   | { readonly type: "back"; readonly source: "gamepad" }
   | { readonly type: "menu"; readonly source: "gamepad" }
   | { readonly type: "options"; readonly source: "gamepad" }
+  /** Guide/system remains semantic; its Android key code never crosses. */
+  | { readonly type: "system"; readonly source: "gamepad" }
 
 // ── Shell surface (JS -> Kotlin) ────────────────────────────────────────
 

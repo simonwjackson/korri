@@ -61,6 +61,16 @@ export function createFixtureHost(
     runGameAction(gameId, actionId) {
       calls.push(`game-action:${gameId}:${actionId}`)
     },
+    invokeGameplayControl(controlId, value) {
+      calls.push(
+        value === undefined
+          ? `gameplay-control:${controlId}`
+          : `gameplay-control:${controlId}:${JSON.stringify(value)}`,
+      )
+    },
+    dismissGameplayOverlay() {
+      calls.push("gameplay-overlay-dismiss")
+    },
     retry() {
       calls.push("retry")
     },
@@ -75,6 +85,7 @@ export function createFixtureHost(
 
 /** A small, honest catalog: no art, mixed provenance, one resumable session. */
 export const fixtureModel: SurfaceModel = {
+  presentation: { kind: "catalog" },
   catalog: {
     _tag: "Ready",
     games: [

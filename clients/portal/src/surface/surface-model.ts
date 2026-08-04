@@ -278,6 +278,7 @@ export function surfaceModelFrom(
           .filter((action): action is SurfaceAction => action !== null)
 
   return {
+    presentation: { kind: "catalog" },
     catalog: catalogFrom(state),
     status: statusFrom(state),
     actions,

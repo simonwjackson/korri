@@ -173,8 +173,63 @@ export type SurfaceStatus =
       readonly canRetry: boolean
     }
 
+/** Presentation-safe gameplay interaction. Integration effects and protected
+ * platform instructions deliberately have no representation in this treaty. */
+export type SurfaceGameplayControlInteraction =
+  | { readonly kind: "command" }
+  | { readonly kind: "toggle"; readonly value: boolean }
+  | {
+      readonly kind: "choice"
+      readonly value: string
+      readonly options: readonly SurfaceSettingChoice[]
+    }
+  | {
+      readonly kind: "range"
+      readonly value: number
+      readonly min: number
+      readonly max: number
+      readonly step: number
+    }
+
+export interface SurfaceGameplayControl {
+  /** Opaque within the current gameplay-overlay model. */
+  readonly id: string
+  readonly label: string
+  readonly description?: string
+  readonly enabled: boolean
+  readonly disabledReason?: string
+  readonly destructive: boolean
+  readonly dismissOnSuccess: boolean
+  readonly interaction: SurfaceGameplayControlInteraction
+}
+
+/** A plugin-owned run of controls. Korri omits empty groups. */
+export interface SurfaceGameplayControlGroup {
+  readonly id: string
+  readonly label: string
+  readonly controls: readonly SurfaceGameplayControl[]
+}
+
+export interface SurfaceGameplayOverlayPresentation {
+  readonly kind: "gameplay-overlay"
+  readonly title?: string
+  /** Overlay-owned controls such as Resume, always before plugin groups. */
+  readonly controls: readonly SurfaceGameplayControl[]
+  readonly groups: readonly SurfaceGameplayControlGroup[]
+}
+
+export type SurfacePresentation =
+  | { readonly kind: "catalog" }
+  | SurfaceGameplayOverlayPresentation
+
+export type SurfaceGameplayControlValue =
+  | { readonly kind: "toggle"; readonly value: boolean }
+  | { readonly kind: "choice"; readonly value: string }
+  | { readonly kind: "range"; readonly value: number }
+
 /** Everything Korri publishes to the surface. Replaced wholesale on change. */
 export interface SurfaceModel {
+  readonly presentation: SurfacePresentation
   readonly catalog: SurfaceCatalog
   readonly status: SurfaceStatus
   /** Preformatted local time. Absent when the surface should show no clock. */
@@ -205,6 +260,14 @@ export interface SurfaceHost {
   /** Actions available for one game. Empty when Korri supports none yet. */
   gameActions(gameId: string): readonly SurfaceAction[]
   runGameAction(gameId: string, actionId: string): void
+  /** Invoke a control from the current gameplay-overlay model. The host binds
+   * this opaque request to its current launch identity before calling korrid. */
+  invokeGameplayControl(
+    controlId: string,
+    value?: SurfaceGameplayControlValue,
+  ): void
+  /** Close the gameplay overlay locally; no brain call is required. */
+  dismissGameplayOverlay(): void
   /** Try the failed thing again. Only meaningful while `Problem.canRetry`. */
   retry(): void
   /** Acknowledge a `Problem` and return to browsing. */

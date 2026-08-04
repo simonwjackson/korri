@@ -108,6 +108,10 @@ export function SurfaceRoot({ bus, bridge, korrid }: SurfaceRootProps) {
         if (actionId === "stop") stopSession(entry)
         else confirmEntry(entry)
       },
+      // The browsing root never publishes gameplay-overlay controls. U5 owns
+      // the dedicated overlay host that binds these calls to a launch id.
+      invokeGameplayControl: () => {},
+      dismissGameplayOverlay: () => {},
       // Korri has nothing new to try after a failed launch, so retrying means
       // re-reading the world rather than repeating the same request.
       retry: reload,
