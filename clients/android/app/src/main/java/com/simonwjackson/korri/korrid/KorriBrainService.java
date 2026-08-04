@@ -43,6 +43,7 @@ public final class KorriBrainService extends Service {
     private static KorriActiveLaunch activeLaunch;
     private static Object activeLaunchOwner;
     private static boolean overlayArmed;
+    private static String suspendedOverlayLaunchId;
 
     public static synchronized KorriActiveLaunch publishLocalActiveLaunch(
             Object owner, String signedSpecJson) throws Exception {
@@ -66,6 +67,7 @@ public final class KorriBrainService extends Service {
             Object owner, KorriActiveLaunch launch) {
         activeLaunch = launch;
         activeLaunchOwner = owner;
+        suspendedOverlayLaunchId = null;
         overlayArmed = true;
         return launch;
     }
@@ -79,7 +81,19 @@ public final class KorriBrainService extends Service {
     }
 
     public static synchronized void setOverlayArmed(boolean armed) {
-        overlayArmed = activeLaunch != null && armed;
+        overlayArmed = activeLaunch != null
+                && armed
+                && !activeLaunch.launchId().equals(suspendedOverlayLaunchId);
+    }
+
+    /** Foreground discontinuity disarms only the launch that actually left. */
+    public static synchronized boolean suspendOverlay(String launchId) {
+        if (activeLaunch == null || !activeLaunch.launchId().equals(launchId)) {
+            return false;
+        }
+        suspendedOverlayLaunchId = launchId;
+        overlayArmed = false;
+        return true;
     }
 
     /** Recreated Game Activities retain the serialized launchId but replace
@@ -121,6 +135,7 @@ public final class KorriBrainService extends Service {
     private static void clearJavaActiveLaunch() {
         activeLaunch = null;
         activeLaunchOwner = null;
+        suspendedOverlayLaunchId = null;
         overlayArmed = false;
     }
 

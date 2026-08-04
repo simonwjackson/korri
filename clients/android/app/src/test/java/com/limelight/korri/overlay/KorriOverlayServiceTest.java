@@ -15,9 +15,15 @@ import static org.junit.Assert.assertTrue;
 public class KorriOverlayServiceTest {
     private static final String LAUNCH = "0123456789abcdef0123456789abcdef";
 
+    private static final String REPLACEMENT = "fedcba9876543210fedcba9876543210";
+
     private static KorriActiveLaunch artemis() {
+        return artemis(LAUNCH);
+    }
+
+    private static KorriActiveLaunch artemis(String launchId) {
         return KorriActiveLaunch.artemis(
-                LAUNCH,
+                launchId,
                 "skate3",
                 "Skate 3",
                 "com.simonwjackson.korri",
@@ -56,6 +62,40 @@ public class KorriOverlayServiceTest {
                 "com.simonwjackson.korri", "com.limelight.KorriShellActivity");
         assertFalse(mismatch.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN));
         assertFalse(mismatch.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP));
+    }
+
+    @Test
+    public void matchedLaunchStaysDisarmedAfterDirectForegroundReturn() {
+        KorriOverlayService.StateMachine state = new KorriOverlayService.StateMachine(
+                "com.simonwjackson.korri");
+        state.updateSession(artemis(), true);
+        state.updateForeground("com.simonwjackson.korri", "com.limelight.Game");
+
+        assertEquals(
+                LAUNCH,
+                state.updateForeground(
+                        "com.simonwjackson.korri", "com.limelight.KorriShellActivity"));
+        state.updateForeground("com.simonwjackson.korri", "com.limelight.Game");
+        state.updateSession(artemis(), true);
+
+        assertFalse(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN));
+        assertFalse(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP));
+    }
+
+    @Test
+    public void freshKorriPublicationRearmsKnownMatchingForeground() {
+        KorriOverlayService.StateMachine state = new KorriOverlayService.StateMachine(
+                "com.simonwjackson.korri");
+        state.updateSession(artemis(), true);
+        state.updateForeground("com.simonwjackson.korri", "com.limelight.Game");
+        state.updateForeground(
+                "com.simonwjackson.korri", "com.limelight.KorriShellActivity");
+        state.updateForeground("com.simonwjackson.korri", "com.limelight.Game");
+
+        state.updateSession(artemis(REPLACEMENT), true);
+
+        assertTrue(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN));
+        assertTrue(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP));
     }
 
     @Test

@@ -11,6 +11,7 @@ import java.util.Deque;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
@@ -19,53 +20,152 @@ public class KorriLaunchContinuityTest {
     private static final String LAUNCH_B = "fedcba9876543210fedcba9876543210";
 
     @Test
-    public void eventThenDelayedDeathClearsExactLaunchAndDifferentDirectRelaunchCannotRearmIt() {
+    public void eventBeforePublicationAndUnavailableInspectionRetryInitialBinding() {
         ConfigurableInspector inspector = new ConfigurableInspector();
         ManualScheduler scheduler = new ManualScheduler();
         RecordingEnd end = new RecordingEnd();
         KorriLaunchContinuity continuity = new KorriLaunchContinuity(inspector, scheduler, end, 4);
-        KorriActiveLaunch launch = external(LAUNCH_A, "org.example.game");
-        KorriLaunchContinuity.ProcessIdentity original = process(41, 10041, "org.example.game", "org.example.game");
-        KorriLaunchContinuity.ProcessIdentity replacement = process(57, 10041, "org.example.game", "org.example.game");
+        KorriLaunchContinuity.ProcessIdentity original =
+                process(41, 10041, "org.example.game", "org.example.game");
 
-        inspector.add(complete(original));
-        continuity.updateSession(launch);
         continuity.updateForeground("org.example.game", "org.example.game.Game");
+        assertEquals(0, scheduler.pending());
+        continuity.updateSession(external(LAUNCH_A, "org.example.game"));
+        assertEquals(1, scheduler.pending());
 
-        continuity.updateForeground("com.simonwjackson.korri", "com.limelight.KorriShellActivity");
         inspector.add(KorriLaunchContinuity.ProcessObservation.unavailable());
         scheduler.runNext();
-        assertEquals(Collections.emptyList(), end.launchIds);
+        assertEquals(1, scheduler.pending());
+        inspector.add(complete(original));
+        scheduler.runNext();
 
+        assertTrue(continuity.hasBoundIdentity(LAUNCH_A, 41));
+        assertEquals(0, scheduler.pending());
+        assertEquals(Collections.emptyList(), end.launchIds);
+    }
+
+    @Test
+    public void delayedDeathClearsOnlyAfterExactBoundProcessDisappears() {
+        ConfigurableInspector inspector = new ConfigurableInspector();
+        ManualScheduler scheduler = new ManualScheduler();
+        RecordingEnd end = new RecordingEnd();
+        KorriLaunchContinuity continuity = new KorriLaunchContinuity(inspector, scheduler, end, 5);
+        KorriLaunchContinuity.ProcessIdentity original =
+                process(41, 10041, "org.example.game", "org.example.game");
+        KorriLaunchContinuity.ProcessIdentity replacement =
+                process(57, 10041, "org.example.game", "org.example.game");
+
+        continuity.updateSession(external(LAUNCH_A, "org.example.game"));
+        continuity.updateForeground("org.example.game", "org.example.game.Game");
+        inspector.add(complete(original));
+        scheduler.runNext();
+        continuity.updateForeground(
+                "com.simonwjackson.korri", "com.limelight.KorriShellActivity");
+
+        inspector.add(KorriLaunchContinuity.ProcessObservation.unavailable());
+        scheduler.runNext();
+        inspector.add(complete(original));
+        scheduler.runNext();
+        assertEquals(Collections.emptyList(), end.launchIds);
         inspector.add(complete(replacement));
         scheduler.runNext();
-        assertEquals(Collections.singletonList(LAUNCH_A), end.launchIds);
 
+        assertEquals(Collections.singletonList(LAUNCH_A), end.launchIds);
+        assertEquals(0, scheduler.pending());
+    }
+
+    @Test
+    public void cachedProcessAndDirectReturnNeverReplaceBoundIdentityOrStopDeathChecks() {
+        ConfigurableInspector inspector = new ConfigurableInspector();
+        ManualScheduler scheduler = new ManualScheduler();
+        RecordingEnd end = new RecordingEnd();
+        KorriLaunchContinuity continuity = new KorriLaunchContinuity(inspector, scheduler, end, 3);
+        KorriLaunchContinuity.ProcessIdentity original =
+                process(41, 10041, "org.example.game", "org.example.game");
+
+        continuity.updateSession(external(LAUNCH_A, "org.example.game"));
+        continuity.updateForeground("org.example.game", "org.example.game.Game");
+        inspector.add(complete(original));
+        scheduler.runNext();
+        continuity.updateForeground("org.example.other", "org.example.other.Main");
+        continuity.updateForeground("org.example.game", "org.example.game.Game");
+
+        inspector.add(complete(original));
+        scheduler.runNext();
+        inspector.add(complete(original));
+        scheduler.runNext();
+        inspector.add(complete(original));
+        scheduler.runNext();
+
+        assertTrue(continuity.hasBoundIdentity(LAUNCH_A, 41));
+        assertEquals(Collections.emptyList(), end.launchIds);
+        assertEquals(0, scheduler.pending());
+    }
+
+    @Test
+    public void replacementCancelsOlderCallbacksAndBindsOnlyFreshLaunch() {
+        ConfigurableInspector inspector = new ConfigurableInspector();
+        ManualScheduler scheduler = new ManualScheduler();
+        RecordingEnd end = new RecordingEnd();
+        KorriLaunchContinuity continuity = new KorriLaunchContinuity(inspector, scheduler, end, 4);
+        KorriLaunchContinuity.ProcessIdentity original =
+                process(10, 1010, "org.example.a", "org.example.a");
+
+        continuity.updateSession(external(LAUNCH_A, "org.example.a"));
+        continuity.updateForeground("org.example.a", "org.example.a.Game");
+        inspector.add(complete(original));
+        scheduler.runNext();
+        continuity.updateForeground("org.example.other", "org.example.other.Main");
+        assertEquals(1, scheduler.pending());
+
+        continuity.updateSession(external(LAUNCH_B, "org.example.b"));
+        assertEquals(0, scheduler.pending());
+        continuity.updateForeground("org.example.b", "org.example.b.Game");
+        inspector.add(complete(process(20, 2020, "org.example.b", "org.example.b")));
+        scheduler.runNext();
+
+        assertEquals(Collections.emptyList(), end.launchIds);
+        assertFalse(continuity.hasBoundIdentity(LAUNCH_A, 10));
+        assertTrue(continuity.hasBoundIdentity(LAUNCH_B, 20));
+    }
+
+    @Test
+    public void destructionCancelsPendingCallbackAndIdleSessionsDoNotPoll() {
+        ConfigurableInspector inspector = new ConfigurableInspector();
+        ManualScheduler scheduler = new ManualScheduler();
+        RecordingEnd end = new RecordingEnd();
+        KorriLaunchContinuity continuity = new KorriLaunchContinuity(inspector, scheduler, end, 3);
+
+        continuity.updateForeground("org.example.game", "org.example.game.Game");
+        continuity.updateSession(external(LAUNCH_A, "org.example.game"));
+        assertEquals(1, scheduler.pending());
+        continuity.destroy();
+
+        assertEquals(0, scheduler.pending());
+        scheduler.runAll();
+        assertEquals(0, inspector.inspections);
+        assertEquals(Collections.emptyList(), end.launchIds);
+        continuity.updateSession(null);
         continuity.updateForeground("org.example.game", "org.example.game.Game");
         assertEquals(0, scheduler.pending());
     }
 
     @Test
-    public void lateDeathCheckForOlderLaunchCannotClearReplacementLaunch() {
+    public void initialBindingRetriesAreBoundedWhileInspectorStaysUnavailable() {
         ConfigurableInspector inspector = new ConfigurableInspector();
         ManualScheduler scheduler = new ManualScheduler();
-        RecordingEnd end = new RecordingEnd();
-        KorriLaunchContinuity continuity = new KorriLaunchContinuity(inspector, scheduler, end, 4);
-        KorriActiveLaunch launchA = external(LAUNCH_A, "org.example.a");
-        KorriActiveLaunch launchB = external(LAUNCH_B, "org.example.b");
+        KorriLaunchContinuity continuity =
+                new KorriLaunchContinuity(inspector, scheduler, launchId -> {}, 3);
 
-        inspector.add(complete(process(10, 1010, "org.example.a", "org.example.a")));
-        continuity.updateSession(launchA);
-        continuity.updateForeground("org.example.a", "org.example.a.Game");
-        continuity.updateForeground("com.simonwjackson.korri", "com.limelight.KorriShellActivity");
+        continuity.updateForeground("org.example.game", "org.example.game.Game");
+        continuity.updateSession(external(LAUNCH_A, "org.example.game"));
+        inspector.add(KorriLaunchContinuity.ProcessObservation.unavailable());
+        inspector.add(KorriLaunchContinuity.ProcessObservation.unavailable());
+        inspector.add(KorriLaunchContinuity.ProcessObservation.unavailable());
+        scheduler.runAll();
 
-        inspector.add(complete(process(20, 2020, "org.example.b", "org.example.b")));
-        continuity.updateSession(launchB);
-        continuity.updateForeground("org.example.b", "org.example.b.Game");
-        scheduler.runNext();
-
-        assertEquals(Collections.emptyList(), end.launchIds);
-        assertTrue(continuity.hasBoundIdentity(LAUNCH_B, 20));
+        assertEquals(3, inspector.inspections);
+        assertEquals(0, scheduler.pending());
     }
 
     private static KorriActiveLaunch external(String launchId, String packageName) {
@@ -85,6 +185,7 @@ public class KorriLaunchContinuityTest {
 
     private static final class ConfigurableInspector implements KorriLaunchContinuity.ProcessInspector {
         private final Deque<KorriLaunchContinuity.ProcessObservation> observations = new ArrayDeque<>();
+        int inspections;
 
         void add(KorriLaunchContinuity.ProcessObservation observation) {
             observations.addLast(observation);
@@ -92,24 +193,55 @@ public class KorriLaunchContinuityTest {
 
         @Override
         public KorriLaunchContinuity.ProcessObservation inspect() {
+            inspections++;
             return observations.removeFirst();
         }
     }
 
     private static final class ManualScheduler implements KorriLaunchContinuity.Scheduler {
-        private final Deque<Runnable> callbacks = new ArrayDeque<>();
+        private final Deque<ScheduledCallback> callbacks = new ArrayDeque<>();
 
         @Override
-        public void schedule(Runnable callback) {
-            callbacks.addLast(callback);
+        public KorriLaunchContinuity.Cancellable schedule(Runnable callback) {
+            ScheduledCallback scheduled = new ScheduledCallback(callback);
+            callbacks.addLast(scheduled);
+            return scheduled;
         }
 
         void runNext() {
-            callbacks.removeFirst().run();
+            while (!callbacks.isEmpty()) {
+                ScheduledCallback callback = callbacks.removeFirst();
+                if (!callback.cancelled) {
+                    callback.callback.run();
+                    return;
+                }
+            }
+        }
+
+        void runAll() {
+            while (pending() > 0) runNext();
         }
 
         int pending() {
-            return callbacks.size();
+            int pending = 0;
+            for (ScheduledCallback callback : callbacks) {
+                if (!callback.cancelled) pending++;
+            }
+            return pending;
+        }
+    }
+
+    private static final class ScheduledCallback implements KorriLaunchContinuity.Cancellable {
+        final Runnable callback;
+        boolean cancelled;
+
+        ScheduledCallback(Runnable callback) {
+            this.callback = callback;
+        }
+
+        @Override
+        public void cancel() {
+            cancelled = true;
         }
     }
 

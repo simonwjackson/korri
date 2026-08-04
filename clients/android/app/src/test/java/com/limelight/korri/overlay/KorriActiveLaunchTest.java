@@ -107,6 +107,29 @@ public class KorriActiveLaunchTest {
     }
 
     @Test
+    public void suspensionIsExactAndOnlyFreshPublicationRearms() {
+        Object owner = new Object();
+        KorriActiveLaunch launchA = KorriActiveLaunch.packageLaunch(
+                LAUNCH_A, "a", "A", "org.example.a", "@korri:android-app/android-app");
+        KorriActiveLaunch launchB = KorriActiveLaunch.packageLaunch(
+                LAUNCH_B, "b", "B", "org.example.b", "@korri:android-app/android-app");
+
+        KorriBrainService.publishActiveLaunchForTest(owner, launchA);
+        assertTrue(KorriBrainService.isOverlayArmed());
+        assertFalse(KorriBrainService.suspendOverlay(LAUNCH_B));
+        assertTrue(KorriBrainService.isOverlayArmed());
+        assertTrue(KorriBrainService.suspendOverlay(LAUNCH_A));
+        assertFalse(KorriBrainService.isOverlayArmed());
+        assertTrue(KorriBrainService.claimActiveLaunch(LAUNCH_A, new Object()));
+        KorriBrainService.setOverlayArmed(true);
+        assertFalse(KorriBrainService.isOverlayArmed());
+
+        KorriBrainService.publishActiveLaunchForTest(owner, launchB);
+        assertTrue(KorriBrainService.isOverlayArmed());
+        assertSame(launchB, KorriBrainService.activeLaunch());
+    }
+
+    @Test
     public void compareAndClearProtectsReplacementAndActivityRecreation() throws Exception {
         Object activityA = new Object();
         Object recreatedA = new Object();

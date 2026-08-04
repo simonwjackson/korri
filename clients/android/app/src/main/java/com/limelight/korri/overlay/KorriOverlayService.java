@@ -22,6 +22,7 @@ public final class KorriOverlayService extends AccessibilityService {
 
     private StateMachine state;
     private KorriLaunchContinuity continuity;
+    private KorriActiveSessionMonitor sessionMonitor;
 
     @Override
     protected void onServiceConnected() {
@@ -31,8 +32,19 @@ public final class KorriOverlayService extends AccessibilityService {
         continuity = new KorriLaunchContinuity(
                 new KorriLaunchContinuity.ActivityManagerProcessInspector(
                         (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE)),
-                callback -> handler.postDelayed(callback, LIVENESS_CHECK_DELAY_MS),
+                callback -> {
+                    handler.postDelayed(callback, LIVENESS_CHECK_DELAY_MS);
+                    return () -> handler.removeCallbacks(callback);
+                },
                 KorriBrainService::clearActiveLaunchOnEnd,
+                MAX_LIVENESS_CHECKS);
+        sessionMonitor = new KorriActiveSessionMonitor(
+                KorriBrainService::activeLaunch,
+                launch -> syncSession(),
+                callback -> {
+                    handler.postDelayed(callback, LIVENESS_CHECK_DELAY_MS);
+                    return () -> handler.removeCallbacks(callback);
+                },
                 MAX_LIVENESS_CHECKS);
         syncSession();
     }
@@ -51,14 +63,22 @@ public final class KorriOverlayService extends AccessibilityService {
                 || event.getPackageName() == null) {
             return;
         }
-        syncSession();
+        KorriActiveLaunch observedLaunch = syncSession();
         String packageName = event.getPackageName().toString();
         String className = event.getClassName() == null ? null : event.getClassName().toString();
-        state.updateForeground(packageName, className);
+        String suspendedLaunchId = state.updateForeground(packageName, className);
+        if (suspendedLaunchId != null) {
+            KorriBrainService.suspendOverlay(suspendedLaunchId);
+        }
         if (continuity != null
                 && !(getPackageName().equals(packageName)
                         && KorriOverlayService.class.getName().equals(className))) {
             continuity.updateForeground(packageName, className);
+        }
+        if (observedLaunch == null) {
+            sessionMonitor.watchForPublication();
+        } else {
+            sessionMonitor.cancel();
         }
     }
 
@@ -69,14 +89,16 @@ public final class KorriOverlayService extends AccessibilityService {
 
     @Override
     public void onDestroy() {
+        if (sessionMonitor != null) sessionMonitor.destroy();
         if (state != null) state.destroy();
-        if (continuity != null) continuity.updateSession(null);
+        if (continuity != null) continuity.destroy();
+        sessionMonitor = null;
         state = null;
         continuity = null;
         super.onDestroy();
     }
 
-    private void syncSession() {
+    private KorriActiveLaunch syncSession() {
         KorriActiveLaunch launch = KorriBrainService.activeLaunch();
         if (state != null) {
             state.updateSession(launch, KorriBrainService.isOverlayArmed());
@@ -84,6 +106,7 @@ public final class KorriOverlayService extends AccessibilityService {
         if (continuity != null) {
             continuity.updateSession(launch);
         }
+        return launch;
     }
 
     /** Pure public state machine; Android callbacks are only adapters. */
@@ -95,6 +118,7 @@ public final class KorriOverlayService extends AccessibilityService {
         private String foregroundClass;
         private boolean showing;
         private String matchedLaunchId;
+        private String suspendedLaunchId;
         private boolean guideOwned;
         private int toggleCount;
         private boolean destroyed;
@@ -104,31 +128,49 @@ public final class KorriOverlayService extends AccessibilityService {
         }
 
         public void updateSession(KorriActiveLaunch next, boolean armed) {
-            boolean replaced = launch != null
+            boolean freshIdentity = next != null
+                    && (launch == null || !launch.launchId().equals(next.launchId()));
+            boolean endedOrReplaced = launch != null
                     && (next == null || !launch.launchId().equals(next.launchId()));
             launch = next;
             ownerArmed = next != null && armed;
-            if (replaced || next == null) {
+            if (freshIdentity || next == null) {
                 matchedLaunchId = null;
+                suspendedLaunchId = null;
             }
-            if (replaced || next == null || !isForegroundMatch()) {
+            if (freshIdentity && isForegroundMatch()) {
+                matchedLaunchId = next.launchId();
+            }
+            if (endedOrReplaced || next == null || !isForegroundMatch()) {
                 hide();
             }
         }
 
-        public void updateForeground(String packageName, String className) {
+        /** Returns the exact launch newly suspended by foreground discontinuity. */
+        public String updateForeground(String packageName, String className) {
             if (showing
                     && servicePackage.equals(packageName)
                     && KorriOverlayService.class.getName().equals(className)) {
-                return;
+                return null;
             }
+            boolean wasMatchedForeground = isForegroundMatch()
+                    && launch != null
+                    && launch.launchId().equals(matchedLaunchId);
             foregroundPackage = packageName;
             foregroundClass = className;
             if (isForegroundMatch()) {
-                matchedLaunchId = launch.launchId();
-            } else {
-                hide();
+                if (!launch.launchId().equals(suspendedLaunchId)) {
+                    matchedLaunchId = launch.launchId();
+                }
+                return null;
             }
+            hide();
+            if (wasMatchedForeground && !launch.launchId().equals(suspendedLaunchId)) {
+                suspendedLaunchId = launch.launchId();
+                ownerArmed = false;
+                return suspendedLaunchId;
+            }
+            return null;
         }
 
         public boolean onKey(int keyCode, int action) {
@@ -179,11 +221,16 @@ public final class KorriOverlayService extends AccessibilityService {
             launch = null;
             ownerArmed = false;
             matchedLaunchId = null;
+            suspendedLaunchId = null;
             interrupt();
         }
 
         private boolean isArmed() {
-            return ownerArmed && launch != null && isForegroundMatch();
+            return ownerArmed
+                    && launch != null
+                    && launch.launchId().equals(matchedLaunchId)
+                    && !launch.launchId().equals(suspendedLaunchId)
+                    && isForegroundMatch();
         }
 
         private boolean isForegroundMatch() {

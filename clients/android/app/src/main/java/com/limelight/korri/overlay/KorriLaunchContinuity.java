@@ -7,14 +7,18 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
-/** Binds a matched launch to one process and requires positive evidence before ending it. */
+/** Bounded monitor that binds and later clears one exact foreground launch process. */
 public final class KorriLaunchContinuity {
     public interface ProcessInspector {
         ProcessObservation inspect();
     }
 
+    public interface Cancellable {
+        void cancel();
+    }
+
     public interface Scheduler {
-        void schedule(Runnable callback);
+        Cancellable schedule(Runnable callback);
     }
 
     public interface EndLaunch {
@@ -101,14 +105,22 @@ public final class KorriLaunchContinuity {
         }
     }
 
+    private enum CheckKind {
+        BIND,
+        LIVENESS
+    }
+
     private final ProcessInspector inspector;
     private final Scheduler scheduler;
     private final EndLaunch endLaunch;
     private final int maxChecks;
     private KorriActiveLaunch launch;
     private ProcessIdentity boundIdentity;
-    private boolean checking;
+    private String foregroundPackage;
+    private String foregroundClass;
+    private Cancellable pending;
     private int generation;
+    private boolean destroyed;
 
     public KorriLaunchContinuity(
             ProcessInspector inspector, Scheduler scheduler, EndLaunch endLaunch, int maxChecks) {
@@ -120,30 +132,31 @@ public final class KorriLaunchContinuity {
     }
 
     public void updateSession(KorriActiveLaunch next) {
-        if (sameLaunch(launch, next)) return;
-        generation++;
-        checking = false;
+        if (destroyed || sameLaunch(launch, next)) return;
+        replaceGeneration();
         boundIdentity = null;
         launch = next;
+        if (matchesKnownForeground()) {
+            schedule(CheckKind.BIND, 0);
+        }
     }
 
     public void updateForeground(String packageName, String className) {
+        if (destroyed) return;
+        foregroundPackage = packageName;
+        foregroundClass = className;
         if (launch == null) return;
-        if (launch.matchesForeground(packageName, className)) {
-            generation++;
-            checking = false;
-            if (boundIdentity == null) {
-                ProcessObservation observation = inspector.inspect();
-                if (observation.complete) {
-                    boundIdentity = findTarget(observation.identities, launch.targetPackage());
-                }
+        if (matchesKnownForeground()) {
+            if (boundIdentity == null && pending == null) {
+                schedule(CheckKind.BIND, 0);
             }
             return;
         }
-        if (boundIdentity != null && !checking) {
-            checking = true;
-            int checkGeneration = ++generation;
-            scheduleCheck(checkGeneration, 0);
+        if (boundIdentity != null) {
+            if (pending == null) schedule(CheckKind.LIVENESS, 0);
+        } else if (pending != null) {
+            generation++;
+            cancelPending();
         }
     }
 
@@ -154,27 +167,70 @@ public final class KorriLaunchContinuity {
                 && boundIdentity.pid == pid;
     }
 
-    private void scheduleCheck(int checkGeneration, int completedChecks) {
-        scheduler.schedule(() -> checkLiveness(checkGeneration, completedChecks));
+    public void destroy() {
+        if (destroyed) return;
+        destroyed = true;
+        replaceGeneration();
+        launch = null;
+        boundIdentity = null;
+        foregroundPackage = null;
+        foregroundClass = null;
     }
 
-    private void checkLiveness(int checkGeneration, int completedChecks) {
-        if (checkGeneration != generation || launch == null || boundIdentity == null) return;
+    private void schedule(CheckKind kind, int completedChecks) {
+        String launchId = launch.launchId();
+        int callbackGeneration = generation;
+        pending = scheduler.schedule(
+                () -> check(launchId, callbackGeneration, kind, completedChecks));
+    }
+
+    private void check(
+            String launchId, int callbackGeneration, CheckKind kind, int completedChecks) {
+        if (!isCurrent(launchId, callbackGeneration)) return;
+        pending = null;
         ProcessObservation observation = inspector.inspect();
-        if (observation.complete && !observation.identities.contains(boundIdentity)) {
-            String endedLaunchId = launch.launchId();
+        if (kind == CheckKind.BIND) {
+            if (!matchesKnownForeground()) return;
+            if (observation.complete) {
+                boundIdentity = findTarget(observation.identities, launch.targetPackage());
+                if (boundIdentity != null) return;
+            }
+        } else if (boundIdentity == null) {
+            return;
+        } else if (observation.complete && !observation.identities.contains(boundIdentity)) {
             generation++;
-            checking = false;
             launch = null;
             boundIdentity = null;
-            endLaunch.clear(endedLaunchId);
+            endLaunch.clear(launchId);
             return;
         }
+
         int nextCompletedChecks = completedChecks + 1;
         if (nextCompletedChecks < maxChecks) {
-            scheduleCheck(checkGeneration, nextCompletedChecks);
-        } else {
-            checking = false;
+            schedule(kind, nextCompletedChecks);
+        }
+    }
+
+    private boolean matchesKnownForeground() {
+        return launch != null && launch.matchesForeground(foregroundPackage, foregroundClass);
+    }
+
+    private boolean isCurrent(String launchId, int callbackGeneration) {
+        return !destroyed
+                && callbackGeneration == generation
+                && launch != null
+                && launch.launchId().equals(launchId);
+    }
+
+    private void replaceGeneration() {
+        generation++;
+        cancelPending();
+    }
+
+    private void cancelPending() {
+        if (pending != null) {
+            pending.cancel();
+            pending = null;
         }
     }
 
