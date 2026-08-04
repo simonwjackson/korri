@@ -14,7 +14,7 @@ import type { InputAction, InputAdapter } from "./types"
 const GLOBAL_NAME = "__korriInput"
 
 const directions = new Set(["up", "down", "left", "right"])
-const simpleTypes = new Set(["confirm", "back", "menu", "options"])
+const simpleTypes = new Set(["confirm", "back", "menu", "options", "system"])
 
 /** Parse a wire event, returning null for anything malformed. */
 export function parseBridgeInputEvent(json: string): InputAction | null {
@@ -37,7 +37,10 @@ export function parseBridgeInputEvent(json: string): InputAction | null {
     }
   }
   if (typeof event.type === "string" && simpleTypes.has(event.type)) {
-    return { type: event.type as "confirm" | "back" | "menu" | "options", source: "gamepad" }
+    return {
+      type: event.type as "confirm" | "back" | "menu" | "options" | "system",
+      source: "gamepad",
+    }
   }
   return null
 }

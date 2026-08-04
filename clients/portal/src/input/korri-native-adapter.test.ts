@@ -15,7 +15,13 @@ describe("parseBridgeInputEvent", () => {
   })
 
   it("parses simple semantic events", () => {
-    for (const type of ["confirm", "back", "menu", "options"] as const) {
+    for (const type of [
+      "confirm",
+      "back",
+      "menu",
+      "options",
+      "system",
+    ] as const) {
       expect(parseBridgeInputEvent(JSON.stringify({ type }))).toEqual({
         type,
         source: "gamepad",
