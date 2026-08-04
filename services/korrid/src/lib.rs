@@ -220,6 +220,52 @@ pub enum SessionControlInvokeOutcome {
     Err(SessionControlFailure),
 }
 
+fn ulp_at(value: f64) -> f64 {
+    let magnitude = value.abs();
+    if magnitude < f64::MIN_POSITIVE {
+        return f64::from_bits(1);
+    }
+    let exponent = ((magnitude.to_bits() >> 52) & 0x7ff) as i32 - 1023;
+    2.0_f64.powi(exponent - 52)
+}
+
+fn valid_range_value(value: f64, min: f64, max: f64, step: f64) -> bool {
+    if !value.is_finite()
+        || !min.is_finite()
+        || !max.is_finite()
+        || !step.is_finite()
+        || step <= 0.0
+        || min > max
+        || value < min
+        || value > max
+    {
+        return false;
+    }
+    if value == min || value == max {
+        return true;
+    }
+
+    let offset = value - min;
+    let steps = if offset.is_finite() {
+        offset / step
+    } else {
+        value / step - min / step
+    };
+    if !steps.is_finite() {
+        return false;
+    }
+    let nearest = steps.round().mul_add(step, min);
+    if !nearest.is_finite() {
+        return false;
+    }
+
+    // Subtraction, division, rounding, and the fused grid reconstruction can
+    // each move the result by an ULP. Compare in value space so a large step
+    // cannot turn a materially off-grid value into a tiny quotient error.
+    let tolerance = 4.0 * ulp_at(value).max(ulp_at(min)).max(ulp_at(nearest));
+    (value - nearest).abs() <= tolerance
+}
+
 /** Validate the invocation against the current materialized control before an
  * integration effect can be selected or protected. */
 pub fn validate_session_control_invocation(
@@ -257,18 +303,16 @@ pub fn validate_session_control_invocation(
             Some(SessionControlValue::Choice(value)),
         ) => options.iter().any(|option| option.value == *value),
         (
-            SessionControlInteraction::Range { min, max, step, .. },
-            Some(SessionControlValue::Range(value)),
+            SessionControlInteraction::Range {
+                value: current,
+                min,
+                max,
+                step,
+            },
+            Some(SessionControlValue::Range(submitted)),
         ) => {
-            let steps = (*value - *min) / *step;
-            value.is_finite()
-                && min.is_finite()
-                && max.is_finite()
-                && step.is_finite()
-                && *step > 0.0
-                && *value >= *min
-                && *value <= *max
-                && (steps - steps.round()).abs() <= 1e-9
+            valid_range_value(*current, *min, *max, *step)
+                && valid_range_value(*submitted, *min, *max, *step)
         }
         _ => false,
     };
@@ -1226,6 +1270,19 @@ mod tests {
         }
     }
 
+    fn assert_invalid_range(interaction: SessionControlInteraction, submitted: f64) {
+        assert_eq!(
+            validate_session_control_invocation(
+                "current",
+                &invocation(Some(SessionControlValue::Range(submitted))),
+                &control(interaction),
+            )
+            .expect_err("range invocation must be rejected")
+            .reason,
+            SessionControlFailureReason::InvalidValue
+        );
+    }
+
     #[test]
     fn session_control_values_are_validated_before_effect_resolution() {
         assert!(validate_session_control_invocation(
@@ -1266,6 +1323,122 @@ mod tests {
                 min: 0.0,
                 max: 100.0,
                 step: 5.0,
+            }),
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn range_validation_rejects_large_step_off_grid_values() {
+        assert_invalid_range(
+            SessionControlInteraction::Range {
+                value: 0.0,
+                min: 0.0,
+                max: 2_000_000_000_000.0,
+                step: 1_000_000_000_000.0,
+            },
+            1.0,
+        );
+    }
+
+    #[test]
+    fn range_validation_rejects_malformed_metadata_and_values() {
+        let malformed = [
+            SessionControlInteraction::Range {
+                value: f64::NAN,
+                min: 0.0,
+                max: 10.0,
+                step: 1.0,
+            },
+            SessionControlInteraction::Range {
+                value: 5.0,
+                min: f64::NEG_INFINITY,
+                max: 10.0,
+                step: 1.0,
+            },
+            SessionControlInteraction::Range {
+                value: 5.0,
+                min: 0.0,
+                max: f64::INFINITY,
+                step: 1.0,
+            },
+            SessionControlInteraction::Range {
+                value: 5.0,
+                min: 0.0,
+                max: 10.0,
+                step: f64::NAN,
+            },
+            SessionControlInteraction::Range {
+                value: 5.0,
+                min: 0.0,
+                max: 10.0,
+                step: 0.0,
+            },
+            SessionControlInteraction::Range {
+                value: 5.0,
+                min: 0.0,
+                max: 10.0,
+                step: -1.0,
+            },
+            SessionControlInteraction::Range {
+                value: 5.0,
+                min: 10.0,
+                max: 0.0,
+                step: 1.0,
+            },
+            SessionControlInteraction::Range {
+                value: 11.0,
+                min: 0.0,
+                max: 10.0,
+                step: 1.0,
+            },
+            SessionControlInteraction::Range {
+                value: 5.5,
+                min: 0.0,
+                max: 10.0,
+                step: 1.0,
+            },
+        ];
+        for interaction in malformed {
+            assert_invalid_range(interaction, 5.0);
+        }
+
+        let valid_metadata = SessionControlInteraction::Range {
+            value: 5.0,
+            min: 0.0,
+            max: 10.0,
+            step: 1.0,
+        };
+        for submitted in [f64::NAN, f64::NEG_INFINITY, f64::INFINITY, 5.5] {
+            assert_invalid_range(valid_metadata.clone(), submitted);
+        }
+    }
+
+    #[test]
+    fn range_validation_preserves_exact_endpoints_and_decimal_steps() {
+        let endpoint_range = control(SessionControlInteraction::Range {
+            value: 10.0,
+            min: 0.0,
+            max: 10.0,
+            step: 3.0,
+        });
+        for submitted in [0.0, 10.0] {
+            assert!(validate_session_control_invocation(
+                "current",
+                &invocation(Some(SessionControlValue::Range(submitted))),
+                &endpoint_range,
+            )
+            .is_ok());
+        }
+
+        assert!(validate_session_control_invocation(
+            "current",
+            &invocation(Some(SessionControlValue::Range(0.3))),
+            &control(SessionControlInteraction::Range {
+                value: 0.2,
+                min: 0.0,
+                max: 1.0,
+                step: 0.1,
             }),
         )
         .is_ok());
