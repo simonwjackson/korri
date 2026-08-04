@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./preview": "./src/preview.ts",
     "./shift.css": "./src/shift.css"
   },
   "scripts": {
