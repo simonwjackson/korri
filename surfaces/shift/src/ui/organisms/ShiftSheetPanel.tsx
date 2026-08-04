@@ -43,7 +43,7 @@ export function ShiftSheetPanel({ children }: ShiftSheetPanelProps) {
   useEffect(() => {
     if (!open) return
     const focusables = panelRef.current?.querySelectorAll<HTMLElement>(
-      "button:not([disabled]), [href], [tabindex]:not([tabindex='-1'])",
+      "input:not([disabled]), button:not([disabled]), [href], [tabindex]:not([tabindex='-1'])",
     )
     const ordered = Array.from(focusables ?? [])
     const target =

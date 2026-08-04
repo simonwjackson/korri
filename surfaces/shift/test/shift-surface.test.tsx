@@ -245,9 +245,9 @@ describe("Shift settings", () => {
     openSettings()
 
     fireEvent.click(screen.getByRole("button", { name: "Name: usu" }))
-    fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
-      target: { value: "pocket" },
-    })
+    const input = screen.getByRole("textbox", { name: "Name" })
+    expect(document.activeElement).toBe(input)
+    fireEvent.change(input, { target: { value: "pocket" } })
     fireEvent.click(screen.getByRole("button", { name: "Save" }))
 
     expect(host.calls).toEqual(["setting:device-name:pocket"])
