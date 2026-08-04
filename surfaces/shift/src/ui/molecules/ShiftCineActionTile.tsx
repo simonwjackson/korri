@@ -1,5 +1,6 @@
 import {
   KeyRound,
+  LibraryBig,
   Link2,
   type LucideIcon,
   Settings,
@@ -25,6 +26,8 @@ const ACTION_ICONS: Record<string, LucideIcon> = {
   pairing: Link2,
   "storage-access": KeyRound,
   "background-notice": Settings,
+  "shift:library": LibraryBig,
+  "shift:settings": Settings,
   stop: Square,
 }
 

@@ -163,6 +163,52 @@ describe("ShiftSurface", () => {
   })
 })
 
+describe("Shift library", () => {
+  const openLibrary = () => {
+    const cap = screen.getByRole("button", { name: "Library" })
+    fireEvent.focus(cap)
+    fireEvent.click(cap)
+  }
+
+  test("restores the original browse-everything destination", () => {
+    const { container } = render(
+      <ShiftSurface model={model()} host={createFixtureHost()} />,
+    )
+
+    openLibrary()
+
+    expect(container.querySelector("[data-shift-library]")).toBeDefined()
+    expect(screen.getByRole("heading", { name: "Library" })).toBeDefined()
+    expect(screen.getByText("3 games")).toBeDefined()
+    expect(
+      screen.getAllByRole("button").map(button => button.getAttribute("aria-label")),
+    ).toEqual(["Skate 3", "Wario Land 4", "Neverball"])
+  })
+
+  test("launches the selected Korri game from Home's feedback context", () => {
+    const host = createFixtureHost()
+    const { container } = render(<ShiftSurface model={model()} host={host} />)
+    openLibrary()
+
+    fireEvent.click(screen.getByRole("button", { name: "Wario Land 4" }))
+
+    expect(host.calls).toEqual(["launch:local-game:wl4"])
+    expect(container.querySelector("[data-shift-library]")).toBeNull()
+  })
+
+  test("Back returns to Home without calling the host", () => {
+    const host = createFixtureHost()
+    const { container } = render(<ShiftSurface model={model()} host={host} />)
+    openLibrary()
+
+    act(() => host.press("back"))
+
+    expect(container.querySelector("[data-shift-library]")).toBeNull()
+    expect(screen.getByRole("button", { name: "Library" })).toBeDefined()
+    expect(host.calls).toEqual([])
+  })
+})
+
 describe("Shift settings", () => {
   const openSettings = () => {
     const cap = screen.getByRole("button", { name: "Settings" })

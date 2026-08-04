@@ -22,6 +22,8 @@ import {
 import { ShiftHomeEmptyBody } from "./pages/ShiftHomeEmptyBody"
 import { ShiftHomeLoadErrorBody } from "./pages/ShiftHomeLoadErrorBody"
 import { ShiftHomeLoadingBody } from "./pages/ShiftHomeLoadingBody"
+import { ShiftLibraryGrid } from "./pages/ShiftLibraryGrid"
+import type { ShiftLibraryGame } from "./pages/shift-library-game"
 import { ShiftSettings } from "./pages/ShiftSettings"
 import { ShiftGameActionsSheet } from "./ui/organisms/ShiftGameActionsSheet"
 
@@ -49,13 +51,31 @@ export function shiftGameFromSurfaceGame(
   }
 }
 
+export function shiftLibraryGameFromSurfaceGame(
+  game: SurfaceGame,
+): ShiftLibraryGame {
+  return {
+    id: game.id,
+    title: game.title,
+    artUrl: game.coverArtUrl ?? "",
+  }
+}
+
 /**
  * The rail's Settings destination. Shift owns it, not Korri: which screens a
  * surface has, and how you reach them, is the surface's business — Korri only
  * says what the settings themselves are. It joins the host's own rail actions
  * as an ordinary affordance, so the rail learns nothing new.
  */
+export const SHIFT_LIBRARY_ACTION_ID = "shift:library"
 export const SHIFT_SETTINGS_ACTION_ID = "shift:settings"
+
+const LIBRARY_AFFORDANCE: SurfaceAction = {
+  id: SHIFT_LIBRARY_ACTION_ID,
+  label: "Library",
+  description: "Browse every game Korri knows about.",
+  enabled: true,
+}
 
 const SETTINGS_AFFORDANCE: SurfaceAction = {
   id: SHIFT_SETTINGS_ACTION_ID,
@@ -66,27 +86,33 @@ const SETTINGS_AFFORDANCE: SurfaceAction = {
 
 export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
   const [sheetGameId, setSheetGameId] = useState<string | null>(null)
-  const [screen, setScreen] = useState<"home" | "settings">("home")
+  const [screen, setScreen] = useState<"home" | "library" | "settings">("home")
 
+  const surfaceGames = model.catalog._tag === "Ready" ? model.catalog.games : []
   const games = useMemo(
-    () =>
-      model.catalog._tag === "Ready"
-        ? model.catalog.games.map(shiftGameFromSurfaceGame)
-        : [],
-    [model.catalog],
+    () => surfaceGames.map(shiftGameFromSurfaceGame),
+    [surfaceGames],
+  )
+  const libraryGames = useMemo(
+    () => surfaceGames.map(shiftLibraryGameFromSurfaceGame),
+    [surfaceGames],
   )
 
   const closeSheet = useCallback(() => setSheetGameId(null), [])
 
-  // Setup commands now live with their current values in Settings; the home
-  // rail is for things to play plus this one destination, never a debug list of
-  // permissions and pairing actions.
+  // Setup commands live with their current values in Settings. The original
+  // Library destination returns as Shift's browse-everything route, backed only
+  // by Korri's catalog rather than Sunshine app advertisements.
   const railActions = useMemo<readonly SurfaceAction[]>(
-    () => (model.settings.length > 0 ? [SETTINGS_AFFORDANCE] : []),
-    [model.settings],
+    () => [
+      ...(model.catalog._tag === "Ready" ? [LIBRARY_AFFORDANCE] : []),
+      ...(model.settings.length > 0 ? [SETTINGS_AFFORDANCE] : []),
+    ],
+    [model.catalog._tag, model.settings],
   )
 
   const runRailAction = useCallback((actionId: string) => {
+    if (actionId === SHIFT_LIBRARY_ACTION_ID) setScreen("library")
     if (actionId === SHIFT_SETTINGS_ACTION_ID) setScreen("settings")
   }, [])
 
@@ -110,6 +136,24 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
         onDismissProblem={() => host.dismissSettingsProblem()}
         {...(model.clockLabel === undefined ? {} : { time: model.clockLabel })}
         onClose={() => setScreen("home")}
+      />
+    ) : screen === "library" && model.catalog._tag === "Loading" ? (
+      <ShiftHomeLoadingBody />
+    ) : screen === "library" && model.catalog._tag === "Error" ? (
+      <ShiftHomeLoadErrorBody
+        message={model.catalog.message}
+        onRetry={() => host.reload()}
+      />
+    ) : screen === "library" ? (
+      <ShiftLibraryGrid
+        games={libraryGames}
+        onSelect={gameId => {
+          // Home already owns Korri's busy/failure/retry presentation. Return
+          // there before launching so Library never hides launch feedback.
+          setScreen("home")
+          host.launchGame(gameId)
+        }}
+        onBack={() => setScreen("home")}
       />
     ) : model.catalog._tag === "Loading" ? (
       <ShiftHomeLoadingBody />
