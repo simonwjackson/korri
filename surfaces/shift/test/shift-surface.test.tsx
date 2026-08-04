@@ -253,6 +253,20 @@ describe("Shift settings", () => {
     expect(host.calls).toEqual(["setting:device-name:pocket"])
   })
 
+  test("a background refresh does not erase an unfinished text edit", () => {
+    const host = createFixtureHost()
+    const rendered = render(<ShiftSurface model={model()} host={host} />)
+    openSettings()
+    fireEvent.click(screen.getByRole("button", { name: "Name: usu" }))
+    const input = screen.getByRole("textbox", { name: "Name" })
+    fireEvent.change(input, { target: { value: "unfinished" } })
+
+    rendered.rerender(<ShiftSurface model={model()} host={host} />)
+
+    expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Name" }).value)
+      .toBe("unfinished")
+  })
+
   test("a choice opens the side sheet and publishes the chosen value", () => {
     const host = createFixtureHost()
     render(<ShiftSurface model={model()} host={host} />)

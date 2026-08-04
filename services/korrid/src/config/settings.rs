@@ -114,7 +114,11 @@ pub fn update(
     plugin_policy::enabled_plugin_ids_for_snapshot(&snapshot)
         .map_err(|error| SettingsError::Candidate(error.to_string()))?;
 
-    write_atomically(&root.join(CONFIG_FILE_NAME), candidate.as_bytes())?;
+    write_atomically(
+        &root.join(CONFIG_FILE_NAME),
+        candidate.as_bytes(),
+        expected_revision,
+    )?;
     read(root)
 }
 
@@ -200,7 +204,11 @@ fn revision(content: &str) -> String {
     hex::encode(Sha256::digest(content.as_bytes()))
 }
 
-fn write_atomically(path: &Path, content: &[u8]) -> Result<(), SettingsError> {
+fn write_atomically(
+    path: &Path,
+    content: &[u8],
+    expected_revision: &str,
+) -> Result<(), SettingsError> {
     let parent = path
         .parent()
         .ok_or_else(|| SettingsError::Storage("config file has no parent".into()))?;
@@ -215,16 +223,29 @@ fn write_atomically(path: &Path, content: &[u8]) -> Result<(), SettingsError> {
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&temporary)?;
-        file.write_all(content)?;
-        file.sync_all()?;
-        fs::rename(&temporary, path)?;
-        Ok::<(), std::io::Error>(())
+            .open(&temporary)
+            .map_err(|error| SettingsError::Storage(error.to_string()))?;
+        file.write_all(content)
+            .map_err(|error| SettingsError::Storage(error.to_string()))?;
+        file.sync_all()
+            .map_err(|error| SettingsError::Storage(error.to_string()))?;
+
+        // Validation may take long enough for a file manager or sync tool to
+        // replace config.yaml. Gate the rename on the bytes that are present
+        // immediately before replacement, not only those read at update start.
+        let current =
+            fs::read_to_string(path).map_err(|error| SettingsError::Storage(error.to_string()))?;
+        if revision(&current) != expected_revision {
+            return Err(SettingsError::Conflict);
+        }
+
+        fs::rename(&temporary, path).map_err(|error| SettingsError::Storage(error.to_string()))?;
+        Ok(())
     })();
     if result.is_err() {
         let _ = fs::remove_file(&temporary);
     }
-    result.map_err(|error| SettingsError::Storage(error.to_string()))
+    result
 }
 
 #[cfg(test)]
@@ -319,6 +340,26 @@ mod tests {
         assert!(fs::read_to_string(root.path().join(CONFIG_FILE_NAME))
             .unwrap()
             .contains("outside"));
+    }
+
+    #[test]
+    fn rechecks_external_edits_at_the_final_rename_gate() {
+        let root = root("host:\n  title: first\n");
+        let path = root.path().join(CONFIG_FILE_NAME);
+        let expected_revision = revision(&fs::read_to_string(&path).unwrap());
+        fs::write(&path, "host:\n  title: changed-during-validation\n").unwrap();
+
+        let error = write_atomically(
+            &path,
+            b"host:\n  title: settings-write\n",
+            &expected_revision,
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, SettingsError::Conflict));
+        assert!(fs::read_to_string(path)
+            .unwrap()
+            .contains("changed-during-validation"));
     }
 
     #[test]

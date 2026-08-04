@@ -1230,13 +1230,32 @@ command = ["sh", "-c", "sleep 1"]
             }
         })
         .to_string();
-        let updated = rpc_body_authorized(app, &request, Some("right-token")).await;
+        let updated = rpc_body_authorized(app.clone(), &request, Some("right-token")).await;
 
         assert_eq!(updated["outcome"]["_tag"], "Ok");
         assert_eq!(updated["outcome"]["payload"]["deviceName"], "usu");
         assert!(std::fs::read_to_string(root.path().join("config.yaml"))
             .unwrap()
             .contains("title: usu"));
+
+        let updated_revision = updated["outcome"]["payload"]["revision"].as_str().unwrap();
+        std::fs::write(root.path().join("config.yaml"), "host:\n  title: outside\n").unwrap();
+        let stale_request = serde_json::json!({
+            "_tag": "system.settings.update",
+            "payload": {
+                "expectedRevision": updated_revision,
+                "settingId": "device-name",
+                "value": "overwritten"
+            }
+        })
+        .to_string();
+        let conflict = rpc_body_authorized(app, &stale_request, Some("right-token")).await;
+
+        assert_eq!(conflict["outcome"]["_tag"], "Err");
+        assert_eq!(conflict["outcome"]["payload"]["code"], "SettingsConflict");
+        assert!(std::fs::read_to_string(root.path().join("config.yaml"))
+            .unwrap()
+            .contains("title: outside"));
     }
 
     #[tokio::test]

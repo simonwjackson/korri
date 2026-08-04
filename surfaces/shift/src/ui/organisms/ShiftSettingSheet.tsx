@@ -26,19 +26,22 @@ export function ShiftSettingSheet({
   readonly onClose: () => void
 }) {
   const [text, setText] = useState(item?.value ?? "")
-  const wasSaving = useRef(false)
-  useEffect(() => setText(item?.value ?? ""), [item])
+  const savingSettingId = useRef<string | null>(null)
+  // A background refresh rebuilds item objects. Keep an in-progress edit unless
+  // the user actually moved to a different setting.
+  useEffect(() => setText(item?.value ?? ""), [item?.id])
   useEffect(() => {
-    if (status._tag === "Saving") {
-      wasSaving.current = true
-    } else if (status._tag === "Idle" && wasSaving.current) {
-      wasSaving.current = false
-      onClose()
+    if (status._tag === "Saving" && status.settingId === item?.id) {
+      savingSettingId.current = item.id
+    } else if (status._tag === "Idle" && savingSettingId.current !== null) {
+      const shouldClose = savingSettingId.current === item?.id
+      savingSettingId.current = null
+      if (shouldClose) onClose()
     }
-  }, [status, onClose])
+  }, [item?.id, status, onClose])
 
   if (!item?.interaction || item.interaction.kind === "action") return null
-  const saving = status._tag === "Saving" && status.settingId === item.id
+  const saving = status._tag === "Saving"
   const problem = status._tag === "Problem" && status.settingId === item.id
 
   return (
