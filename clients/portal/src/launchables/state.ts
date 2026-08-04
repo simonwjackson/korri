@@ -4,7 +4,6 @@ import type {
   QueryStreamAppsResult,
   StartStreamResult,
   StorageAccessResult,
-  StreamApp,
   StreamHost,
 } from "@contracts/bridge/korri-native-bridge"
 import type {
@@ -23,9 +22,9 @@ import type {
  * Launchables screen state. Raw bridge results are converted into this ADT
  * at the seam; components never inspect bridge payloads directly.
  *
- * Entries come from korrid's game catalog, local games on this
- * device, and streamable apps on paired hosts — but once converted they
- * are one flat, ordered list with a single selection.
+ * Playable entries come from korrid's catalog and local games on this device.
+ * Sunshine's advertised app list is transport data: it may identify Korri's
+ * streaming endpoint, but it is not Korri's game catalog.
  */
 export type PortalEntry =
   /**
@@ -50,12 +49,6 @@ export type PortalEntry =
   | { readonly kind: "now-playing"; readonly session: ActiveSession }
   | { readonly kind: "local-game"; readonly game: LocalGame }
   | { readonly kind: "game"; readonly game: Game }
-  | {
-      readonly kind: "stream"
-      readonly hostUuid: string
-      readonly hostName: string
-      readonly app: StreamApp
-    }
 
 /** One paired host's app-query outcome, as gathered by the Root. */
 export interface StreamSource {
@@ -126,8 +119,6 @@ export const entryKey = (entry: PortalEntry): string => {
       return entry.game.host === undefined
         ? `game:${entry.game.id}`
         : `game:${entry.game.host}:${entry.game.id}`
-    case "stream":
-      return `stream:${entry.hostUuid}:${entry.app.id}`
   }
 }
 
@@ -143,22 +134,20 @@ export const entryLabel = (entry: PortalEntry): string =>
       ? "Pair a device"
     : entry.kind === "now-playing"
     ? (entry.session.title ?? entry.session.gameId ?? "Current session")
-    : entry.kind === "local-game" || entry.kind === "game"
-      ? entry.game.title
-      : entry.app.name
+    : entry.game.title
 
 export const LaunchablesState = {
   loading: (): LaunchablesState => ({ _tag: "Loading" }),
 
   /**
-   * Fold all sources into one state. Failed sources degrade to a notice;
-   * pairing and the background notice keep the screen actionable even when
-   * every content source fails.
+   * Fold Korri-owned game sources into one state. Sunshine discovery remains
+   * available to launch routing and pairing, but its app catalog and query
+   * failures do not become home-screen content.
    */
   fromSources: (
-    streams: readonly StreamSource[],
+    _streams: readonly StreamSource[],
     korrid: CatalogSnapshotOutcome,
-    hostsError?: string,
+    _hostsError?: string,
     session?: SessionStatusOutcome,
     localGames?: LocalGamesListOutcome,
     storage?: StorageAccessResult,
@@ -202,23 +191,6 @@ export const LaunchablesState = {
       failures.push(`games: ${korrid.payload.code}`)
     }
 
-
-    if (hostsError !== undefined) failures.push(`stream hosts: ${hostsError}`)
-
-    for (const source of streams) {
-      if (source.apps._tag === "StreamApps") {
-        for (const app of source.apps.items) {
-          entries.push({
-            kind: "stream",
-            hostUuid: source.host.uuid,
-            hostName: source.host.name,
-            app,
-          })
-        }
-      } else {
-        failures.push(`${source.host.name}: ${source.apps.message}`)
-      }
-    }
 
     // Pairing is always reachable. It is how a device joins at all, so
     // it cannot be conditional on already having something to show.

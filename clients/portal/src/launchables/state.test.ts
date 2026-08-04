@@ -56,7 +56,7 @@ const localGamesOk: LocalGamesListOutcome = {
 const ready = LaunchablesState.fromSources([officeApps], gamesOk)
 
 describe("LaunchablesState.fromSources", () => {
-  it("folds the local game beside stream catalog entries", () => {
+  it("folds the local game beside Korri catalog entries", () => {
     const state = LaunchablesState.fromSources(
       [officeApps],
       gamesOk,
@@ -69,8 +69,6 @@ describe("LaunchablesState.fromSources", () => {
       "local-game",
       "game",
       "game",
-      "stream",
-      "stream",
       "pairing",
       "background-notice",
     ])
@@ -80,14 +78,12 @@ describe("LaunchablesState.fromSources", () => {
     })
   })
 
-  it("folds korrid games and stream apps into one ordered list", () => {
+  it("does not turn Sunshine's advertised apps into Korri games", () => {
     expect(ready._tag).toBe("Ready")
     if (ready._tag !== "Ready") throw new Error("unreachable")
     expect(ready.entries.map(e => e.kind)).toEqual([
       "game",
       "game",
-      "stream",
-      "stream",
       // Pairing closes every list: it is how a device joins at all.
       "pairing",
       "background-notice",
@@ -172,23 +168,17 @@ describe("LaunchablesState.fromSources", () => {
     })
   })
 
-  it("degrades a failed stream source to a notice while entries remain", () => {
+  it("does not surface Sunshine app-query failures as catalog failures", () => {
     const state = LaunchablesState.fromSources(
       [{ host: officeHost, apps: { _tag: "QueryFailed", message: "no cache" } }],
       gamesOk,
     )
-    expect(state).toMatchObject({
-      _tag: "Ready",
-      notice: "Office PC: no cache",
-    })
+    expect(state).toMatchObject({ _tag: "Ready", notice: null })
   })
 
-  it("reports a hosts-query error in the notice", () => {
+  it("does not surface Sunshine host-query failures as catalog failures", () => {
     const state = LaunchablesState.fromSources([], gamesOk, "db locked")
-    expect(state).toMatchObject({
-      _tag: "Ready",
-      notice: "stream hosts: db locked",
-    })
+    expect(state).toMatchObject({ _tag: "Ready", notice: null })
   })
 
   it("keeps pairing reachable when every source failed", () => {
@@ -209,9 +199,7 @@ describe("LaunchablesState.fromSources", () => {
       "pairing",
       "background-notice",
     ])
-    expect(state.notice).toBe(
-      "games: UpstreamUnreachable · Office PC: no cache",
-    )
+    expect(state.notice).toBe("games: UpstreamUnreachable")
   })
 })
 

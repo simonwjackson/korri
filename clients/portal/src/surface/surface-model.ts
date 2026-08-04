@@ -91,13 +91,6 @@ function gameFromEntry(entry: PortalEntry): SurfaceGame | null {
         section: entry.game.host ?? "Other devices",
         ...(entry.game.host === undefined ? {} : { subtitle: entry.game.host }),
       }
-    case "stream":
-      return {
-        id: entryKey(entry),
-        title: entry.app.name,
-        section: entry.hostName,
-        subtitle: entry.hostName,
-      }
     default:
       return null
   }

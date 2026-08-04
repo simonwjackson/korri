@@ -392,19 +392,6 @@ export function useLaunchables(
         return
       }
 
-      if (entry.kind === "stream") {
-        const launching = LaunchablesState.beginLaunching(
-          current,
-          entryLabel(entry),
-        )
-        publish(launching)
-        void bridge.startStream(entry.hostUuid, entry.app.id).then(result => {
-          if (!mountedRef.current || operation !== actionSeq.current) return
-          publish(LaunchablesState.withStartStreamResult(launching, result))
-        })
-        return
-      }
-
       // Never arm a host unless the shell can attach to that exact host.
       // Otherwise prepare would leave an unmanaged game running unseen.
       const target = findKorriStreamTarget(entry.game.host)
