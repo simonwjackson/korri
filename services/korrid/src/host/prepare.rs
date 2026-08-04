@@ -1,7 +1,7 @@
 use super::config::{HostConfig, HostGame};
 use crate::{RpcFailure, SessionPrepared};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     process::{Command, Stdio},
     sync::{Arc, Mutex},
 };
@@ -10,7 +10,7 @@ use std::{
 pub struct HostLauncher {
     games: Arc<HashMap<String, HostGame>>,
     environment: Arc<std::collections::BTreeMap<String, String>>,
-    running: Arc<Mutex<HashSet<String>>>,
+    running: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl HostLauncher {
@@ -25,7 +25,7 @@ impl HostLauncher {
                     .collect(),
             ),
             environment: Arc::new(config.environment.clone()),
-            running: Arc::new(Mutex::new(HashSet::new())),
+            running: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -43,10 +43,10 @@ impl HostLauncher {
         configured_command: &[String],
     ) -> Result<SessionPrepared, RpcFailure> {
         let mut running = self.running.lock().expect("host child mutex poisoned");
-        if running.contains(game_id) {
+        if let Some(launch_id) = running.get(game_id) {
             return Ok(SessionPrepared {
                 game_id: game_id.into(),
-                launch_id: crate::generate_launch_id(),
+                launch_id: launch_id.clone(),
             });
         }
 
@@ -81,21 +81,20 @@ impl HostLauncher {
             });
         }
         let game_id = game_id.to_owned();
-        running.insert(game_id.clone());
+        let launch_id = crate::generate_launch_id();
+        running.insert(game_id.clone(), launch_id.clone());
         drop(running);
         let running = Arc::clone(&self.running);
         let reaped_game_id = game_id.clone();
+        let reaped_launch_id = launch_id.clone();
         std::thread::spawn(move || {
             let _ = child.wait();
-            running
-                .lock()
-                .expect("host child mutex poisoned")
-                .remove(&reaped_game_id);
+            let mut running = running.lock().expect("host child mutex poisoned");
+            if running.get(&reaped_game_id) == Some(&reaped_launch_id) {
+                running.remove(&reaped_game_id);
+            }
         });
-        Ok(SessionPrepared {
-            game_id,
-            launch_id: crate::generate_launch_id(),
-        })
+        Ok(SessionPrepared { game_id, launch_id })
     }
 }
 
@@ -190,9 +189,10 @@ mod tests {
     }
 
     #[test]
-    fn prepare_is_idempotent_while_the_game_is_running() {
+    fn prepare_preserves_a_running_launch_identity_and_replaces_it_after_exit() {
         let root = tempfile::tempdir().unwrap();
-        let marker = root.path().join("starts");
+        let starts = root.path().join("starts");
+        let exited = root.path().join("exited");
         let launcher = launcher(HostGame {
             id: "slow".into(),
             title: "Slow".into(),
@@ -200,14 +200,35 @@ mod tests {
             command: vec![
                 "sh".into(),
                 "-c".into(),
-                format!("printf x >> {}; sleep 2", marker.display()),
+                format!(
+                    "printf x >> {}; sleep 0.2; printf x >> {}",
+                    starts.display(),
+                    exited.display()
+                ),
             ],
         });
 
-        launcher.prepare("slow").unwrap();
-        wait_for(&marker);
-        launcher.prepare("slow").unwrap();
+        let first = launcher.prepare("slow").unwrap();
+        wait_for(&starts);
+        let repeated = launcher.prepare("slow").unwrap();
 
-        assert_eq!(std::fs::read_to_string(marker).unwrap(), "x");
+        assert_eq!(repeated.launch_id, first.launch_id);
+        assert_eq!(std::fs::read_to_string(&starts).unwrap(), "x");
+
+        wait_for(&exited);
+        let restarted = (0..50)
+            .find_map(|_| {
+                let prepared = launcher.prepare("slow").unwrap();
+                if prepared.launch_id != first.launch_id {
+                    Some(prepared)
+                } else {
+                    std::thread::sleep(Duration::from_millis(10));
+                    None
+                }
+            })
+            .expect("exited child was not cleared");
+
+        assert_ne!(restarted.launch_id, first.launch_id);
+        assert_eq!(std::fs::read_to_string(starts).unwrap(), "xx");
     }
 }
