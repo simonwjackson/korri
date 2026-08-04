@@ -5,6 +5,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.provider.Settings;
 import android.view.accessibility.AccessibilityManager;
 
 import java.util.List;
@@ -28,8 +29,7 @@ public final class KorriOverlayPermission {
         } catch (PackageManager.NameNotFoundException error) {
             available = false;
         }
-        Intent settings = settingsIntent(service);
-        boolean settingsAvailable = settings.resolveActivity(context.getPackageManager()) != null;
+        boolean settingsAvailable = availableSettingsIntent(context, service) != null;
         AccessibilityManager manager =
                 (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
         boolean enabled = false;
@@ -75,8 +75,9 @@ public final class KorriOverlayPermission {
 
     public static String openSettings(Context context) {
         try {
-            Intent intent = settingsIntent(new ComponentName(context, KorriOverlayService.class));
-            if (intent.resolveActivity(context.getPackageManager()) == null) {
+            Intent intent = availableSettingsIntent(
+                    context, new ComponentName(context, KorriOverlayService.class));
+            if (intent == null) {
                 return unavailableJson("Android accessibility settings are unavailable");
             }
             if (!(context instanceof android.app.Activity)) {
@@ -91,9 +92,14 @@ public final class KorriOverlayPermission {
         }
     }
 
-    private static Intent settingsIntent(ComponentName service) {
-        return new Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+    private static Intent availableSettingsIntent(Context context, ComponentName service) {
+        Intent details = new Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
                 .putExtra("android.provider.extra.ACCESSIBILITY_SERVICE_COMPONENT_NAME", service);
+        if (details.resolveActivity(context.getPackageManager()) != null) {
+            return details;
+        }
+        Intent general = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+        return general.resolveActivity(context.getPackageManager()) == null ? null : general;
     }
 
     private static String unavailableJson(String message) {
