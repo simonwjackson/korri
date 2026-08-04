@@ -96,6 +96,54 @@ public class KorriOverlayServiceTest {
     }
 
     @Test
+    public void guideOwnershipSurvivesScopeLossUntilReleaseWithoutToggling() {
+        KorriOverlayService.StateMachine state = new KorriOverlayService.StateMachine(
+                "com.simonwjackson.korri");
+        state.updateSession(artemis(), true);
+        state.updateForeground("com.simonwjackson.korri", "com.limelight.Game");
+
+        assertTrue(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN));
+        state.updateForeground("org.example.other", "org.example.other.Main");
+        state.updateSession(null, false);
+
+        assertTrue(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP));
+        assertFalse(state.isShowing());
+        assertEquals(0, state.toggleCount());
+        assertFalse(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP));
+    }
+
+    @Test
+    public void cancelledGuideReleaseIsConsumedWithoutToggling() {
+        KorriOverlayService.StateMachine state = new KorriOverlayService.StateMachine(
+                "com.simonwjackson.korri");
+        state.updateSession(artemis(), true);
+        state.updateForeground("com.simonwjackson.korri", "com.limelight.Game");
+
+        assertTrue(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN));
+        assertTrue(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP, true));
+        assertFalse(state.isShowing());
+        assertEquals(0, state.toggleCount());
+    }
+
+    @Test
+    public void interruptResetsTransientStateButDestroyIsTerminal() {
+        KorriOverlayService.StateMachine state = new KorriOverlayService.StateMachine(
+                "com.simonwjackson.korri");
+        state.updateSession(artemis(), true);
+        state.updateForeground("com.simonwjackson.korri", "com.limelight.Game");
+        state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN);
+
+        state.interrupt();
+        assertFalse(state.isShowing());
+        assertTrue(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN));
+        assertTrue(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP));
+        assertTrue(state.isShowing());
+
+        state.destroy();
+        assertFalse(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN));
+    }
+
+    @Test
     public void unrelatedKeysAlwaysPassThrough() {
         KorriOverlayService.StateMachine state = new KorriOverlayService.StateMachine(
                 "com.simonwjackson.korri");
