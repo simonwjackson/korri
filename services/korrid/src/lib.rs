@@ -769,6 +769,52 @@ fn session_stop_outcome(
     }
 }
 
+fn resolve_moonlight_outcome(
+    config_state: &config::snapshot::ConfigSnapshotState,
+    native_platform: NativePlatform,
+) -> MoonlightResolveOutcome {
+    if config_state.authorization == config::snapshot::SnapshotAuthorization::Unauthorized {
+        return MoonlightResolveOutcome::Unavailable(
+            config_state
+                .diagnostic
+                .as_ref()
+                .map(snapshot_diagnostic_failure)
+                .unwrap_or_else(|| RpcFailure {
+                    code: "LocalConfigUnauthorized".into(),
+                    message: "current configuration snapshot is unauthorized".into(),
+                }),
+        );
+    }
+
+    match plugin_policy::registry_for_snapshot(&config_state.snapshot) {
+        Ok(registry) => (native_platform == NativePlatform::EmbeddedAndroid)
+            .then(|| {
+                config::resolver::resolve_moonlight_transport(
+                    &registry,
+                    config::resolver::RoutePlatform::Android,
+                )
+            })
+            .flatten()
+            .map(|resolved| {
+                MoonlightResolveOutcome::Available(ResolvedMoonlight {
+                    transport_id: resolved.transport_id,
+                    implementation: MoonlightImplementation::Artemis,
+                    sunshine_app: resolved.sunshine_app,
+                })
+            })
+            .unwrap_or_else(|| {
+                MoonlightResolveOutcome::Unavailable(RpcFailure {
+                    code: "MoonlightUnavailable".into(),
+                    message: "Moonlight is disabled or Artemis is unavailable".into(),
+                })
+            }),
+        Err(error) => MoonlightResolveOutcome::Unavailable(RpcFailure {
+            code: "PluginPolicyInvalid".into(),
+            message: error.to_string(),
+        }),
+    }
+}
+
 fn session_route_context_unavailable() -> SessionControlFailure {
     SessionControlFailure {
         reason: SessionControlFailureReason::Unavailable,
@@ -796,37 +842,10 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
         }
         RpcRequest::MoonlightResolve(_) => {
             let outcome = match &state.mode {
-                ServerMode::Brain(brain) => {
-                    let config_state = brain.config_snapshot.reload();
-                    match plugin_policy::registry_for_snapshot(&config_state.snapshot) {
-                        Ok(registry) => (brain.native_platform == NativePlatform::EmbeddedAndroid)
-                            .then(|| {
-                                config::resolver::resolve_moonlight_transport(
-                                    &registry,
-                                    config::resolver::RoutePlatform::Android,
-                                )
-                            })
-                            .flatten()
-                            .map(|resolved| {
-                                MoonlightResolveOutcome::Available(ResolvedMoonlight {
-                                    transport_id: resolved.transport_id,
-                                    implementation: MoonlightImplementation::Artemis,
-                                    sunshine_app: resolved.sunshine_app,
-                                })
-                            })
-                            .unwrap_or_else(|| {
-                                MoonlightResolveOutcome::Unavailable(RpcFailure {
-                                    code: "MoonlightUnavailable".into(),
-                                    message: "Moonlight is disabled or Artemis is unavailable"
-                                        .into(),
-                                })
-                            }),
-                        Err(error) => MoonlightResolveOutcome::Unavailable(RpcFailure {
-                            code: "PluginPolicyInvalid".into(),
-                            message: error.to_string(),
-                        }),
-                    }
-                }
+                ServerMode::Brain(brain) => resolve_moonlight_outcome(
+                    &brain.config_snapshot.reload(),
+                    brain.native_platform,
+                ),
                 ServerMode::Host(_) => MoonlightResolveOutcome::Unavailable(RpcFailure {
                     code: "MoonlightUnavailable".into(),
                     message: "Artemis is available only at the Android edge".into(),
@@ -1376,6 +1395,25 @@ mod tests {
             control_id: "control".into(),
             value,
         }
+    }
+
+    #[test]
+    fn moonlight_resolution_withholds_retained_snapshot_while_unauthorized() {
+        let state = config::snapshot::ConfigSnapshotState {
+            snapshot: Arc::new(config::ConfigSnapshot::default()),
+            generation: 1,
+            diagnostic: Some(config::snapshot::SnapshotDiagnostic {
+                code: config::snapshot::SnapshotDiagnosticCode::LocalConfigUnauthorized,
+                message: "configured storage denial".into(),
+            }),
+            authorization: config::snapshot::SnapshotAuthorization::Unauthorized,
+        };
+
+        let outcome = resolve_moonlight_outcome(&state, NativePlatform::EmbeddedAndroid);
+        let MoonlightResolveOutcome::Unavailable(failure) = outcome else {
+            panic!("retained Moonlight declaration must be withheld");
+        };
+        assert_eq!(failure.code, "LocalConfigUnauthorized");
     }
 
     fn assert_invalid_range(interaction: SessionControlInteraction, submitted: f64) {
