@@ -668,6 +668,7 @@ struct BrainRuntime {
     local_storage_root: PathBuf,
     local_file_provision: launcher::FileProvisionMode,
     local_launch_signing_key: Vec<u8>,
+    local_launch_reservations: Arc<Mutex<launcher::LaunchPublicationReservations>>,
     moonlight_launch_authority: Arc<Mutex<launcher::MoonlightLaunchAuthority>>,
     active_android_launch: Arc<Mutex<Option<launcher::AndroidActiveLaunch>>>,
     native_platform: NativePlatform,
@@ -1144,8 +1145,15 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                     &registry,
                 )
                 .map(|spec| {
-                    spec.with_launch_id(generate_launch_id())
-                        .sign(&brain.local_launch_signing_key)
+                    let signed = spec
+                        .with_launch_id(generate_launch_id())
+                        .sign(&brain.local_launch_signing_key);
+                    brain
+                        .local_launch_reservations
+                        .lock()
+                        .expect("local launch reservations poisoned")
+                        .reserve(signed.launch_id.clone());
+                    signed
                 })
                 .map(LocalGameLaunchOutcome::Ok)
                 .unwrap_or_else(|error| LocalGameLaunchOutcome::Err(local_launch_failure(error)));
@@ -1296,6 +1304,8 @@ pub fn router_with_capability_and_local_root(
 ) -> Router {
     let local_storage_root = local_storage_root.as_ref().to_owned();
     let signing_key = generate_launch_signing_key();
+    let local_launch_reservations =
+        Arc::new(Mutex::new(launcher::LaunchPublicationReservations::new()));
     let moonlight_launch_authority = Arc::new(Mutex::new(launcher::MoonlightLaunchAuthority::new(
         signing_key.clone(),
     )));
@@ -1306,6 +1316,7 @@ pub fn router_with_capability_and_local_root(
         local_storage_root,
         launcher::FileProvisionMode::Direct,
         signing_key,
+        local_launch_reservations,
         moonlight_launch_authority,
         Arc::new(Mutex::new(None)),
         NativePlatform::Standalone,
@@ -1323,6 +1334,8 @@ fn android_router_with_capability_and_local_root(
 ) -> Router {
     let local_storage_root = local_storage_root.as_ref().to_owned();
     let signing_key = generate_launch_signing_key();
+    let local_launch_reservations =
+        Arc::new(Mutex::new(launcher::LaunchPublicationReservations::new()));
     let moonlight_launch_authority = Arc::new(Mutex::new(launcher::MoonlightLaunchAuthority::new(
         signing_key.clone(),
     )));
@@ -1333,6 +1346,7 @@ fn android_router_with_capability_and_local_root(
         local_storage_root,
         launcher::FileProvisionMode::Deferred,
         signing_key,
+        local_launch_reservations,
         moonlight_launch_authority,
         Arc::new(Mutex::new(None)),
         NativePlatform::EmbeddedAndroid,
@@ -1346,6 +1360,7 @@ fn router_with_capability_local_root_and_provision(
     local_storage_root: impl AsRef<Path>,
     local_file_provision: launcher::FileProvisionMode,
     local_launch_signing_key: Vec<u8>,
+    local_launch_reservations: Arc<Mutex<launcher::LaunchPublicationReservations>>,
     moonlight_launch_authority: Arc<Mutex<launcher::MoonlightLaunchAuthority>>,
     active_android_launch: Arc<Mutex<Option<launcher::AndroidActiveLaunch>>>,
     native_platform: NativePlatform,
@@ -1360,6 +1375,7 @@ fn router_with_capability_local_root_and_provision(
             local_storage_root,
             local_file_provision,
             local_launch_signing_key,
+            local_launch_reservations,
             moonlight_launch_authority,
             active_android_launch,
             native_platform,
@@ -1432,6 +1448,7 @@ struct ServerHandle {
     port: u16,
     rpc_capability: String,
     launch_signing_key: Vec<u8>,
+    local_launch_reservations: Arc<Mutex<launcher::LaunchPublicationReservations>>,
     active_android_launch: Arc<Mutex<Option<launcher::AndroidActiveLaunch>>>,
     platform_instruction_verifier: Option<launcher::PlatformInstructionVerifier>,
     moonlight_launch_authority: Arc<Mutex<launcher::MoonlightLaunchAuthority>>,
@@ -1509,6 +1526,9 @@ fn start_local_server_for_platform(
     let server_capability = rpc_capability.clone();
     let launch_signing_key = generate_launch_signing_key();
     let server_signing_key = launch_signing_key.clone();
+    let local_launch_reservations =
+        Arc::new(Mutex::new(launcher::LaunchPublicationReservations::new()));
+    let server_local_launch_reservations = Arc::clone(&local_launch_reservations);
     let moonlight_launch_authority = Arc::new(Mutex::new(launcher::MoonlightLaunchAuthority::new(
         launch_signing_key.clone(),
     )));
@@ -1536,6 +1556,7 @@ fn start_local_server_for_platform(
                         &local_storage_root,
                         launcher::FileProvisionMode::Deferred,
                         server_signing_key,
+                        server_local_launch_reservations,
                         server_moonlight_launch_authority,
                         router_active_android_launch,
                         native_platform,
@@ -1557,6 +1578,7 @@ fn start_local_server_for_platform(
         port,
         rpc_capability,
         launch_signing_key,
+        local_launch_reservations,
         active_android_launch,
         platform_instruction_verifier: None,
         moonlight_launch_authority,
@@ -1601,16 +1623,42 @@ pub fn local_server_capability() -> Option<String> {
 pub enum ActiveAndroidLaunchFailure {
     InvalidSpec,
     Integrity,
+    Stale,
+    NotStarted,
+    AlreadyPublished,
     ServerUnavailable,
+}
+
+fn active_launch_reservation_failure(
+    failure: launcher::LaunchPublicationReservationFailure,
+) -> ActiveAndroidLaunchFailure {
+    match failure {
+        launcher::LaunchPublicationReservationFailure::Stale => ActiveAndroidLaunchFailure::Stale,
+        launcher::LaunchPublicationReservationFailure::NotStarted => {
+            ActiveAndroidLaunchFailure::NotStarted
+        }
+        launcher::LaunchPublicationReservationFailure::AlreadyPublished
+        | launcher::LaunchPublicationReservationFailure::Replay => {
+            ActiveAndroidLaunchFailure::AlreadyPublished
+        }
+    }
 }
 
 fn publish_verified_android_launch(
     server: &mut ServerHandle,
     launch: launcher::AndroidActiveLaunch,
 ) -> launcher::AndroidActiveLaunch {
-    server.platform_instruction_verifier = Some(launcher::PlatformInstructionVerifier::new(
-        launch.launch_id.clone(),
-    ));
+    let same_launch = server
+        .active_android_launch
+        .lock()
+        .expect("active Android launch mutex poisoned")
+        .as_ref()
+        .is_some_and(|active| active.launch_id == launch.launch_id);
+    if !same_launch {
+        server.platform_instruction_verifier = Some(launcher::PlatformInstructionVerifier::new(
+            launch.launch_id.clone(),
+        ));
+    }
     *server
         .active_android_launch
         .lock()
@@ -1634,6 +1682,12 @@ pub fn publish_local_active_launch(
     if spec.context.foreground.kind == launcher::LaunchForegroundKind::ArtemisGame {
         return Err(ActiveAndroidLaunchFailure::InvalidSpec);
     }
+    server
+        .local_launch_reservations
+        .lock()
+        .expect("local launch reservations poisoned")
+        .publish(&spec.launch_id)
+        .map_err(active_launch_reservation_failure)?;
     Ok(publish_verified_android_launch(
         server,
         launcher::AndroidActiveLaunch::from_context(spec.launch_id, spec.context),
@@ -1661,6 +1715,12 @@ pub fn publish_moonlight_active_launch(
     {
         return Err(ActiveAndroidLaunchFailure::Integrity);
     }
+    server
+        .moonlight_launch_authority
+        .lock()
+        .expect("Moonlight launch authority poisoned")
+        .publish(&spec)
+        .map_err(active_launch_reservation_failure)?;
     let mut context = spec.context;
     context.foreground = launcher::LaunchForegroundRule {
         kind: launcher::LaunchForegroundKind::Component,
@@ -1798,16 +1858,25 @@ pub fn authorize_moonlight_launch_spec(spec_json: &str) -> MoonlightLaunchAuthor
     }
 }
 
-/// Verify that a launcher-neutral instruction came from this embedded server.
+/// Verify and consume the latest launcher-neutral reservation before Android starts it.
 pub fn verify_local_launch_spec(spec_json: &str) -> bool {
     let Ok(spec) = serde_json::from_str::<launcher::LaunchSpec>(spec_json) else {
         return false;
     };
-    server_slot()
+    let slot = server_slot().lock().expect("server mutex poisoned");
+    let Some(server) = slot.as_ref() else {
+        return false;
+    };
+    if !spec.verify(&server.launch_signing_key) {
+        return false;
+    }
+    let authorized = server
+        .local_launch_reservations
         .lock()
-        .expect("server mutex poisoned")
-        .as_ref()
-        .is_some_and(|server| spec.verify(&server.launch_signing_key))
+        .expect("local launch reservations poisoned")
+        .authorize(&spec.launch_id)
+        .is_ok();
+    authorized
 }
 
 pub mod host;
@@ -2614,6 +2683,7 @@ command = ["sh", "-c", "sleep 1"]
             root.path(),
             launcher::FileProvisionMode::Deferred,
             b"test signing key".to_vec(),
+            Arc::new(Mutex::new(launcher::LaunchPublicationReservations::new())),
             Arc::new(Mutex::new(launcher::MoonlightLaunchAuthority::new(
                 b"test signing key".to_vec(),
             ))),
@@ -2724,6 +2794,10 @@ command = ["sh", "-c", "sleep 1"]
         let spec_json = serde_json::to_string(&spec).unwrap();
         assert!(verify_local_launch_spec(&spec_json));
         let local = publish_local_active_launch(&spec_json).unwrap();
+        assert_eq!(
+            publish_local_active_launch(&spec_json),
+            Err(ActiveAndroidLaunchFailure::AlreadyPublished)
+        );
         assert_eq!(local.game_id.as_deref(), Some("wl4"));
         assert_eq!(local.title.as_deref(), Some("Wario Land 4"));
         assert_eq!(
@@ -2761,6 +2835,10 @@ command = ["sh", "-c", "sleep 1"]
         );
         assert!(clear_active_android_launch(&local.launch_id));
         assert!(active_android_launch().is_none());
+        assert_eq!(
+            publish_local_active_launch(&spec_json),
+            Err(ActiveAndroidLaunchFailure::AlreadyPublished)
+        );
 
         spec["files"][0]["content"] = serde_json::Value::String("tampered".into());
         assert!(!verify_local_launch_spec(
@@ -2832,6 +2910,14 @@ command = ["sh", "-c", "sleep 1"]
         assert_eq!(
             authorize_platform_instruction(&instruction_json),
             PlatformInstructionAuthorization::Authorized
+        );
+        assert_eq!(
+            publish_moonlight_active_launch(
+                &first_json,
+                "com.simonwjackson.korri",
+                "com.limelight.Game",
+            ),
+            Err(ActiveAndroidLaunchFailure::AlreadyPublished)
         );
         assert_eq!(
             authorize_platform_instruction(&instruction_json),

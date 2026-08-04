@@ -20,7 +20,7 @@ public final class KorridServer {
     public static native String capability();
     /** Tagged authorization result; a valid Moonlight launch is consumed once. */
     public static native String authorizeMoonlightLaunchSpec(String specJson);
-    /** True only for an untampered instruction from the running embedded server. */
+    /** Consumes the latest untampered local reservation before Android starts it. */
     public static native boolean verifyLaunchSpec(String specJson);
     /** Verify the signed local handoff and publish its launch context. */
     public static native String publishLocalActiveLaunch(String specJson);

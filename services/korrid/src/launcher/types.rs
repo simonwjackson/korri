@@ -288,22 +288,103 @@ pub enum MoonlightLaunchVerificationFailure {
     Replay,
 }
 
-struct CurrentMoonlightLaunch {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LaunchPublicationState {
+    Reserved,
+    Started,
+    Published,
+}
+
+struct CurrentLaunchPublication {
     id: String,
-    consumed: bool,
+    state: LaunchPublicationState,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LaunchPublicationReservationFailure {
+    Stale,
+    Replay,
+    NotStarted,
+    AlreadyPublished,
+}
+
+/** Latest-only reservation shared by native verification and publication. */
+pub struct LaunchPublicationReservations {
+    current: Option<CurrentLaunchPublication>,
+}
+
+impl LaunchPublicationReservations {
+    pub fn new() -> Self {
+        Self { current: None }
+    }
+
+    pub fn reserve(&mut self, launch_id: impl Into<String>) {
+        self.current = Some(CurrentLaunchPublication {
+            id: launch_id.into(),
+            state: LaunchPublicationState::Reserved,
+        });
+    }
+
+    pub fn cancel(&mut self, launch_id: &str) -> bool {
+        let cancellable = self.current.as_ref().is_some_and(|current| {
+            current.id == launch_id && current.state == LaunchPublicationState::Reserved
+        });
+        if cancellable {
+            self.current = None;
+        }
+        cancellable
+    }
+
+    pub fn authorize(
+        &mut self,
+        launch_id: &str,
+    ) -> Result<(), LaunchPublicationReservationFailure> {
+        let Some(current) = self.current.as_mut() else {
+            return Err(LaunchPublicationReservationFailure::Stale);
+        };
+        if current.id != launch_id {
+            return Err(LaunchPublicationReservationFailure::Stale);
+        }
+        if current.state != LaunchPublicationState::Reserved {
+            return Err(LaunchPublicationReservationFailure::Replay);
+        }
+        current.state = LaunchPublicationState::Started;
+        Ok(())
+    }
+
+    pub fn publish(&mut self, launch_id: &str) -> Result<(), LaunchPublicationReservationFailure> {
+        let Some(current) = self.current.as_mut() else {
+            return Err(LaunchPublicationReservationFailure::Stale);
+        };
+        if current.id != launch_id {
+            return Err(LaunchPublicationReservationFailure::Stale);
+        }
+        match current.state {
+            LaunchPublicationState::Reserved => {
+                Err(LaunchPublicationReservationFailure::NotStarted)
+            }
+            LaunchPublicationState::Started => {
+                current.state = LaunchPublicationState::Published;
+                Ok(())
+            }
+            LaunchPublicationState::Published => {
+                Err(LaunchPublicationReservationFailure::AlreadyPublished)
+            }
+        }
+    }
 }
 
 /** Per-server signer and one-use native verifier for Moonlight startup. */
 pub struct MoonlightLaunchAuthority {
     key: Vec<u8>,
-    current_launch: Option<CurrentMoonlightLaunch>,
+    reservations: LaunchPublicationReservations,
 }
 
 impl MoonlightLaunchAuthority {
     pub fn new(key: Vec<u8>) -> Self {
         Self {
             key,
-            current_launch: None,
+            reservations: LaunchPublicationReservations::new(),
         }
     }
 
@@ -348,23 +429,13 @@ impl MoonlightLaunchAuthority {
             integrity: String::new(),
         }
         .sign(&self.key);
-        self.current_launch = Some(CurrentMoonlightLaunch {
-            id: launch_id,
-            consumed: false,
-        });
+        self.reservations.reserve(launch_id);
         spec
     }
 
     /** Invalidate only the named current reservation while it remains unused. */
     pub fn cancel(&mut self, launch_id: &str) -> bool {
-        let cancellable = self
-            .current_launch
-            .as_ref()
-            .is_some_and(|current| current.id == launch_id && !current.consumed);
-        if cancellable {
-            self.current_launch = None;
-        }
-        cancellable
+        self.reservations.cancel(launch_id)
     }
 
     pub fn authorize(
@@ -374,17 +445,28 @@ impl MoonlightLaunchAuthority {
         if !spec.verify(&self.key) {
             return Err(MoonlightLaunchVerificationFailure::Integrity);
         }
-        let Some(current) = self.current_launch.as_mut() else {
-            return Err(MoonlightLaunchVerificationFailure::Stale);
-        };
-        if current.id != spec.launch_id {
-            return Err(MoonlightLaunchVerificationFailure::Stale);
+        self.reservations
+            .authorize(&spec.launch_id)
+            .map_err(|failure| match failure {
+                LaunchPublicationReservationFailure::Stale => {
+                    MoonlightLaunchVerificationFailure::Stale
+                }
+                LaunchPublicationReservationFailure::Replay
+                | LaunchPublicationReservationFailure::NotStarted
+                | LaunchPublicationReservationFailure::AlreadyPublished => {
+                    MoonlightLaunchVerificationFailure::Replay
+                }
+            })
+    }
+
+    pub fn publish(
+        &mut self,
+        spec: &MoonlightLaunchSpec,
+    ) -> Result<(), LaunchPublicationReservationFailure> {
+        if !spec.verify(&self.key) {
+            return Err(LaunchPublicationReservationFailure::Stale);
         }
-        if current.consumed {
-            return Err(MoonlightLaunchVerificationFailure::Replay);
-        }
-        current.consumed = true;
-        Ok(())
+        self.reservations.publish(&spec.launch_id)
     }
 }
 
@@ -560,6 +642,50 @@ mod tests {
     }
 
     #[test]
+    fn launch_publication_reservation_is_latest_started_and_one_use() {
+        let mut reservations = LaunchPublicationReservations::new();
+        reservations.reserve("older");
+        reservations.reserve("latest");
+
+        assert_eq!(
+            reservations.authorize("older"),
+            Err(LaunchPublicationReservationFailure::Stale)
+        );
+        assert_eq!(
+            reservations.publish("latest"),
+            Err(LaunchPublicationReservationFailure::NotStarted)
+        );
+        assert!(reservations.authorize("latest").is_ok());
+        assert_eq!(
+            reservations.authorize("latest"),
+            Err(LaunchPublicationReservationFailure::Replay)
+        );
+        assert!(reservations.publish("latest").is_ok());
+        assert_eq!(
+            reservations.publish("latest"),
+            Err(LaunchPublicationReservationFailure::AlreadyPublished)
+        );
+    }
+
+    #[test]
+    fn consumed_start_failure_stays_unpublished_until_a_replacement_is_reserved() {
+        let mut reservations = LaunchPublicationReservations::new();
+        reservations.reserve("failed-start");
+        assert!(reservations.authorize("failed-start").is_ok());
+        assert!(reservations.current.as_ref().is_some_and(|current| {
+            current.id == "failed-start" && current.state == LaunchPublicationState::Started
+        }));
+
+        reservations.reserve("replacement");
+        assert_eq!(
+            reservations.publish("failed-start"),
+            Err(LaunchPublicationReservationFailure::Stale)
+        );
+        assert!(reservations.authorize("replacement").is_ok());
+        assert!(reservations.publish("replacement").is_ok());
+    }
+
+    #[test]
     fn signed_moonlight_launches_reject_tamper_stale_and_replay() {
         let mut authority = MoonlightLaunchAuthority::new(b"private per-server key".to_vec());
         let first = authority.prepare(
@@ -589,10 +715,11 @@ mod tests {
         assert_ne!(second.launch_id, first.launch_id);
         assert_eq!(
             authority
-                .current_launch
+                .reservations
+                .current
                 .as_ref()
-                .map(|launch| (launch.id.as_str(), launch.consumed)),
-            Some((second.launch_id.as_str(), false))
+                .map(|launch| (launch.id.as_str(), launch.state)),
+            Some((second.launch_id.as_str(), LaunchPublicationState::Reserved))
         );
         assert_eq!(
             authority.authorize(&first),
@@ -607,12 +734,18 @@ mod tests {
         );
         assert!(authority.authorize(&second).is_ok());
         assert!(authority
-            .current_launch
+            .reservations
+            .current
             .as_ref()
-            .is_some_and(|launch| launch.consumed));
+            .is_some_and(|launch| launch.state == LaunchPublicationState::Started));
         assert_eq!(
             authority.authorize(&second),
             Err(MoonlightLaunchVerificationFailure::Replay)
+        );
+        assert!(authority.publish(&second).is_ok());
+        assert_eq!(
+            authority.publish(&second),
+            Err(LaunchPublicationReservationFailure::AlreadyPublished)
         );
     }
 
