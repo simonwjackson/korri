@@ -321,7 +321,10 @@ export function createInMemoryKorridClient(
           payload: { code: "UpstreamFailure", message: `cannot prepare ${gameId}` },
         }
       }
-      return { _tag: "Ok", payload: { gameId } }
+      return {
+        _tag: "Ok",
+        payload: { gameId, launchId: `in-memory:${host ?? "local"}:${gameId}` },
+      }
     },
     async sessionStatus() {
       if (behavior === "status-fail") {

@@ -195,6 +195,8 @@ pub fn launch_route(
     };
 
     Ok(LaunchSpec {
+        // The RPC preparation boundary replaces this before signing.
+        launch_id: String::new(),
         launcher_id: route.integration_token.clone(),
         component: AndroidComponent {
             package_name: component.package_name.clone(),

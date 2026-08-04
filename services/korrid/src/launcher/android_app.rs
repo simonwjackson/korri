@@ -98,6 +98,8 @@ pub fn launch_route(route: &ResolvedRoute) -> Result<LaunchSpec, AndroidAppRoute
     }
 
     Ok(LaunchSpec {
+        // The RPC preparation boundary replaces this before signing.
+        launch_id: String::new(),
         launcher_id: ANDROID_APP_TOKEN.into(),
         component: AndroidComponent {
             package_name: package_name.into(),

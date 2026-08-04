@@ -343,6 +343,7 @@ impl UpstreamRegistry {
                     .await
                     .map(|prepared| SessionPrepared {
                         game_id: prepared.game_id,
+                        launch_id: prepared.session_id,
                     })
             }
             RegisteredClient::Native(client) => client.prepare_stream(game_id).await,

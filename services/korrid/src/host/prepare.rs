@@ -46,6 +46,7 @@ impl HostLauncher {
         if running.contains(game_id) {
             return Ok(SessionPrepared {
                 game_id: game_id.into(),
+                launch_id: crate::generate_launch_id(),
             });
         }
 
@@ -91,7 +92,10 @@ impl HostLauncher {
                 .expect("host child mutex poisoned")
                 .remove(&reaped_game_id);
         });
-        Ok(SessionPrepared { game_id })
+        Ok(SessionPrepared {
+            game_id,
+            launch_id: crate::generate_launch_id(),
+        })
     }
 }
 

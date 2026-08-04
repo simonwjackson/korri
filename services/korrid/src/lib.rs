@@ -81,6 +81,205 @@ pub struct SessionPrepareRequest {
 #[serde(rename_all = "camelCase")]
 pub struct SessionPrepared {
     pub game_id: String,
+    /** Identity created by korrid while preparing this exact launch. */
+    pub launch_id: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "payload", rename_all = "kebab-case")]
+pub enum SessionControlInteraction {
+    Command,
+    Toggle {
+        value: bool,
+    },
+    Choice {
+        value: String,
+        options: Vec<SessionControlChoice>,
+    },
+    Range {
+        value: f64,
+        min: f64,
+        max: f64,
+        step: f64,
+    },
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct SessionControlChoice {
+    pub value: String,
+    pub label: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionControl {
+    pub id: String,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disabled_reason: Option<String>,
+    pub destructive: bool,
+    pub dismiss_on_success: bool,
+    pub interaction: SessionControlInteraction,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct SessionControlGroup {
+    pub id: String,
+    pub label: String,
+    pub controls: Vec<SessionControl>,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionControls {
+    pub launch_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub groups: Vec<SessionControlGroup>,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionControlsRequest {
+    pub launch_id: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", rename_all = "kebab-case")]
+pub enum SessionControlValue {
+    Toggle(bool),
+    Choice(String),
+    Range(f64),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionControlInvokeRequest {
+    pub launch_id: String,
+    pub control_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<SessionControlValue>,
+}
+
+#[typeshare]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum SessionControlFailureReason {
+    StaleSession,
+    UnknownControl,
+    Disabled,
+    InvalidValue,
+    Unavailable,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct SessionControlFailure {
+    pub reason: SessionControlFailureReason,
+    pub message: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
+pub enum SessionControlsOutcome {
+    Ok(SessionControls),
+    Err(SessionControlFailure),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionControlCompleted {
+    pub launch_id: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
+pub enum SessionControlInvokeResult {
+    Completed(SessionControlCompleted),
+    PlatformInstruction(launcher::PlatformInstruction),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
+pub enum SessionControlInvokeOutcome {
+    Ok(SessionControlInvokeResult),
+    Err(SessionControlFailure),
+}
+
+/** Validate the invocation against the current materialized control before an
+ * integration effect can be selected or protected. */
+pub fn validate_session_control_invocation(
+    active_launch_id: &str,
+    request: &SessionControlInvokeRequest,
+    control: &SessionControl,
+) -> Result<(), SessionControlFailure> {
+    if request.launch_id != active_launch_id {
+        return Err(SessionControlFailure {
+            reason: SessionControlFailureReason::StaleSession,
+            message: "The gameplay session changed. Reopen the overlay and try again.".into(),
+        });
+    }
+    if request.control_id != control.id {
+        return Err(SessionControlFailure {
+            reason: SessionControlFailureReason::UnknownControl,
+            message: "That gameplay control is no longer available.".into(),
+        });
+    }
+    if !control.enabled {
+        return Err(SessionControlFailure {
+            reason: SessionControlFailureReason::Disabled,
+            message: control
+                .disabled_reason
+                .clone()
+                .unwrap_or_else(|| "That gameplay control is currently unavailable.".into()),
+        });
+    }
+
+    let valid = match (&control.interaction, &request.value) {
+        (SessionControlInteraction::Command, None) => true,
+        (SessionControlInteraction::Toggle { .. }, Some(SessionControlValue::Toggle(_))) => true,
+        (
+            SessionControlInteraction::Choice { options, .. },
+            Some(SessionControlValue::Choice(value)),
+        ) => options.iter().any(|option| option.value == *value),
+        (
+            SessionControlInteraction::Range { min, max, step, .. },
+            Some(SessionControlValue::Range(value)),
+        ) => {
+            let steps = (*value - *min) / *step;
+            value.is_finite()
+                && min.is_finite()
+                && max.is_finite()
+                && step.is_finite()
+                && *step > 0.0
+                && *value >= *min
+                && *value <= *max
+                && (steps - steps.round()).abs() <= 1e-9
+        }
+        _ => false,
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(SessionControlFailure {
+            reason: SessionControlFailureReason::InvalidValue,
+            message: "That value is not valid for this gameplay control.".into(),
+        })
+    }
 }
 
 #[typeshare]
@@ -284,6 +483,10 @@ pub enum RpcRequest {
     SessionStatus(SessionStatusRequest),
     #[serde(rename = "app.session.stop")]
     SessionStop(SessionStopRequest),
+    #[serde(rename = "app.session.controls")]
+    SessionControls(SessionControlsRequest),
+    #[serde(rename = "app.session.control.invoke")]
+    SessionControlInvoke(SessionControlInvokeRequest),
     #[serde(rename = "app.local-games.list")]
     LocalGamesList(LocalGamesListRequest),
     #[serde(rename = "app.local-games.launch")]
@@ -308,6 +511,10 @@ pub enum RpcResponse {
     SessionStatus(SessionStatusOutcome),
     #[serde(rename = "app.session.stop")]
     SessionStop(SessionStopOutcome),
+    #[serde(rename = "app.session.controls")]
+    SessionControls(SessionControlsOutcome),
+    #[serde(rename = "app.session.control.invoke")]
+    SessionControlInvoke(SessionControlInvokeOutcome),
     #[serde(rename = "app.local-games.list")]
     LocalGamesList(LocalGamesListOutcome),
     #[serde(rename = "app.local-games.launch")]
@@ -531,6 +738,18 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                 message: "host session stop is not implemented".into(),
             })),
         },
+        RpcRequest::SessionControls(_) => {
+            RpcResponse::SessionControls(SessionControlsOutcome::Err(SessionControlFailure {
+                reason: SessionControlFailureReason::Unavailable,
+                message: "Gameplay controls are not available for this session yet.".into(),
+            }))
+        }
+        RpcRequest::SessionControlInvoke(_) => RpcResponse::SessionControlInvoke(
+            SessionControlInvokeOutcome::Err(SessionControlFailure {
+                reason: SessionControlFailureReason::Unavailable,
+                message: "Gameplay controls are not available for this session yet.".into(),
+            }),
+        ),
         RpcRequest::LocalGamesList(_) => match &state.mode {
             ServerMode::Brain(brain) => {
                 let config_state = brain.config_snapshot.reload();
@@ -584,7 +803,10 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                     &config_state,
                     &registry,
                 )
-                .map(|spec| spec.sign(&brain.local_launch_signing_key))
+                .map(|spec| {
+                    spec.with_launch_id(generate_launch_id())
+                        .sign(&brain.local_launch_signing_key)
+                })
                 .map(LocalGameLaunchOutcome::Ok)
                 .unwrap_or_else(|error| LocalGameLaunchOutcome::Err(local_launch_failure(error)));
                 RpcResponse::LocalGameLaunch(outcome)
@@ -802,6 +1024,12 @@ pub fn generate_rpc_capability() -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+/** Create the identity korrid carries through one prepared launch. */
+pub fn generate_launch_id() -> String {
+    let bytes: [u8; 16] = rand::random();
+    hex::encode(bytes)
+}
+
 fn generate_launch_signing_key() -> Vec<u8> {
     let bytes: [u8; 32] = rand::random();
     bytes.to_vec()
@@ -975,6 +1203,145 @@ mod tests {
     fn write_wl4_plugin_config(root: &Path) {
         std::fs::write(root.join("config.yaml"), "{}\n").unwrap();
         std::fs::write(root.join("library.yaml"), WL4_PLUGIN_LIBRARY).unwrap();
+    }
+
+    fn control(interaction: SessionControlInteraction) -> SessionControl {
+        SessionControl {
+            id: "control".into(),
+            label: "Control".into(),
+            description: None,
+            enabled: true,
+            disabled_reason: None,
+            destructive: false,
+            dismiss_on_success: false,
+            interaction,
+        }
+    }
+
+    fn invocation(value: Option<SessionControlValue>) -> SessionControlInvokeRequest {
+        SessionControlInvokeRequest {
+            launch_id: "current".into(),
+            control_id: "control".into(),
+            value,
+        }
+    }
+
+    #[test]
+    fn session_control_values_are_validated_before_effect_resolution() {
+        assert!(validate_session_control_invocation(
+            "current",
+            &invocation(None),
+            &control(SessionControlInteraction::Command),
+        )
+        .is_ok());
+        assert!(validate_session_control_invocation(
+            "current",
+            &invocation(Some(SessionControlValue::Toggle(true))),
+            &control(SessionControlInteraction::Toggle { value: false }),
+        )
+        .is_ok());
+        assert!(validate_session_control_invocation(
+            "current",
+            &invocation(Some(SessionControlValue::Choice("direct".into()))),
+            &control(SessionControlInteraction::Choice {
+                value: "trackpad".into(),
+                options: vec![
+                    SessionControlChoice {
+                        value: "trackpad".into(),
+                        label: "Trackpad".into(),
+                    },
+                    SessionControlChoice {
+                        value: "direct".into(),
+                        label: "Direct".into(),
+                    },
+                ],
+            }),
+        )
+        .is_ok());
+        assert!(validate_session_control_invocation(
+            "current",
+            &invocation(Some(SessionControlValue::Range(55.0))),
+            &control(SessionControlInteraction::Range {
+                value: 50.0,
+                min: 0.0,
+                max: 100.0,
+                step: 5.0,
+            }),
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn malformed_disabled_and_stale_session_invocations_are_rejected() {
+        let invalid_cases = [
+            (
+                control(SessionControlInteraction::Command),
+                invocation(Some(SessionControlValue::Toggle(true))),
+                SessionControlFailureReason::InvalidValue,
+            ),
+            (
+                control(SessionControlInteraction::Choice {
+                    value: "trackpad".into(),
+                    options: vec![SessionControlChoice {
+                        value: "trackpad".into(),
+                        label: "Trackpad".into(),
+                    }],
+                }),
+                invocation(Some(SessionControlValue::Choice("outside".into()))),
+                SessionControlFailureReason::InvalidValue,
+            ),
+            (
+                control(SessionControlInteraction::Range {
+                    value: 50.0,
+                    min: 0.0,
+                    max: 100.0,
+                    step: 5.0,
+                }),
+                invocation(Some(SessionControlValue::Range(101.0))),
+                SessionControlFailureReason::InvalidValue,
+            ),
+            (
+                control(SessionControlInteraction::Range {
+                    value: 50.0,
+                    min: 0.0,
+                    max: 100.0,
+                    step: 5.0,
+                }),
+                invocation(Some(SessionControlValue::Range(52.0))),
+                SessionControlFailureReason::InvalidValue,
+            ),
+        ];
+        for (control, request, reason) in invalid_cases {
+            assert_eq!(
+                validate_session_control_invocation("current", &request, &control)
+                    .expect_err("invocation must be rejected")
+                    .reason,
+                reason
+            );
+        }
+
+        let mut disabled = control(SessionControlInteraction::Command);
+        disabled.enabled = false;
+        disabled.disabled_reason = Some("No live executor".into());
+        assert_eq!(
+            validate_session_control_invocation("current", &invocation(None), &disabled)
+                .unwrap_err()
+                .reason,
+            SessionControlFailureReason::Disabled
+        );
+
+        let mut stale = invocation(None);
+        stale.launch_id = "old".into();
+        assert_eq!(
+            validate_session_control_invocation(
+                "current",
+                &stale,
+                &control(SessionControlInteraction::Command),
+            )
+            .unwrap_err()
+            .reason,
+            SessionControlFailureReason::StaleSession
+        );
     }
 
     #[test]
@@ -1348,6 +1715,7 @@ command = ["sh", "-c", "sleep 1"]
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
         let spec = &body["outcome"]["payload"];
+        assert_eq!(spec["launchId"].as_str().unwrap().len(), 32);
         assert_eq!(spec["files"].as_array().unwrap().len(), 1);
         assert_eq!(spec["directories"].as_array().unwrap().len(), 4);
         assert!(!spec["integrity"].as_str().unwrap().is_empty());

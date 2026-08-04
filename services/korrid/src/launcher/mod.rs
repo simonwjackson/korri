@@ -12,7 +12,11 @@ use crate::{
 };
 use std::path::Path;
 
-pub use types::{AndroidComponent, FileProvisionMode, LaunchSpec, LocalGame, ProvisionedFile};
+pub use types::{
+    AndroidComponent, AndroidMoonlightEffect, FileProvisionMode, LaunchSpec, LocalGame,
+    PlatformEffect, PlatformInstruction, PlatformInstructionVerificationFailure,
+    PlatformInstructionVerifier, ProvisionedFile,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LocalGameCatalog {

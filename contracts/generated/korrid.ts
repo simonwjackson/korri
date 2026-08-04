@@ -58,6 +58,8 @@ export interface ProvisionedFile {
 }
 
 export interface LaunchSpec {
+	/** Identity created by korrid while preparing this exact launch. */
+	launchId: string;
 	launcherId: string;
 	component: AndroidComponent;
 	extras: Record<string, string>;
@@ -91,10 +93,102 @@ export interface LocalGames {
 export interface LocalGamesListRequest {
 }
 
+export type SessionControlValue =
+	| { kind: "toggle", value: boolean }
+	| { kind: "choice", value: string }
+	| { kind: "range", value: number };
+
+/** Closed platform effect vocabulary. Plugins may refer only to integrations
+ * represented here; no process, URL, intent, socket, or method name crosses. */
+export type PlatformEffect =
+	| { kind: "android-moonlight", payload: AndroidMoonlightEffect };
+
+export interface PlatformInstruction {
+	launchId: string;
+	actionId: string;
+	/** Cryptographically random, consumed once for the active launch. */
+	nonce: string;
+	value?: SessionControlValue;
+	effect: PlatformEffect;
+	/** Per-server HMAC verified at the native platform edge. */
+	integrity: string;
+}
+
 export interface PluginSetting {
 	id: string;
 	title: string;
 	enabled: boolean;
+}
+
+export type SessionControlInteraction =
+	| { kind: "command", payload?: undefined }
+	| { kind: "toggle", payload: {
+	value: boolean;
+}}
+	| { kind: "choice", payload: {
+	value: string;
+	options: SessionControlChoice[];
+}}
+	| { kind: "range", payload: {
+	value: number;
+	min: number;
+	max: number;
+	step: number;
+}};
+
+export interface SessionControl {
+	id: string;
+	label: string;
+	description?: string;
+	enabled: boolean;
+	disabledReason?: string;
+	destructive: boolean;
+	dismissOnSuccess: boolean;
+	interaction: SessionControlInteraction;
+}
+
+export interface SessionControlChoice {
+	value: string;
+	label: string;
+}
+
+export interface SessionControlCompleted {
+	launchId: string;
+}
+
+export enum SessionControlFailureReason {
+	StaleSession = "StaleSession",
+	UnknownControl = "UnknownControl",
+	Disabled = "Disabled",
+	InvalidValue = "InvalidValue",
+	Unavailable = "Unavailable",
+}
+
+export interface SessionControlFailure {
+	reason: SessionControlFailureReason;
+	message: string;
+}
+
+export interface SessionControlGroup {
+	id: string;
+	label: string;
+	controls: SessionControl[];
+}
+
+export interface SessionControlInvokeRequest {
+	launchId: string;
+	controlId: string;
+	value?: SessionControlValue;
+}
+
+export interface SessionControls {
+	launchId: string;
+	title?: string;
+	groups: SessionControlGroup[];
+}
+
+export interface SessionControlsRequest {
+	launchId: string;
 }
 
 export interface SessionPrepareRequest {
@@ -104,6 +198,8 @@ export interface SessionPrepareRequest {
 
 export interface SessionPrepared {
 	gameId: string;
+	/** Identity created by korrid while preparing this exact launch. */
+	launchId: string;
 }
 
 export interface SessionStatus {
@@ -143,6 +239,27 @@ export interface SettingsUpdateRequest {
 	value: string;
 }
 
+export enum AndroidMoonlightEffect {
+	Disconnect = "disconnect",
+	QuitHost = "quit-host",
+	ToggleKeyboard = "toggle-keyboard",
+	ToggleFullKeyboard = "toggle-full-keyboard",
+	SetFillMode = "set-fill-mode",
+	SetZoomMode = "set-zoom-mode",
+	RotateScreen = "rotate-screen",
+	ToggleHud = "toggle-hud",
+	ToggleFloatingMenu = "toggle-floating-menu",
+	ToggleKeyboardController = "toggle-keyboard-controller",
+	SwitchTouchSensitivity = "switch-touch-sensitivity",
+	SetMouseMode = "set-mouse-mode",
+	SetLocalCursor = "set-local-cursor",
+	SetSgsrQuality = "set-sgsr-quality",
+	SetSgsrSharpness = "set-sgsr-sharpness",
+	SetFaceButtonFlip = "set-face-button-flip",
+	SetRumble = "set-rumble",
+	SetPictureInPicture = "set-picture-in-picture",
+}
+
 export type CatalogSnapshotOutcome =
 	| { _tag: "Ok", payload: CatalogSnapshot }
 	| { _tag: "Err", payload: RpcFailure };
@@ -164,6 +281,8 @@ export type RpcRequest =
 	| { _tag: "app.session.prepare", payload: SessionPrepareRequest }
 	| { _tag: "app.session.status", payload: SessionStatusRequest }
 	| { _tag: "app.session.stop", payload: SessionStopRequest }
+	| { _tag: "app.session.controls", payload: SessionControlsRequest }
+	| { _tag: "app.session.control.invoke", payload: SessionControlInvokeRequest }
 	| { _tag: "app.local-games.list", payload: LocalGamesListRequest }
 	| { _tag: "app.local-games.launch", payload: LocalGameLaunchRequest }
 	| { _tag: "system.health", payload: HealthRequest }
@@ -175,11 +294,25 @@ export type RpcResponse =
 	| { _tag: "app.session.prepare", outcome: SessionPrepareOutcome }
 	| { _tag: "app.session.status", outcome: SessionStatusOutcome }
 	| { _tag: "app.session.stop", outcome: SessionStopOutcome }
+	| { _tag: "app.session.controls", outcome: SessionControlsOutcome }
+	| { _tag: "app.session.control.invoke", outcome: SessionControlInvokeOutcome }
 	| { _tag: "app.local-games.list", outcome: LocalGamesListOutcome }
 	| { _tag: "app.local-games.launch", outcome: LocalGameLaunchOutcome }
 	| { _tag: "system.health", outcome: HealthOutcome }
 	| { _tag: "system.settings.snapshot", outcome: SettingsSnapshotOutcome }
 	| { _tag: "system.settings.update", outcome: SettingsUpdateOutcome };
+
+export type SessionControlInvokeOutcome =
+	| { _tag: "Ok", payload: SessionControlInvokeResult }
+	| { _tag: "Err", payload: SessionControlFailure };
+
+export type SessionControlInvokeResult =
+	| { _tag: "Completed", payload: SessionControlCompleted }
+	| { _tag: "PlatformInstruction", payload: PlatformInstruction };
+
+export type SessionControlsOutcome =
+	| { _tag: "Ok", payload: SessionControls }
+	| { _tag: "Err", payload: SessionControlFailure };
 
 export type SessionPrepareOutcome =
 	| { _tag: "Ok", payload: SessionPrepared }

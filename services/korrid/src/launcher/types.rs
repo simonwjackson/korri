@@ -1,10 +1,10 @@
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use typeshare::typeshare;
 
-use crate::GameIdentity;
+use crate::{GameIdentity, SessionControlValue};
 
 type HmacSha256 = Hmac<Sha256>;
 const RETROARCH_CONTROL_TOKEN: &str = "KORRI_CONTROL_TOKEN";
@@ -39,6 +39,8 @@ pub struct ProvisionedFile {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LaunchSpec {
+    /** Identity created by korrid while preparing this exact launch. */
+    pub launch_id: String,
     pub launcher_id: String,
     pub component: AndroidComponent,
     pub extras: HashMap<String, String>,
@@ -56,6 +58,7 @@ impl LaunchSpec {
         }
 
         let mut bytes = Vec::new();
+        push(&self.launch_id, &mut bytes);
         push(&self.launcher_id, &mut bytes);
         push(&self.component.package_name, &mut bytes);
         push(&self.component.class_name, &mut bytes);
@@ -76,6 +79,11 @@ impl LaunchSpec {
             push(&file.content, &mut bytes);
         }
         bytes
+    }
+
+    pub(crate) fn with_launch_id(mut self, launch_id: String) -> Self {
+        self.launch_id = launch_id;
+        self
     }
 
     pub(crate) fn sign(mut self, key: &[u8]) -> Self {
@@ -104,6 +112,148 @@ impl LaunchSpec {
     }
 }
 
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AndroidMoonlightEffect {
+    Disconnect,
+    QuitHost,
+    ToggleKeyboard,
+    ToggleFullKeyboard,
+    SetFillMode,
+    SetZoomMode,
+    RotateScreen,
+    ToggleHud,
+    ToggleFloatingMenu,
+    ToggleKeyboardController,
+    SwitchTouchSensitivity,
+    SetMouseMode,
+    SetLocalCursor,
+    SetSgsrQuality,
+    SetSgsrSharpness,
+    SetFaceButtonFlip,
+    SetRumble,
+    SetPictureInPicture,
+}
+
+/** Closed platform effect vocabulary. Plugins may refer only to integrations
+ * represented here; no process, URL, intent, socket, or method name crosses. */
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "payload", rename_all = "kebab-case")]
+pub enum PlatformEffect {
+    AndroidMoonlight(AndroidMoonlightEffect),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformInstruction {
+    pub launch_id: String,
+    pub action_id: String,
+    /** Cryptographically random, consumed once for the active launch. */
+    pub nonce: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<SessionControlValue>,
+    pub effect: PlatformEffect,
+    /** Per-server HMAC verified at the native platform edge. */
+    pub integrity: String,
+}
+
+impl PlatformInstruction {
+    fn signing_bytes(&self) -> Vec<u8> {
+        fn push(value: &[u8], bytes: &mut Vec<u8>) {
+            bytes.extend_from_slice(&(value.len() as u64).to_be_bytes());
+            bytes.extend_from_slice(value);
+        }
+
+        let mut bytes = Vec::new();
+        push(self.launch_id.as_bytes(), &mut bytes);
+        push(self.action_id.as_bytes(), &mut bytes);
+        push(self.nonce.as_bytes(), &mut bytes);
+        push(
+            &serde_json::to_vec(&self.value).expect("control values serialize"),
+            &mut bytes,
+        );
+        push(
+            &serde_json::to_vec(&self.effect).expect("platform effects serialize"),
+            &mut bytes,
+        );
+        bytes
+    }
+
+    pub fn protect(
+        launch_id: impl Into<String>,
+        action_id: impl Into<String>,
+        value: Option<SessionControlValue>,
+        effect: PlatformEffect,
+        key: &[u8],
+    ) -> Self {
+        let nonce: [u8; 32] = rand::random();
+        let mut instruction = Self {
+            launch_id: launch_id.into(),
+            action_id: action_id.into(),
+            nonce: hex::encode(nonce),
+            value,
+            effect,
+            integrity: String::new(),
+        };
+        let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
+        mac.update(&instruction.signing_bytes());
+        instruction.integrity = hex::encode(mac.finalize().into_bytes());
+        instruction
+    }
+
+    fn verify(&self, key: &[u8]) -> bool {
+        let Ok(signature) = hex::decode(&self.integrity) else {
+            return false;
+        };
+        let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
+        mac.update(&self.signing_bytes());
+        mac.verify_slice(&signature).is_ok()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlatformInstructionVerificationFailure {
+    Integrity,
+    StaleSession,
+    Replay,
+}
+
+/** Stateful native-edge authorization: integrity and launch binding are
+ * checked before a nonce is atomically marked consumed. */
+pub struct PlatformInstructionVerifier {
+    active_launch_id: String,
+    consumed_nonces: HashSet<String>,
+}
+
+impl PlatformInstructionVerifier {
+    pub fn new(active_launch_id: impl Into<String>) -> Self {
+        Self {
+            active_launch_id: active_launch_id.into(),
+            consumed_nonces: HashSet::new(),
+        }
+    }
+
+    pub fn authorize(
+        &mut self,
+        instruction: &PlatformInstruction,
+        key: &[u8],
+    ) -> Result<(), PlatformInstructionVerificationFailure> {
+        if !instruction.verify(key) {
+            return Err(PlatformInstructionVerificationFailure::Integrity);
+        }
+        if instruction.launch_id != self.active_launch_id {
+            return Err(PlatformInstructionVerificationFailure::StaleSession);
+        }
+        if !self.consumed_nonces.insert(instruction.nonce.clone()) {
+            return Err(PlatformInstructionVerificationFailure::Replay);
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FileProvisionMode {
     Direct,
@@ -116,6 +266,7 @@ mod tests {
 
     fn spec() -> LaunchSpec {
         LaunchSpec {
+            launch_id: "launch-1".into(),
             launcher_id: "retroarch".into(),
             component: AndroidComponent {
                 package_name: "package".into(),
@@ -128,6 +279,46 @@ mod tests {
                 content: "config".into(),
             }],
             integrity: String::new(),
+        }
+    }
+
+    #[test]
+    fn protected_platform_instructions_reject_tampering_and_replay() {
+        let key = b"private per-server key";
+        let instruction = PlatformInstruction::protect(
+            "launch-1",
+            "fill",
+            Some(SessionControlValue::Toggle(true)),
+            PlatformEffect::AndroidMoonlight(AndroidMoonlightEffect::SetFillMode),
+            key,
+        );
+        let mut verifier = PlatformInstructionVerifier::new("launch-1");
+        assert!(verifier.authorize(&instruction, key).is_ok());
+        assert_eq!(
+            verifier.authorize(&instruction, key),
+            Err(PlatformInstructionVerificationFailure::Replay)
+        );
+        assert_eq!(
+            PlatformInstructionVerifier::new("replacement-launch").authorize(&instruction, key),
+            Err(PlatformInstructionVerificationFailure::StaleSession)
+        );
+
+        let mutations: Vec<Box<dyn Fn(&mut PlatformInstruction)>> = vec![
+            Box::new(|value| value.action_id = "quit".into()),
+            Box::new(|value| value.value = Some(SessionControlValue::Toggle(false))),
+            Box::new(|value| value.launch_id = "launch-2".into()),
+            Box::new(|value| value.nonce = "other".into()),
+            Box::new(|value| {
+                value.effect = PlatformEffect::AndroidMoonlight(AndroidMoonlightEffect::SetZoomMode)
+            }),
+        ];
+        for mutate in mutations {
+            let mut tampered = instruction.clone();
+            mutate(&mut tampered);
+            assert_eq!(
+                PlatformInstructionVerifier::new(&tampered.launch_id).authorize(&tampered, key),
+                Err(PlatformInstructionVerificationFailure::Integrity)
+            );
         }
     }
 

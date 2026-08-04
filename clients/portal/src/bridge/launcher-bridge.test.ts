@@ -9,6 +9,7 @@ describe("createInMemoryLauncherBridge", () => {
   it("launches local specs through the configured in-memory bridge", async () => {
     const bridge = createInMemoryLauncherBridge()
     const spec = {
+      launchId: "launch-1",
       launcherId: "retroarch",
       component: { packageName: "pkg", className: "Activity" },
       extras: {},
@@ -23,6 +24,7 @@ describe("createInMemoryLauncherBridge", () => {
   it("fails local launches when configured to", async () => {
     const bridge = createInMemoryLauncherBridge({ behavior: "local-launch-fail" })
     const result = await bridge.launchLocal({
+      launchId: "launch-2",
       launcherId: "retroarch",
       component: { packageName: "pkg", className: "Activity" },
       extras: {},
@@ -87,6 +89,7 @@ describe("createKorriNativeLauncherBridge", () => {
       }),
     )
     const spec = {
+      launchId: "launch-3",
       launcherId: "retroarch",
       component: { packageName: "pkg", className: "Activity" },
       extras: { ROM: "/rom" },
@@ -215,6 +218,7 @@ describe("createKorriNativeLauncherBridge", () => {
     )
     expect(
       await bridge.launchLocal({
+        launchId: "launch-4",
         launcherId: "retroarch",
         component: { packageName: "pkg", className: "Activity" },
         extras: {},

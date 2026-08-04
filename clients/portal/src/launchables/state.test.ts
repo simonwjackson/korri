@@ -376,7 +376,7 @@ describe("LaunchablesState action results", () => {
     expect(
       LaunchablesState.withPrepareOutcome(preparing, {
         _tag: "Ok",
-        payload: { gameId: "skate3" },
+        payload: { gameId: "skate3", launchId: "launch-1" },
       }),
     ).toMatchObject({ _tag: "Preparing", notice: null })
   })
@@ -529,7 +529,7 @@ describe("LaunchablesState preparing", () => {
     const preparing = LaunchablesState.beginPreparing(ready, "Skate 3")
     const prepared = LaunchablesState.withPrepareOutcome(preparing, {
       _tag: "Ok",
-      payload: { gameId: "skate3" },
+      payload: { gameId: "skate3", launchId: "launch-2" },
     })
     if (prepared._tag !== "Preparing") throw new Error("unreachable")
     expect(prepared.title).toBe("Skate 3")

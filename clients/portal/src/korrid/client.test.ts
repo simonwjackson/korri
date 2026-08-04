@@ -119,6 +119,7 @@ describe("local games", () => {
 
   it("returns caller-provided local launch instructions unchanged", async () => {
     const spec = {
+      launchId: "fixture-launch",
       launcherId: "fixture-launcher",
       component: { packageName: "dev.fixture.runtime", className: "dev.fixture.Main" },
       extras: { CONTENT: "/fixture/game.bin" },
