@@ -836,6 +836,25 @@ fn resolve_moonlight_outcome(
     }
 }
 
+fn authorize_moonlight_launch_against_current_policy(
+    authority: &mut launcher::MoonlightLaunchAuthority,
+    spec: &launcher::MoonlightLaunchSpec,
+    current: MoonlightResolveOutcome,
+) -> Result<(), launcher::MoonlightLaunchVerificationFailure> {
+    match current {
+        MoonlightResolveOutcome::Available(resolved)
+            if spec.transport_id == resolved.transport_id
+                && spec.implementation == resolved.implementation
+                && spec.sunshine_app == resolved.sunshine_app =>
+        {
+            authority.authorize(spec)
+        }
+        MoonlightResolveOutcome::Available(_) | MoonlightResolveOutcome::Unavailable(_) => {
+            Err(launcher::MoonlightLaunchVerificationFailure::Stale)
+        }
+    }
+}
+
 fn session_route_context_unavailable() -> SessionControlFailure {
     SessionControlFailure {
         reason: SessionControlFailureReason::Unavailable,
@@ -876,39 +895,42 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
         }
         RpcRequest::MoonlightLaunchPrepare(request) => {
             let outcome = match &state.mode {
-                ServerMode::Brain(brain) => match resolve_moonlight_outcome(
-                    &brain.config_snapshot.reload(),
-                    brain.native_platform,
-                ) {
-                    MoonlightResolveOutcome::Available(resolved)
-                        if !request.host_uuid.is_empty()
-                            && request.app_id > 0
-                            && request.app_id <= i32::MAX as u32 =>
-                    {
-                        let spec = brain
-                            .moonlight_launch_authority
-                            .lock()
-                            .expect("Moonlight launch authority poisoned")
-                            .prepare(
+                ServerMode::Brain(brain) => {
+                    let mut authority = brain
+                        .moonlight_launch_authority
+                        .lock()
+                        .expect("Moonlight launch authority poisoned");
+                    match resolve_moonlight_outcome(
+                        &brain.config_snapshot.reload(),
+                        brain.native_platform,
+                    ) {
+                        MoonlightResolveOutcome::Available(resolved)
+                            if !request.host_uuid.is_empty()
+                                && request.app_id > 0
+                                && request.app_id <= i32::MAX as u32 =>
+                        {
+                            let spec = authority.prepare(
                                 resolved.transport_id,
                                 resolved.implementation,
                                 resolved.sunshine_app,
                                 request.host_uuid,
                                 request.app_id,
                             );
-                        MoonlightLaunchPrepareOutcome::Ok(spec)
+                            MoonlightLaunchPrepareOutcome::Ok(spec)
+                        }
+                        MoonlightResolveOutcome::Available(_) => {
+                            MoonlightLaunchPrepareOutcome::Err(RpcFailure {
+                                code: "InvalidMoonlightLaunchTarget".into(),
+                                message:
+                                    "Moonlight host UUID and positive Android app ID are required"
+                                        .into(),
+                            })
+                        }
+                        MoonlightResolveOutcome::Unavailable(failure) => {
+                            MoonlightLaunchPrepareOutcome::Err(failure)
+                        }
                     }
-                    MoonlightResolveOutcome::Available(_) => {
-                        MoonlightLaunchPrepareOutcome::Err(RpcFailure {
-                            code: "InvalidMoonlightLaunchTarget".into(),
-                            message: "Moonlight host UUID and positive Android app ID are required"
-                                .into(),
-                        })
-                    }
-                    MoonlightResolveOutcome::Unavailable(failure) => {
-                        MoonlightLaunchPrepareOutcome::Err(failure)
-                    }
-                },
+                }
                 ServerMode::Host(_) => MoonlightLaunchPrepareOutcome::Err(RpcFailure {
                     code: "MoonlightUnavailable".into(),
                     message: "Artemis is available only at the Android edge".into(),
@@ -1168,10 +1190,12 @@ pub fn router_with_capability_and_local_root(
     allowed_origin: &str,
     local_storage_root: impl AsRef<Path>,
 ) -> Router {
+    let local_storage_root = local_storage_root.as_ref().to_owned();
     let signing_key = generate_launch_signing_key();
     let moonlight_launch_authority = Arc::new(Mutex::new(launcher::MoonlightLaunchAuthority::new(
         signing_key.clone(),
     )));
+    let config_snapshot = config::snapshot::ConfigSnapshotCoordinator::new(&local_storage_root);
     router_with_capability_local_root_and_provision(
         rpc_capability,
         allowed_origin,
@@ -1180,6 +1204,7 @@ pub fn router_with_capability_and_local_root(
         signing_key,
         moonlight_launch_authority,
         NativePlatform::Standalone,
+        config_snapshot,
     )
 }
 
@@ -1189,10 +1214,12 @@ pub fn android_router_with_capability_and_local_root(
     allowed_origin: &str,
     local_storage_root: impl AsRef<Path>,
 ) -> Router {
+    let local_storage_root = local_storage_root.as_ref().to_owned();
     let signing_key = generate_launch_signing_key();
     let moonlight_launch_authority = Arc::new(Mutex::new(launcher::MoonlightLaunchAuthority::new(
         signing_key.clone(),
     )));
+    let config_snapshot = config::snapshot::ConfigSnapshotCoordinator::new(&local_storage_root);
     router_with_capability_local_root_and_provision(
         rpc_capability,
         allowed_origin,
@@ -1201,6 +1228,7 @@ pub fn android_router_with_capability_and_local_root(
         signing_key,
         moonlight_launch_authority,
         NativePlatform::EmbeddedAndroid,
+        config_snapshot,
     )
 }
 
@@ -1212,9 +1240,9 @@ fn router_with_capability_local_root_and_provision(
     local_launch_signing_key: Vec<u8>,
     moonlight_launch_authority: Arc<Mutex<launcher::MoonlightLaunchAuthority>>,
     native_platform: NativePlatform,
+    config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
 ) -> Router {
     let local_storage_root = local_storage_root.as_ref().to_owned();
-    let config_snapshot = config::snapshot::ConfigSnapshotCoordinator::new(&local_storage_root);
     let state = AppState {
         mode: ServerMode::Brain(BrainRuntime {
             upstream: upstreams::UpstreamRegistry::from_env_or_file(
@@ -1295,6 +1323,8 @@ struct ServerHandle {
     rpc_capability: String,
     launch_signing_key: Vec<u8>,
     moonlight_launch_authority: Arc<Mutex<launcher::MoonlightLaunchAuthority>>,
+    moonlight_config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
+    native_platform: NativePlatform,
     stop: oneshot::Sender<()>,
     thread: JoinHandle<()>,
 }
@@ -1346,6 +1376,9 @@ pub fn start_local_server(
     let server_moonlight_launch_authority = Arc::clone(&moonlight_launch_authority);
     let allowed_origin = allowed_origin.to_owned();
     let local_storage_root = local_storage_root.to_owned();
+    let moonlight_config_snapshot =
+        config::snapshot::ConfigSnapshotCoordinator::new(&local_storage_root);
+    let server_config_snapshot = moonlight_config_snapshot.clone();
     let (stop, stopped) = oneshot::channel();
     let thread = std::thread::Builder::new()
         .name("korrid".into())
@@ -1364,6 +1397,7 @@ pub fn start_local_server(
                         server_signing_key,
                         server_moonlight_launch_authority,
                         NativePlatform::EmbeddedAndroid,
+                        server_config_snapshot,
                     ),
                 )
                 .with_graceful_shutdown(async {
@@ -1382,6 +1416,8 @@ pub fn start_local_server(
         rpc_capability,
         launch_signing_key,
         moonlight_launch_authority,
+        moonlight_config_snapshot,
+        native_platform: NativePlatform::EmbeddedAndroid,
         stop,
         thread,
     });
@@ -1432,18 +1468,28 @@ pub fn authorize_moonlight_launch_spec(spec_json: &str) -> MoonlightLaunchAuthor
     let Ok(spec) = serde_json::from_str::<launcher::MoonlightLaunchSpec>(spec_json) else {
         return MoonlightLaunchAuthorization::InvalidSpec;
     };
-    let Some(authority) = server_slot()
+    let Some((authority, config_snapshot, native_platform)) = server_slot()
         .lock()
         .expect("server mutex poisoned")
         .as_ref()
-        .map(|server| Arc::clone(&server.moonlight_launch_authority))
+        .map(|server| {
+            (
+                Arc::clone(&server.moonlight_launch_authority),
+                server.moonlight_config_snapshot.clone(),
+                server.native_platform,
+            )
+        })
     else {
         return MoonlightLaunchAuthorization::ServerUnavailable;
     };
-    let verification = authority
+    let mut authority = authority
         .lock()
-        .expect("Moonlight launch authority poisoned")
-        .authorize(&spec);
+        .expect("Moonlight launch authority poisoned");
+    let verification = authorize_moonlight_launch_against_current_policy(
+        &mut authority,
+        &spec,
+        resolve_moonlight_outcome(&config_snapshot.reload(), native_platform),
+    );
     match verification {
         Ok(()) => MoonlightLaunchAuthorization::Authorized,
         Err(launcher::MoonlightLaunchVerificationFailure::Integrity) => {
@@ -1518,6 +1564,37 @@ mod tests {
             control_id: "control".into(),
             value,
         }
+    }
+
+    #[test]
+    fn native_moonlight_authority_rejects_a_changed_plugin_owned_app_without_consuming() {
+        let mut authority = launcher::MoonlightLaunchAuthority::new(b"test signing key".to_vec());
+        let spec = authority.prepare(
+            "@korri:moonlight/moonlight",
+            MoonlightImplementation::Artemis,
+            "Korri Stream",
+            "host-uuid",
+            7,
+        );
+        let changed = MoonlightResolveOutcome::Available(ResolvedMoonlight {
+            transport_id: "@korri:moonlight/moonlight".into(),
+            implementation: MoonlightImplementation::Artemis,
+            sunshine_app: "Renamed Stream App".into(),
+        });
+        assert_eq!(
+            authorize_moonlight_launch_against_current_policy(&mut authority, &spec, changed),
+            Err(launcher::MoonlightLaunchVerificationFailure::Stale)
+        );
+
+        let original = MoonlightResolveOutcome::Available(ResolvedMoonlight {
+            transport_id: "@korri:moonlight/moonlight".into(),
+            implementation: MoonlightImplementation::Artemis,
+            sunshine_app: "Korri Stream".into(),
+        });
+        assert!(
+            authorize_moonlight_launch_against_current_policy(&mut authority, &spec, original)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -2178,6 +2255,7 @@ command = ["sh", "-c", "sleep 1"]
                 b"test signing key".to_vec(),
             ))),
             NativePlatform::EmbeddedAndroid,
+            config::snapshot::ConfigSnapshotCoordinator::new(root.path()),
         );
         let response = app
             .oneshot(
@@ -2319,6 +2397,25 @@ command = ["sh", "-c", "sleep 1"]
         assert_eq!(
             authorize_moonlight_launch_spec(&serde_json::to_string(&unknown).unwrap()),
             MoonlightLaunchAuthorization::InvalidSpec
+        );
+
+        let prepared_before_disable = prepare()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap()["outcome"]["payload"]
+            .clone();
+        std::fs::write(
+            root.path().join("config.yaml"),
+            "host:\n  plugin:\n    '@korri:moonlight': false\n",
+        )
+        .unwrap();
+        assert_eq!(
+            authorize_moonlight_launch_spec(
+                &serde_json::to_string(&prepared_before_disable).unwrap()
+            ),
+            MoonlightLaunchAuthorization::Stale
         );
     }
 
