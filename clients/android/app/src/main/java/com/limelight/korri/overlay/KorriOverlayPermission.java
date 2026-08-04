@@ -91,13 +91,16 @@ public final class KorriOverlayPermission {
             boolean settingsAvailable,
             boolean enabled,
             Restriction restriction) {
+        if (enabled) {
+            return State.ENABLED;
+        }
         if (!serviceAvailable || !settingsAvailable) {
             return State.RESTRICTED_OR_UNAVAILABLE;
         }
         if (sdk >= 33 && restriction != Restriction.ALLOWED) {
             return State.RESTRICTED_OR_UNAVAILABLE;
         }
-        return enabled ? State.ENABLED : State.DISABLED;
+        return State.DISABLED;
     }
 
     public static String stateJson(State state) {

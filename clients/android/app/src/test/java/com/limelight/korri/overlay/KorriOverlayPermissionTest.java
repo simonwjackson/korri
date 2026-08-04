@@ -34,7 +34,19 @@ public class KorriOverlayPermissionTest {
     }
 
     @Test
-    public void api33RequiresAllowedRestrictedSettingsAppOp() {
+    public void enabledServiceWinsBeforeRestrictionAndSettingsChecks() {
+        assertEquals(
+                KorriOverlayPermission.State.ENABLED,
+                KorriOverlayPermission.classify(
+                        33, true, false, true, KorriOverlayPermission.Restriction.DENIED));
+        assertEquals(
+                KorriOverlayPermission.State.ENABLED,
+                KorriOverlayPermission.classify(
+                        33, true, true, true, KorriOverlayPermission.Restriction.UNAVAILABLE));
+    }
+
+    @Test
+    public void api33RequiresAllowedRestrictedSettingsAppOpOnlyWhileDisabled() {
         assertEquals(
                 KorriOverlayPermission.State.DISABLED,
                 KorriOverlayPermission.classify(
