@@ -13,6 +13,7 @@ import type {
   LocalGame,
   LocalGameLaunchOutcome,
   LocalGamesListOutcome,
+  ResolvedMoonlight,
   SessionPrepareOutcome,
   SessionStatusOutcome,
   SessionStopOutcome,
@@ -95,8 +96,6 @@ export type LaunchablesState =
 export type Maybe<A> =
   | { readonly _tag: "Some"; readonly value: A }
   | { readonly _tag: "None" }
-
-export const KORRI_STREAM_APP = "Korri Stream"
 
 interface StreamTarget {
   readonly hostUuid: string
@@ -240,8 +239,9 @@ export const LaunchablesState = {
     notice,
   }),
 
-  /** Select one stable Sunshine app, constrained to a game's origin host. */
+  /** Select the plugin-owned Sunshine app, constrained to a game's origin host. */
   korriStreamTarget: (
+    moonlight: ResolvedMoonlight,
     streams: readonly StreamSource[],
     hostName?: string,
   ): Maybe<StreamTarget> => {
@@ -251,7 +251,9 @@ export const LaunchablesState = {
         : streams.filter(source => source.host.name === hostName)
     for (const source of candidates) {
       if (source.apps._tag !== "StreamApps") continue
-      const app = source.apps.items.find(app => app.name === KORRI_STREAM_APP)
+      const app = source.apps.items.find(
+        app => app.name === moonlight.sunshineApp,
+      )
       if (app !== undefined) {
         return {
           _tag: "Some",

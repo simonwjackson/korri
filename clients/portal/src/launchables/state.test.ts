@@ -5,7 +5,10 @@ import type {
   SessionStatusOutcome,
   SessionStopOutcome,
 } from "@contracts/generated/korrid"
-import { SessionStopPhase } from "@contracts/generated/korrid"
+import {
+  MoonlightImplementation,
+  SessionStopPhase,
+} from "@contracts/generated/korrid"
 import type { BackgroundNoticeResult } from "@contracts/bridge/korri-native-bridge"
 import { entryKey, entryLabel, LaunchablesState } from "./state"
 import type { LaunchablesState as State, PortalEntry } from "./state"
@@ -275,39 +278,58 @@ describe("hosted game identity", () => {
 })
 
 describe("LaunchablesState stream targets", () => {
+  const resolvedMoonlight = {
+    transportId: "@korri:moonlight/moonlight",
+    implementation: MoonlightImplementation.Artemis,
+    sunshineApp: "Moonlight-owned Sunshine app",
+  }
   const streamSources = [
     {
       host: { uuid: "aka-uuid", name: "aka", paired: true },
       apps: {
         _tag: "StreamApps" as const,
-        items: [{ id: 10, name: "Korri Stream" }],
+        items: [{ id: 10, name: "Moonlight-owned Sunshine app" }],
       },
     },
     {
       host: { uuid: "zao-uuid", name: "zao", paired: true },
       apps: {
         _tag: "StreamApps" as const,
-        items: [{ id: 20, name: "Korri Stream" }],
+        items: [{ id: 20, name: "Moonlight-owned Sunshine app" }],
       },
     },
   ]
 
   it("selects the paired stream host named by the game", () => {
-    expect(LaunchablesState.korriStreamTarget(streamSources, "zao")).toEqual({
+    expect(
+      LaunchablesState.korriStreamTarget(
+        resolvedMoonlight,
+        streamSources,
+        "zao",
+      ),
+    ).toEqual({
       _tag: "Some",
       value: { hostUuid: "zao-uuid", appId: 20 },
     })
   })
 
   it("preserves first-match behavior for games without a host", () => {
-    expect(LaunchablesState.korriStreamTarget(streamSources)).toEqual({
+    expect(
+      LaunchablesState.korriStreamTarget(resolvedMoonlight, streamSources),
+    ).toEqual({
       _tag: "Some",
       value: { hostUuid: "aka-uuid", appId: 10 },
     })
   })
 
   it("does not attach to another machine when the named host is absent", () => {
-    expect(LaunchablesState.korriStreamTarget(streamSources, "sobo")).toEqual({
+    expect(
+      LaunchablesState.korriStreamTarget(
+        resolvedMoonlight,
+        streamSources,
+        "sobo",
+      ),
+    ).toEqual({
       _tag: "None",
     })
   })

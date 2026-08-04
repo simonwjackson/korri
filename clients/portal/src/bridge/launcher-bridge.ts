@@ -15,6 +15,7 @@ import type {
   StreamApp,
   StreamHost,
 } from "@contracts/bridge/korri-native-bridge"
+import type { MoonlightResolveOutcome } from "@contracts/generated/korrid"
 
 /**
  * Async seam over the native launcher bridge. Two real implementations:
@@ -44,6 +45,59 @@ export interface LauncherBridge {
   openPairing(): Promise<OpenPairingResult>
   /** Android and app identity for System information. */
   systemInfo(): Promise<SystemInfoResult>
+}
+
+export interface ResolvedMoonlightStreamSource {
+  readonly host: StreamHost
+  readonly apps: QueryStreamAppsResult
+}
+
+export interface ResolvedMoonlightDiscovery {
+  readonly resolution: MoonlightResolveOutcome
+  readonly streams: readonly ResolvedMoonlightStreamSource[]
+  readonly hostsResult?: QueryStreamHostsResult
+}
+
+/** Native discovery is reachable only through an enabled, platform-resolved
+ * Moonlight declaration. Artemis remains the implementation of these effects. */
+export async function discoverResolvedMoonlight(
+  resolution: MoonlightResolveOutcome,
+  bridge: Pick<LauncherBridge, "queryStreamHosts" | "queryStreamApps">,
+): Promise<ResolvedMoonlightDiscovery> {
+  if (resolution._tag !== "Available") {
+    return { resolution, streams: [] }
+  }
+  const hostsResult = await bridge.queryStreamHosts()
+  if (hostsResult._tag !== "StreamHosts") {
+    return { resolution, streams: [], hostsResult }
+  }
+  const streams = await Promise.all(
+    hostsResult.items
+      .filter(host => host.paired)
+      .map(async host => ({
+        host,
+        apps: await bridge.queryStreamApps(host.uuid),
+      })),
+  )
+  return { resolution, streams, hostsResult }
+}
+
+/** Preserve the existing StartStreamResult treaty while refusing to call the
+ * native edge when korrid did not resolve Moonlight for this client. */
+export async function startResolvedMoonlight(
+  resolution: MoonlightResolveOutcome,
+  bridge: Pick<LauncherBridge, "startStream">,
+  hostUuid: string,
+  appId: number,
+): Promise<StartStreamResult> {
+  if (resolution._tag !== "Available") {
+    return {
+      _tag: "StreamFailed",
+      reason: "StartFailed",
+      message: resolution.payload.message,
+    }
+  }
+  return bridge.startStream(hostUuid, appId)
 }
 
 export function createKorriNativeLauncherBridge(

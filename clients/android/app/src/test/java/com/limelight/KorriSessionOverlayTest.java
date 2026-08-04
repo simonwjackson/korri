@@ -51,6 +51,20 @@ public class KorriSessionOverlayTest {
     }
 
     @Test
+    public void preStreamLifecycleEventsKeepTheirTreatyBytes() {
+        assertEquals(
+                "{\"type\":\"stage-starting\",\"stage\":\"initializing\",\"detail\":\"name resolution\"}",
+                KorriSessionOverlay.stageStartingEvent("name resolution", "Korri Stream").toString());
+        assertEquals(
+                "{\"type\":\"failed\",\"reason\":\"HostUnreachable\",\"stage\":\"initializing\",\"errorCode\":-408,\"detail\":\"name resolution\"}",
+                KorriSessionOverlay.failedEvent("name resolution", "Korri Stream", -408, false).toString());
+        assertEquals("{\"type\":\"connected\"}", KorriSessionOverlay.connectedEvent().toString());
+        assertEquals(
+                "{\"type\":\"terminated\",\"graceful\":false,\"reason\":\"ConnectionLost\",\"errorCode\":-999}",
+                KorriSessionOverlay.terminatedEvent(false, -999).toString());
+    }
+
+    @Test
     public void decoderUnsupportedEventIsAWebLifecycleFailure() throws Exception {
         JSONObject event = KorriSessionOverlay.decoderUnsupportedEvent();
         assertEquals("failed", event.getString("type"));

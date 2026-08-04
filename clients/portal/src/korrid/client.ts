@@ -14,6 +14,7 @@ import type {
   LocalGame,
   LocalGameLaunchOutcome,
   LocalGamesListOutcome,
+  MoonlightResolveOutcome,
   RpcRequest,
   RpcResponse,
   SessionPrepareOutcome,
@@ -39,6 +40,7 @@ export interface KorridClient {
     value: string,
   ): Promise<SettingsUpdateOutcome>
   catalogSnapshot(): Promise<CatalogSnapshotOutcome>
+  moonlightResolve(): Promise<MoonlightResolveOutcome>
   localGames(): Promise<LocalGamesListOutcome>
   localGameLaunch(gameId: string): Promise<LocalGameLaunchOutcome>
   sessionPrepare(gameId: string, host?: string): Promise<SessionPrepareOutcome>
@@ -135,6 +137,20 @@ export function createHttpKorridClient(
         return unreachable(error)
       }
     },
+    async moonlightResolve() {
+      try {
+        const response = await callKorrid(baseUrl, capability, {
+          _tag: "app.moonlight.resolve",
+          payload: {},
+        })
+        return response.outcome
+      } catch (error) {
+        return {
+          _tag: "Unavailable",
+          payload: unreachable(error).payload,
+        }
+      }
+    },
     async localGames() {
       try {
         const response = await callKorrid(baseUrl, capability, {
@@ -202,12 +218,14 @@ export interface InMemoryKorridClientConfig {
   readonly behavior?:
     | "ok"
     | "catalog-fail"
+    | "moonlight-unavailable"
     | "prepare-fail"
     | "local-list-fail"
     | "local-launch-fail"
     | "status-fail"
     | "stop-fail"
   readonly games?: readonly Game[]
+  readonly moonlight?: MoonlightResolveOutcome
   readonly localGames?: readonly LocalGame[]
   readonly localLaunchSpecs?: Readonly<Record<string, LaunchSpec>>
   readonly localFailures?: readonly { readonly code: string; readonly message: string }[]
@@ -225,6 +243,13 @@ export function createInMemoryKorridClient(
 ): KorridClient {
   const behavior = config.behavior ?? "ok"
   const games = config.games ?? sampleGames
+  const moonlight = config.moonlight ?? {
+    _tag: "Unavailable" as const,
+    payload: {
+      code: "MoonlightUnavailable",
+      message: "Moonlight is not configured in this browser fixture",
+    },
+  }
   const localGames = config.localGames ?? []
   const localLaunchSpecs = config.localLaunchSpecs ?? {}
   const localFailures = config.localFailures
@@ -235,6 +260,7 @@ export function createInMemoryKorridClient(
     plugins: [
       { id: "@korri:android-app", title: "Android", enabled: true },
       { id: "@korri:mgba", title: "mGBA", enabled: true },
+      { id: "@korri:moonlight", title: "Moonlight", enabled: true },
       { id: "@korri:retroarch", title: "RetroArch", enabled: true },
     ],
   }
@@ -274,6 +300,21 @@ export function createInMemoryKorridClient(
         }
       }
       return { _tag: "Ok", payload: { games: [...games] } }
+    },
+    async moonlightResolve() {
+      const enabled = settings.plugins.some(
+        plugin => plugin.id === "@korri:moonlight" && plugin.enabled,
+      )
+      if (behavior === "moonlight-unavailable" || !enabled) {
+        return {
+          _tag: "Unavailable",
+          payload: {
+            code: "MoonlightUnavailable",
+            message: "Moonlight is disabled or Artemis is unavailable",
+          },
+        }
+      }
+      return moonlight
     },
     async localGames() {
       if (behavior === "local-list-fail") {

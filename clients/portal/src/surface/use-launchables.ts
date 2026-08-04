@@ -11,13 +11,17 @@
 import { SHELL_RESUMED_EVENT } from "@contracts/bridge/korri-native-bridge"
 import type { SurfaceSettingsStatus } from "@contracts/surface/korri-surface"
 import { useCallback, useEffect, useRef, useState } from "react"
-import type { LauncherBridge } from "../bridge/launcher-bridge"
+import {
+  discoverResolvedMoonlight,
+  startResolvedMoonlight,
+  type LauncherBridge,
+} from "../bridge/launcher-bridge"
+import type { MoonlightResolveOutcome } from "@contracts/generated/korrid"
 import type { KorridClient } from "../korrid/client"
 import type { DeviceFacts } from "./settings-model"
 import {
   entryKey,
   entryLabel,
-  KORRI_STREAM_APP,
   LaunchablesState,
   type PortalEntry,
   type StreamSource,
@@ -67,6 +71,13 @@ export function useLaunchables(
   const factsRef = useRef(facts)
   factsRef.current = facts
   const streamsRef = useRef<readonly StreamSource[]>([])
+  const moonlightRef = useRef<MoonlightResolveOutcome>({
+    _tag: "Unavailable",
+    payload: {
+      code: "MoonlightUnavailable",
+      message: "Moonlight has not been resolved",
+    },
+  })
   const settingsBusyRef = useRef(false)
 
   const loadSeq = useRef(0)
@@ -100,7 +111,7 @@ export function useLaunchables(
     const [
       games,
       localGames,
-      hostsResult,
+      moonlightDiscovery,
       session,
       storage,
       notice,
@@ -110,7 +121,9 @@ export function useLaunchables(
     ] = await Promise.all([
         korrid.catalogSnapshot(),
         korrid.localGames(),
-        bridge.queryStreamHosts(),
+        korrid
+          .moonlightResolve()
+          .then(resolution => discoverResolvedMoonlight(resolution, bridge)),
         sessionStatusWithTimeout(),
         // Re-read on every load so returning from system settings clears the
         // prompt without the user restarting Korri.
@@ -123,19 +136,17 @@ export function useLaunchables(
         korrid.settingsSnapshot(),
         bridge.systemInfo(),
       ])
-    const streams: readonly StreamSource[] =
-      hostsResult._tag === "StreamHosts"
-        ? await Promise.all(
-            hostsResult.items
-              .filter(host => host.paired)
-              .map(async host => ({
-                host,
-                apps: await bridge.queryStreamApps(host.uuid),
-              })),
-          )
-        : []
+    const streams: readonly StreamSource[] = moonlightDiscovery.streams
+    const hostsResult = moonlightDiscovery.hostsResult ?? {
+      _tag: "QueryFailed" as const,
+      message:
+        moonlightDiscovery.resolution._tag === "Unavailable"
+          ? moonlightDiscovery.resolution.payload.message
+          : "Moonlight discovery unavailable",
+    }
     if (!mountedRef.current || seq !== loadSeq.current) return
     streamsRef.current = streams
+    moonlightRef.current = moonlightDiscovery.resolution
     setFacts({
       ...(health._tag === "Ok" ? { version: health.payload.version } : {}),
       ...(settings._tag === "Ok" ? { settings: settings.payload } : {}),
@@ -189,12 +200,25 @@ export function useLaunchables(
     return () => window.removeEventListener(SHELL_RESUMED_EVENT, onResumed)
   }, [load])
 
-  /** Locate the stable app, constrained to the prepared game's host. */
-  const findKorriStreamTarget = useCallback(
-    (hostName?: string) =>
-      LaunchablesState.korriStreamTarget(streamsRef.current, hostName),
-    [],
-  )
+  /** Locate the plugin-owned app, constrained to the prepared game's host. */
+  const findKorriStreamTarget = useCallback((hostName?: string) => {
+    const resolution = moonlightRef.current
+    return resolution._tag === "Available"
+      ? LaunchablesState.korriStreamTarget(
+          resolution.payload,
+          streamsRef.current,
+          hostName,
+        )
+      : { _tag: "None" as const }
+  }, [])
+
+  const moonlightTargetFailure = useCallback((hostName?: string) => {
+    const resolution = moonlightRef.current
+    if (resolution._tag === "Unavailable") return resolution.payload.message
+    return hostName === undefined
+      ? `no "${resolution.payload.sunshineApp}" app on a paired host`
+      : `no "${resolution.payload.sunshineApp}" app on paired host ${hostName}`
+  }, [])
 
   const noticeOnReady = useCallback(
     (operation: number, message: string) => {
@@ -354,20 +378,24 @@ export function useLaunchables(
           publish(
             LaunchablesState.withStartStreamResult(launching, {
               _tag: "StreamFailed",
-              reason: "AppNotFound",
-              message: `no "${KORRI_STREAM_APP}" app on a paired host`,
+              reason:
+                moonlightRef.current._tag === "Unavailable"
+                  ? "StartFailed"
+                  : "AppNotFound",
+              message: moonlightTargetFailure(entry.session.host),
             }),
           )
           return
         }
-        void bridge
-          .startStream(target.value.hostUuid, target.value.appId)
-          .then(result => {
-            if (!mountedRef.current || operation !== actionSeq.current) return
-            publish(
-              LaunchablesState.withStartStreamResult(launching, result),
-            )
-          })
+        void startResolvedMoonlight(
+          moonlightRef.current,
+          bridge,
+          target.value.hostUuid,
+          target.value.appId,
+        ).then(result => {
+          if (!mountedRef.current || operation !== actionSeq.current) return
+          publish(LaunchablesState.withStartStreamResult(launching, result))
+        })
         return
       }
 
@@ -405,10 +433,7 @@ export function useLaunchables(
             _tag: "Err",
             payload: {
               code: "NoStreamTarget",
-              message:
-                entry.game.host === undefined
-                  ? `no "${KORRI_STREAM_APP}" app on a paired host`
-                  : `no "${KORRI_STREAM_APP}" app on paired host ${entry.game.host}`,
+              message: moonlightTargetFailure(entry.game.host),
             },
           }),
         )
@@ -426,7 +451,9 @@ export function useLaunchables(
             publish(LaunchablesState.withPrepareOutcome(preparing, outcome))
             return
           }
-          const result = await bridge.startStream(
+          const result = await startResolvedMoonlight(
+            moonlightRef.current,
+            bridge,
             target.value.hostUuid,
             target.value.appId,
           )
@@ -434,7 +461,14 @@ export function useLaunchables(
           publish(LaunchablesState.withStartStreamResult(preparing, result))
         })
     },
-    [bridge, findKorriStreamTarget, korrid, noticeOnReady, publish],
+    [
+      bridge,
+      findKorriStreamTarget,
+      korrid,
+      moonlightTargetFailure,
+      noticeOnReady,
+      publish,
+    ],
   )
 
   const stopSession = useCallback(

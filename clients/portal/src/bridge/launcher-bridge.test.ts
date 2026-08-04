@@ -1,8 +1,11 @@
 import { describe, expect, it } from "bun:test"
 import type { KorriNativeBridgeSurface } from "@contracts/bridge/korri-native-bridge"
+import { MoonlightImplementation } from "@contracts/generated/korrid"
 import {
   createInMemoryLauncherBridge,
   createKorriNativeLauncherBridge,
+  discoverResolvedMoonlight,
+  startResolvedMoonlight,
 } from "./launcher-bridge"
 
 describe("createInMemoryLauncherBridge", () => {
@@ -36,6 +39,141 @@ describe("createInMemoryLauncherBridge", () => {
       _tag: "LaunchFailed",
       reason: "NotInstalled",
     })
+  })
+})
+
+describe("resolved Moonlight bridge path", () => {
+  const available = {
+    _tag: "Available" as const,
+    payload: {
+      transportId: "@korri:moonlight/moonlight",
+      implementation: MoonlightImplementation.Artemis,
+      sunshineApp: "Korri Stream",
+    },
+  }
+
+  it("invokes native discovery and start only after successful typed resolution", async () => {
+    const calls: string[] = []
+    const bridge = createInMemoryLauncherBridge({
+      streamHosts: [{ uuid: "h1", name: "Office", paired: true }],
+      streamApps: { h1: [{ id: 7, name: "Korri Stream" }] },
+    })
+    const recordingBridge = {
+      ...bridge,
+      async queryStreamHosts() {
+        calls.push("query-hosts")
+        return bridge.queryStreamHosts()
+      },
+      async queryStreamApps(hostUuid: string) {
+        calls.push(`query-apps:${hostUuid}`)
+        return bridge.queryStreamApps(hostUuid)
+      },
+      async startStream(hostUuid: string, appId: number) {
+        calls.push(`start:${hostUuid}:${appId}`)
+        return bridge.startStream(hostUuid, appId)
+      },
+    }
+
+    const discovered = await discoverResolvedMoonlight(available, recordingBridge)
+    expect(discovered).toMatchObject({
+      resolution: available,
+      streams: [
+        {
+          host: { uuid: "h1", name: "Office", paired: true },
+          apps: {
+            _tag: "StreamApps",
+            items: [{ id: 7, name: "Korri Stream" }],
+          },
+        },
+      ],
+    })
+    expect(calls).toEqual(["query-hosts", "query-apps:h1"])
+
+    expect(
+      await startResolvedMoonlight(available, recordingBridge, "h1", 7),
+    ).toEqual({ _tag: "StreamStarted" })
+    expect(calls).toEqual(["query-hosts", "query-apps:h1", "start:h1:7"])
+  })
+
+  it("preserves native discovery and start failure tags unchanged", async () => {
+    const hostFailure = { _tag: "QueryFailed" as const, message: "db locked" }
+    expect(
+      await discoverResolvedMoonlight(available, {
+        async queryStreamHosts() {
+          return hostFailure
+        },
+        async queryStreamApps() {
+          throw new Error("must not query apps after host failure")
+        },
+      }),
+    ).toEqual({ resolution: available, streams: [], hostsResult: hostFailure })
+
+    const appFailure = { _tag: "QueryFailed" as const, message: "no cache" }
+    const discovery = await discoverResolvedMoonlight(available, {
+      async queryStreamHosts() {
+        return {
+          _tag: "StreamHosts",
+          items: [{ uuid: "h1", name: "Office", paired: true }],
+        }
+      },
+      async queryStreamApps() {
+        return appFailure
+      },
+    })
+    expect(discovery.streams[0]?.apps).toEqual(appFailure)
+
+    const startFailure = {
+      _tag: "StreamFailed" as const,
+      reason: "NotPaired" as const,
+      message: "pair first",
+    }
+    expect(
+      await startResolvedMoonlight(
+        available,
+        { async startStream() { return startFailure } },
+        "h1",
+        7,
+      ),
+    ).toEqual(startFailure)
+  })
+
+  it("does not invoke native Artemis when Moonlight is unavailable", async () => {
+    const calls: string[] = []
+    const bridge = {
+      ...createInMemoryLauncherBridge(),
+      async queryStreamHosts() {
+        calls.push("query-hosts")
+        return { _tag: "StreamHosts" as const, items: [] }
+      },
+      async queryStreamApps(hostUuid: string) {
+        calls.push(`query-apps:${hostUuid}`)
+        return { _tag: "StreamApps" as const, items: [] }
+      },
+      async startStream(hostUuid: string, appId: number) {
+        calls.push(`start:${hostUuid}:${appId}`)
+        return { _tag: "StreamStarted" as const }
+      },
+    }
+    const unavailable = {
+      _tag: "Unavailable" as const,
+      payload: {
+        code: "MoonlightUnavailable",
+        message: "Moonlight is disabled or Artemis is unavailable",
+      },
+    }
+
+    expect(await discoverResolvedMoonlight(unavailable, bridge)).toEqual({
+      resolution: unavailable,
+      streams: [],
+    })
+    expect(
+      await startResolvedMoonlight(unavailable, bridge, "h1", 7),
+    ).toEqual({
+      _tag: "StreamFailed",
+      reason: "StartFailed",
+      message: "Moonlight is disabled or Artemis is unavailable",
+    })
+    expect(calls).toEqual([])
   })
 })
 

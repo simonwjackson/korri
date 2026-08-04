@@ -2,6 +2,39 @@ import { describe, expect, test } from "bun:test"
 import type { StreamLifecycleEvent } from "@contracts/bridge/korri-native-bridge"
 import { FIXTURE_TIMELINE_EVENTS, SessionLifecycleState, STAGE_ORDER } from "./state"
 
+describe("pre-stream lifecycle treaty compatibility", () => {
+  test("stage, failure, connected, and termination events keep their wire bytes", () => {
+    const events: readonly StreamLifecycleEvent[] = [
+      {
+        type: "stage-starting",
+        stage: "initializing",
+        detail: "name resolution",
+      },
+      {
+        type: "failed",
+        reason: "HostUnreachable",
+        stage: "initializing",
+        errorCode: -408,
+        detail: "name resolution",
+      },
+      { type: "connected" },
+      {
+        type: "terminated",
+        graceful: false,
+        reason: "ConnectionLost",
+        errorCode: -999,
+      },
+    ]
+
+    expect(events.map(event => JSON.stringify(event))).toEqual([
+      '{"type":"stage-starting","stage":"initializing","detail":"name resolution"}',
+      '{"type":"failed","reason":"HostUnreachable","stage":"initializing","errorCode":-408,"detail":"name resolution"}',
+      '{"type":"connected"}',
+      '{"type":"terminated","graceful":false,"reason":"ConnectionLost","errorCode":-999}',
+    ])
+  })
+})
+
 describe("SessionLifecycleState.fromEvents", () => {
   test("empty snapshot yields a connecting state with all stages pending", () => {
     const state = SessionLifecycleState.fromEvents([])
