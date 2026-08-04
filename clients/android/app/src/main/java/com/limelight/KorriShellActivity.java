@@ -46,7 +46,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -530,27 +529,12 @@ public class KorriShellActivity extends AppCompatActivity {
                                 : "local file provisioning failed");
             }
 
-            CountDownLatch started = new CountDownLatch(1);
-            AtomicReference<Exception> startError = new AtomicReference<>();
-            runOnUiThread(() -> {
-                try {
-                    startActivity(intent);
-                } catch (Exception error) {
-                    startError.set(error);
-                } finally {
-                    started.countDown();
-                }
-            });
             try {
-                if (!started.await(5, TimeUnit.SECONDS)) {
-                    return launchFailed("StartFailed", "local launcher start timed out");
-                }
+                startActivityOnUiThread(intent, "local launcher start timed out");
             } catch (InterruptedException error) {
                 Thread.currentThread().interrupt();
                 return launchFailed("StartFailed", "local launcher start interrupted");
-            }
-            Exception error = startError.get();
-            if (error != null) {
+            } catch (Exception error) {
                 return launchFailed("StartFailed",
                         error.getMessage() != null ? error.getMessage() : "start failed");
             }
@@ -588,28 +572,12 @@ public class KorriShellActivity extends AppCompatActivity {
                 return;
             }
 
-            CountDownLatch opened = new CountDownLatch(1);
-            AtomicReference<Exception> startError = new AtomicReference<>();
-            runOnUiThread(() -> {
-                try {
-                    start.run();
-                } catch (Exception error) {
-                    startError.set(error);
-                } finally {
-                    opened.countDown();
-                }
-            });
-            try {
-                if (!opened.await(5, TimeUnit.SECONDS)) {
-                    throw new IllegalStateException(timeoutMessage);
-                }
-            } catch (InterruptedException error) {
-                Thread.currentThread().interrupt();
-                throw error;
-            }
-            if (startError.get() != null) {
-                throw startError.get();
-            }
+            KorriUiStartGate.run(
+                    KorriShellActivity.this::runOnUiThread,
+                    start::run,
+                    5,
+                    TimeUnit.SECONDS,
+                    timeoutMessage);
         }
 
         private void provisionDirectory(String targetPath) throws Exception {
