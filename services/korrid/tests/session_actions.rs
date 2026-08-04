@@ -277,8 +277,31 @@ async fn rpc_list_and_invoke_stay_unavailable_without_current_route_context() {
     }
 }
 
+fn moonlight_request() -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri("/rpc")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, "Bearer moonlight-test-capability")
+        .body(Body::from(
+            r#"{"_tag":"app.moonlight.resolve","payload":{}}"#,
+        ))
+        .expect("Moonlight RPC request")
+}
+
+async fn moonlight_outcome(app: axum::Router) -> serde_json::Value {
+    let response = app
+        .oneshot(moonlight_request())
+        .await
+        .expect("Moonlight RPC response");
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("Moonlight RPC body");
+    serde_json::from_slice(&body).expect("typed response")
+}
+
 #[tokio::test]
-async fn brain_rpc_publishes_resolved_artemis_and_honors_user_disable() {
+async fn standalone_brain_reports_typed_moonlight_unavailable() {
     let root = tempfile::tempdir().expect("Moonlight config root");
     std::fs::write(root.path().join("config.yaml"), "{}\n").expect("default config");
     std::fs::write(root.path().join("library.yaml"), "{}\n").expect("empty library");
@@ -288,27 +311,23 @@ async fn brain_rpc_publishes_resolved_artemis_and_honors_user_disable() {
         root.path(),
     );
 
-    let request = || {
-        Request::builder()
-            .method("POST")
-            .uri("/rpc")
-            .header(header::CONTENT_TYPE, "application/json")
-            .header(header::AUTHORIZATION, "Bearer moonlight-test-capability")
-            .body(Body::from(
-                r#"{"_tag":"app.moonlight.resolve","payload":{}}"#,
-            ))
-            .expect("Moonlight RPC request")
-    };
+    let body = moonlight_outcome(app).await;
+    assert_eq!(body["outcome"]["_tag"], "Unavailable");
+    assert_eq!(body["outcome"]["payload"]["code"], "MoonlightUnavailable");
+}
 
-    let response = app
-        .clone()
-        .oneshot(request())
-        .await
-        .expect("Moonlight RPC response");
-    let body = to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("Moonlight RPC body");
-    let body: serde_json::Value = serde_json::from_slice(&body).expect("typed response");
+#[tokio::test]
+async fn embedded_android_brain_publishes_resolved_artemis_and_honors_user_disable() {
+    let root = tempfile::tempdir().expect("Moonlight config root");
+    std::fs::write(root.path().join("config.yaml"), "{}\n").expect("default config");
+    std::fs::write(root.path().join("library.yaml"), "{}\n").expect("empty library");
+    let app = korrid::android_router_with_capability_and_local_root(
+        "moonlight-test-capability",
+        "https://appassets.androidplatform.net",
+        root.path(),
+    );
+
+    let body = moonlight_outcome(app.clone()).await;
     assert_eq!(body["outcome"]["_tag"], "Available");
     assert_eq!(
         body["outcome"]["payload"],
@@ -324,14 +343,7 @@ async fn brain_rpc_publishes_resolved_artemis_and_honors_user_disable() {
         "host:\n  plugin:\n    '@korri:moonlight': false\n",
     )
     .expect("user-disabled config");
-    let response = app
-        .oneshot(request())
-        .await
-        .expect("disabled Moonlight RPC response");
-    let body = to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("disabled Moonlight RPC body");
-    let body: serde_json::Value = serde_json::from_slice(&body).expect("typed response");
+    let body = moonlight_outcome(app).await;
     assert_eq!(body["outcome"]["_tag"], "Unavailable");
     assert_eq!(body["outcome"]["payload"]["code"], "MoonlightUnavailable");
 }

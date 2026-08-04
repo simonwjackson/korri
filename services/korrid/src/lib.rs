@@ -606,12 +606,19 @@ pub enum RpcResponse {
     SettingsUpdate(SettingsUpdateOutcome),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum NativePlatform {
+    Standalone,
+    EmbeddedAndroid,
+}
+
 #[derive(Clone)]
 struct BrainRuntime {
     upstream: upstreams::UpstreamRegistry,
     local_storage_root: PathBuf,
     local_file_provision: launcher::FileProvisionMode,
     local_launch_signing_key: Vec<u8>,
+    native_platform: NativePlatform,
     config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
     /** Serialises revision-check + replace; external file-manager edits are
      * detected by the revision inside this same critical section. */
@@ -792,23 +799,28 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                 ServerMode::Brain(brain) => {
                     let config_state = brain.config_snapshot.reload();
                     match plugin_policy::registry_for_snapshot(&config_state.snapshot) {
-                        Ok(registry) => config::resolver::resolve_moonlight_transport(
-                            &registry,
-                            config::resolver::RoutePlatform::Android,
-                        )
-                        .map(|resolved| {
-                            MoonlightResolveOutcome::Available(ResolvedMoonlight {
-                                transport_id: resolved.transport_id,
-                                implementation: MoonlightImplementation::Artemis,
-                                sunshine_app: resolved.sunshine_app,
+                        Ok(registry) => (brain.native_platform == NativePlatform::EmbeddedAndroid)
+                            .then(|| {
+                                config::resolver::resolve_moonlight_transport(
+                                    &registry,
+                                    config::resolver::RoutePlatform::Android,
+                                )
                             })
-                        })
-                        .unwrap_or_else(|| {
-                            MoonlightResolveOutcome::Unavailable(RpcFailure {
-                                code: "MoonlightUnavailable".into(),
-                                message: "Moonlight is disabled or Artemis is unavailable".into(),
+                            .flatten()
+                            .map(|resolved| {
+                                MoonlightResolveOutcome::Available(ResolvedMoonlight {
+                                    transport_id: resolved.transport_id,
+                                    implementation: MoonlightImplementation::Artemis,
+                                    sunshine_app: resolved.sunshine_app,
+                                })
                             })
-                        }),
+                            .unwrap_or_else(|| {
+                                MoonlightResolveOutcome::Unavailable(RpcFailure {
+                                    code: "MoonlightUnavailable".into(),
+                                    message: "Moonlight is disabled or Artemis is unavailable"
+                                        .into(),
+                                })
+                            }),
                         Err(error) => MoonlightResolveOutcome::Unavailable(RpcFailure {
                             code: "PluginPolicyInvalid".into(),
                             message: error.to_string(),
@@ -1080,6 +1092,23 @@ pub fn router_with_capability_and_local_root(
         local_storage_root,
         launcher::FileProvisionMode::Direct,
         generate_launch_signing_key(),
+        NativePlatform::Standalone,
+    )
+}
+
+/** Build the embedded Android/JNI brain router with the Artemis native edge. */
+pub fn android_router_with_capability_and_local_root(
+    rpc_capability: &str,
+    allowed_origin: &str,
+    local_storage_root: impl AsRef<Path>,
+) -> Router {
+    router_with_capability_local_root_and_provision(
+        rpc_capability,
+        allowed_origin,
+        local_storage_root,
+        launcher::FileProvisionMode::Deferred,
+        generate_launch_signing_key(),
+        NativePlatform::EmbeddedAndroid,
     )
 }
 
@@ -1089,6 +1118,7 @@ fn router_with_capability_local_root_and_provision(
     local_storage_root: impl AsRef<Path>,
     local_file_provision: launcher::FileProvisionMode,
     local_launch_signing_key: Vec<u8>,
+    native_platform: NativePlatform,
 ) -> Router {
     let local_storage_root = local_storage_root.as_ref().to_owned();
     let config_snapshot = config::snapshot::ConfigSnapshotCoordinator::new(&local_storage_root);
@@ -1100,6 +1130,7 @@ fn router_with_capability_local_root_and_provision(
             local_storage_root,
             local_file_provision,
             local_launch_signing_key,
+            native_platform,
             config_snapshot,
             settings_write_lock: Arc::new(Mutex::new(())),
         }),
@@ -1232,6 +1263,7 @@ pub fn start_local_server(
                         &local_storage_root,
                         launcher::FileProvisionMode::Deferred,
                         server_signing_key,
+                        NativePlatform::EmbeddedAndroid,
                     ),
                 )
                 .with_graceful_shutdown(async {
@@ -1981,6 +2013,7 @@ command = ["sh", "-c", "sleep 1"]
             root.path(),
             launcher::FileProvisionMode::Deferred,
             b"test signing key".to_vec(),
+            NativePlatform::EmbeddedAndroid,
         );
         let response = app
             .oneshot(
