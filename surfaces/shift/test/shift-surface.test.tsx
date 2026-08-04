@@ -170,6 +170,15 @@ describe("Shift library", () => {
     fireEvent.click(cap)
   }
 
+  test("uses the original dedicated Library hero and tile", () => {
+    render(<ShiftSurface model={model()} host={createFixtureHost()} />)
+
+    fireEvent.focus(screen.getByRole("button", { name: "Library" }))
+
+    expect(screen.getByText("Your collection")).toBeDefined()
+    expect(screen.getByText("Browse every game")).toBeDefined()
+  })
+
   test("restores the original browse-everything destination", () => {
     const { container } = render(
       <ShiftSurface model={model()} host={createFixtureHost()} />,
@@ -179,21 +188,39 @@ describe("Shift library", () => {
 
     expect(container.querySelector("[data-shift-library]")).toBeDefined()
     expect(screen.getByRole("heading", { name: "Library" })).toBeDefined()
-    expect(screen.getByText("3 games")).toBeDefined()
+    expect(screen.getByRole("tab", { name: "All" })).toBeDefined()
+    expect(screen.getByRole("tab", { name: "Favorites" })).toBeDefined()
+    expect(screen.getByRole("tab", { name: "By Genre" })).toBeDefined()
     expect(
-      screen.getAllByRole("button").map(button => button.getAttribute("aria-label")),
-    ).toEqual(["Skate 3", "Wario Land 4", "Neverball"])
+      screen.getByRole("button", { name: "Sorted by Recent. Press to change." }),
+    ).toBeDefined()
+    expect(
+      screen
+        .getAllByRole("button")
+        .map(button => button.getAttribute("aria-label"))
+        .filter(Boolean),
+    ).toEqual([
+      "Sorted by Recent. Press to change.",
+      "Neverball",
+      "Skate 3",
+      "Wario Land 4",
+    ])
   })
 
-  test("launches the selected Korri game from Home's feedback context", () => {
+  test("opens the original detail screen before launching", () => {
     const host = createFixtureHost()
     const { container } = render(<ShiftSurface model={model()} host={host} />)
     openLibrary()
 
     fireEvent.click(screen.getByRole("button", { name: "Wario Land 4" }))
 
-    expect(host.calls).toEqual(["launch:local-game:wl4"])
     expect(container.querySelector("[data-shift-library]")).toBeNull()
+    expect(container.querySelector("[data-shift-detail]")).toBeDefined()
+    expect(host.calls).toEqual([])
+
+    fireEvent.click(screen.getByRole("button", { name: "▶ Play" }))
+    expect(host.calls).toEqual(["launch:local-game:wl4"])
+    expect(container.querySelector("[data-shift-detail]")).toBeNull()
   })
 
   test("Back returns to Home without calling the host", () => {

@@ -27,6 +27,7 @@ import { launchStatusView } from "../launch-failure-copy"
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
 import { ShiftCineActionTile } from "../ui/molecules/ShiftCineActionTile"
 import { ShiftCineBackdrop } from "../ui/molecules/ShiftCineBackdrop"
+import { ShiftCineLibraryTile } from "../ui/molecules/ShiftCineLibraryTile"
 import {
   type ShiftCineHintSpec,
   ShiftCineLegend,
@@ -37,6 +38,7 @@ import {
 } from "../ui/molecules/ShiftStatusBar"
 import { ShiftCineActionHero } from "../ui/organisms/ShiftCineActionHero"
 import { ShiftCineHero } from "../ui/organisms/ShiftCineHero"
+import { ShiftCineLibraryHero } from "../ui/organisms/ShiftCineLibraryHero"
 import { ShiftCineRail } from "../ui/organisms/ShiftCineRail"
 
 export interface ShiftCinematicGame {
@@ -66,7 +68,9 @@ export interface ShiftCinematicGame {
  * pair a device, grant storage access, stop what is running — so the rail grows
  * a new end cap without Shift learning what the action means.
  */
-type RailAffordance = SurfaceAction
+type RailAffordance =
+  | { readonly kind: "library"; readonly onConfirm: () => void }
+  | { readonly kind: "action"; readonly action: SurfaceAction }
 
 export interface ShiftImageWindow {
   readonly start: number
@@ -138,7 +142,9 @@ export interface ShiftCinematicHomeProps {
   readonly onRetry?: () => void
   /** Dismiss the launch feedback and return to browsing (B). */
   readonly onDismiss?: () => void
-  /** Host-declared non-game entries appended to the rail, in the host's order. */
+  /** Open Shift's original Library destination. */
+  readonly onOpenLibrary?: () => void
+  /** Host-declared non-game entries appended after Library, in host order. */
   readonly actions?: readonly SurfaceAction[]
   /** Confirming a rail action. The host decides what the action does. */
   readonly onAction?: (actionId: string) => void
@@ -156,6 +162,7 @@ export function ShiftCinematicHome({
   status: surfaceStatus,
   onRetry,
   onDismiss,
+  onOpenLibrary,
   actions,
   onAction,
   onOptions,
@@ -167,12 +174,16 @@ export function ShiftCinematicHome({
   const preloadedImageUrlsRef = useRef<Set<string>>(new Set())
   const game = games[index]
   const gameId = game?.id
-  // The rail's trailing entries are non-game "destination" affordances, in the
-  // host's own order. Each occupies one focus slot past the games, so the focus
-  // index runs past `games.length` when an affordance is active.
+  // Restore Library as Shift's dedicated destination, then append host-backed
+  // actions such as Settings. Each occupies one focus slot past the games.
   const affordances = useMemo<readonly RailAffordance[]>(
-    () => actions ?? [],
-    [actions],
+    () => [
+      ...(onOpenLibrary
+        ? [{ kind: "library" as const, onConfirm: onOpenLibrary }]
+        : []),
+      ...(actions ?? []).map(action => ({ kind: "action" as const, action })),
+    ],
+    [onOpenLibrary, actions],
   )
   const activeAffordance =
     index >= games.length ? affordances[index - games.length] : undefined
@@ -257,7 +268,9 @@ export function ShiftCinematicHome({
     // An affordance slot owns its confirm regardless of any lingering launch
     // status, so focusing it and pressing A always fires its action.
     if (activeAffordance) {
-      if (activeAffordance.enabled) onAction?.(activeAffordance.id)
+      if (activeAffordance.kind === "library") activeAffordance.onConfirm()
+      else if (activeAffordance.action.enabled)
+        onAction?.(activeAffordance.action.id)
       return
     }
     if (status) {
@@ -368,11 +381,13 @@ export function ShiftCinematicHome({
   // rail (info left, actions right), so the actions sit with the game they
   // describe. Both nodes are hoisted here so the band composes them in one row.
   const heroNode =
-    activeAffordance ? (
+    activeAffordance?.kind === "library" ? (
+      <ShiftCineLibraryHero />
+    ) : activeAffordance?.kind === "action" ? (
       <ShiftCineActionHero
-        label={activeAffordance.label}
-        {...(activeAffordance.description
-          ? { description: activeAffordance.description }
+        label={activeAffordance.action.label}
+        {...(activeAffordance.action.description
+          ? { description: activeAffordance.action.description }
           : {})}
       />
     ) : game ? (
@@ -413,13 +428,21 @@ export function ShiftCinematicHome({
             affordances.length > 0
               ? affordances.map((affordance, i) => {
                   const slot = games.length + i
-                  return (
-                    <ShiftCineActionTile
-                      key={affordance.id}
+                  return affordance.kind === "library" ? (
+                    <ShiftCineLibraryTile
+                      key="library"
                       index={slot}
-                      actionId={affordance.id}
-                      label={affordance.label}
-                      disabled={!affordance.enabled}
+                      focused={index === slot}
+                      onFocus={() => setIndex(slot)}
+                      onActivate={() => activate(slot)}
+                    />
+                  ) : (
+                    <ShiftCineActionTile
+                      key={affordance.action.id}
+                      index={slot}
+                      actionId={affordance.action.id}
+                      label={affordance.action.label}
+                      disabled={!affordance.action.enabled}
                       focused={index === slot}
                       onFocus={() => setIndex(slot)}
                       onActivate={() => activate(slot)}
