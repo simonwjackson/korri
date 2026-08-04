@@ -225,7 +225,12 @@ pub struct SessionControlsRequest {
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "kind", content = "value", rename_all = "kebab-case")]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "kebab-case",
+    deny_unknown_fields
+)]
 pub enum SessionControlValue {
     Toggle(bool),
     Choice(String),

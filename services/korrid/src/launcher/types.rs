@@ -22,7 +22,7 @@ pub struct LocalGame {
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AndroidComponent {
     pub package_name: String,
     pub class_name: String,
@@ -30,6 +30,7 @@ pub struct AndroidComponent {
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProvisionedFile {
     pub path: String,
     pub content: String,
@@ -46,6 +47,7 @@ pub enum LaunchContributorKind {
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct LaunchRouteContributor {
     pub kind: LaunchContributorKind,
     pub id: String,
@@ -53,6 +55,7 @@ pub struct LaunchRouteContributor {
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct LaunchExecutor {
     pub id: String,
     pub available: bool,
@@ -70,7 +73,7 @@ pub enum LaunchForegroundKind {
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LaunchForegroundRule {
     pub kind: LaunchForegroundKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -81,7 +84,7 @@ pub struct LaunchForegroundRule {
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LaunchContext {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_id: Option<String>,
@@ -95,7 +98,7 @@ pub struct LaunchContext {
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AndroidActiveLaunch {
     pub launch_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -139,7 +142,7 @@ impl LaunchContext {
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LaunchSpec {
     /** Identity created by korrid while preparing this exact launch. */
     pub launch_id: String,
@@ -498,14 +501,19 @@ pub enum AndroidMoonlightEffect {
  * represented here; no process, URL, intent, socket, or method name crosses. */
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(tag = "kind", content = "payload", rename_all = "kebab-case")]
+#[serde(
+    tag = "kind",
+    content = "payload",
+    rename_all = "kebab-case",
+    deny_unknown_fields
+)]
 pub enum PlatformEffect {
     AndroidMoonlight(AndroidMoonlightEffect),
 }
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PlatformInstruction {
     pub launch_id: String,
     pub action_id: String,
@@ -839,6 +847,107 @@ mod tests {
                 Err(PlatformInstructionVerificationFailure::Integrity)
             );
         }
+    }
+
+    #[test]
+    fn protected_jni_records_reject_unknown_top_level_and_nested_fields() {
+        let key = b"private per-server key";
+        let local = spec()
+            .with_context(LaunchContext {
+                game_id: Some("game".into()),
+                title: Some("Game".into()),
+                contributors: vec![LaunchRouteContributor {
+                    kind: LaunchContributorKind::Launcher,
+                    id: "@korri:retroarch/retroarch".into(),
+                }],
+                executor: Some(LaunchExecutor {
+                    id: "retroarch-control".into(),
+                    available: false,
+                }),
+                foreground: LaunchForegroundRule {
+                    kind: LaunchForegroundKind::Package,
+                    package_name: Some("com.retroarch".into()),
+                    class_name: None,
+                },
+            })
+            .sign(key);
+        let local_json = serde_json::to_value(&local).unwrap();
+        let local_round_trip: LaunchSpec = serde_json::from_value(local_json.clone()).unwrap();
+        assert_eq!(local_round_trip.signing_bytes(), local.signing_bytes());
+
+        let mut local_top = local_json.clone();
+        local_top["unexpected"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<LaunchSpec>(local_top).is_err());
+        for path in ["component", "context"] {
+            let mut value = local_json.clone();
+            value[path]["unexpected"] = serde_json::json!(true);
+            assert!(
+                serde_json::from_value::<LaunchSpec>(value).is_err(),
+                "{path}"
+            );
+        }
+        let mut local_contributor = local_json.clone();
+        local_contributor["context"]["contributors"][0]["unexpected"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<LaunchSpec>(local_contributor).is_err());
+        let mut local_file = local_json.clone();
+        local_file["files"][0]["unexpected"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<LaunchSpec>(local_file).is_err());
+        for path in ["executor", "foreground"] {
+            let mut value = local_json.clone();
+            value["context"][path]["unexpected"] = serde_json::json!(true);
+            assert!(
+                serde_json::from_value::<LaunchSpec>(value).is_err(),
+                "{path}"
+            );
+        }
+
+        let mut authority = MoonlightLaunchAuthority::new(key.to_vec());
+        let moonlight = authority.prepare(
+            "@korri:moonlight/moonlight",
+            crate::MoonlightImplementation::Artemis,
+            "Korri Stream",
+            "host-uuid",
+            7,
+            None,
+            None,
+        );
+        let moonlight_json = serde_json::to_value(&moonlight).unwrap();
+        let moonlight_round_trip: MoonlightLaunchSpec =
+            serde_json::from_value(moonlight_json.clone()).unwrap();
+        assert_eq!(
+            moonlight_round_trip.signing_bytes(),
+            moonlight.signing_bytes()
+        );
+        let mut moonlight_top = moonlight_json.clone();
+        moonlight_top["unexpected"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<MoonlightLaunchSpec>(moonlight_top).is_err());
+        let mut moonlight_nested = moonlight_json;
+        moonlight_nested["context"]["foreground"]["unexpected"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<MoonlightLaunchSpec>(moonlight_nested).is_err());
+
+        let instruction = PlatformInstruction::protect(
+            "launch-1",
+            "fill",
+            Some(SessionControlValue::Toggle(true)),
+            PlatformEffect::AndroidMoonlight(AndroidMoonlightEffect::SetFillMode),
+            key,
+        );
+        let instruction_json = serde_json::to_value(&instruction).unwrap();
+        let instruction_round_trip: PlatformInstruction =
+            serde_json::from_value(instruction_json.clone()).unwrap();
+        assert_eq!(
+            instruction_round_trip.signing_bytes(),
+            instruction.signing_bytes()
+        );
+        let mut instruction_top = instruction_json.clone();
+        instruction_top["unexpected"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<PlatformInstruction>(instruction_top).is_err());
+        let mut instruction_effect = instruction_json.clone();
+        instruction_effect["effect"]["unexpected"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<PlatformInstruction>(instruction_effect).is_err());
+        let mut instruction_value = instruction_json;
+        instruction_value["value"]["unexpected"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<PlatformInstruction>(instruction_value).is_err());
     }
 
     #[test]
