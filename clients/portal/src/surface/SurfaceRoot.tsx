@@ -18,7 +18,9 @@ import type { KorridClient } from "../korrid/client"
 import { settingsFrom } from "./settings-model"
 import {
   entryForId,
+  entryForLaunchLocation,
   gameActionsForEntry,
+  launchLocationsForEntry,
   surfaceModelFrom,
 } from "./surface-model"
 import { useLaunchables } from "./use-launchables"
@@ -84,9 +86,17 @@ export function SurfaceRoot({ bus, bridge, korrid }: SurfaceRootProps) {
         on: (action: SurfaceInputAction, handler: () => void) =>
           bus.onAction(action, handler),
       },
-      launchGame: id => {
+      launchGame: (id, launchLocationId) => {
         const entry = entryForId(stateRef.current, id)
-        if (entry) confirmEntry(entry)
+        if (!entry) return
+        const locations = launchLocationsForEntry(entry)
+        if (locations.length > 1) {
+          if (launchLocationId === undefined) return
+          const chosen = entryForLaunchLocation(entry, launchLocationId)
+          if (chosen) confirmEntry(chosen)
+          return
+        }
+        confirmEntry(entry)
       },
       runAction: runDeviceAction,
       changeSetting,

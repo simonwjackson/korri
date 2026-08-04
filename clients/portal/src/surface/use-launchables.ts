@@ -13,8 +13,6 @@ import type { SurfaceSettingsStatus } from "@contracts/surface/korri-surface"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { LauncherBridge } from "../bridge/launcher-bridge"
 import type { KorridClient } from "../korrid/client"
-import type { PortalGameCopy } from "../launchables/fold-games"
-import { launchGameCopies } from "../launchables/launch-game-copies"
 import type { DeviceFacts } from "./settings-model"
 import {
   entryKey,
@@ -33,16 +31,6 @@ import {
 const SESSION_STATUS_TIMEOUT_MS = 3000
 const STOP_POLL_INTERVAL_MS = 500
 const STOP_POLL_DEADLINE_MS = 8000
-
-function copiesForEntry(entry: PortalEntry): readonly PortalGameCopy[] {
-  if (entry.kind === "local-game") {
-    return [{ kind: "local", game: entry.game }, ...(entry.alternatives ?? [])]
-  }
-  if (entry.kind === "game") {
-    return [{ kind: "remote", game: entry.game }, ...(entry.alternatives ?? [])]
-  }
-  return []
-}
 
 export interface Launchables {
   readonly state: LaunchablesState
@@ -380,48 +368,6 @@ export function useLaunchables(
               LaunchablesState.withStartStreamResult(launching, result),
             )
           })
-        return
-      }
-
-      if (
-        (entry.kind === "local-game" || entry.kind === "game") &&
-        (entry.alternatives?.length ?? 0) > 0
-      ) {
-        const starting = LaunchablesState.beginPreparing(
-          current,
-          entry.game.title,
-        )
-        publish(starting)
-        void launchGameCopies(
-          copiesForEntry(entry),
-          {
-            localGameLaunch: gameId => korrid.localGameLaunch(gameId),
-            launchLocal: spec => bridge.launchLocal(spec),
-            streamTarget: host => {
-              const target = findKorriStreamTarget(host)
-              return target._tag === "Some" ? target.value : undefined
-            },
-            sessionPrepare: (gameId, host) =>
-              korrid.sessionPrepare(gameId, host),
-            startStream: (hostUuid, appId) =>
-              bridge.startStream(hostUuid, appId),
-          },
-          () => mountedRef.current && operation === actionSeq.current,
-        ).then(result => {
-          if (result._tag === "Cancelled" || result._tag === "Started") return
-          if (result._tag === "StreamResult") {
-            publish(
-              LaunchablesState.withStartStreamResult(starting, result.result),
-            )
-            return
-          }
-          publish(
-            LaunchablesState.withPrepareOutcome(starting, {
-              _tag: "Err",
-              payload: { code: "NoLaunchCopy", message: result.message },
-            }),
-          )
-        })
         return
       }
 

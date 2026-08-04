@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { act, fireEvent, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import type { SurfaceModel } from "@contracts/surface/korri-surface"
 import {
   createFixtureHost,
@@ -267,6 +267,97 @@ describe("Shift library", () => {
     fireEvent.click(screen.getByRole("button", { name: "▶ Play" }))
     expect(host.calls).toEqual(["launch:local-game:wl4"])
     expect(container.querySelector("[data-shift-detail]")).toBeNull()
+  })
+
+  test("a combined game asks for a host with local first", () => {
+    const host = createFixtureHost()
+    const games =
+      fixtureModel.catalog._tag === "Ready"
+        ? fixtureModel.catalog.games.map(game =>
+            game.id === "local-game:wl4"
+              ? {
+                  ...game,
+                  launchLocations: [
+                    { id: "local-wl4", label: "This device" },
+                    { id: "zao-wl4", label: "zao" },
+                  ],
+                }
+              : game,
+          )
+        : []
+    const { container } = render(
+      <ShiftSurface
+        model={model({ catalog: { _tag: "Ready", games } })}
+        host={host}
+      />,
+    )
+    openLibrary()
+    fireEvent.click(screen.getByRole("button", { name: "Wario Land 4" }))
+    fireEvent.click(screen.getByRole("button", { name: "▶ Play" }))
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Choose where to play Wario Land 4",
+    })
+    const choices = within(dialog)
+      .getAllByRole("button")
+      .filter(button =>
+        ["This device", "zao"].includes(button.textContent ?? ""),
+      )
+    expect(choices.map(button => button.textContent)).toEqual([
+      "This device",
+      "zao",
+    ])
+    expect(document.activeElement).toBe(choices[0]!)
+    expect(host.calls).toEqual([])
+
+    act(() => host.press("back"))
+    expect(screen.queryByRole("dialog")).toBeNull()
+    expect(container.querySelector("[data-shift-detail]")).toBeDefined()
+    expect(host.calls).toEqual([])
+
+    fireEvent.click(screen.getByRole("button", { name: "▶ Play" }))
+    const reopened = screen.getByRole("dialog", {
+      name: "Choose where to play Wario Land 4",
+    })
+    fireEvent.click(within(reopened).getByRole("button", { name: "zao" }))
+    expect(host.calls).toEqual(["launch:local-game:wl4:zao-wl4"])
+    expect(screen.queryByRole("dialog")).toBeNull()
+  })
+
+  test("a catalog refresh cannot leave a hidden chooser trapping Back", () => {
+    const host = createFixtureHost()
+    const games =
+      fixtureModel.catalog._tag === "Ready"
+        ? fixtureModel.catalog.games.map(game =>
+            game.id === "local-game:wl4"
+              ? {
+                  ...game,
+                  launchLocations: [
+                    { id: "local-wl4", label: "This device" },
+                    { id: "zao-wl4", label: "zao" },
+                  ],
+                }
+              : game,
+          )
+        : []
+    const rendered = render(
+      <ShiftSurface
+        model={model({ catalog: { _tag: "Ready", games } })}
+        host={host}
+      />,
+    )
+    openLibrary()
+    fireEvent.click(screen.getByRole("button", { name: "Wario Land 4" }))
+    fireEvent.click(screen.getByRole("button", { name: "▶ Play" }))
+    expect(screen.getByRole("dialog")).toBeDefined()
+
+    rendered.rerender(<ShiftSurface model={model()} host={host} />)
+    expect(screen.queryByRole("dialog")).toBeNull()
+    act(() => host.press("back"))
+
+    expect(rendered.container.querySelector("[data-shift-detail]")).toBeNull()
+    expect(screen.getByRole("button", { name: "Library" })).toBeDefined()
+    expect(host.calls).toEqual([])
   })
 
   test("Back returns to Home without calling the host", () => {

@@ -39,8 +39,12 @@ export function createFixtureHost(
         return () => set.delete(handler)
       },
     },
-    launchGame(gameId) {
-      calls.push(`launch:${gameId}`)
+    launchGame(gameId, launchLocationId) {
+      calls.push(
+        launchLocationId === undefined
+          ? `launch:${gameId}`
+          : `launch:${gameId}:${launchLocationId}`,
+      )
     },
     runAction(actionId) {
       calls.push(`action:${actionId}`)

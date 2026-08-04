@@ -11,11 +11,13 @@ import type {
   SurfaceAction,
   SurfaceCatalog,
   SurfaceGame,
+  SurfaceLaunchLocation,
   SurfaceModel,
   SurfaceSettingGroup,
   SurfaceSettingsStatus,
   SurfaceStatus,
 } from "@contracts/surface/korri-surface"
+import type { PortalGameCopy } from "../launchables/fold-games"
 import {
   entryKey,
   type LaunchablesState,
@@ -66,12 +68,94 @@ function actionFromEntry(entry: PortalEntry): SurfaceAction | null {
   }
 }
 
+function orderedCopiesForEntry(entry: PortalEntry): readonly PortalGameCopy[] {
+  if (entry.kind !== "local-game" && entry.kind !== "game") return []
+  const copies: PortalGameCopy[] = [
+    entry.kind === "local-game"
+      ? { kind: "local", game: entry.game }
+      : { kind: "remote", game: entry.game },
+    ...(entry.alternatives ?? []),
+  ]
+  return copies.sort((left, right) => {
+    if (left.kind !== right.kind) return left.kind === "local" ? -1 : 1
+    if (left.kind === "local" && right.kind === "local") {
+      return left.game.id.localeCompare(right.game.id)
+    }
+    if (left.kind === "remote" && right.kind === "remote") {
+      return (
+        (left.game.host ?? "").localeCompare(right.game.host ?? "") ||
+        left.game.id.localeCompare(right.game.id)
+      )
+    }
+    return 0
+  })
+}
+
+function copyHostKey(copy: PortalGameCopy): string {
+  return copy.kind === "local" ? "local" : `remote:${copy.game.host ?? ""}`
+}
+
+function copyLocationLabel(copy: PortalGameCopy): string {
+  return copy.kind === "local"
+    ? "This device"
+    : (copy.game.host ?? "Other device")
+}
+
+function copyLocationId(copy: PortalGameCopy): string {
+  return JSON.stringify([
+    copy.kind,
+    copy.kind === "remote" ? (copy.game.host ?? null) : null,
+    copy.game.id,
+  ])
+}
+
+function distinctHostCopies(entry: PortalEntry): readonly PortalGameCopy[] {
+  const seen = new Set<string>()
+  return orderedCopiesForEntry(entry).filter(copy => {
+    const key = copyHostKey(copy)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+/** Host choices for a folded game. Local is always first when it exists. */
+export function launchLocationsForEntry(
+  entry: PortalEntry,
+): readonly SurfaceLaunchLocation[] {
+  const copies = distinctHostCopies(entry)
+  if (copies.length < 2) return []
+  return copies.map(copy => ({
+    id: copyLocationId(copy),
+    label: copyLocationLabel(copy),
+  }))
+}
+
+/** Resolve an opaque surface choice to one exact copy, with no fallback. */
+export function entryForLaunchLocation(
+  entry: PortalEntry,
+  launchLocationId: string,
+): PortalEntry | undefined {
+  const copy = distinctHostCopies(entry).find(
+    candidate => copyLocationId(candidate) === launchLocationId,
+  )
+  if (copy === undefined) return undefined
+  return copy.kind === "local"
+    ? { kind: "local-game", game: copy.game }
+    : { kind: "game", game: copy.game }
+}
+
 function alternativeLocation(entry: PortalEntry): string | undefined {
   if (entry.kind !== "local-game" && entry.kind !== "game") return undefined
-  const locations = entry.alternatives?.map(copy =>
-    copy.kind === "local" ? "this device" : copy.game.host,
-  )
-  const visible = [...new Set(locations?.filter(Boolean) ?? [])]
+  const primaryKey =
+    entry.kind === "local-game"
+      ? "local"
+      : `remote:${entry.game.host ?? ""}`
+  const visible = distinctHostCopies(entry)
+    .filter(copy => copyHostKey(copy) !== primaryKey)
+    .map(copy =>
+      copy.kind === "local" ? "this device" : copyLocationLabel(copy),
+    )
   return visible.length === 0 ? undefined : `Also on ${visible.join(", ")}`
 }
 
@@ -88,6 +172,7 @@ function gameFromEntry(entry: PortalEntry): SurfaceGame | null {
       }
     case "local-game": {
       const alternative = alternativeLocation(entry)
+      const launchLocations = launchLocationsForEntry(entry)
       return {
         id: entryKey(entry),
         title: entry.game.title,
@@ -96,16 +181,19 @@ function gameFromEntry(entry: PortalEntry): SurfaceGame | null {
           alternative === undefined
             ? entry.game.system
             : `${entry.game.system} · ${alternative}`,
+        ...(launchLocations.length < 2 ? {} : { launchLocations }),
       }
     }
     case "game": {
       const alternative = alternativeLocation(entry)
+      const launchLocations = launchLocationsForEntry(entry)
       const subtitle = [entry.game.host, alternative].filter(Boolean).join(" · ")
       return {
         id: entryKey(entry),
         title: entry.game.title,
         section: entry.game.host ?? "Other devices",
         ...(subtitle.length === 0 ? {} : { subtitle }),
+        ...(launchLocations.length < 2 ? {} : { launchLocations }),
       }
     }
     default:

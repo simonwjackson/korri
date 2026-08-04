@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { LaunchablesState, type PortalEntry } from "../launchables/state"
 import {
   entryForId,
+  entryForLaunchLocation,
   gameActionsForEntry,
   surfaceModelFrom,
 } from "./surface-model"
@@ -73,6 +74,10 @@ describe("surfaceModelFrom", () => {
               kind: "remote",
               game: { id: "wl4", title: "Wario Land 4", host: "zao" },
             },
+            {
+              kind: "remote",
+              game: { id: "wl4-aka", title: "Wario Land 4", host: "aka" },
+            },
           ],
         },
       ]),
@@ -80,7 +85,33 @@ describe("surfaceModelFrom", () => {
 
     if (model.catalog._tag !== "Ready") throw new Error("expected Ready")
     expect(model.catalog.games).toHaveLength(1)
-    expect(model.catalog.games[0]?.subtitle).toBe("GBA · Also on zao")
+    expect(model.catalog.games[0]?.subtitle).toBe("GBA · Also on aka, zao")
+    expect(
+      model.catalog.games[0]?.launchLocations?.map(location => location.label),
+    ).toEqual(["This device", "aka", "zao"])
+  })
+
+  test("a host choice resolves to exactly that copy", () => {
+    const folded: PortalEntry = {
+      ...localGame,
+      alternatives: [
+        {
+          kind: "remote",
+          game: { id: "wl4", title: "Wario Land 4", host: "zao" },
+        },
+      ],
+    }
+    const model = surfaceModelFrom(ready([folded]))
+    if (model.catalog._tag !== "Ready") throw new Error("expected Ready")
+    const zao = model.catalog.games[0]?.launchLocations?.find(
+      location => location.label === "zao",
+    )
+    if (zao === undefined) throw new Error("expected zao choice")
+
+    expect(entryForLaunchLocation(folded, zao.id)).toEqual({
+      kind: "game",
+      game: { id: "wl4", title: "Wario Land 4", host: "zao" },
+    })
   })
 
   test("the running session is resumable and leads the catalog", () => {

@@ -37,9 +37,22 @@ export interface SurfaceInput {
  * One playable thing. `id` is opaque to the surface — it is handed back
  * verbatim when asking Korri to launch or act on it.
  */
+export interface SurfaceLaunchLocation {
+  /** Opaque copy id. A surface returns it unchanged when the user chooses. */
+  readonly id: string
+  /** Human-readable host name, such as "This device" or "zao". */
+  readonly label: string
+}
+
 export interface SurfaceGame {
   readonly id: string
   readonly title: string
+  /**
+   * Places that can launch this game. Present only when there is a real choice;
+   * surfaces must ask the user rather than silently selecting or falling back.
+   * Korri orders the local device first, followed by stable remote host order.
+   */
+  readonly launchLocations?: readonly SurfaceLaunchLocation[]
   /**
    * Grouping caption ("Continue", "This device", a peer device's name). Games
    * sharing a section arrive consecutively; the surface groups on change.
@@ -178,8 +191,11 @@ export interface SurfaceModel {
 /** Everything the surface may ask Korri to do. */
 export interface SurfaceHost {
   readonly input: SurfaceInput
-  /** Start or resume the game. Korri decides which, and how. */
-  launchGame(gameId: string): void
+  /**
+   * Start or resume the game. A location id is required when the corresponding
+   * SurfaceGame publishes launchLocations; otherwise it is absent.
+   */
+  launchGame(gameId: string, launchLocationId?: string): void
   /** Run a device-level action from `SurfaceModel.actions`. */
   runAction(actionId: string): void
   /** Change an editable setting. Korri validates and republishes the result. */

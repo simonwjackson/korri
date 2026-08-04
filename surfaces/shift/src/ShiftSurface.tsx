@@ -13,7 +13,7 @@ import type {
   SurfaceHost,
   SurfaceModel,
 } from "@contracts/surface/korri-surface"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { SurfaceHostProvider } from "./host/surface-host"
 import {
   type ShiftCinematicGame,
@@ -28,6 +28,7 @@ import type { ShiftLibraryGame } from "./pages/shift-library-game"
 import type { ShiftGameDetailView } from "./pages/shift-game-detail-view"
 import { ShiftSettings } from "./pages/ShiftSettings"
 import { ShiftGameActionsSheet } from "./ui/organisms/ShiftGameActionsSheet"
+import { ShiftLaunchLocationSheet } from "./ui/organisms/ShiftLaunchLocationSheet"
 
 export interface ShiftSurfaceProps {
   readonly model: SurfaceModel
@@ -127,6 +128,7 @@ const SETTINGS_AFFORDANCE: SurfaceAction = {
 
 export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
   const [sheetGameId, setSheetGameId] = useState<string | null>(null)
+  const [launchGameId, setLaunchGameId] = useState<string | null>(null)
   const [detailGameId, setDetailGameId] = useState<string | null>(null)
   const [screen, setScreen] = useState<
     "home" | "library" | "detail" | "settings"
@@ -152,6 +154,18 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
   )
 
   const closeSheet = useCallback(() => setSheetGameId(null), [])
+  const requestLaunch = useCallback(
+    (gameId: string) => {
+      const game = surfaceGames.find(candidate => candidate.id === gameId)
+      if ((game?.launchLocations?.length ?? 0) > 1) {
+        setLaunchGameId(gameId)
+        return
+      }
+      setScreen("home")
+      host.launchGame(gameId)
+    },
+    [host, surfaceGames],
+  )
 
   // Library is Shift's dedicated destination. Generic rail actions are reserved
   // for newer host-backed destinations such as Settings.
@@ -165,6 +179,12 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
   }, [])
 
   const sheetGame = games.find(game => game.id === sheetGameId)
+  const launchSurfaceGame = surfaceGames.find(game => game.id === launchGameId)
+  const launchChooserOpen =
+    (launchSurfaceGame?.launchLocations?.length ?? 0) > 1
+  useEffect(() => {
+    if (launchGameId !== null && !launchChooserOpen) setLaunchGameId(null)
+  }, [launchChooserOpen, launchGameId])
   const detailSurfaceGame = surfaceGames.find(game => game.id === detailGameId)
   const detailGame = detailSurfaceGame
     ? shiftDetailGameFromSurfaceGame(detailSurfaceGame)
@@ -210,11 +230,10 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
     ) : screen === "detail" && detailGame ? (
       <ShiftDetailSplit
         game={detailGame}
-        onPlay={() => {
-          setScreen("home")
-          host.launchGame(detailGame.id)
+        onPlay={() => requestLaunch(detailGame.id)}
+        onBack={() => {
+          if (!launchChooserOpen) setScreen("home")
         }}
-        onBack={() => setScreen("home")}
       />
     ) : screen === "detail" ? (
       <main
@@ -252,7 +271,7 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
         status={model.status}
         onOpenLibrary={() => setScreen("library")}
         actions={railActions}
-        onLaunch={gameId => host.launchGame(gameId)}
+        onLaunch={requestLaunch}
         onAction={runRailAction}
         onRetry={() => host.retry()}
         onDismiss={() => host.dismiss()}
@@ -280,6 +299,19 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
               host.runGameAction(sheetGame.id, actionId)
             }}
             onClose={closeSheet}
+          />
+        ) : null}
+        {launchChooserOpen && launchSurfaceGame?.launchLocations ? (
+          <ShiftLaunchLocationSheet
+            open
+            gameTitle={launchSurfaceGame.title}
+            locations={launchSurfaceGame.launchLocations}
+            onSelect={launchLocationId => {
+              setLaunchGameId(null)
+              setScreen("home")
+              host.launchGame(launchSurfaceGame.id, launchLocationId)
+            }}
+            onClose={() => setLaunchGameId(null)}
           />
         ) : null}
       </div>
