@@ -53,9 +53,10 @@ export function focusInDirection(direction: Direction): boolean {
   ).filter(element => element !== active && isVisible(element))
   if (candidates.length === 0) return false
 
-  // No current focus: start at the first candidate rather than guessing.
+  // Match the legacy focus engine: initial focus uses the browser's native
+  // reveal, while directional moves below explicitly own nearest-edge scroll.
   if (!active) {
-    candidates[0]?.focus({ preventScroll: true })
+    candidates[0]?.focus()
     return true
   }
 
@@ -83,7 +84,11 @@ export function focusInDirection(direction: Direction): boolean {
   }
 
   if (!best) return false
+  // This is the legacy non-Mario-camera path. Suppress the browser's implicit
+  // focus scroll, then reveal the chosen control exactly once with nearest-edge
+  // behavior so grids and shelves follow controller selection without jumping.
   best.element.focus({ preventScroll: true })
+  best.element.scrollIntoView({ block: "nearest", inline: "nearest" })
   return true
 }
 

@@ -29,6 +29,9 @@ function button(id: string, rect: { x: number; y: number }): HTMLElement {
   element.id = id
   document.body.appendChild(element)
   place(element, rect)
+  // happy-dom does not implement browser scrolling; individual tests replace
+  // this no-op when they need to inspect the reveal request.
+  element.scrollIntoView = () => {}
   return element
 }
 
@@ -45,6 +48,20 @@ describe("focusInDirection", () => {
 
     expect(focusInDirection("right")).toBe(true)
     expect(document.activeElement).toBe(second)
+  })
+
+  test("reveals the selected tile with the legacy nearest-edge scroll", () => {
+    const first = button("first", { x: 0, y: 0 })
+    const second = button("second", { x: 0, y: 200 })
+    let options: ScrollIntoViewOptions | undefined
+    second.scrollIntoView = next => {
+      options = typeof next === "object" ? next : undefined
+    }
+    first.focus()
+
+    expect(focusInDirection("down")).toBe(true)
+    expect(document.activeElement).toBe(second)
+    expect(options).toEqual({ block: "nearest", inline: "nearest" })
   })
 
   test("never moves opposite the pressed direction", () => {
