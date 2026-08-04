@@ -93,6 +93,27 @@ export interface LocalGames {
 export interface LocalGamesListRequest {
 }
 
+export interface MoonlightLaunchPrepareRequest {
+	hostUuid: string;
+	appId: number;
+}
+
+export enum MoonlightImplementation {
+	Artemis = "artemis",
+}
+
+export interface MoonlightLaunchSpec {
+	/** Fresh identity created by korrid for this native stream startup. */
+	launchId: string;
+	transportId: string;
+	implementation: MoonlightImplementation;
+	sunshineApp: string;
+	hostUuid: string;
+	appId: number;
+	/** Per-server HMAC. The portal transports it opaquely; native consumes it once. */
+	integrity: string;
+}
+
 export interface MoonlightResolveRequest {
 }
 
@@ -121,10 +142,6 @@ export interface PluginSetting {
 	id: string;
 	title: string;
 	enabled: boolean;
-}
-
-export enum MoonlightImplementation {
-	Artemis = "artemis",
 }
 
 export interface ResolvedMoonlight {
@@ -289,6 +306,10 @@ export type LocalGamesListOutcome =
 	| { _tag: "Ok", payload: LocalGames }
 	| { _tag: "Err", payload: RpcFailure };
 
+export type MoonlightLaunchPrepareOutcome =
+	| { _tag: "Ok", payload: MoonlightLaunchSpec }
+	| { _tag: "Err", payload: RpcFailure };
+
 export type MoonlightResolveOutcome =
 	| { _tag: "Available", payload: ResolvedMoonlight }
 	| { _tag: "Unavailable", payload: RpcFailure };
@@ -296,6 +317,7 @@ export type MoonlightResolveOutcome =
 export type RpcRequest =
 	| { _tag: "app.catalog.snapshot", payload: CatalogSnapshotRequest }
 	| { _tag: "app.moonlight.resolve", payload: MoonlightResolveRequest }
+	| { _tag: "app.moonlight.launch.prepare", payload: MoonlightLaunchPrepareRequest }
 	| { _tag: "app.session.prepare", payload: SessionPrepareRequest }
 	| { _tag: "app.session.status", payload: SessionStatusRequest }
 	| { _tag: "app.session.stop", payload: SessionStopRequest }
@@ -310,6 +332,7 @@ export type RpcRequest =
 export type RpcResponse =
 	| { _tag: "app.catalog.snapshot", outcome: CatalogSnapshotOutcome }
 	| { _tag: "app.moonlight.resolve", outcome: MoonlightResolveOutcome }
+	| { _tag: "app.moonlight.launch.prepare", outcome: MoonlightLaunchPrepareOutcome }
 	| { _tag: "app.session.prepare", outcome: SessionPrepareOutcome }
 	| { _tag: "app.session.status", outcome: SessionStatusOutcome }
 	| { _tag: "app.session.stop", outcome: SessionStopOutcome }

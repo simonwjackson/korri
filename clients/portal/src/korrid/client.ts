@@ -14,6 +14,7 @@ import type {
   LocalGame,
   LocalGameLaunchOutcome,
   LocalGamesListOutcome,
+  MoonlightLaunchPrepareOutcome,
   MoonlightResolveOutcome,
   RpcRequest,
   RpcResponse,
@@ -41,6 +42,10 @@ export interface KorridClient {
   ): Promise<SettingsUpdateOutcome>
   catalogSnapshot(): Promise<CatalogSnapshotOutcome>
   moonlightResolve(): Promise<MoonlightResolveOutcome>
+  moonlightLaunchPrepare(
+    hostUuid: string,
+    appId: number,
+  ): Promise<MoonlightLaunchPrepareOutcome>
   localGames(): Promise<LocalGamesListOutcome>
   localGameLaunch(gameId: string): Promise<LocalGameLaunchOutcome>
   sessionPrepare(gameId: string, host?: string): Promise<SessionPrepareOutcome>
@@ -149,6 +154,17 @@ export function createHttpKorridClient(
           _tag: "Unavailable",
           payload: unreachable(error).payload,
         }
+      }
+    },
+    async moonlightLaunchPrepare(hostUuid, appId) {
+      try {
+        const response = await callKorrid(baseUrl, capability, {
+          _tag: "app.moonlight.launch.prepare",
+          payload: { hostUuid, appId },
+        })
+        return response.outcome
+      } catch (error) {
+        return unreachable(error)
       }
     },
     async localGames() {
@@ -265,6 +281,22 @@ export function createInMemoryKorridClient(
     ],
   }
   let settingsRevision = 0
+  let moonlightLaunchSequence = 0
+  const currentMoonlight = (): MoonlightResolveOutcome => {
+    const enabled = settings.plugins.some(
+      plugin => plugin.id === "@korri:moonlight" && plugin.enabled,
+    )
+    if (behavior === "moonlight-unavailable" || !enabled) {
+      return {
+        _tag: "Unavailable",
+        payload: {
+          code: "MoonlightUnavailable",
+          message: "Moonlight is disabled or Artemis is unavailable",
+        },
+      }
+    }
+    return moonlight
+  }
   return {
     async health() {
       return { _tag: "Ok", payload: { version: "korrid-in-memory" } }
@@ -302,19 +334,26 @@ export function createInMemoryKorridClient(
       return { _tag: "Ok", payload: { games: [...games] } }
     },
     async moonlightResolve() {
-      const enabled = settings.plugins.some(
-        plugin => plugin.id === "@korri:moonlight" && plugin.enabled,
-      )
-      if (behavior === "moonlight-unavailable" || !enabled) {
-        return {
-          _tag: "Unavailable",
-          payload: {
-            code: "MoonlightUnavailable",
-            message: "Moonlight is disabled or Artemis is unavailable",
-          },
-        }
+      return currentMoonlight()
+    },
+    async moonlightLaunchPrepare(hostUuid, appId) {
+      const resolved = currentMoonlight()
+      if (resolved._tag !== "Available") {
+        return { _tag: "Err", payload: resolved.payload }
       }
-      return moonlight
+      moonlightLaunchSequence += 1
+      return {
+        _tag: "Ok",
+        payload: {
+          launchId: `in-memory-moonlight-${moonlightLaunchSequence}`,
+          transportId: resolved.payload.transportId,
+          implementation: resolved.payload.implementation,
+          sunshineApp: resolved.payload.sunshineApp,
+          hostUuid,
+          appId,
+          integrity: "in-memory-integrity",
+        },
+      }
     },
     async localGames() {
       if (behavior === "local-list-fail") {

@@ -114,6 +114,121 @@ impl LaunchSpec {
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MoonlightLaunchSpec {
+    /** Fresh identity created by korrid for this native stream startup. */
+    pub launch_id: String,
+    pub transport_id: String,
+    pub implementation: crate::MoonlightImplementation,
+    pub sunshine_app: String,
+    pub host_uuid: String,
+    pub app_id: u32,
+    /** Per-server HMAC. The portal transports it opaquely; native consumes it once. */
+    pub integrity: String,
+}
+
+impl MoonlightLaunchSpec {
+    fn signing_bytes(&self) -> Vec<u8> {
+        fn push(value: &[u8], bytes: &mut Vec<u8>) {
+            bytes.extend_from_slice(&(value.len() as u64).to_be_bytes());
+            bytes.extend_from_slice(value);
+        }
+
+        let mut bytes = Vec::new();
+        push(self.launch_id.as_bytes(), &mut bytes);
+        push(self.transport_id.as_bytes(), &mut bytes);
+        push(
+            &serde_json::to_vec(&self.implementation).expect("Moonlight implementation serializes"),
+            &mut bytes,
+        );
+        push(self.sunshine_app.as_bytes(), &mut bytes);
+        push(self.host_uuid.as_bytes(), &mut bytes);
+        push(&self.app_id.to_be_bytes(), &mut bytes);
+        bytes
+    }
+
+    fn sign(mut self, key: &[u8]) -> Self {
+        let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
+        mac.update(&self.signing_bytes());
+        self.integrity = hex::encode(mac.finalize().into_bytes());
+        self
+    }
+
+    fn verify(&self, key: &[u8]) -> bool {
+        let Ok(signature) = hex::decode(&self.integrity) else {
+            return false;
+        };
+        let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
+        mac.update(&self.signing_bytes());
+        mac.verify_slice(&signature).is_ok()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MoonlightLaunchVerificationFailure {
+    Integrity,
+    Stale,
+    Replay,
+}
+
+/** Per-server signer and one-use native verifier for Moonlight startup. */
+pub struct MoonlightLaunchAuthority {
+    key: Vec<u8>,
+    current_launch_id: Option<String>,
+    consumed_launch_ids: HashSet<String>,
+}
+
+impl MoonlightLaunchAuthority {
+    pub fn new(key: Vec<u8>) -> Self {
+        Self {
+            key,
+            current_launch_id: None,
+            consumed_launch_ids: HashSet::new(),
+        }
+    }
+
+    pub fn prepare(
+        &mut self,
+        transport_id: impl Into<String>,
+        implementation: crate::MoonlightImplementation,
+        sunshine_app: impl Into<String>,
+        host_uuid: impl Into<String>,
+        app_id: u32,
+    ) -> MoonlightLaunchSpec {
+        let launch_id = hex::encode(rand::random::<[u8; 16]>());
+        let spec = MoonlightLaunchSpec {
+            launch_id: launch_id.clone(),
+            transport_id: transport_id.into(),
+            implementation,
+            sunshine_app: sunshine_app.into(),
+            host_uuid: host_uuid.into(),
+            app_id,
+            integrity: String::new(),
+        }
+        .sign(&self.key);
+        self.current_launch_id = Some(launch_id);
+        spec
+    }
+
+    pub fn authorize(
+        &mut self,
+        spec: &MoonlightLaunchSpec,
+    ) -> Result<(), MoonlightLaunchVerificationFailure> {
+        if !spec.verify(&self.key) {
+            return Err(MoonlightLaunchVerificationFailure::Integrity);
+        }
+        if self.current_launch_id.as_deref() != Some(spec.launch_id.as_str()) {
+            return Err(MoonlightLaunchVerificationFailure::Stale);
+        }
+        if !self.consumed_launch_ids.insert(spec.launch_id.clone()) {
+            return Err(MoonlightLaunchVerificationFailure::Replay);
+        }
+        Ok(())
+    }
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum AndroidMoonlightEffect {
     Disconnect,
@@ -280,6 +395,48 @@ mod tests {
             }],
             integrity: String::new(),
         }
+    }
+
+    #[test]
+    fn signed_moonlight_launches_reject_tamper_stale_and_replay() {
+        let mut authority = MoonlightLaunchAuthority::new(b"private per-server key".to_vec());
+        let first = authority.prepare(
+            "@korri:moonlight/moonlight",
+            crate::MoonlightImplementation::Artemis,
+            "Korri Stream",
+            "host-uuid",
+            7,
+        );
+        assert_eq!(first.transport_id, "@korri:moonlight/moonlight");
+        assert_eq!(first.sunshine_app, "Korri Stream");
+        assert_eq!(first.host_uuid, "host-uuid");
+        assert_eq!(first.app_id, 7);
+        assert_eq!(first.launch_id.len(), 32);
+
+        let second = authority.prepare(
+            "@korri:moonlight/moonlight",
+            crate::MoonlightImplementation::Artemis,
+            "Korri Stream",
+            "host-uuid",
+            7,
+        );
+        assert_ne!(second.launch_id, first.launch_id);
+        assert_eq!(
+            authority.authorize(&first),
+            Err(MoonlightLaunchVerificationFailure::Stale)
+        );
+
+        let mut tampered = second.clone();
+        tampered.app_id = 8;
+        assert_eq!(
+            authority.authorize(&tampered),
+            Err(MoonlightLaunchVerificationFailure::Integrity)
+        );
+        assert!(authority.authorize(&second).is_ok());
+        assert_eq!(
+            authority.authorize(&second),
+            Err(MoonlightLaunchVerificationFailure::Replay)
+        );
     }
 
     #[test]

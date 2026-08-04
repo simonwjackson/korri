@@ -51,6 +51,15 @@ describe("resolved Moonlight bridge path", () => {
       sunshineApp: "Korri Stream",
     },
   }
+  const launchSpec = {
+    launchId: "0123456789abcdef0123456789abcdef",
+    transportId: "@korri:moonlight/moonlight",
+    implementation: MoonlightImplementation.Artemis,
+    sunshineApp: "Korri Stream",
+    hostUuid: "h1",
+    appId: 7,
+    integrity: "opaque-integrity",
+  }
 
   it("invokes native discovery and start only after successful typed resolution", async () => {
     const calls: string[] = []
@@ -68,9 +77,9 @@ describe("resolved Moonlight bridge path", () => {
         calls.push(`query-apps:${hostUuid}`)
         return bridge.queryStreamApps(hostUuid)
       },
-      async startStream(hostUuid: string, appId: number) {
-        calls.push(`start:${hostUuid}:${appId}`)
-        return bridge.startStream(hostUuid, appId)
+      async startStream(spec: typeof launchSpec) {
+        calls.push(`start:${spec.hostUuid}:${spec.appId}:${spec.integrity}`)
+        return bridge.startStream(spec)
       },
     }
 
@@ -90,9 +99,25 @@ describe("resolved Moonlight bridge path", () => {
     expect(calls).toEqual(["query-hosts", "query-apps:h1"])
 
     expect(
-      await startResolvedMoonlight(available, recordingBridge, "h1", 7),
+      await startResolvedMoonlight(
+        available,
+        {
+          async moonlightLaunchPrepare(hostUuid, appId) {
+            calls.push(`prepare:${hostUuid}:${appId}`)
+            return { _tag: "Ok" as const, payload: launchSpec }
+          },
+        },
+        recordingBridge,
+        "h1",
+        7,
+      ),
     ).toEqual({ _tag: "StreamStarted" })
-    expect(calls).toEqual(["query-hosts", "query-apps:h1", "start:h1:7"])
+    expect(calls).toEqual([
+      "query-hosts",
+      "query-apps:h1",
+      "prepare:h1:7",
+      "start:h1:7:opaque-integrity",
+    ])
   })
 
   it("preserves native discovery and start failure tags unchanged", async () => {
@@ -130,11 +155,49 @@ describe("resolved Moonlight bridge path", () => {
     expect(
       await startResolvedMoonlight(
         available,
+        {
+          async moonlightLaunchPrepare() {
+            return { _tag: "Ok" as const, payload: launchSpec }
+          },
+        },
         { async startStream() { return startFailure } },
         "h1",
         7,
       ),
     ).toEqual(startFailure)
+  })
+
+  it("does not invoke native startup when signed launch preparation fails", async () => {
+    let nativeCalls = 0
+    expect(
+      await startResolvedMoonlight(
+        available,
+        {
+          async moonlightLaunchPrepare() {
+            return {
+              _tag: "Err" as const,
+              payload: {
+                code: "LocalConfigUnauthorized",
+                message: "current configuration is unauthorized",
+              },
+            }
+          },
+        },
+        {
+          async startStream() {
+            nativeCalls += 1
+            return { _tag: "StreamStarted" as const }
+          },
+        },
+        "h1",
+        7,
+      ),
+    ).toEqual({
+      _tag: "StreamFailed",
+      reason: "StartFailed",
+      message: "current configuration is unauthorized",
+    })
+    expect(nativeCalls).toBe(0)
   })
 
   it("does not invoke native Artemis when Moonlight is unavailable", async () => {
@@ -149,8 +212,8 @@ describe("resolved Moonlight bridge path", () => {
         calls.push(`query-apps:${hostUuid}`)
         return { _tag: "StreamApps" as const, items: [] }
       },
-      async startStream(hostUuid: string, appId: number) {
-        calls.push(`start:${hostUuid}:${appId}`)
+      async startStream(spec: typeof launchSpec) {
+        calls.push(`start:${spec.hostUuid}:${spec.appId}`)
         return { _tag: "StreamStarted" as const }
       },
     }
@@ -167,7 +230,17 @@ describe("resolved Moonlight bridge path", () => {
       streams: [],
     })
     expect(
-      await startResolvedMoonlight(unavailable, bridge, "h1", 7),
+      await startResolvedMoonlight(
+        unavailable,
+        {
+          async moonlightLaunchPrepare() {
+            throw new Error("must not prepare while unavailable")
+          },
+        },
+        bridge,
+        "h1",
+        7,
+      ),
     ).toEqual({
       _tag: "StreamFailed",
       reason: "StartFailed",
@@ -178,6 +251,15 @@ describe("resolved Moonlight bridge path", () => {
 })
 
 describe("createKorriNativeLauncherBridge", () => {
+  const nativeLaunchSpec = {
+    launchId: "0123456789abcdef0123456789abcdef",
+    transportId: "@korri:moonlight/moonlight",
+    implementation: MoonlightImplementation.Artemis,
+    sunshineApp: "Korri Stream",
+    hostUuid: "h1",
+    appId: 7,
+    integrity: "opaque-integrity",
+  }
   const surface = (
     overrides: Partial<KorriNativeBridgeSurface>,
   ): KorriNativeBridgeSurface => ({
@@ -212,7 +294,7 @@ describe("createKorriNativeLauncherBridge", () => {
           appVersion: "1.0",
         },
       }),
-    bridgeVersion: () => 11,
+    bridgeVersion: () => 12,
     ...overrides,
   })
 
@@ -239,8 +321,16 @@ describe("createKorriNativeLauncherBridge", () => {
     expect(JSON.parse(received)).toEqual(spec)
   })
 
-  it("decodes stream results from the native surface", async () => {
-    const bridge = createKorriNativeLauncherBridge(surface({}))
+  it("serializes the signed Moonlight launch spec to the native surface", async () => {
+    let received = ""
+    const bridge = createKorriNativeLauncherBridge(
+      surface({
+        startStream: specJson => {
+          received = specJson
+          return JSON.stringify({ _tag: "StreamStarted" })
+        },
+      }),
+    )
     expect(await bridge.queryStreamHosts()).toEqual({
       _tag: "StreamHosts",
       items: [{ uuid: "h1", name: "Office", paired: true }],
@@ -249,9 +339,10 @@ describe("createKorriNativeLauncherBridge", () => {
       _tag: "StreamApps",
       items: [{ id: 7, name: "Desktop" }],
     })
-    expect(await bridge.startStream("h1", 7)).toEqual({
+    expect(await bridge.startStream(nativeLaunchSpec)).toEqual({
       _tag: "StreamStarted",
     })
+    expect(JSON.parse(received)).toEqual(nativeLaunchSpec)
   })
 
   it("round-trips valid shell-state bridge payloads", async () => {
@@ -340,7 +431,7 @@ describe("createKorriNativeLauncherBridge", () => {
         },
       }),
     )
-    expect(await bridge.startStream("h1", 7)).toMatchObject({
+    expect(await bridge.startStream(nativeLaunchSpec)).toMatchObject({
       _tag: "StreamFailed",
       reason: "StartFailed",
     })

@@ -276,7 +276,7 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public int bridgeVersion() {
             // Mirrors BRIDGE_VERSION in contracts/bridge/korri-native-bridge.ts.
-            return 11;
+            return 12;
         }
 
         @JavascriptInterface
@@ -672,20 +672,24 @@ public class KorriShellActivity extends AppCompatActivity {
         }
 
         /**
-         * JSON-encoded StartStreamResult. Direct, same-task stream launch:
-         * resolve the host through ComputerManagerService (poll until ONLINE
-         * if needed), resolve the app from the applist cache, then start the
-         * native Game activity.
+         * JSON-encoded StartStreamResult. The only callable startup surface
+         * accepts korrid's signed, one-use Moonlight launch instruction.
          */
         @JavascriptInterface
-        public String startStream(String hostUuid, int appId) {
+        public String startStream(String specJson) {
             try {
+                String authorization = KorridServer.authorizeMoonlightLaunchSpec(specJson);
+                if (!"Authorized".equals(authorization)) {
+                    return streamFailed("StartFailed",
+                            "Moonlight launch instruction rejected: " + authorization);
+                }
+                KorriMoonlightLaunchSpec spec = KorriMoonlightLaunchSpec.parse(specJson);
                 ComputerManagerService.ComputerManagerBinder binder = awaitBinder(10);
                 if (binder == null) {
                     return streamFailed("StartFailed", "computer manager not ready");
                 }
 
-                ComputerDetails computer = awaitOnlineComputer(binder, hostUuid, 12);
+                ComputerDetails computer = awaitOnlineComputer(binder, spec.hostUuid, 12);
                 if (computer == null) {
                     return streamFailed("HostUnreachable", "host is not reachable");
                 }
@@ -694,16 +698,11 @@ public class KorriShellActivity extends AppCompatActivity {
                             "host is not paired — pair once in Artemis setup");
                 }
 
-                NvApp app = null;
-                for (NvApp cached : cachedAppList(hostUuid)) {
-                    if (cached.getAppId() == appId) {
-                        app = cached;
-                        break;
-                    }
-                }
+                NvApp app = spec.selectExpectedApp(cachedAppList(spec.hostUuid));
                 if (app == null) {
                     return streamFailed("AppNotFound",
-                            "app " + appId + " not in cache — open the host once in Artemis setup");
+                            "cached app " + spec.appId
+                                    + " does not match plugin-owned app " + spec.sunshineApp);
                 }
 
                 final Intent intent = ServerHelper.createStartIntent(
@@ -713,6 +712,8 @@ public class KorriShellActivity extends AppCompatActivity {
                 intent.putExtra(Game.EXTRA_KORRI_SESSION, true);
                 runOnUiThread(() -> startActivity(intent));
                 return "{\"_tag\":\"StreamStarted\"}";
+            } catch (KorriMoonlightLaunchSpec.Invalid error) {
+                return streamFailed("StartFailed", error.getMessage());
             } catch (Exception e) {
                 return streamFailed("StartFailed",
                         e.getMessage() != null ? e.getMessage() : "start failed");
@@ -746,27 +747,10 @@ public class KorriShellActivity extends AppCompatActivity {
 
         // --- Spike-era surface below: not yet part of the treaty ---
 
-        /** Superseded by startStream; kept briefly for the spike page. */
-        @JavascriptInterface
-        public String launchGame(String requestJson) {
-            try {
-                JSONObject request = new JSONObject(requestJson);
-                String hostUuid = request.optString("hostUuid", "");
-                int appId = request.optInt("appId", -1);
-                if (hostUuid.isEmpty() || appId <= 0) {
-                    return errorResult("hostUuid and appId are required");
-                }
-                return startStream(hostUuid, appId);
-            } catch (Exception e) {
-                return errorResult(e.getMessage() != null ? e.getMessage() : "launch failed");
-            }
-        }
-
         /**
          * Korrid control-plane RPC (Effect RPC over HTTP, single request).
          * Runs on the WebView JS-bridge thread, so a blocking call is fine.
-         * The page drives the orchestrated flow:
-         *   app.catalog.snapshot -> app.server.stream.prepare -> launchGame("Korri Stream")
+         * Legacy diagnostic RPC surface; stream startup is not reachable here.
          */
         @JavascriptInterface
         public String korriRpc(String rpcUrl, String tag, String payloadJson) {

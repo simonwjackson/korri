@@ -14,6 +14,7 @@ use std::path::Path;
 
 pub use types::{
     AndroidComponent, AndroidMoonlightEffect, FileProvisionMode, LaunchSpec, LocalGame,
+    MoonlightLaunchAuthority, MoonlightLaunchSpec, MoonlightLaunchVerificationFailure,
     PlatformEffect, PlatformInstruction, PlatformInstructionVerificationFailure,
     PlatformInstructionVerifier, ProvisionedFile,
 };

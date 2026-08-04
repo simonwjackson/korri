@@ -2,6 +2,7 @@ import type {
   KorriNativeBridgeSurface,
   LaunchLocalResult,
   LocalLaunchSpec,
+  MoonlightLaunchSpec,
   OpenNotificationSettingsResult,
   BackgroundNoticeResult,
   RequestBackgroundNoticeResult,
@@ -15,7 +16,10 @@ import type {
   StreamApp,
   StreamHost,
 } from "@contracts/bridge/korri-native-bridge"
-import type { MoonlightResolveOutcome } from "@contracts/generated/korrid"
+import type {
+  MoonlightLaunchPrepareOutcome,
+  MoonlightResolveOutcome,
+} from "@contracts/generated/korrid"
 
 /**
  * Async seam over the native launcher bridge. Two real implementations:
@@ -30,7 +34,7 @@ export interface LauncherBridge {
   launchLocal(spec: LocalLaunchSpec): Promise<LaunchLocalResult>
   queryStreamHosts(): Promise<QueryStreamHostsResult>
   queryStreamApps(hostUuid: string): Promise<QueryStreamAppsResult>
-  startStream(hostUuid: string, appId: number): Promise<StartStreamResult>
+  startStream(spec: MoonlightLaunchSpec): Promise<StartStreamResult>
   /** Whether Korri may use the storage its settings and plugins live in. */
   storageAccess(): Promise<StorageAccessResult>
   /** Take the user to the system screen where that access is granted. */
@@ -82,10 +86,16 @@ export async function discoverResolvedMoonlight(
   return { resolution, streams, hostsResult }
 }
 
-/** Preserve the existing StartStreamResult treaty while refusing to call the
- * native edge when korrid did not resolve Moonlight for this client. */
+/** Obtain korrid's current signed launch instruction before the native edge
+ * can start a stream; raw host/app startup is not part of this seam. */
 export async function startResolvedMoonlight(
   resolution: MoonlightResolveOutcome,
+  preparer: {
+    moonlightLaunchPrepare(
+      hostUuid: string,
+      appId: number,
+    ): Promise<MoonlightLaunchPrepareOutcome>
+  },
   bridge: Pick<LauncherBridge, "startStream">,
   hostUuid: string,
   appId: number,
@@ -97,7 +107,15 @@ export async function startResolvedMoonlight(
       message: resolution.payload.message,
     }
   }
-  return bridge.startStream(hostUuid, appId)
+  const prepared = await preparer.moonlightLaunchPrepare(hostUuid, appId)
+  if (prepared._tag !== "Ok") {
+    return {
+      _tag: "StreamFailed",
+      reason: "StartFailed",
+      message: prepared.payload.message,
+    }
+  }
+  return bridge.startStream(prepared.payload)
 }
 
 export function createKorriNativeLauncherBridge(
@@ -131,10 +149,10 @@ export function createKorriNativeLauncherBridge(
         return { _tag: "QueryFailed", message: describe(error) }
       }
     },
-    async startStream(hostUuid, appId) {
+    async startStream(spec) {
       try {
         return JSON.parse(
-          surface.startStream(hostUuid, appId),
+          surface.startStream(JSON.stringify(spec)),
         ) as StartStreamResult
       } catch (error) {
         return {
@@ -261,21 +279,21 @@ export function createInMemoryLauncherBridge(
       await delay()
       return { _tag: "StreamApps", items: streamApps[hostUuid] ?? [] }
     },
-    async startStream(hostUuid, appId) {
+    async startStream(spec) {
       await delay()
-      const apps = streamApps[hostUuid]
+      const apps = streamApps[spec.hostUuid]
       if (behavior === "stream-start-fail" || apps === undefined) {
         return {
           _tag: "StreamFailed",
           reason: "HostUnreachable",
-          message: `cannot reach ${hostUuid}`,
+          message: `cannot reach ${spec.hostUuid}`,
         }
       }
-      if (!apps.some(app => app.id === appId)) {
+      if (!apps.some(app => app.id === spec.appId && app.name === spec.sunshineApp)) {
         return {
           _tag: "StreamFailed",
           reason: "AppNotFound",
-          message: `no app ${appId} on ${hostUuid}`,
+          message: `no matching app ${spec.appId} on ${spec.hostUuid}`,
         }
       }
       return { _tag: "StreamStarted" }

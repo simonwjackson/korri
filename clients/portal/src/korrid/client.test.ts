@@ -94,6 +94,45 @@ describe("callKorrid", () => {
     })
   })
 
+  it("requests a signed Moonlight launch handoff from korrid", async () => {
+    let body: unknown
+    globalThis.fetch = (async (_input, init) => {
+      body = JSON.parse(String(init?.body))
+      return new Response(
+        JSON.stringify({
+          _tag: "app.moonlight.launch.prepare",
+          outcome: {
+            _tag: "Ok",
+            payload: {
+              launchId: "0123456789abcdef0123456789abcdef",
+              transportId: "@korri:moonlight/moonlight",
+              implementation: "artemis",
+              sunshineApp: "Korri Stream",
+              hostUuid: "host-uuid",
+              appId: 7,
+              integrity: "opaque-integrity",
+            },
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    }) as typeof fetch
+
+    const outcome = await createHttpKorridClient(
+      "http://127.0.0.1:43117",
+      "capability",
+    ).moonlightLaunchPrepare("host-uuid", 7)
+
+    expect(body).toEqual({
+      _tag: "app.moonlight.launch.prepare",
+      payload: { hostUuid: "host-uuid", appId: 7 },
+    })
+    expect(outcome).toMatchObject({
+      _tag: "Ok",
+      payload: { launchId: "0123456789abcdef0123456789abcdef" },
+    })
+  })
+
   it("aborts session status at its UI deadline", async () => {
     globalThis.fetch = ((_input, init) =>
       new Promise((_resolve, reject) => {

@@ -389,6 +389,7 @@ export function useLaunchables(
         }
         void startResolvedMoonlight(
           moonlightRef.current,
+          korrid,
           bridge,
           target.value.hostUuid,
           target.value.appId,
@@ -453,6 +454,7 @@ export function useLaunchables(
           }
           const result = await startResolvedMoonlight(
             moonlightRef.current,
+            korrid,
             bridge,
             target.value.hostUuid,
             target.value.appId,

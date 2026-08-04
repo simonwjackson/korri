@@ -348,6 +348,105 @@ async fn embedded_android_brain_publishes_resolved_artemis_and_honors_user_disab
     assert_eq!(body["outcome"]["payload"]["code"], "MoonlightUnavailable");
 }
 
+#[tokio::test]
+async fn only_embedded_android_prepares_fresh_signed_moonlight_launches() {
+    let root = tempfile::tempdir().expect("Moonlight config root");
+    std::fs::write(root.path().join("config.yaml"), "{}\n").expect("default config");
+    std::fs::write(root.path().join("library.yaml"), "{}\n").expect("empty library");
+    let request = || {
+        Request::builder()
+            .method("POST")
+            .uri("/rpc")
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::AUTHORIZATION, "Bearer moonlight-test-capability")
+            .body(Body::from(
+                r#"{"_tag":"app.moonlight.launch.prepare","payload":{"hostUuid":"host-uuid","appId":7}}"#,
+            ))
+            .expect("Moonlight launch preparation request")
+    };
+    let response_json = |body: axum::body::Bytes| {
+        serde_json::from_slice::<serde_json::Value>(&body).expect("typed response")
+    };
+
+    let standalone = korrid::router_with_capability_and_local_root(
+        "moonlight-test-capability",
+        "https://appassets.androidplatform.net",
+        root.path(),
+    );
+    let response = standalone
+        .oneshot(request())
+        .await
+        .expect("standalone response");
+    let body = response_json(
+        to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("standalone body"),
+    );
+    assert_eq!(body["outcome"]["_tag"], "Err");
+    assert_eq!(body["outcome"]["payload"]["code"], "MoonlightUnavailable");
+
+    let android = korrid::android_router_with_capability_and_local_root(
+        "moonlight-test-capability",
+        "https://appassets.androidplatform.net",
+        root.path(),
+    );
+    let mut launch_ids = Vec::new();
+    for _ in 0..2 {
+        let response = android
+            .clone()
+            .oneshot(request())
+            .await
+            .expect("Android response");
+        let body = response_json(
+            to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("Android body"),
+        );
+        assert_eq!(body["outcome"]["_tag"], "Ok");
+        let spec = &body["outcome"]["payload"];
+        assert_eq!(spec["transportId"], "@korri:moonlight/moonlight");
+        assert_eq!(spec["implementation"], "artemis");
+        assert_eq!(spec["sunshineApp"], "Korri Stream");
+        assert_eq!(spec["hostUuid"], "host-uuid");
+        assert_eq!(spec["appId"], 7);
+        assert_eq!(spec["launchId"].as_str().expect("launch ID").len(), 32);
+        assert_eq!(spec["integrity"].as_str().expect("integrity").len(), 64);
+        launch_ids.push(spec["launchId"].clone());
+    }
+    assert_ne!(launch_ids[0], launch_ids[1]);
+
+    for payload in [
+        r#"{"hostUuid":"","appId":7}"#,
+        r#"{"hostUuid":"host-uuid","appId":0}"#,
+    ] {
+        let response = android
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/rpc")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, "Bearer moonlight-test-capability")
+                    .body(Body::from(format!(
+                        r#"{{"_tag":"app.moonlight.launch.prepare","payload":{payload}}}"#
+                    )))
+                    .expect("invalid Moonlight launch request"),
+            )
+            .await
+            .expect("invalid target response");
+        let body = response_json(
+            to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("invalid target body"),
+        );
+        assert_eq!(body["outcome"]["_tag"], "Err");
+        assert_eq!(
+            body["outcome"]["payload"]["code"],
+            "InvalidMoonlightLaunchTarget"
+        );
+    }
+}
+
 #[test]
 fn layered_disable_removes_controls_without_reassigning_reserved_identity() {
     let disabled = registry(&["@korri:retroarch"]);

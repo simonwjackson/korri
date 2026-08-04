@@ -1,4 +1,7 @@
-import type { LaunchSpec as GeneratedLaunchSpec } from "../generated/korrid"
+import type {
+  LaunchSpec as GeneratedLaunchSpec,
+  MoonlightLaunchSpec as GeneratedMoonlightLaunchSpec,
+} from "../generated/korrid"
 
 /**
  * Treaty between the portal (TS, in the WebView) and the Android shell
@@ -24,8 +27,9 @@ import type { LaunchSpec as GeneratedLaunchSpec } from "../generated/korrid"
 // capability required to protect localhost session-control RPCs. 6 adds the
 // launcher-neutral local launch instruction. 10 removes direct Android app
 // enumeration/launch and makes notification prompt semantics explicit. 11 adds
-// the shell-owned Android/app identity used by System information.
-export const BRIDGE_VERSION = 11
+// the shell-owned Android/app identity used by System information. 12 seals
+// Moonlight startup behind korrid's signed, one-use launch instruction.
+export const BRIDGE_VERSION = 12
 
 // ── Local launches (JS -> Kotlin) ───────────────────────────────────────
 
@@ -74,7 +78,10 @@ export type QueryStreamAppsResult =
   | { readonly _tag: "StreamApps"; readonly items: readonly StreamApp[] }
   | { readonly _tag: "QueryFailed"; readonly message: string }
 
-/** Result of `KorriNative.startStream(hostUuid, appId)`. */
+/** Signed Moonlight startup instruction produced and consumed by korrid. */
+export type MoonlightLaunchSpec = GeneratedMoonlightLaunchSpec
+
+/** Result of `KorriNative.startStream(specJson)`. */
 export type StartStreamResult =
   | { readonly _tag: "StreamStarted" }
   | {
@@ -128,12 +135,10 @@ export interface KorriNativeBridgeSurface {
   /** Returns JSON-encoded `QueryStreamAppsResult`. */
   queryStreamApps(hostUuid: string): string
   /**
-   * Starts the native stream Activity for an app on a paired host.
-   * Returns JSON-encoded `StartStreamResult`; "StreamStarted" means the
-   * Activity was launched, after which the portal is backgrounded until
-   * the stream ends (see the `korri-shell-resumed` window event).
+   * Verifies and consumes korrid's signed Moonlight launch instruction before
+   * starting the stream Activity. The portal cannot submit raw host/app data.
    */
-  startStream(hostUuid: string, appId: number): string
+  startStream(specJson: string): string
   /**
    * Port of the embedded korrid server on 127.0.0.1, or -1 when it is not
    * running. The portal builds its brain base URL from this; hardware and

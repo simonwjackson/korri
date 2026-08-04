@@ -90,6 +90,14 @@ pub struct SessionPrepared {
 pub struct MoonlightResolveRequest {}
 
 #[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MoonlightLaunchPrepareRequest {
+    pub host_uuid: String,
+    pub app_id: u32,
+}
+
+#[typeshare]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum MoonlightImplementation {
@@ -111,6 +119,14 @@ pub struct ResolvedMoonlight {
 pub enum MoonlightResolveOutcome {
     Available(ResolvedMoonlight),
     Unavailable(RpcFailure),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
+pub enum MoonlightLaunchPrepareOutcome {
+    Ok(launcher::MoonlightLaunchSpec),
+    Err(RpcFailure),
 }
 
 #[typeshare]
@@ -554,6 +570,8 @@ pub enum RpcRequest {
     CatalogSnapshot(CatalogSnapshotRequest),
     #[serde(rename = "app.moonlight.resolve")]
     MoonlightResolve(MoonlightResolveRequest),
+    #[serde(rename = "app.moonlight.launch.prepare")]
+    MoonlightLaunchPrepare(MoonlightLaunchPrepareRequest),
     #[serde(rename = "app.session.prepare")]
     SessionPrepare(SessionPrepareRequest),
     #[serde(rename = "app.session.status")]
@@ -584,6 +602,8 @@ pub enum RpcResponse {
     CatalogSnapshot(CatalogSnapshotOutcome),
     #[serde(rename = "app.moonlight.resolve")]
     MoonlightResolve(MoonlightResolveOutcome),
+    #[serde(rename = "app.moonlight.launch.prepare")]
+    MoonlightLaunchPrepare(MoonlightLaunchPrepareOutcome),
     #[serde(rename = "app.session.prepare")]
     SessionPrepare(SessionPrepareOutcome),
     #[serde(rename = "app.session.status")]
@@ -618,6 +638,7 @@ struct BrainRuntime {
     local_storage_root: PathBuf,
     local_file_provision: launcher::FileProvisionMode,
     local_launch_signing_key: Vec<u8>,
+    moonlight_launch_authority: Arc<Mutex<launcher::MoonlightLaunchAuthority>>,
     native_platform: NativePlatform,
     config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
     /** Serialises revision-check + replace; external file-manager edits are
@@ -852,6 +873,45 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                 }),
             };
             RpcResponse::MoonlightResolve(outcome)
+        }
+        RpcRequest::MoonlightLaunchPrepare(request) => {
+            let outcome = match &state.mode {
+                ServerMode::Brain(brain) => match resolve_moonlight_outcome(
+                    &brain.config_snapshot.reload(),
+                    brain.native_platform,
+                ) {
+                    MoonlightResolveOutcome::Available(resolved)
+                        if !request.host_uuid.is_empty() && request.app_id > 0 =>
+                    {
+                        let spec = brain
+                            .moonlight_launch_authority
+                            .lock()
+                            .expect("Moonlight launch authority poisoned")
+                            .prepare(
+                                resolved.transport_id,
+                                resolved.implementation,
+                                resolved.sunshine_app,
+                                request.host_uuid,
+                                request.app_id,
+                            );
+                        MoonlightLaunchPrepareOutcome::Ok(spec)
+                    }
+                    MoonlightResolveOutcome::Available(_) => {
+                        MoonlightLaunchPrepareOutcome::Err(RpcFailure {
+                            code: "InvalidMoonlightLaunchTarget".into(),
+                            message: "Moonlight host UUID and positive app ID are required".into(),
+                        })
+                    }
+                    MoonlightResolveOutcome::Unavailable(failure) => {
+                        MoonlightLaunchPrepareOutcome::Err(failure)
+                    }
+                },
+                ServerMode::Host(_) => MoonlightLaunchPrepareOutcome::Err(RpcFailure {
+                    code: "MoonlightUnavailable".into(),
+                    message: "Artemis is available only at the Android edge".into(),
+                }),
+            };
+            RpcResponse::MoonlightLaunchPrepare(outcome)
         }
         RpcRequest::SessionPrepare(request) => {
             let outcome = match &state.mode {
@@ -1105,12 +1165,17 @@ pub fn router_with_capability_and_local_root(
     allowed_origin: &str,
     local_storage_root: impl AsRef<Path>,
 ) -> Router {
+    let signing_key = generate_launch_signing_key();
+    let moonlight_launch_authority = Arc::new(Mutex::new(launcher::MoonlightLaunchAuthority::new(
+        signing_key.clone(),
+    )));
     router_with_capability_local_root_and_provision(
         rpc_capability,
         allowed_origin,
         local_storage_root,
         launcher::FileProvisionMode::Direct,
-        generate_launch_signing_key(),
+        signing_key,
+        moonlight_launch_authority,
         NativePlatform::Standalone,
     )
 }
@@ -1121,12 +1186,17 @@ pub fn android_router_with_capability_and_local_root(
     allowed_origin: &str,
     local_storage_root: impl AsRef<Path>,
 ) -> Router {
+    let signing_key = generate_launch_signing_key();
+    let moonlight_launch_authority = Arc::new(Mutex::new(launcher::MoonlightLaunchAuthority::new(
+        signing_key.clone(),
+    )));
     router_with_capability_local_root_and_provision(
         rpc_capability,
         allowed_origin,
         local_storage_root,
         launcher::FileProvisionMode::Deferred,
-        generate_launch_signing_key(),
+        signing_key,
+        moonlight_launch_authority,
         NativePlatform::EmbeddedAndroid,
     )
 }
@@ -1137,6 +1207,7 @@ fn router_with_capability_local_root_and_provision(
     local_storage_root: impl AsRef<Path>,
     local_file_provision: launcher::FileProvisionMode,
     local_launch_signing_key: Vec<u8>,
+    moonlight_launch_authority: Arc<Mutex<launcher::MoonlightLaunchAuthority>>,
     native_platform: NativePlatform,
 ) -> Router {
     let local_storage_root = local_storage_root.as_ref().to_owned();
@@ -1149,6 +1220,7 @@ fn router_with_capability_local_root_and_provision(
             local_storage_root,
             local_file_provision,
             local_launch_signing_key,
+            moonlight_launch_authority,
             native_platform,
             config_snapshot,
             settings_write_lock: Arc::new(Mutex::new(())),
@@ -1219,6 +1291,7 @@ struct ServerHandle {
     port: u16,
     rpc_capability: String,
     launch_signing_key: Vec<u8>,
+    moonlight_launch_authority: Arc<Mutex<launcher::MoonlightLaunchAuthority>>,
     stop: oneshot::Sender<()>,
     thread: JoinHandle<()>,
 }
@@ -1264,6 +1337,10 @@ pub fn start_local_server(
     let server_capability = rpc_capability.clone();
     let launch_signing_key = generate_launch_signing_key();
     let server_signing_key = launch_signing_key.clone();
+    let moonlight_launch_authority = Arc::new(Mutex::new(launcher::MoonlightLaunchAuthority::new(
+        launch_signing_key.clone(),
+    )));
+    let server_moonlight_launch_authority = Arc::clone(&moonlight_launch_authority);
     let allowed_origin = allowed_origin.to_owned();
     let local_storage_root = local_storage_root.to_owned();
     let (stop, stopped) = oneshot::channel();
@@ -1282,6 +1359,7 @@ pub fn start_local_server(
                         &local_storage_root,
                         launcher::FileProvisionMode::Deferred,
                         server_signing_key,
+                        server_moonlight_launch_authority,
                         NativePlatform::EmbeddedAndroid,
                     ),
                 )
@@ -1300,6 +1378,7 @@ pub fn start_local_server(
         port,
         rpc_capability,
         launch_signing_key,
+        moonlight_launch_authority,
         stop,
         thread,
     });
@@ -1333,6 +1412,47 @@ pub fn local_server_capability() -> Option<String> {
         .expect("server mutex poisoned")
         .as_ref()
         .map(|server| server.rpc_capability.clone())
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MoonlightLaunchAuthorization {
+    Authorized,
+    InvalidSpec,
+    Integrity,
+    Stale,
+    Replay,
+    ServerUnavailable,
+}
+
+/** Verify and atomically consume a signed Moonlight startup instruction. */
+pub fn authorize_moonlight_launch_spec(spec_json: &str) -> MoonlightLaunchAuthorization {
+    let Ok(spec) = serde_json::from_str::<launcher::MoonlightLaunchSpec>(spec_json) else {
+        return MoonlightLaunchAuthorization::InvalidSpec;
+    };
+    let Some(authority) = server_slot()
+        .lock()
+        .expect("server mutex poisoned")
+        .as_ref()
+        .map(|server| Arc::clone(&server.moonlight_launch_authority))
+    else {
+        return MoonlightLaunchAuthorization::ServerUnavailable;
+    };
+    let verification = authority
+        .lock()
+        .expect("Moonlight launch authority poisoned")
+        .authorize(&spec);
+    match verification {
+        Ok(()) => MoonlightLaunchAuthorization::Authorized,
+        Err(launcher::MoonlightLaunchVerificationFailure::Integrity) => {
+            MoonlightLaunchAuthorization::Integrity
+        }
+        Err(launcher::MoonlightLaunchVerificationFailure::Stale) => {
+            MoonlightLaunchAuthorization::Stale
+        }
+        Err(launcher::MoonlightLaunchVerificationFailure::Replay) => {
+            MoonlightLaunchAuthorization::Replay
+        }
+    }
 }
 
 /// Verify that a launcher-neutral instruction came from this embedded server.
@@ -2051,6 +2171,9 @@ command = ["sh", "-c", "sleep 1"]
             root.path(),
             launcher::FileProvisionMode::Deferred,
             b"test signing key".to_vec(),
+            Arc::new(Mutex::new(launcher::MoonlightLaunchAuthority::new(
+                b"test signing key".to_vec(),
+            ))),
             NativePlatform::EmbeddedAndroid,
         );
         let response = app
@@ -2135,6 +2258,65 @@ command = ["sh", "-c", "sleep 1"]
         assert!(!verify_local_launch_spec(
             &serde_json::to_string(&spec).unwrap()
         ));
+
+        let prepare = || {
+            client
+                .post(&url)
+                .bearer_auth(&capability)
+                .json(&serde_json::json!({
+                    "_tag": "app.moonlight.launch.prepare",
+                    "payload": { "hostUuid": "host-uuid", "appId": 7 }
+                }))
+                .send()
+        };
+        let first = prepare()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap()["outcome"]["payload"]
+            .clone();
+        let first_json = serde_json::to_string(&first).unwrap();
+        assert_eq!(
+            authorize_moonlight_launch_spec(&first_json),
+            MoonlightLaunchAuthorization::Authorized
+        );
+        assert_eq!(
+            authorize_moonlight_launch_spec(&first_json),
+            MoonlightLaunchAuthorization::Replay
+        );
+
+        let second = prepare()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap()["outcome"]["payload"]
+            .clone();
+        let mut tampered = second.clone();
+        tampered["appId"] = serde_json::json!(8);
+        assert_eq!(
+            authorize_moonlight_launch_spec(&serde_json::to_string(&tampered).unwrap()),
+            MoonlightLaunchAuthorization::Integrity
+        );
+
+        let third = prepare()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap()["outcome"]["payload"]
+            .clone();
+        assert_eq!(
+            authorize_moonlight_launch_spec(&serde_json::to_string(&second).unwrap()),
+            MoonlightLaunchAuthorization::Stale
+        );
+        let mut unknown = third;
+        unknown["signingKey"] = serde_json::json!("must not cross");
+        assert_eq!(
+            authorize_moonlight_launch_spec(&serde_json::to_string(&unknown).unwrap()),
+            MoonlightLaunchAuthorization::InvalidSpec
+        );
     }
 
     #[cfg(unix)]

@@ -1,9 +1,9 @@
-//! Android edge: five JNI functions mirroring
+//! Android edge: JNI functions mirroring
 //! clients/android/.../korrid/KorridServer.java.
 
 use crate::{
-    korrid_version, local_server_capability, start_local_server, stop_local_server,
-    verify_local_launch_spec,
+    authorize_moonlight_launch_spec, korrid_version, local_server_capability, start_local_server,
+    stop_local_server, verify_local_launch_spec, MoonlightLaunchAuthorization,
 };
 use jni::{
     objects::{JClass, JString},
@@ -71,6 +71,36 @@ pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_capabili
         },
         None => {
             let _ = env.throw_new("java/lang/IllegalStateException", "korrid is not running");
+            ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_authorizeMoonlightLaunchSpec(
+    mut env: JNIEnv,
+    _class: JClass,
+    spec_json: JString,
+) -> jstring {
+    let spec_json: String = match env.get_string(&spec_json) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error.to_string());
+            return ptr::null_mut();
+        }
+    };
+    let outcome = match authorize_moonlight_launch_spec(&spec_json) {
+        MoonlightLaunchAuthorization::Authorized => "Authorized",
+        MoonlightLaunchAuthorization::InvalidSpec => "InvalidSpec",
+        MoonlightLaunchAuthorization::Integrity => "Integrity",
+        MoonlightLaunchAuthorization::Stale => "Stale",
+        MoonlightLaunchAuthorization::Replay => "Replay",
+        MoonlightLaunchAuthorization::ServerUnavailable => "ServerUnavailable",
+    };
+    match env.new_string(outcome) {
+        Ok(value) => value.into_raw(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error.to_string());
             ptr::null_mut()
         }
     }
