@@ -5,7 +5,10 @@ import {
   createFixtureHost,
   fixtureModel,
 } from "../src/fixtures/fixture-host"
-import { ShiftSurface } from "../src/ShiftSurface"
+import {
+  shiftHomeGamesFromCatalog,
+  ShiftSurface,
+} from "../src/ShiftSurface"
 
 const model = (overrides: Partial<SurfaceModel> = {}): SurfaceModel => ({
   ...fixtureModel,
@@ -13,16 +16,59 @@ const model = (overrides: Partial<SurfaceModel> = {}): SurfaceModel => ({
 })
 
 describe("ShiftSurface", () => {
-  test("renders every game the host published, in the host's order", () => {
+  test("keeps the full catalog in Library instead of pouring it onto Home", () => {
     render(<ShiftSurface model={model()} host={createFixtureHost()} />)
 
-    const tiles = screen.getAllByRole("button", {
+    const homeTiles = screen.getAllByRole("button", {
       name: /Skate 3|Wario Land 4|Neverball/,
     })
-    expect(tiles.map(tile => tile.getAttribute("aria-label"))).toEqual([
+    expect(homeTiles).toHaveLength(2)
+    expect(homeTiles.map(tile => tile.getAttribute("aria-label"))).toContain(
+      "Skate 3",
+    )
+
+    const library = screen.getByRole("button", { name: "Library" })
+    fireEvent.focus(library)
+    fireEvent.click(library)
+    const libraryTiles = screen.getAllByRole("button", {
+      name: /Skate 3|Wario Land 4|Neverball/,
+    })
+    expect(libraryTiles.map(tile => tile.getAttribute("aria-label"))).toEqual([
+      "Neverball",
       "Skate 3",
       "Wario Land 4",
-      "Neverball",
+    ])
+  })
+
+  test("builds Continue plus one rotating pick without duplicating it", () => {
+    const games = [
+      {
+        id: "running",
+        title: "Running",
+        tileArtUrl: "",
+        wideArtUrl: "",
+        resumable: true,
+      },
+      { id: "a", title: "A", tileArtUrl: "", wideArtUrl: "" },
+      { id: "b", title: "B", tileArtUrl: "", wideArtUrl: "" },
+    ]
+
+    expect(shiftHomeGamesFromCatalog(games, () => 1)).toEqual([
+      {
+        id: "running",
+        title: "Running",
+        tileArtUrl: "",
+        wideArtUrl: "",
+        resumable: true,
+        section: "Continue",
+      },
+      {
+        id: "b",
+        title: "B",
+        tileArtUrl: "",
+        wideArtUrl: "",
+        section: "Random",
+      },
     ])
   })
 
@@ -32,7 +78,7 @@ describe("ShiftSurface", () => {
     )
 
     expect(container.querySelectorAll("img")).toHaveLength(0)
-    expect(container.querySelectorAll(".shift-monogram").length).toBe(3)
+    expect(container.querySelectorAll(".shift-monogram").length).toBe(2)
   })
 
   test("setup actions do not pollute the game rail", () => {
@@ -368,7 +414,7 @@ describe("Shift settings", () => {
 
     act(() => host.press("back"))
 
-    expect(screen.getByRole("button", { name: "Wario Land 4" })).toBeDefined()
+    expect(screen.getByRole("button", { name: "Library" })).toBeDefined()
     expect(host.calls).toEqual([])
   })
 })

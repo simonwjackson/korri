@@ -74,6 +74,42 @@ export function shiftDetailGameFromSurfaceGame(
   }
 }
 
+const HOME_CONTINUE_CAP = 8
+
+/**
+ * Keep Home curated, as the legacy Shift route did: active/recent work first,
+ * then one rotating pick. The complete catalog belongs behind Library.
+ *
+ * The current surface treaty only exposes whether a game is resumable, not a
+ * last-played timestamp, so resumable games are the honest Continue section.
+ * `randomIndex` is injected to keep this rule deterministic in tests.
+ */
+export function shiftHomeGamesFromCatalog(
+  games: readonly ShiftCinematicGame[],
+  randomIndex: (count: number) => number = count =>
+    Math.floor(Math.random() * count),
+): readonly ShiftCinematicGame[] {
+  const continuing = games
+    .filter(game => game.resumable)
+    .slice(0, HOME_CONTINUE_CAP)
+  const continuingIds = new Set(continuing.map(game => game.id))
+  const candidates = games.filter(game => !continuingIds.has(game.id))
+  const random =
+    candidates.length > 0
+      ? candidates[
+          Math.min(
+            Math.max(randomIndex(candidates.length), 0),
+            candidates.length - 1,
+          )
+        ]
+      : undefined
+
+  return [
+    ...continuing.map(game => ({ ...game, section: "Continue" })),
+    ...(random ? [{ ...random, section: "Random" }] : []),
+  ]
+}
+
 /**
  * The rail's Settings destination. Shift owns it, not Korri: which screens a
  * surface has, and how you reach them, is the surface's business — Korri only
@@ -97,9 +133,18 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
   >("home")
 
   const surfaceGames = model.catalog._tag === "Ready" ? model.catalog.games : []
-  const games = useMemo(
+  const allGames = useMemo(
     () => surfaceGames.map(shiftGameFromSurfaceGame),
     [surfaceGames],
+  )
+  // Stable per Home visit: ordinary re-renders must not reshuffle the pick.
+  const homeRandomSeed = useMemo(() => Math.random(), [])
+  const games = useMemo(
+    () =>
+      shiftHomeGamesFromCatalog(allGames, count =>
+        Math.floor(homeRandomSeed * count),
+      ),
+    [allGames, homeRandomSeed],
   )
   const libraryGames = useMemo(
     () => surfaceGames.map(shiftLibraryGameFromSurfaceGame),
