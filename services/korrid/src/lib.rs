@@ -95,6 +95,10 @@ pub struct MoonlightResolveRequest {}
 pub struct MoonlightLaunchPrepareRequest {
     pub host_uuid: String,
     pub app_id: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
 }
 
 #[typeshare]
@@ -665,6 +669,7 @@ struct BrainRuntime {
     local_file_provision: launcher::FileProvisionMode,
     local_launch_signing_key: Vec<u8>,
     moonlight_launch_authority: Arc<Mutex<launcher::MoonlightLaunchAuthority>>,
+    active_android_launch: Arc<Mutex<Option<launcher::AndroidActiveLaunch>>>,
     native_platform: NativePlatform,
     config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
     /** Serialises revision-check + replace; external file-manager edits are
@@ -941,6 +946,8 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                                 resolved.sunshine_app,
                                 request.host_uuid,
                                 request.app_id,
+                                request.game_id,
+                                request.title,
                             );
                             MoonlightLaunchPrepareOutcome::Ok(spec)
                         }
@@ -1029,16 +1036,60 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                 message: "host session stop is not implemented".into(),
             })),
         },
-        // U2 can resolve declarations from an explicit route plus live executor
-        // state. The existing upstream session status carries neither, so U3/U4
-        // must publish that context before these RPCs can honestly materialize or
-        // invoke a control. Never infer a route from game/title/provider strings.
-        RpcRequest::SessionControls(_) => RpcResponse::SessionControls(
-            SessionControlsOutcome::Err(session_route_context_unavailable()),
-        ),
-        RpcRequest::SessionControlInvoke(_) => RpcResponse::SessionControlInvoke(
-            SessionControlInvokeOutcome::Err(session_route_context_unavailable()),
-        ),
+        RpcRequest::SessionControls(request) => {
+            let active = match &state.mode {
+                ServerMode::Brain(brain) => brain
+                    .active_android_launch
+                    .lock()
+                    .expect("active Android launch mutex poisoned")
+                    .clone(),
+                ServerMode::Host(_) => None,
+            };
+            let outcome = match active {
+                Some(active) if active.launch_id == request.launch_id => {
+                    // U4 publishes the signed route context, but its executors
+                    // remain unavailable until U6/U7. Resume is overlay-owned
+                    // and U5 composes it locally, so no optimistic plugin rows.
+                    SessionControlsOutcome::Ok(SessionControls {
+                        launch_id: active.launch_id,
+                        title: active.title,
+                        groups: Vec::new(),
+                    })
+                }
+                Some(_) => SessionControlsOutcome::Err(SessionControlFailure {
+                    reason: SessionControlFailureReason::StaleSession,
+                    message: "The gameplay session changed. Reopen the overlay and try again."
+                        .into(),
+                }),
+                None => SessionControlsOutcome::Err(session_route_context_unavailable()),
+            };
+            RpcResponse::SessionControls(outcome)
+        }
+        RpcRequest::SessionControlInvoke(request) => {
+            let active = match &state.mode {
+                ServerMode::Brain(brain) => brain
+                    .active_android_launch
+                    .lock()
+                    .expect("active Android launch mutex poisoned")
+                    .clone(),
+                ServerMode::Host(_) => None,
+            };
+            let outcome = match active {
+                Some(active) if active.launch_id != request.launch_id => {
+                    SessionControlInvokeOutcome::Err(SessionControlFailure {
+                        reason: SessionControlFailureReason::StaleSession,
+                        message: "The gameplay session changed. Reopen the overlay and try again."
+                            .into(),
+                    })
+                }
+                Some(_) => SessionControlInvokeOutcome::Err(SessionControlFailure {
+                    reason: SessionControlFailureReason::UnknownControl,
+                    message: "That gameplay control is not available yet.".into(),
+                }),
+                None => SessionControlInvokeOutcome::Err(session_route_context_unavailable()),
+            };
+            RpcResponse::SessionControlInvoke(outcome)
+        }
         RpcRequest::LocalGamesList(_) => match &state.mode {
             ServerMode::Brain(brain) => {
                 let config_state = brain.config_snapshot.reload();
@@ -1256,6 +1307,7 @@ pub fn router_with_capability_and_local_root(
         launcher::FileProvisionMode::Direct,
         signing_key,
         moonlight_launch_authority,
+        Arc::new(Mutex::new(None)),
         NativePlatform::Standalone,
         config_snapshot,
     )
@@ -1282,6 +1334,7 @@ fn android_router_with_capability_and_local_root(
         launcher::FileProvisionMode::Deferred,
         signing_key,
         moonlight_launch_authority,
+        Arc::new(Mutex::new(None)),
         NativePlatform::EmbeddedAndroid,
         config_snapshot,
     )
@@ -1294,6 +1347,7 @@ fn router_with_capability_local_root_and_provision(
     local_file_provision: launcher::FileProvisionMode,
     local_launch_signing_key: Vec<u8>,
     moonlight_launch_authority: Arc<Mutex<launcher::MoonlightLaunchAuthority>>,
+    active_android_launch: Arc<Mutex<Option<launcher::AndroidActiveLaunch>>>,
     native_platform: NativePlatform,
     config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
 ) -> Router {
@@ -1307,6 +1361,7 @@ fn router_with_capability_local_root_and_provision(
             local_file_provision,
             local_launch_signing_key,
             moonlight_launch_authority,
+            active_android_launch,
             native_platform,
             config_snapshot,
             settings_write_lock: Arc::new(Mutex::new(())),
@@ -1377,6 +1432,8 @@ struct ServerHandle {
     port: u16,
     rpc_capability: String,
     launch_signing_key: Vec<u8>,
+    active_android_launch: Arc<Mutex<Option<launcher::AndroidActiveLaunch>>>,
+    platform_instruction_verifier: Option<launcher::PlatformInstructionVerifier>,
     moonlight_launch_authority: Arc<Mutex<launcher::MoonlightLaunchAuthority>>,
     moonlight_config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
     native_platform: NativePlatform,
@@ -1456,6 +1513,8 @@ fn start_local_server_for_platform(
         launch_signing_key.clone(),
     )));
     let server_moonlight_launch_authority = Arc::clone(&moonlight_launch_authority);
+    let active_android_launch = Arc::new(Mutex::new(None));
+    let router_active_android_launch = Arc::clone(&active_android_launch);
     let allowed_origin = allowed_origin.to_owned();
     let local_storage_root = local_storage_root.to_owned();
     let moonlight_config_snapshot =
@@ -1478,6 +1537,7 @@ fn start_local_server_for_platform(
                         launcher::FileProvisionMode::Deferred,
                         server_signing_key,
                         server_moonlight_launch_authority,
+                        router_active_android_launch,
                         native_platform,
                         server_config_snapshot,
                     ),
@@ -1497,6 +1557,8 @@ fn start_local_server_for_platform(
         port,
         rpc_capability,
         launch_signing_key,
+        active_android_launch,
+        platform_instruction_verifier: None,
         moonlight_launch_authority,
         moonlight_config_snapshot,
         native_platform,
@@ -1533,6 +1595,156 @@ pub fn local_server_capability() -> Option<String> {
         .expect("server mutex poisoned")
         .as_ref()
         .map(|server| server.rpc_capability.clone())
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ActiveAndroidLaunchFailure {
+    InvalidSpec,
+    Integrity,
+    ServerUnavailable,
+}
+
+fn publish_verified_android_launch(
+    server: &mut ServerHandle,
+    launch: launcher::AndroidActiveLaunch,
+) -> launcher::AndroidActiveLaunch {
+    server.platform_instruction_verifier = Some(launcher::PlatformInstructionVerifier::new(
+        launch.launch_id.clone(),
+    ));
+    *server
+        .active_android_launch
+        .lock()
+        .expect("active Android launch mutex poisoned") = Some(launch.clone());
+    launch
+}
+
+/** Publish signed local context only after Java reports Android start success. */
+pub fn publish_local_active_launch(
+    spec_json: &str,
+) -> Result<launcher::AndroidActiveLaunch, ActiveAndroidLaunchFailure> {
+    let spec = serde_json::from_str::<launcher::LaunchSpec>(spec_json)
+        .map_err(|_| ActiveAndroidLaunchFailure::InvalidSpec)?;
+    let mut slot = server_slot().lock().expect("server mutex poisoned");
+    let server = slot
+        .as_mut()
+        .ok_or(ActiveAndroidLaunchFailure::ServerUnavailable)?;
+    if !spec.verify(&server.launch_signing_key) {
+        return Err(ActiveAndroidLaunchFailure::Integrity);
+    }
+    if spec.context.foreground.kind == launcher::LaunchForegroundKind::ArtemisGame {
+        return Err(ActiveAndroidLaunchFailure::InvalidSpec);
+    }
+    Ok(publish_verified_android_launch(
+        server,
+        launcher::AndroidActiveLaunch::from_context(spec.launch_id, spec.context),
+    ))
+}
+
+/** Publish a signed Moonlight context. Rust signs an Artemis marker; Java is
+ * the authority for its own application package and Game component names. */
+pub fn publish_moonlight_active_launch(
+    spec_json: &str,
+    application_package: &str,
+    game_class_name: &str,
+) -> Result<launcher::AndroidActiveLaunch, ActiveAndroidLaunchFailure> {
+    if application_package.is_empty() || game_class_name.is_empty() {
+        return Err(ActiveAndroidLaunchFailure::InvalidSpec);
+    }
+    let spec = serde_json::from_str::<launcher::MoonlightLaunchSpec>(spec_json)
+        .map_err(|_| ActiveAndroidLaunchFailure::InvalidSpec)?;
+    let mut slot = server_slot().lock().expect("server mutex poisoned");
+    let server = slot
+        .as_mut()
+        .ok_or(ActiveAndroidLaunchFailure::ServerUnavailable)?;
+    if !spec.verify(&server.launch_signing_key)
+        || spec.context.foreground.kind != launcher::LaunchForegroundKind::ArtemisGame
+    {
+        return Err(ActiveAndroidLaunchFailure::Integrity);
+    }
+    let mut context = spec.context;
+    context.foreground = launcher::LaunchForegroundRule {
+        kind: launcher::LaunchForegroundKind::Component,
+        package_name: Some(application_package.to_owned()),
+        class_name: Some(game_class_name.to_owned()),
+    };
+    Ok(publish_verified_android_launch(
+        server,
+        launcher::AndroidActiveLaunch::from_context(spec.launch_id, context),
+    ))
+}
+
+pub fn active_android_launch() -> Option<launcher::AndroidActiveLaunch> {
+    server_slot()
+        .lock()
+        .expect("server mutex poisoned")
+        .as_ref()
+        .and_then(|server| {
+            server
+                .active_android_launch
+                .lock()
+                .expect("active Android launch mutex poisoned")
+                .clone()
+        })
+}
+
+/** Late end evidence for A cannot clear replacement B. */
+pub fn clear_active_android_launch(launch_id: &str) -> bool {
+    let mut slot = server_slot().lock().expect("server mutex poisoned");
+    let Some(server) = slot.as_mut() else {
+        return false;
+    };
+    let mut active = server
+        .active_android_launch
+        .lock()
+        .expect("active Android launch mutex poisoned");
+    if active
+        .as_ref()
+        .is_none_or(|current| current.launch_id != launch_id)
+    {
+        return false;
+    }
+    *active = None;
+    drop(active);
+    server.platform_instruction_verifier = None;
+    true
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlatformInstructionAuthorization {
+    Authorized,
+    InvalidSpec,
+    Integrity,
+    Stale,
+    Replay,
+    NoActiveLaunch,
+    ServerUnavailable,
+}
+
+/** Verification/one-use seam only. U6 installs the allowlisted action executor. */
+pub fn authorize_platform_instruction(instruction_json: &str) -> PlatformInstructionAuthorization {
+    let Ok(instruction) = serde_json::from_str::<launcher::PlatformInstruction>(instruction_json)
+    else {
+        return PlatformInstructionAuthorization::InvalidSpec;
+    };
+    let mut slot = server_slot().lock().expect("server mutex poisoned");
+    let Some(server) = slot.as_mut() else {
+        return PlatformInstructionAuthorization::ServerUnavailable;
+    };
+    let Some(verifier) = server.platform_instruction_verifier.as_mut() else {
+        return PlatformInstructionAuthorization::NoActiveLaunch;
+    };
+    match verifier.authorize(&instruction, &server.launch_signing_key) {
+        Ok(()) => PlatformInstructionAuthorization::Authorized,
+        Err(launcher::PlatformInstructionVerificationFailure::Integrity) => {
+            PlatformInstructionAuthorization::Integrity
+        }
+        Err(launcher::PlatformInstructionVerificationFailure::StaleSession) => {
+            PlatformInstructionAuthorization::Stale
+        }
+        Err(launcher::PlatformInstructionVerificationFailure::Replay) => {
+            PlatformInstructionAuthorization::Replay
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1657,6 +1869,8 @@ mod tests {
             "Korri Stream",
             "host-uuid",
             7,
+            None,
+            None,
         );
         let changed = MoonlightResolveOutcome::Available(ResolvedMoonlight {
             transport_id: "@korri:moonlight/moonlight".into(),
@@ -2403,6 +2617,7 @@ command = ["sh", "-c", "sleep 1"]
             Arc::new(Mutex::new(launcher::MoonlightLaunchAuthority::new(
                 b"test signing key".to_vec(),
             ))),
+            Arc::new(Mutex::new(None)),
             NativePlatform::EmbeddedAndroid,
             config::snapshot::ConfigSnapshotCoordinator::new(root.path()),
         );
@@ -2508,6 +2723,44 @@ command = ["sh", "-c", "sleep 1"]
         let mut spec = response["outcome"]["payload"].clone();
         let spec_json = serde_json::to_string(&spec).unwrap();
         assert!(verify_local_launch_spec(&spec_json));
+        let local = publish_local_active_launch(&spec_json).unwrap();
+        assert_eq!(local.game_id.as_deref(), Some("wl4"));
+        assert_eq!(local.title.as_deref(), Some("Wario Land 4"));
+        assert_eq!(
+            local.contributors,
+            vec![
+                launcher::LaunchRouteContributor {
+                    kind: launcher::LaunchContributorKind::Launcher,
+                    id: "@korri:retroarch/retroarch".into(),
+                },
+                launcher::LaunchRouteContributor {
+                    kind: launcher::LaunchContributorKind::Runtime,
+                    id: "@korri:mgba/mgba".into(),
+                },
+            ]
+        );
+        assert!(!clear_active_android_launch("late-older-launch"));
+        assert_eq!(active_android_launch().unwrap().launch_id, local.launch_id);
+        let controls = client
+            .post(&url)
+            .bearer_auth(&capability)
+            .json(&serde_json::json!({
+                "_tag": "app.session.controls",
+                "payload": { "launchId": local.launch_id.clone() }
+            }))
+            .send()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        assert_eq!(controls["outcome"]["_tag"], "Ok");
+        assert_eq!(
+            controls["outcome"]["payload"]["groups"],
+            serde_json::json!([])
+        );
+        assert!(clear_active_android_launch(&local.launch_id));
+        assert!(active_android_launch().is_none());
 
         spec["files"][0]["content"] = serde_json::Value::String("tampered".into());
         assert!(!verify_local_launch_spec(
@@ -2539,6 +2792,50 @@ command = ["sh", "-c", "sleep 1"]
         assert_eq!(
             authorize_moonlight_launch_spec(&first_json),
             MoonlightLaunchAuthorization::Replay
+        );
+        let stream = publish_moonlight_active_launch(
+            &first_json,
+            "com.simonwjackson.korri",
+            "com.limelight.Game",
+        )
+        .unwrap();
+        assert_eq!(stream.launch_id, first["launchId"].as_str().unwrap());
+        assert_eq!(
+            stream.foreground.kind,
+            launcher::LaunchForegroundKind::Component
+        );
+        assert_eq!(
+            stream.foreground.package_name.as_deref(),
+            Some("com.simonwjackson.korri")
+        );
+        assert_eq!(
+            stream.foreground.class_name.as_deref(),
+            Some("com.limelight.Game")
+        );
+        let signing_key = server_slot()
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .launch_signing_key
+            .clone();
+        let instruction = launcher::PlatformInstruction::protect(
+            stream.launch_id.clone(),
+            "@korri:moonlight/disconnect",
+            None,
+            launcher::PlatformEffect::AndroidMoonlight(
+                launcher::AndroidMoonlightEffect::Disconnect,
+            ),
+            &signing_key,
+        );
+        let instruction_json = serde_json::to_string(&instruction).unwrap();
+        assert_eq!(
+            authorize_platform_instruction(&instruction_json),
+            PlatformInstructionAuthorization::Authorized
+        );
+        assert_eq!(
+            authorize_platform_instruction(&instruction_json),
+            PlatformInstructionAuthorization::Replay
         );
 
         let second = prepare()

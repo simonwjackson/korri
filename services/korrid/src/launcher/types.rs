@@ -37,11 +37,114 @@ pub struct ProvisionedFile {
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LaunchContributorKind {
+    Launcher,
+    Transport,
+    Runtime,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct LaunchRouteContributor {
+    pub kind: LaunchContributorKind,
+    pub id: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct LaunchExecutor {
+    pub id: String,
+    pub available: bool,
+}
+
+#[typeshare]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LaunchForegroundKind {
+    Component,
+    Package,
+    /** Java resolves this marker to its own package plus Game component. */
+    ArtemisGame,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaunchForegroundRule {
+    pub kind: LaunchForegroundKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub class_name: Option<String>,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaunchContext {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub contributors: Vec<LaunchRouteContributor>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executor: Option<LaunchExecutor>,
+    pub foreground: LaunchForegroundRule,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AndroidActiveLaunch {
+    pub launch_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub contributors: Vec<LaunchRouteContributor>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executor: Option<LaunchExecutor>,
+    pub foreground: LaunchForegroundRule,
+}
+
+impl AndroidActiveLaunch {
+    pub fn from_context(launch_id: String, context: LaunchContext) -> Self {
+        Self {
+            launch_id,
+            game_id: context.game_id,
+            title: context.title,
+            contributors: context.contributors,
+            executor: context.executor,
+            foreground: context.foreground,
+        }
+    }
+}
+
+impl LaunchContext {
+    pub(crate) fn unresolved() -> Self {
+        Self {
+            game_id: None,
+            title: None,
+            contributors: Vec::new(),
+            executor: None,
+            foreground: LaunchForegroundRule {
+                kind: LaunchForegroundKind::Package,
+                package_name: Some(String::new()),
+                class_name: None,
+            },
+        }
+    }
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LaunchSpec {
     /** Identity created by korrid while preparing this exact launch. */
     pub launch_id: String,
     pub launcher_id: String,
+    pub context: LaunchContext,
     pub component: AndroidComponent,
     pub extras: HashMap<String, String>,
     pub directories: Vec<String>,
@@ -60,6 +163,10 @@ impl LaunchSpec {
         let mut bytes = Vec::new();
         push(&self.launch_id, &mut bytes);
         push(&self.launcher_id, &mut bytes);
+        push(
+            &serde_json::to_string(&self.context).expect("launch context serializes"),
+            &mut bytes,
+        );
         push(&self.component.package_name, &mut bytes);
         push(&self.component.class_name, &mut bytes);
         let mut extras: Vec<_> = self.extras.iter().collect();
@@ -83,6 +190,11 @@ impl LaunchSpec {
 
     pub(crate) fn with_launch_id(mut self, launch_id: String) -> Self {
         self.launch_id = launch_id;
+        self
+    }
+
+    pub(crate) fn with_context(mut self, context: LaunchContext) -> Self {
+        self.context = context;
         self
     }
 
@@ -119,6 +231,7 @@ pub struct MoonlightLaunchSpec {
     /** Fresh identity created by korrid for this native stream startup. */
     pub launch_id: String,
     pub transport_id: String,
+    pub context: LaunchContext,
     pub implementation: crate::MoonlightImplementation,
     pub sunshine_app: String,
     pub host_uuid: String,
@@ -138,6 +251,10 @@ impl MoonlightLaunchSpec {
         push(self.launch_id.as_bytes(), &mut bytes);
         push(self.transport_id.as_bytes(), &mut bytes);
         push(
+            &serde_json::to_vec(&self.context).expect("launch context serializes"),
+            &mut bytes,
+        );
+        push(
             &serde_json::to_vec(&self.implementation).expect("Moonlight implementation serializes"),
             &mut bytes,
         );
@@ -154,7 +271,7 @@ impl MoonlightLaunchSpec {
         self
     }
 
-    fn verify(&self, key: &[u8]) -> bool {
+    pub(crate) fn verify(&self, key: &[u8]) -> bool {
         let Ok(signature) = hex::decode(&self.integrity) else {
             return false;
         };
@@ -197,11 +314,33 @@ impl MoonlightLaunchAuthority {
         sunshine_app: impl Into<String>,
         host_uuid: impl Into<String>,
         app_id: u32,
+        game_id: Option<String>,
+        title: Option<String>,
     ) -> MoonlightLaunchSpec {
         let launch_id = hex::encode(rand::random::<[u8; 16]>());
+        let transport_id = transport_id.into();
         let spec = MoonlightLaunchSpec {
             launch_id: launch_id.clone(),
-            transport_id: transport_id.into(),
+            context: LaunchContext {
+                game_id,
+                title,
+                contributors: vec![LaunchRouteContributor {
+                    kind: LaunchContributorKind::Transport,
+                    id: transport_id.clone(),
+                }],
+                // U6 installs the live Game executor. U4 carries its stable
+                // identity but truthfully reports it unavailable.
+                executor: Some(LaunchExecutor {
+                    id: "android-moonlight".into(),
+                    available: false,
+                }),
+                foreground: LaunchForegroundRule {
+                    kind: LaunchForegroundKind::ArtemisGame,
+                    package_name: None,
+                    class_name: None,
+                },
+            },
+            transport_id,
             implementation,
             sunshine_app: sunshine_app.into(),
             host_uuid: host_uuid.into(),
@@ -405,6 +544,7 @@ mod tests {
         LaunchSpec {
             launch_id: "launch-1".into(),
             launcher_id: "retroarch".into(),
+            context: LaunchContext::unresolved(),
             component: AndroidComponent {
                 package_name: "package".into(),
                 class_name: "Activity".into(),
@@ -428,6 +568,8 @@ mod tests {
             "Korri Stream",
             "host-uuid",
             7,
+            None,
+            None,
         );
         assert_eq!(first.transport_id, "@korri:moonlight/moonlight");
         assert_eq!(first.sunshine_app, "Korri Stream");
@@ -441,6 +583,8 @@ mod tests {
             "Korri Stream",
             "host-uuid",
             7,
+            None,
+            None,
         );
         assert_ne!(second.launch_id, first.launch_id);
         assert_eq!(
@@ -481,6 +625,8 @@ mod tests {
             "Korri Stream",
             "host-uuid",
             7,
+            None,
+            None,
         );
 
         assert!(authority.cancel(&reservation.launch_id));
@@ -500,6 +646,8 @@ mod tests {
             "Korri Stream",
             "host-uuid",
             7,
+            None,
+            None,
         );
         let replacement = authority.prepare(
             "@korri:moonlight/moonlight",
@@ -507,6 +655,8 @@ mod tests {
             "Korri Stream",
             "host-uuid",
             7,
+            None,
+            None,
         );
 
         assert!(!authority.cancel(&older.launch_id));

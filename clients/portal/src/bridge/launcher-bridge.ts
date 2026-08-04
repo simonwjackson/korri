@@ -6,8 +6,10 @@ import type {
   OpenNotificationSettingsResult,
   BackgroundNoticeResult,
   RequestBackgroundNoticeResult,
+  OpenOverlaySettingsResult,
   OpenPairingResult,
   OpenStorageSettingsResult,
+  OverlayPermissionResult,
   QueryStreamAppsResult,
   QueryStreamHostsResult,
   StartStreamResult,
@@ -39,6 +41,10 @@ export interface LauncherBridge {
   storageAccess(): Promise<StorageAccessResult>
   /** Take the user to the system screen where that access is granted. */
   openStorageAccessSettings(): Promise<OpenStorageSettingsResult>
+  /** Actual gameplay-overlay accessibility grant state. */
+  overlayPermission(): Promise<OverlayPermissionResult>
+  /** Open Android accessibility settings; this does not imply a grant. */
+  openOverlaySettings(): Promise<OpenOverlaySettingsResult>
   /** Whether the user can see that Korri is running in the background. */
   backgroundNotice(): Promise<BackgroundNoticeResult>
   /** Ask Android for permission to show that notice. */
@@ -90,6 +96,8 @@ interface MoonlightLaunchPreparer {
   moonlightLaunchPrepare(
     hostUuid: string,
     appId: number,
+    gameId?: string,
+    title?: string,
   ): Promise<MoonlightLaunchPrepareOutcome>
 }
 
@@ -101,9 +109,11 @@ export async function reserveResolvedMoonlightLaunch(
   preparer: MoonlightLaunchPreparer,
   hostUuid: string,
   appId: number,
+  gameId?: string,
+  title?: string,
 ): Promise<MoonlightLaunchPrepareOutcome> {
   return resolution._tag === "Available"
-    ? preparer.moonlightLaunchPrepare(hostUuid, appId)
+    ? preparer.moonlightLaunchPrepare(hostUuid, appId, gameId, title)
     : { _tag: "Err", payload: resolution.payload }
 }
 
@@ -162,6 +172,22 @@ export function createKorriNativeLauncherBridge(
       try {
         return decodeOpenStorageSettings(
           JSON.parse(surface.openStorageAccessSettings()),
+        )
+      } catch (error) {
+        return { _tag: "Unavailable", message: describe(error) }
+      }
+    },
+    async overlayPermission() {
+      try {
+        return decodeOverlayPermission(JSON.parse(surface.overlayPermission()))
+      } catch {
+        return { _tag: "RestrictedOrUnavailable" }
+      }
+    },
+    async openOverlaySettings() {
+      try {
+        return decodeOpenOverlaySettings(
+          JSON.parse(surface.openOverlaySettings()),
         )
       } catch (error) {
         return { _tag: "Unavailable", message: describe(error) }
@@ -299,6 +325,17 @@ export function createInMemoryLauncherBridge(
         ? { _tag: "Unavailable", message: "no settings screen in browser dev" }
         : { _tag: "Opened" }
     },
+    async overlayPermission() {
+      await delay()
+      return { _tag: "RestrictedOrUnavailable" }
+    },
+    async openOverlaySettings() {
+      await delay()
+      return {
+        _tag: "Unavailable",
+        message: "no accessibility settings in browser dev",
+      }
+    },
     async openPairing() {
       await delay()
       // Browser dev has no native pairing screen to reach.
@@ -362,6 +399,30 @@ function decodeOpenStorageSettings(
       return { _tag: payload._tag, message: stringField(payload, "message") }
     default:
       throw new Error("malformed OpenStorageSettingsResult")
+  }
+}
+
+function decodeOverlayPermission(value: unknown): OverlayPermissionResult {
+  const payload = record(value, "OverlayPermissionResult")
+  switch (payload._tag) {
+    case "Enabled":
+    case "Disabled":
+    case "RestrictedOrUnavailable":
+      return { _tag: payload._tag }
+    default:
+      throw new Error("malformed OverlayPermissionResult")
+  }
+}
+
+function decodeOpenOverlaySettings(value: unknown): OpenOverlaySettingsResult {
+  const payload = record(value, "OpenOverlaySettingsResult")
+  switch (payload._tag) {
+    case "Opened":
+      return { _tag: payload._tag }
+    case "Unavailable":
+      return { _tag: payload._tag, message: stringField(payload, "message") }
+    default:
+      throw new Error("malformed OpenOverlaySettingsResult")
   }
 }
 

@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { MoonlightImplementation } from "@contracts/generated/korrid"
+import {
+  LaunchContributorKind,
+  LaunchForegroundKind,
+  MoonlightImplementation,
+} from "@contracts/generated/korrid"
 import {
   callKorrid,
   createHttpKorridClient,
@@ -121,11 +125,16 @@ describe("callKorrid", () => {
     const outcome = await createHttpKorridClient(
       "http://127.0.0.1:43117",
       "capability",
-    ).moonlightLaunchPrepare("host-uuid", 7)
+    ).moonlightLaunchPrepare("host-uuid", 7, "skate3", "Skate 3")
 
     expect(body).toEqual({
       _tag: "app.moonlight.launch.prepare",
-      payload: { hostUuid: "host-uuid", appId: 7 },
+      payload: {
+        hostUuid: "host-uuid",
+        appId: 7,
+        gameId: "skate3",
+        title: "Skate 3",
+      },
     })
     expect(outcome).toMatchObject({
       _tag: "Ok",
@@ -252,6 +261,18 @@ describe("local games", () => {
     const spec = {
       launchId: "fixture-launch",
       launcherId: "fixture-launcher",
+      context: {
+        gameId: "fixture",
+        title: "Fixture",
+        contributors: [
+          { kind: LaunchContributorKind.Launcher, id: "fixture-launcher" },
+        ],
+        foreground: {
+          kind: LaunchForegroundKind.Component,
+          packageName: "dev.fixture.runtime",
+          className: "dev.fixture.Main",
+        },
+      },
       component: { packageName: "dev.fixture.runtime", className: "dev.fixture.Main" },
       extras: { CONTENT: "/fixture/game.bin" },
       directories: [],

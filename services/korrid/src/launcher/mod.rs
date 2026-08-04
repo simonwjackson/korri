@@ -13,10 +13,11 @@ use crate::{
 use std::path::Path;
 
 pub use types::{
-    AndroidComponent, AndroidMoonlightEffect, FileProvisionMode, LaunchSpec, LocalGame,
-    MoonlightLaunchAuthority, MoonlightLaunchSpec, MoonlightLaunchVerificationFailure,
-    PlatformEffect, PlatformInstruction, PlatformInstructionVerificationFailure,
-    PlatformInstructionVerifier, ProvisionedFile,
+    AndroidActiveLaunch, AndroidComponent, AndroidMoonlightEffect, FileProvisionMode,
+    LaunchContext, LaunchContributorKind, LaunchExecutor, LaunchForegroundKind,
+    LaunchForegroundRule, LaunchRouteContributor, LaunchSpec, LocalGame, MoonlightLaunchAuthority,
+    MoonlightLaunchSpec, MoonlightLaunchVerificationFailure, PlatformEffect, PlatformInstruction,
+    PlatformInstructionVerificationFailure, PlatformInstructionVerifier, ProvisionedFile,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -123,6 +124,7 @@ pub fn launch_game(
     )
     .map_err(launch_error_from_route_diagnostic)?;
 
+    let context = local_launch_context(&route);
     match route.launcher_kind.as_str() {
         "@korri:android-app" => android_app::launch_route(&route)
             .map_err(|error| LaunchError::RouteUnavailable(error.to_string())),
@@ -130,6 +132,49 @@ pub fn launch_game(
         other => Err(LaunchError::RouteUnavailable(format!(
             "unsupported launcher kind {other}"
         ))),
+    }
+    .map(|spec| spec.with_context(context))
+}
+
+fn local_launch_context(route: &ResolvedRoute) -> LaunchContext {
+    let mut contributors = vec![LaunchRouteContributor {
+        kind: LaunchContributorKind::Launcher,
+        id: route.launcher_id.clone(),
+    }];
+    if let Some(runtime) = &route.runtime {
+        contributors.push(LaunchRouteContributor {
+            kind: LaunchContributorKind::Runtime,
+            id: runtime.id.clone(),
+        });
+    }
+    let foreground = match route.android_component.as_ref() {
+        Some(component) => LaunchForegroundRule {
+            kind: LaunchForegroundKind::Component,
+            package_name: Some(component.package_name.clone()),
+            class_name: Some(component.class_name.clone()),
+        },
+        None => LaunchForegroundRule {
+            kind: LaunchForegroundKind::Package,
+            package_name: Some(
+                route
+                    .flattened_target
+                    .strip_prefix("@korri:android-app:")
+                    .unwrap_or_default()
+                    .to_owned(),
+            ),
+            class_name: None,
+        },
+    };
+    LaunchContext {
+        game_id: Some(route.playable_id.clone()),
+        title: route.title.clone(),
+        contributors,
+        executor: (route.launcher_kind == "@korri:retroarch").then(|| LaunchExecutor {
+            id: "retroarch-control".into(),
+            // U7 proves and enables the authenticated command executor.
+            available: false,
+        }),
+        foreground,
     }
 }
 
@@ -282,6 +327,29 @@ mod tests {
 
         assert_eq!(spec.launcher_id, "android-app");
         assert_eq!(spec.component.package_name, "com.playdigious.tmnt");
+        assert_eq!(
+            spec.context.game_id.as_deref(),
+            Some("tmnt-shredders-revenge")
+        );
+        assert_eq!(
+            spec.context.title.as_deref(),
+            Some("TMNT: Shredder's Revenge")
+        );
+        assert_eq!(
+            spec.context.contributors,
+            vec![LaunchRouteContributor {
+                kind: LaunchContributorKind::Launcher,
+                id: "@korri:android-app/android-app".into(),
+            }]
+        );
+        assert_eq!(
+            spec.context.foreground,
+            LaunchForegroundRule {
+                kind: LaunchForegroundKind::Package,
+                package_name: Some("com.playdigious.tmnt".into()),
+                class_name: None,
+            }
+        );
     }
 
     #[test]

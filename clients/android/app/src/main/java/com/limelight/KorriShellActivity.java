@@ -32,6 +32,7 @@ import com.limelight.nvstream.http.NvHTTP;
 import com.limelight.nvstream.http.PairingManager;
 import com.limelight.utils.CacheHelper;
 import com.limelight.utils.ServerHelper;
+import com.limelight.korri.overlay.KorriOverlayPermission;
 import com.simonwjackson.korri.korrid.KorriBrainService;
 import com.simonwjackson.korri.korrid.KorridServer;
 
@@ -246,10 +247,23 @@ public class KorriShellActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        // The launch may remain live, but Korri itself being foreground is
+        // never a gameplay-overlay target.
+        KorriBrainService.setOverlayArmed(false);
         // Returning from a stream: let the web surface refresh its state.
         if (webView != null) {
             webView.evaluateJavascript(
                     "window.dispatchEvent(new Event('korri-shell-resumed'))", null);
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // Backgrounding is only an arming transition. It does not claim that
+        // the active process or stream ended.
+        if (KorriBrainService.activeLaunch() != null) {
+            KorriBrainService.setOverlayArmed(true);
         }
     }
 
@@ -271,7 +285,7 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public int bridgeVersion() {
             // Mirrors BRIDGE_VERSION in contracts/bridge/korri-native-bridge.ts.
-            return 12;
+            return 13;
         }
 
         @JavascriptInterface
@@ -420,6 +434,19 @@ public class KorriShellActivity extends AppCompatActivity {
             }
         }
 
+        /** Actual accessibility grant state; the launch path never depends on it. */
+        @JavascriptInterface
+        public String overlayPermission() {
+            return KorriOverlayPermission.stateJson(
+                    KorriOverlayPermission.state(KorriShellActivity.this));
+        }
+
+        /** Opens Settings only. The grant remains a later observed state. */
+        @JavascriptInterface
+        public String openOverlaySettings() {
+            return KorriOverlayPermission.openSettings(KorriShellActivity.this);
+        }
+
         /** Port of the embedded korrid server, or -1 when it is not running. */
         @JavascriptInterface
         public int korridPort() {
@@ -526,6 +553,12 @@ public class KorriShellActivity extends AppCompatActivity {
             if (error != null) {
                 return launchFailed("StartFailed",
                         error.getMessage() != null ? error.getMessage() : "start failed");
+            }
+            try {
+                // Record only after Android accepted the exact signed launch.
+                KorriBrainService.publishLocalActiveLaunch(spec, specJson);
+            } catch (Exception publishError) {
+                return launchFailed("StartFailed", "local launch context could not be recorded");
             }
             return "{\"_tag\":\"Launched\"}";
         }
@@ -702,7 +735,18 @@ public class KorriShellActivity extends AppCompatActivity {
                 // Korri-initiated: the stream Activity narrates its lifecycle
                 // through the web overlay instead of the native spinner.
                 intent.putExtra(Game.EXTRA_KORRI_SESSION, true);
-                runOnUiThread(() -> startActivity(intent));
+                intent.putExtra(Game.EXTRA_KORRI_LAUNCH_ID, spec.launchId);
+                startActivityOnUiThread(intent, "Moonlight Activity start timed out");
+                // Artemis names itself at the Android edge. Rust signed only
+                // the artemis-game rule; it never manufactures Java classes.
+                KorriBrainService.publishMoonlightActiveLaunch(
+                        spec,
+                        specJson,
+                        getPackageName(),
+                        Game.class.getName());
+                if (Game.instance != null) {
+                    KorriBrainService.claimActiveLaunch(spec.launchId, Game.instance);
+                }
                 return "{\"_tag\":\"StreamStarted\"}";
             } catch (KorriMoonlightLaunchSpec.Invalid error) {
                 return streamFailed("StartFailed", error.getMessage());

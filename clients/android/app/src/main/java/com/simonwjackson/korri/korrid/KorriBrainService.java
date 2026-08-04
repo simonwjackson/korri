@@ -10,6 +10,8 @@ import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
 
+import com.limelight.korri.overlay.KorriActiveLaunch;
+
 /**
  * Keeps korrid alive while Korri is not on screen.
  *
@@ -35,6 +37,107 @@ public final class KorriBrainService extends Service {
      */
     private static boolean started = false;
     private static int port = 0;
+
+    /** One process-local session snapshot. launchId is its only wire identity;
+     * owner identity closes Activity-recreation compare-and-clear races. */
+    private static KorriActiveLaunch activeLaunch;
+    private static Object activeLaunchOwner;
+    private static boolean overlayArmed;
+
+    public static synchronized KorriActiveLaunch publishLocalActiveLaunch(
+            Object owner, String signedSpecJson) throws Exception {
+        return installActiveLaunch(
+                owner, KorriActiveLaunch.fromJson(KorridServer.publishLocalActiveLaunch(
+                        signedSpecJson)));
+    }
+
+    public static synchronized KorriActiveLaunch publishMoonlightActiveLaunch(
+            Object owner,
+            String signedSpecJson,
+            String applicationPackage,
+            String gameClassName) throws Exception {
+        return installActiveLaunch(
+                owner,
+                KorriActiveLaunch.fromJson(KorridServer.publishMoonlightActiveLaunch(
+                        signedSpecJson, applicationPackage, gameClassName)));
+    }
+
+    private static KorriActiveLaunch installActiveLaunch(
+            Object owner, KorriActiveLaunch launch) {
+        activeLaunch = launch;
+        activeLaunchOwner = owner;
+        overlayArmed = true;
+        return launch;
+    }
+
+    public static synchronized KorriActiveLaunch activeLaunch() {
+        return activeLaunch;
+    }
+
+    public static synchronized boolean isOverlayArmed() {
+        return overlayArmed;
+    }
+
+    public static synchronized void setOverlayArmed(boolean armed) {
+        overlayArmed = activeLaunch != null && armed;
+    }
+
+    /** Recreated Game Activities retain the serialized launchId but replace
+     * only the in-process owner object. */
+    public static synchronized boolean claimActiveLaunch(String launchId, Object owner) {
+        if (activeLaunch == null || !activeLaunch.launchId().equals(launchId)) {
+            return false;
+        }
+        activeLaunchOwner = owner;
+        return true;
+    }
+
+    public static synchronized boolean clearActiveLaunch(Object owner, String launchId) {
+        if (!matchesActive(owner, launchId) || !KorridServer.clearActiveLaunch(launchId)) {
+            return false;
+        }
+        clearJavaActiveLaunch();
+        return true;
+    }
+
+    /** Positive process/stream-end evidence has no Activity owner, but still
+     * compares the exact serialized session before clearing. */
+    public static synchronized boolean clearActiveLaunchOnEnd(String launchId) {
+        if (activeLaunch == null
+                || !activeLaunch.launchId().equals(launchId)
+                || !KorridServer.clearActiveLaunch(launchId)) {
+            return false;
+        }
+        clearJavaActiveLaunch();
+        return true;
+    }
+
+    private static boolean matchesActive(Object owner, String launchId) {
+        return activeLaunch != null
+                && activeLaunchOwner == owner
+                && activeLaunch.launchId().equals(launchId);
+    }
+
+    private static void clearJavaActiveLaunch() {
+        activeLaunch = null;
+        activeLaunchOwner = null;
+        overlayArmed = false;
+    }
+
+    public static synchronized void publishActiveLaunchForTest(
+            Object owner, KorriActiveLaunch launch) {
+        installActiveLaunch(owner, launch);
+    }
+
+    public static synchronized boolean clearActiveLaunchForTest(Object owner, String launchId) {
+        if (!matchesActive(owner, launchId)) return false;
+        clearJavaActiveLaunch();
+        return true;
+    }
+
+    public static synchronized void resetActiveLaunchForTest() {
+        clearJavaActiveLaunch();
+    }
 
     /**
      * Starts the brain if it is not already up, then asks Android to keep the
@@ -111,6 +214,7 @@ public final class KorriBrainService extends Service {
             } finally {
                 started = false;
                 port = 0;
+                clearJavaActiveLaunch();
             }
         }
         super.onDestroy();

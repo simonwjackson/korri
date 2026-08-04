@@ -5,6 +5,7 @@ import type {
 } from "@contracts/surface/korri-surface"
 import type {
   BackgroundNoticeResult,
+  OverlayPermissionResult,
   StorageAccessResult,
   StreamHost,
   SystemInfoResult,
@@ -16,6 +17,7 @@ export interface DeviceFacts {
   readonly settings?: SettingsSnapshot
   readonly storage?: StorageAccessResult
   readonly notice?: BackgroundNoticeResult
+  readonly overlay?: OverlayPermissionResult
   readonly hosts?: readonly StreamHost[]
   readonly systemInfo?: SystemInfoResult
   readonly localGameCount?: number
@@ -31,6 +33,17 @@ const storageValue = (result: StorageAccessResult): string => {
       return "Not granted"
     case "QueryFailed":
       return "Unknown"
+  }
+}
+
+const overlayValue = (result: OverlayPermissionResult): string => {
+  switch (result._tag) {
+    case "Enabled":
+      return "Enabled"
+    case "Disabled":
+      return "Disabled"
+    case "RestrictedOrUnavailable":
+      return "Restricted or unavailable"
   }
 }
 
@@ -117,6 +130,21 @@ export function settingsFrom(facts: DeviceFacts): readonly SurfaceSettingGroup[]
       },
     ]),
     group("Permissions", [
+      facts.overlay === undefined
+        ? undefined
+        : {
+            id: "gameplay-overlay",
+            label: "Gameplay overlay",
+            value: overlayValue(facts.overlay),
+            description:
+              facts.overlay._tag === "RestrictedOrUnavailable"
+                ? "Android does not currently offer this grant"
+                : "Managed by Android",
+            interaction: {
+              kind: "action" as const,
+              actionId: "overlay-access",
+            },
+          },
       facts.storage === undefined
         ? undefined
         : {

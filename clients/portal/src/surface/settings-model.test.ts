@@ -63,10 +63,21 @@ describe("settingsFrom", () => {
   it("states permissions and links each one to Android", () => {
     expect(
       group(
-        { storage: { _tag: "Denied" }, notice: { _tag: "Hidden" } },
+        {
+          overlay: { _tag: "Disabled" },
+          storage: { _tag: "Denied" },
+          notice: { _tag: "Hidden" },
+        },
         "Permissions",
       )?.items,
     ).toEqual([
+      {
+        id: "gameplay-overlay",
+        label: "Gameplay overlay",
+        value: "Disabled",
+        description: "Managed by Android",
+        interaction: { kind: "action", actionId: "overlay-access" },
+      },
       {
         id: "file-access",
         label: "File access",
@@ -82,6 +93,21 @@ describe("settingsFrom", () => {
         interaction: { kind: "action", actionId: "background-notice" },
       },
     ])
+  })
+
+  it("states when Android restricts or cannot offer the overlay grant", () => {
+    expect(
+      group(
+        { overlay: { _tag: "RestrictedOrUnavailable" } },
+        "Permissions",
+      )?.items[0],
+    ).toEqual({
+      id: "gameplay-overlay",
+      label: "Gameplay overlay",
+      value: "Restricted or unavailable",
+      description: "Android does not currently offer this grant",
+      interaction: { kind: "action", actionId: "overlay-access" },
+    })
   })
 
   it("does not call a failed permission query denied", () => {

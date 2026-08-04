@@ -116,6 +116,7 @@ export function useLaunchables(
       session,
       storage,
       notice,
+      overlay,
       health,
       settings,
       systemInfo,
@@ -132,6 +133,8 @@ export function useLaunchables(
         // Same reason: returning from the notification screen should be
         // reflected without a restart.
         bridge.backgroundNotice(),
+        // The accessibility grant may be revoked while Korri is backgrounded.
+        bridge.overlayPermission(),
         // Identity, not content: it names the software the user is running.
         korrid.health(),
         korrid.settingsSnapshot(),
@@ -158,6 +161,7 @@ export function useLaunchables(
       systemInfo,
       storage,
       notice,
+      overlay,
       ...(hostsResult._tag === "StreamHosts"
         ? { hosts: hostsResult.items }
         : {}),
@@ -257,6 +261,14 @@ export function useLaunchables(
       }
       if (actionId === "storage-access") {
         void bridge.openStorageAccessSettings().then(result => {
+          if (result._tag === "Unavailable") {
+            settingsProblem(actionId, result.message)
+          }
+        })
+        return
+      }
+      if (actionId === "overlay-access") {
+        void bridge.openOverlaySettings().then(result => {
           if (result._tag === "Unavailable") {
             settingsProblem(actionId, result.message)
           }
@@ -404,6 +416,8 @@ export function useLaunchables(
             korrid,
             target.value.hostUuid,
             target.value.appId,
+            entry.session.gameId,
+            entry.session.title,
           )
           if (reservation._tag !== "Ok") {
             if (!mountedRef.current || operation !== actionSeq.current) return
@@ -483,6 +497,8 @@ export function useLaunchables(
           korrid,
           target.value.hostUuid,
           target.value.appId,
+          entry.game.id,
+          entry.game.title,
         )
         if (reservation._tag !== "Ok") {
           if (!mountedRef.current || operation !== actionSeq.current) return

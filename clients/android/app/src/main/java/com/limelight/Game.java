@@ -39,6 +39,7 @@ import com.limelight.utils.PanZoomHandler;
 import com.limelight.utils.ServerHelper;
 import com.limelight.utils.SpinnerDialog;
 import com.limelight.utils.UiHelper;
+import com.simonwjackson.korri.korrid.KorriBrainService;
 
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
@@ -240,6 +241,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     // Set only by KorriShellActivity.startStream: the pre-stream lifecycle
     // renders as a portal-origin overlay instead of the native spinner.
     public static final String EXTRA_KORRI_SESSION = "KorriSession";
+    public static final String EXTRA_KORRI_LAUNCH_ID = "KorriLaunchId";
     public static final String EXTRA_WIDTH = "Width";
     public static final String EXTRA_HEIGHT = "Height";
     public static final String EXTRA_FPS = "Fps";
@@ -278,6 +280,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     // Korri-initiated sessions only (EXTRA_KORRI_SESSION): web lifecycle
     // overlay replacing the native spinner. Null for stock entry points.
     private KorriSessionOverlay korriSessionOverlay;
+    private String korriLaunchId;
 
     public boolean isInputOnly = true;
     public boolean allowChangeMouseMode = true;
@@ -328,6 +331,10 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         super.onCreate(savedInstanceState);
 
         instance = this;
+        korriLaunchId = getIntent().getStringExtra(EXTRA_KORRI_LAUNCH_ID);
+        if (korriLaunchId != null) {
+            KorriBrainService.claimActiveLaunch(korriLaunchId, this);
+        }
         timerHandler = new Handler(Looper.getMainLooper());
 
 
@@ -963,6 +970,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
             // sessions keep the failure in the web lifecycle; stock Artemis
             // entry points preserve their native dialog.
             if (korriSessionOverlay != null) {
+                endKorriLaunch();
                 korriSessionOverlay.publish(KorriSessionOverlay.decoderUnsupportedEvent());
             } else {
                 Dialog.displayDialog(this, getResources().getString(R.string.conn_error_title),
@@ -1741,6 +1749,11 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     @Override
     protected void onDestroy() {
+        if (korriLaunchId != null && isFinishing()) {
+            // Object identity prevents an old Activity's late teardown from
+            // clearing a same-launch replacement that already claimed it.
+            KorriBrainService.clearActiveLaunch(this, korriLaunchId);
+        }
         super.onDestroy();
 
         instance = null;
@@ -3306,6 +3319,12 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         return handleMotionEvent(view, event);
     }
 
+    private void endKorriLaunch() {
+        if (korriLaunchId != null) {
+            KorriBrainService.clearActiveLaunchOnEnd(korriLaunchId);
+        }
+    }
+
     @Override
     public void stageStarting(final String stage) {
         if (korriSessionOverlay != null) {
@@ -3364,6 +3383,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     @Override
     public boolean stageFailed(final String stage, final int portFlags, final int errorCode) {
+        endKorriLaunch();
         // Perform a connection test if the failure could be due to a blocked port
         // This does network I/O, so don't do it on the main thread.
         final int portTestResult = MoonBridge.testClientConnectivity(ServerHelper.CONNECTION_TEST_SERVER, 443, portFlags);
@@ -3440,6 +3460,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     @Override
     public void connectionTerminated(final int errorCode) {
+        endKorriLaunch();
         // Perform a connection test if the failure could be due to a blocked port
         // This does network I/O, so don't do it on the main thread.
         final int portFlags = MoonBridge.getPortFlagsFromTerminationErrorCode(errorCode);

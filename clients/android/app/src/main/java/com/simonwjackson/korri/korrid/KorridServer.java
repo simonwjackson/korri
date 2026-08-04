@@ -22,6 +22,17 @@ public final class KorridServer {
     public static native String authorizeMoonlightLaunchSpec(String specJson);
     /** True only for an untampered instruction from the running embedded server. */
     public static native boolean verifyLaunchSpec(String specJson);
+    /** Verify the signed local handoff and publish its launch context. */
+    public static native String publishLocalActiveLaunch(String specJson);
+    /** Verify the signed Moonlight handoff; Java supplies its own Game component. */
+    public static native String publishMoonlightActiveLaunch(
+            String specJson, String applicationPackage, String gameClassName);
+    /** Compare-and-clear the exact current launch. */
+    public static native boolean clearActiveLaunch(String launchId);
+    /** Read the current Rust snapshot; returns JSON null when idle. */
+    public static native String activeLaunch();
+    /** Verify and consume one protected instruction for the current launch. */
+    public static native String authorizePlatformInstruction(String instructionJson);
     public static native void stop();
 
     public static int startAndLog(String allowedOrigin, String localStorageRoot) {

@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { act, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { MoonlightImplementation } from "@contracts/generated/korrid"
+import {
+  LaunchContributorKind,
+  LaunchForegroundKind,
+  MoonlightImplementation,
+} from "@contracts/generated/korrid"
 import {
   createInMemoryLauncherBridge,
   type LauncherBridge,
@@ -50,6 +54,18 @@ const available = {
 const launchSpec = (launchId: string) => ({
   launchId,
   transportId: available.payload.transportId,
+  context: {
+    gameId: "game",
+    title: "Game",
+    contributors: [
+      {
+        kind: LaunchContributorKind.Transport,
+        id: available.payload.transportId,
+      },
+    ],
+    executor: { id: "android-moonlight", available: false },
+    foreground: { kind: LaunchForegroundKind.ArtemisGame },
+  },
   implementation: available.payload.implementation,
   sunshineApp: available.payload.sunshineApp,
   hostUuid: "host-uuid",
@@ -509,5 +525,54 @@ describe("Moonlight launch orchestration", () => {
     )
 
     expect(harness.current().state._tag).toBe("Ready")
+  })
+})
+
+describe("overlay permission settings", () => {
+  it("rechecks the actual grant when the shell resumes", async () => {
+    let reads = 0
+    const base = createInMemoryLauncherBridge()
+    const bridge: LauncherBridge = {
+      ...base,
+      async overlayPermission() {
+        reads += 1
+        return reads === 1
+          ? { _tag: "Disabled" as const }
+          : { _tag: "Enabled" as const }
+      },
+    }
+    const harness = await mountLaunchables(createInMemoryKorridClient(), bridge)
+    await waitFor(() => harness.current().facts.overlay?._tag === "Disabled")
+
+    await invoke(() => window.dispatchEvent(new Event("korri-shell-resumed")))
+    await waitFor(() => harness.current().facts.overlay?._tag === "Enabled")
+
+    expect(reads).toBeGreaterThanOrEqual(2)
+  })
+
+  it("reports an unavailable settings screen without changing the grant", async () => {
+    const base = createInMemoryLauncherBridge()
+    const bridge: LauncherBridge = {
+      ...base,
+      async overlayPermission() {
+        return { _tag: "RestrictedOrUnavailable" }
+      },
+      async openOverlaySettings() {
+        return { _tag: "Unavailable", message: "restricted by Android" }
+      },
+    }
+    const harness = await mountLaunchables(createInMemoryKorridClient(), bridge)
+    await waitFor(
+      () => harness.current().facts.overlay?._tag === "RestrictedOrUnavailable",
+    )
+
+    await invoke(() => harness.current().runDeviceAction("overlay-access"))
+    await waitFor(() => harness.current().settingsStatus._tag === "Problem")
+
+    expect(harness.current().settingsStatus).toEqual({
+      _tag: "Problem",
+      settingId: "overlay-access",
+      message: "restricted by Android",
+    })
   })
 })

@@ -10,6 +10,44 @@ export interface ActiveSession {
 	phase?: string;
 }
 
+export enum LaunchContributorKind {
+	Launcher = "launcher",
+	Transport = "transport",
+	Runtime = "runtime",
+}
+
+export interface LaunchRouteContributor {
+	kind: LaunchContributorKind;
+	id: string;
+}
+
+export interface LaunchExecutor {
+	id: string;
+	available: boolean;
+}
+
+export enum LaunchForegroundKind {
+	Component = "component",
+	Package = "package",
+	/** Java resolves this marker to its own package plus Game component. */
+	ArtemisGame = "artemis-game",
+}
+
+export interface LaunchForegroundRule {
+	kind: LaunchForegroundKind;
+	packageName?: string;
+	className?: string;
+}
+
+export interface AndroidActiveLaunch {
+	launchId: string;
+	gameId?: string;
+	title?: string;
+	contributors: LaunchRouteContributor[];
+	executor?: LaunchExecutor;
+	foreground: LaunchForegroundRule;
+}
+
 export interface AndroidComponent {
 	packageName: string;
 	className: string;
@@ -52,6 +90,14 @@ export interface Health {
 export interface HealthRequest {
 }
 
+export interface LaunchContext {
+	gameId?: string;
+	title?: string;
+	contributors: LaunchRouteContributor[];
+	executor?: LaunchExecutor;
+	foreground: LaunchForegroundRule;
+}
+
 export interface ProvisionedFile {
 	path: string;
 	content: string;
@@ -61,6 +107,7 @@ export interface LaunchSpec {
 	/** Identity created by korrid while preparing this exact launch. */
 	launchId: string;
 	launcherId: string;
+	context: LaunchContext;
 	component: AndroidComponent;
 	extras: Record<string, string>;
 	directories: string[];
@@ -104,6 +151,8 @@ export interface MoonlightLaunchCancelled {
 export interface MoonlightLaunchPrepareRequest {
 	hostUuid: string;
 	appId: number;
+	gameId?: string;
+	title?: string;
 }
 
 export enum MoonlightImplementation {
@@ -114,6 +163,7 @@ export interface MoonlightLaunchSpec {
 	/** Fresh identity created by korrid for this native stream startup. */
 	launchId: string;
 	transportId: string;
+	context: LaunchContext;
 	implementation: MoonlightImplementation;
 	sunshineApp: string;
 	hostUuid: string;

@@ -28,8 +28,9 @@ import type {
 // launcher-neutral local launch instruction. 10 removes direct Android app
 // enumeration/launch and makes notification prompt semantics explicit. 11 adds
 // the shell-owned Android/app identity used by System information. 12 seals
-// Moonlight startup behind korrid's signed, one-use launch instruction.
-export const BRIDGE_VERSION = 12
+// Moonlight startup behind korrid's signed, one-use launch instruction. 13 adds
+// the honest gameplay-overlay accessibility grant/settings seam.
+export const BRIDGE_VERSION = 13
 
 // ── Local launches (JS -> Kotlin) ───────────────────────────────────────
 
@@ -169,6 +170,10 @@ export interface KorriNativeBridgeSurface {
    * `storageAccess()` on `korri-shell-resumed`.
    */
   openStorageAccessSettings(): string
+  /** Actual accessibility-service grant state, re-read on shell resume. */
+  overlayPermission(): string
+  /** Open Android's accessibility details. Opened never means granted. */
+  openOverlaySettings(): string
   /**
    * Open the screen where the user pairs with another device, returning a
    * JSON-encoded `OpenPairingResult`.
@@ -248,6 +253,17 @@ export type RequestBackgroundNoticeResult =
 
 /** Outcome of sending the user to the system notification screen. */
 export type OpenNotificationSettingsResult =
+  | { readonly _tag: "Opened" }
+  | { readonly _tag: "Unavailable"; readonly message: string }
+
+// ── Gameplay overlay permission (v13) ───────────────────────────────
+
+export type OverlayPermissionResult =
+  | { readonly _tag: "Enabled" }
+  | { readonly _tag: "Disabled" }
+  | { readonly _tag: "RestrictedOrUnavailable" }
+
+export type OpenOverlaySettingsResult =
   | { readonly _tag: "Opened" }
   | { readonly _tag: "Unavailable"; readonly message: string }
 

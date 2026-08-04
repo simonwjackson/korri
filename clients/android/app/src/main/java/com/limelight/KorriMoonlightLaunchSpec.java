@@ -16,6 +16,7 @@ final class KorriMoonlightLaunchSpec {
     private static final Set<String> FIELDS = new HashSet<>(Arrays.asList(
             "launchId",
             "transportId",
+            "context",
             "implementation",
             "sunshineApp",
             "hostUuid",

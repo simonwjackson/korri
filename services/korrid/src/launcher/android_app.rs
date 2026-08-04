@@ -101,6 +101,7 @@ pub fn launch_route(route: &ResolvedRoute) -> Result<LaunchSpec, AndroidAppRoute
         // The RPC preparation boundary replaces this before signing.
         launch_id: String::new(),
         launcher_id: ANDROID_APP_TOKEN.into(),
+        context: super::types::LaunchContext::unresolved(),
         component: AndroidComponent {
             package_name: package_name.into(),
             // Intentionally unused for android-app: Android package updates can

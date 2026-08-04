@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test"
 import type { KorriNativeBridgeSurface } from "@contracts/bridge/korri-native-bridge"
-import { MoonlightImplementation } from "@contracts/generated/korrid"
+import {
+  LaunchContributorKind,
+  LaunchForegroundKind,
+  MoonlightImplementation,
+} from "@contracts/generated/korrid"
 import {
   createInMemoryLauncherBridge,
   createKorriNativeLauncherBridge,
@@ -8,12 +12,39 @@ import {
   reserveResolvedMoonlightLaunch,
 } from "./launcher-bridge"
 
+const localContext = {
+  gameId: "game",
+  title: "Game",
+  contributors: [
+    { kind: LaunchContributorKind.Launcher, id: "@korri:retroarch/retroarch" },
+  ],
+  foreground: {
+    kind: LaunchForegroundKind.Component,
+    packageName: "pkg",
+    className: "Activity",
+  },
+}
+
+const moonlightContext = {
+  gameId: "game",
+  title: "Game",
+  contributors: [
+    {
+      kind: LaunchContributorKind.Transport,
+      id: "@korri:moonlight/moonlight",
+    },
+  ],
+  executor: { id: "android-moonlight", available: false },
+  foreground: { kind: LaunchForegroundKind.ArtemisGame },
+}
+
 describe("createInMemoryLauncherBridge", () => {
   it("launches local specs through the configured in-memory bridge", async () => {
     const bridge = createInMemoryLauncherBridge()
     const spec = {
       launchId: "launch-1",
       launcherId: "retroarch",
+      context: localContext,
       component: { packageName: "pkg", className: "Activity" },
       extras: {},
       directories: [],
@@ -29,6 +60,7 @@ describe("createInMemoryLauncherBridge", () => {
     const result = await bridge.launchLocal({
       launchId: "launch-2",
       launcherId: "retroarch",
+      context: localContext,
       component: { packageName: "pkg", className: "Activity" },
       extras: {},
       directories: [],
@@ -54,6 +86,7 @@ describe("resolved Moonlight bridge path", () => {
   const launchSpec = {
     launchId: "0123456789abcdef0123456789abcdef",
     transportId: "@korri:moonlight/moonlight",
+    context: moonlightContext,
     implementation: MoonlightImplementation.Artemis,
     sunshineApp: "Korri Stream",
     hostUuid: "h1",
@@ -218,6 +251,7 @@ describe("createKorriNativeLauncherBridge", () => {
   const nativeLaunchSpec = {
     launchId: "0123456789abcdef0123456789abcdef",
     transportId: "@korri:moonlight/moonlight",
+    context: moonlightContext,
     implementation: MoonlightImplementation.Artemis,
     sunshineApp: "Korri Stream",
     hostUuid: "h1",
@@ -243,6 +277,8 @@ describe("createKorriNativeLauncherBridge", () => {
     korridCapability: () => "test-capability",
     storageAccess: () => JSON.stringify({ _tag: "Granted" }),
     openStorageAccessSettings: () => JSON.stringify({ _tag: "Opened" }),
+    overlayPermission: () => JSON.stringify({ _tag: "Enabled" }),
+    openOverlaySettings: () => JSON.stringify({ _tag: "Opened" }),
     openPairing: () => JSON.stringify({ _tag: "Opened" }),
     backgroundNotice: () => JSON.stringify({ _tag: "Visible" }),
     requestBackgroundNotice: () => JSON.stringify({ _tag: "Granted" }),
@@ -258,7 +294,7 @@ describe("createKorriNativeLauncherBridge", () => {
           appVersion: "1.0",
         },
       }),
-    bridgeVersion: () => 12,
+    bridgeVersion: () => 13,
     ...overrides,
   })
 
@@ -275,6 +311,7 @@ describe("createKorriNativeLauncherBridge", () => {
     const spec = {
       launchId: "launch-3",
       launcherId: "retroarch",
+      context: localContext,
       component: { packageName: "pkg", className: "Activity" },
       extras: { ROM: "/rom" },
       directories: [],
@@ -330,6 +367,27 @@ describe("createKorriNativeLauncherBridge", () => {
         surface({ openStorageAccessSettings: () => JSON.stringify(expected) }),
       )
       expect(await bridge.openStorageAccessSettings()).toEqual(expected)
+    }
+
+    for (const expected of [
+      { _tag: "Enabled" },
+      { _tag: "Disabled" },
+      { _tag: "RestrictedOrUnavailable" },
+    ] as const) {
+      const bridge = createKorriNativeLauncherBridge(
+        surface({ overlayPermission: () => JSON.stringify(expected) }),
+      )
+      expect(await bridge.overlayPermission()).toEqual(expected)
+    }
+
+    for (const expected of [
+      { _tag: "Opened" },
+      { _tag: "Unavailable", message: "accessibility settings restricted" },
+    ] as const) {
+      const bridge = createKorriNativeLauncherBridge(
+        surface({ openOverlaySettings: () => JSON.stringify(expected) }),
+      )
+      expect(await bridge.openOverlaySettings()).toEqual(expected)
     }
 
     for (const expected of [{ _tag: "Visible" }, { _tag: "Hidden" }] as const) {
@@ -413,6 +471,7 @@ describe("createKorriNativeLauncherBridge", () => {
       await bridge.launchLocal({
         launchId: "launch-4",
         launcherId: "retroarch",
+      context: localContext,
         component: { packageName: "pkg", className: "Activity" },
         extras: {},
         directories: [],
@@ -431,6 +490,8 @@ describe("createKorriNativeLauncherBridge", () => {
       surface({
         storageAccess: () => JSON.stringify({ _tag: "Opened" }),
         openStorageAccessSettings: () => JSON.stringify({ _tag: "Granted" }),
+        overlayPermission: () => JSON.stringify({ _tag: "Granted" }),
+        openOverlaySettings: () => JSON.stringify({ _tag: "Granted" }),
         backgroundNotice: () => JSON.stringify({ _tag: "Granted" }),
         requestBackgroundNotice: () => JSON.stringify({ _tag: "Visible" }),
         openNotificationSettings: () => JSON.stringify({ _tag: "Denied" }),
@@ -440,6 +501,12 @@ describe("createKorriNativeLauncherBridge", () => {
 
     expect((await bridge.storageAccess())._tag).toBe("QueryFailed")
     expect(await bridge.openStorageAccessSettings()).toMatchObject({
+      _tag: "Unavailable",
+    })
+    expect(await bridge.overlayPermission()).toEqual({
+      _tag: "RestrictedOrUnavailable",
+    })
+    expect(await bridge.openOverlaySettings()).toMatchObject({
       _tag: "Unavailable",
     })
     expect(await bridge.backgroundNotice()).toEqual({ _tag: "Hidden" })

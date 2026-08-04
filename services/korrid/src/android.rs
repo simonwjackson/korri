@@ -2,9 +2,11 @@
 //! clients/android/.../korrid/KorridServer.java.
 
 use crate::{
-    authorize_moonlight_launch_spec, korrid_version, local_server_capability,
-    start_embedded_android_server, stop_local_server, verify_local_launch_spec,
-    MoonlightLaunchAuthorization,
+    active_android_launch, authorize_moonlight_launch_spec, authorize_platform_instruction,
+    clear_active_android_launch, korrid_version, local_server_capability,
+    publish_local_active_launch, publish_moonlight_active_launch, start_embedded_android_server,
+    stop_local_server, verify_local_launch_spec, MoonlightLaunchAuthorization,
+    PlatformInstructionAuthorization,
 };
 use jni::{
     objects::{JClass, JString},
@@ -121,6 +123,146 @@ pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_verifyLa
         }
     };
     verify_local_launch_spec(&spec_json).into()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_publishLocalActiveLaunch(
+    mut env: JNIEnv,
+    _class: JClass,
+    spec_json: JString,
+) -> jstring {
+    let spec_json: String = match env.get_string(&spec_json) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error.to_string());
+            return ptr::null_mut();
+        }
+    };
+    match publish_local_active_launch(&spec_json).and_then(|launch| {
+        serde_json::to_string(&launch).map_err(|_| crate::ActiveAndroidLaunchFailure::InvalidSpec)
+    }) {
+        Ok(json) => env.new_string(json).map_or_else(
+            |error| {
+                let _ = env.throw_new("java/lang/IllegalStateException", error.to_string());
+                ptr::null_mut()
+            },
+            |value| value.into_raw(),
+        ),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", format!("{error:?}"));
+            ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_publishMoonlightActiveLaunch(
+    mut env: JNIEnv,
+    _class: JClass,
+    spec_json: JString,
+    application_package: JString,
+    game_class_name: JString,
+) -> jstring {
+    let spec_json: String = match env.get_string(&spec_json) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error.to_string());
+            return ptr::null_mut();
+        }
+    };
+    let application_package: String = match env.get_string(&application_package) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error.to_string());
+            return ptr::null_mut();
+        }
+    };
+    let game_class_name: String = match env.get_string(&game_class_name) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error.to_string());
+            return ptr::null_mut();
+        }
+    };
+    match publish_moonlight_active_launch(&spec_json, &application_package, &game_class_name)
+        .and_then(|launch| {
+            serde_json::to_string(&launch)
+                .map_err(|_| crate::ActiveAndroidLaunchFailure::InvalidSpec)
+        }) {
+        Ok(json) => env.new_string(json).map_or_else(
+            |error| {
+                let _ = env.throw_new("java/lang/IllegalStateException", error.to_string());
+                ptr::null_mut()
+            },
+            |value| value.into_raw(),
+        ),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", format!("{error:?}"));
+            ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_clearActiveLaunch(
+    mut env: JNIEnv,
+    _class: JClass,
+    launch_id: JString,
+) -> jboolean {
+    let launch_id: String = match env.get_string(&launch_id) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error.to_string());
+            return 0;
+        }
+    };
+    clear_active_android_launch(&launch_id).into()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_activeLaunch(
+    mut env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    let json = serde_json::to_string(&active_android_launch()).unwrap_or_else(|_| "null".into());
+    match env.new_string(json) {
+        Ok(value) => value.into_raw(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error.to_string());
+            ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_authorizePlatformInstruction(
+    mut env: JNIEnv,
+    _class: JClass,
+    instruction_json: JString,
+) -> jstring {
+    let instruction_json: String = match env.get_string(&instruction_json) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error.to_string());
+            return ptr::null_mut();
+        }
+    };
+    let outcome = match authorize_platform_instruction(&instruction_json) {
+        PlatformInstructionAuthorization::Authorized => "Authorized",
+        PlatformInstructionAuthorization::InvalidSpec => "InvalidSpec",
+        PlatformInstructionAuthorization::Integrity => "Integrity",
+        PlatformInstructionAuthorization::Stale => "Stale",
+        PlatformInstructionAuthorization::Replay => "Replay",
+        PlatformInstructionAuthorization::NoActiveLaunch => "NoActiveLaunch",
+        PlatformInstructionAuthorization::ServerUnavailable => "ServerUnavailable",
+    };
+    match env.new_string(outcome) {
+        Ok(value) => value.into_raw(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error.to_string());
+            ptr::null_mut()
+        }
+    }
 }
 
 #[no_mangle]

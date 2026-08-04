@@ -26,7 +26,11 @@ import type {
   SettingsSnapshotOutcome,
   SettingsUpdateOutcome,
 } from "@contracts/generated/korrid"
-import { SessionStopPhase } from "@contracts/generated/korrid"
+import {
+  LaunchContributorKind,
+  LaunchForegroundKind,
+  SessionStopPhase,
+} from "@contracts/generated/korrid"
 
 export type RpcResponseFor<Request extends RpcRequest> = Extract<
   RpcResponse,
@@ -46,6 +50,8 @@ export interface KorridClient {
   moonlightLaunchPrepare(
     hostUuid: string,
     appId: number,
+    gameId?: string,
+    title?: string,
   ): Promise<MoonlightLaunchPrepareOutcome>
   moonlightLaunchCancel(launchId: string): Promise<MoonlightLaunchCancelOutcome>
   localGames(): Promise<LocalGamesListOutcome>
@@ -158,11 +164,11 @@ export function createHttpKorridClient(
         }
       }
     },
-    async moonlightLaunchPrepare(hostUuid, appId) {
+    async moonlightLaunchPrepare(hostUuid, appId, gameId, title) {
       try {
         const response = await callKorrid(baseUrl, capability, {
           _tag: "app.moonlight.launch.prepare",
-          payload: { hostUuid, appId },
+          payload: { hostUuid, appId, gameId, title },
         })
         return response.outcome
       } catch (error) {
@@ -350,7 +356,7 @@ export function createInMemoryKorridClient(
     async moonlightResolve() {
       return currentMoonlight()
     },
-    async moonlightLaunchPrepare(hostUuid, appId) {
+    async moonlightLaunchPrepare(hostUuid, appId, gameId, title) {
       const resolved = currentMoonlight()
       if (resolved._tag !== "Available") {
         return { _tag: "Err", payload: resolved.payload }
@@ -363,6 +369,18 @@ export function createInMemoryKorridClient(
         payload: {
           launchId,
           transportId: resolved.payload.transportId,
+          context: {
+            gameId,
+            title,
+            contributors: [
+              {
+                kind: LaunchContributorKind.Transport,
+                id: resolved.payload.transportId,
+              },
+            ],
+            executor: { id: "android-moonlight", available: false },
+            foreground: { kind: LaunchForegroundKind.ArtemisGame },
+          },
           implementation: resolved.payload.implementation,
           sunshineApp: resolved.payload.sunshineApp,
           hostUuid,
