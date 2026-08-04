@@ -281,6 +281,8 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     // overlay replacing the native spinner. Null for stock entry points.
     private KorriSessionOverlay korriSessionOverlay;
     private String korriLaunchId;
+    private final KorriGameLaunchScope korriLaunchScope =
+            new KorriGameLaunchScope(this::endKorriLaunch);
 
     public boolean isInputOnly = true;
     public boolean allowChangeMouseMode = true;
@@ -3383,12 +3385,15 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     @Override
     public boolean stageFailed(final String stage, final int portFlags, final int errorCode) {
-        endKorriLaunch();
         // Perform a connection test if the failure could be due to a blocked port
         // This does network I/O, so don't do it on the main thread.
         final int portTestResult = MoonBridge.testClientConnectivity(ServerHelper.CONNECTION_TEST_SERVER, 443, portFlags);
 
-        if (errorCode == 0 && portFlags != 0 && (portTestResult == MoonBridge.ML_TEST_RESULT_INCONCLUSIVE || portTestResult == 0)) {
+        boolean retryable = errorCode == 0
+                && portFlags != 0
+                && (portTestResult == MoonBridge.ML_TEST_RESULT_INCONCLUSIVE || portTestResult == 0);
+        korriLaunchScope.stageFailed(retryable);
+        if (retryable) {
             // Korri sessions have no spinner; the retry is silent under the
             // overlay's current stage.
             if (spinner != null) {
@@ -3460,7 +3465,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     @Override
     public void connectionTerminated(final int errorCode) {
-        endKorriLaunch();
+        korriLaunchScope.connectionTerminated();
         // Perform a connection test if the failure could be due to a blocked port
         // This does network I/O, so don't do it on the main thread.
         final int portFlags = MoonBridge.getPortFlagsFromTerminationErrorCode(errorCode);
@@ -3590,6 +3595,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     @Override
     public void connectionStarted() {
+        korriLaunchScope.connectionStarted();
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
