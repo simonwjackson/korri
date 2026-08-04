@@ -13,6 +13,7 @@ import type { SurfaceSettingsStatus } from "@contracts/surface/korri-surface"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   discoverResolvedMoonlight,
+  prepareSessionAndStartResolvedMoonlight,
   startResolvedMoonlight,
   type LauncherBridge,
 } from "../bridge/launcher-bridge"
@@ -440,28 +441,25 @@ export function useLaunchables(
         )
         return
       }
-      // The Korri launch model: brain prepares the game, then the shell
-      // attaches to the stable stream app that now embodies it. Preparing
-      // is visible immediately so there is no dead gap before the swap.
+      // Reserve the signed one-use native launch before asking the host to
+      // prepare. A signing failure must not leave an unmanaged remote game.
+      // Preparing is visible immediately so there is no dead gap before swap.
       publish(preparing)
-      void korrid
-        .sessionPrepare(entry.game.id, entry.game.host)
-        .then(async outcome => {
-          if (!mountedRef.current || operation !== actionSeq.current) return
-          if (outcome._tag !== "Ok") {
-            publish(LaunchablesState.withPrepareOutcome(preparing, outcome))
-            return
-          }
-          const result = await startResolvedMoonlight(
-            moonlightRef.current,
-            korrid,
-            bridge,
-            target.value.hostUuid,
-            target.value.appId,
-          )
-          if (!mountedRef.current || operation !== actionSeq.current) return
-          publish(LaunchablesState.withStartStreamResult(preparing, result))
-        })
+      void prepareSessionAndStartResolvedMoonlight(
+        moonlightRef.current,
+        korrid,
+        bridge,
+        target.value.hostUuid,
+        target.value.appId,
+        () => korrid.sessionPrepare(entry.game.id, entry.game.host),
+      ).then(result => {
+        if (!mountedRef.current || operation !== actionSeq.current) return
+        if (result._tag === "Err") {
+          publish(LaunchablesState.withPrepareOutcome(preparing, result))
+          return
+        }
+        publish(LaunchablesState.withStartStreamResult(preparing, result))
+      })
     },
     [
       bridge,

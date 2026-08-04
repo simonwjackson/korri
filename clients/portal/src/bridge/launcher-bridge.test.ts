@@ -5,6 +5,7 @@ import {
   createInMemoryLauncherBridge,
   createKorriNativeLauncherBridge,
   discoverResolvedMoonlight,
+  prepareSessionAndStartResolvedMoonlight,
   startResolvedMoonlight,
 } from "./launcher-bridge"
 
@@ -167,13 +168,14 @@ describe("resolved Moonlight bridge path", () => {
     ).toEqual(startFailure)
   })
 
-  it("does not invoke native startup when signed launch preparation fails", async () => {
-    let nativeCalls = 0
+  it("does not prepare the host or invoke native startup when signing fails", async () => {
+    const calls: string[] = []
     expect(
-      await startResolvedMoonlight(
+      await prepareSessionAndStartResolvedMoonlight(
         available,
         {
           async moonlightLaunchPrepare() {
+            calls.push("sign")
             return {
               _tag: "Err" as const,
               payload: {
@@ -185,19 +187,58 @@ describe("resolved Moonlight bridge path", () => {
         },
         {
           async startStream() {
-            nativeCalls += 1
+            calls.push("native-start")
             return { _tag: "StreamStarted" as const }
           },
         },
         "h1",
         7,
+        async () => {
+          calls.push("host-prepare")
+          return {
+            _tag: "Ok" as const,
+            payload: { gameId: "game", launchId: "host-launch" },
+          }
+        },
       ),
     ).toEqual({
       _tag: "StreamFailed",
       reason: "StartFailed",
       message: "current configuration is unauthorized",
     })
-    expect(nativeCalls).toBe(0)
+    expect(calls).toEqual(["sign"])
+  })
+
+  it("signs before host preparation and preserves host preparation failures", async () => {
+    const calls: string[] = []
+    const hostFailure = {
+      _tag: "Err" as const,
+      payload: { code: "UpstreamFailure", message: "host prepare failed" },
+    }
+    const result = await prepareSessionAndStartResolvedMoonlight(
+      available,
+      {
+        async moonlightLaunchPrepare() {
+          calls.push("sign")
+          return { _tag: "Ok" as const, payload: launchSpec }
+        },
+      },
+      {
+        async startStream() {
+          calls.push("native-start")
+          return { _tag: "StreamStarted" as const }
+        },
+      },
+      "h1",
+      7,
+      async () => {
+        calls.push("host-prepare")
+        return hostFailure
+      },
+    )
+
+    expect(result).toEqual(hostFailure)
+    expect(calls).toEqual(["sign", "host-prepare"])
   })
 
   it("does not invoke native Artemis when Moonlight is unavailable", async () => {
