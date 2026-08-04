@@ -75,6 +75,30 @@ fn composes_retroarch_launcher_with_mgba_runtime_from_independent_plugins() {
 }
 
 #[test]
+fn resolves_linux_through_the_same_retroarch_and_mgba_plugins() {
+    let root = tempfile::tempdir().unwrap();
+    let state = state(root.path());
+
+    let route = resolver::resolve_route_for_platform(
+        &state.snapshot,
+        &registry(true, true),
+        [],
+        "wl4",
+        resolver::RoutePlatform::Linux,
+    )
+    .expect("composed Linux RetroArch and mGBA route");
+
+    assert_eq!(
+        route.linux_launcher.unwrap().executable_env,
+        "KORRI_RETROARCH_EXECUTABLE"
+    );
+    assert_eq!(
+        route.runtime.unwrap().linux_path_env.as_deref(),
+        Some("KORRI_MGBA_CORE")
+    );
+}
+
+#[test]
 fn materializes_the_existing_launch_treaty_from_composed_plugin_records() {
     let root = tempfile::tempdir().unwrap();
     let state = state(root.path());

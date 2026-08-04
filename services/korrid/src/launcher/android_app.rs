@@ -130,6 +130,7 @@ mod tests {
             integration_token: "android-app".into(),
             flattened_target: "@korri:android-app:org.example.game".into(),
             android_component: None,
+            linux_launcher: None,
             runtime: None,
             file_target: None,
         }

@@ -1,18 +1,21 @@
 # `@korri:retroarch`
 
-This plugin owns the Android RetroArch launcher:
+This plugin owns the RetroArch launcher across platforms:
 
-- `plugin.ts` declares `@korri:retroarch/retroarch` and its Android component.
+- `plugin.ts` declares one `@korri:retroarch/retroarch` identity with Android
+  and Linux implementations.
 - `android/` obtains, patches, builds, verifies, and installs the signed
   `com.korri.retroarch` APK.
+- Nix supplies the Linux RetroArch executable to korrid at deployment time.
 
 Libretro cores are independent plugins. A library route selects this launcher
 and a compatible runtime such as `@korri:mgba/mgba`; korrid composes them using
 the runtime's explicit launcher and system compatibility declarations.
 
-The APK temporarily carries the independently built mGBA `.so` so Android can
-install it into RetroArch's private executable core directory. This packaging
-bridge does not make mGBA part of the RetroArch plugin.
+The APK temporarily carries the independently built Android mGBA `.so` so it
+can install into RetroArch's private executable core directory. On Linux, Nix
+supplies the independently packaged mGBA core. Neither packaging bridge makes
+mGBA part of the RetroArch plugin.
 
 ## Distribution builds
 

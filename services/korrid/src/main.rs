@@ -51,6 +51,23 @@ fn host_config_path() -> PathBuf {
     )
 }
 
+fn resolve_host_storage_root(explicit: Option<OsString>, home: Option<OsString>) -> PathBuf {
+    explicit
+        .map(PathBuf::from)
+        .or_else(|| {
+            home.map(PathBuf::from)
+                .map(|root| root.join(".local/share/korri"))
+        })
+        .unwrap_or_else(|| PathBuf::from("korri"))
+}
+
+fn host_storage_root() -> PathBuf {
+    resolve_host_storage_root(
+        std::env::var_os("KORRID_STORAGE_ROOT"),
+        std::env::var_os("HOME"),
+    )
+}
+
 fn brain_router() -> Router {
     let capability = std::env::var("KORRID_RPC_CAPABILITY")
         .expect("KORRID_RPC_CAPABILITY must be set for the brain server");
@@ -65,7 +82,9 @@ async fn main() {
     let mode = Mode::parse(mode_value.as_deref()).unwrap_or_else(|error| panic!("{error}"));
     let router = match mode {
         Mode::Brain => brain_router(),
-        Mode::Host => korrid::host_router(host_config_path()),
+        Mode::Host => {
+            korrid::host_router_with_storage(host_config_path(), Some(host_storage_root()))
+        }
     };
     let address: SocketAddr = std::env::var("KORRID_ADDRESS")
         .unwrap_or_else(|_| mode.default_address().into())
@@ -106,6 +125,18 @@ mod tests {
         assert_eq!(
             resolve_host_config_path(None, None, Some("/home/test".into())),
             PathBuf::from("/home/test/.config/korrid/host.toml"),
+        );
+    }
+
+    #[test]
+    fn host_storage_uses_explicit_then_home() {
+        assert_eq!(
+            resolve_host_storage_root(Some("/games".into()), Some("/home/test".into())),
+            PathBuf::from("/games"),
+        );
+        assert_eq!(
+            resolve_host_storage_root(None, Some("/home/test".into())),
+            PathBuf::from("/home/test/.local/share/korri"),
         );
     }
 }

@@ -761,8 +761,18 @@ fn router_with_capability_local_root_and_provision(
 /// Build the LAN-facing native host router. Host RPC is intentionally open
 /// for this trusted-network slice; the brain router remains capability-bound.
 pub fn host_router(config_path: impl AsRef<Path>) -> Router {
+    host_router_with_storage(config_path, None::<PathBuf>)
+}
+
+pub fn host_router_with_storage(
+    config_path: impl AsRef<Path>,
+    storage_root: Option<impl Into<PathBuf>>,
+) -> Router {
     let state = AppState {
-        mode: ServerMode::Host(host::HostRuntime::from_path(config_path.as_ref())),
+        mode: ServerMode::Host(host::HostRuntime::from_paths(
+            config_path.as_ref(),
+            storage_root.map(Into::into),
+        )),
         rpc_capability: None,
     };
     Router::new().route("/rpc", post(rpc)).with_state(state)

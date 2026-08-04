@@ -1,13 +1,14 @@
-// Declaration-only RetroArch launcher plugin for the Android target.
+// Declaration-only RetroArch launcher plugin.
 //
 // The adjacent android/ package owns acquisition and provisioning of the
-// signed com.korri.retroarch launcher. Libretro cores are separate plugins;
+// signed com.korri.retroarch launcher. Nix supplies the Linux executable named
+// by the declaration at deployment time. Libretro cores are separate plugins;
 // korrid composes explicitly compatible runtime and launcher declarations.
 const declaration = {
   namespace: "@korri",
   name: "retroarch",
   title: "RetroArch",
-  description: "Owns the Android RetroArch launcher.",
+  description: "Owns the RetroArch launcher on every supported platform.",
   contributes: {
     config: {
       launchers: {
@@ -19,6 +20,9 @@ const declaration = {
             packageName: "com.korri.retroarch",
             className:
               "com.retroarch.browser.retroactivity.RetroActivityFuture",
+          },
+          linux: {
+            executableEnv: "KORRI_RETROARCH_EXECUTABLE",
           },
         },
       },

@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use crate::plugin::{
-    AndroidLauncherRecord, LauncherRecord, PluginRegistry, ProviderRecord, RuntimeRecord,
-    SystemRecord,
+    AndroidLauncherRecord, LauncherRecord, LinuxLauncherRecord, PluginRegistry, ProviderRecord,
+    RuntimeRecord, SystemRecord,
 };
 
 use super::{AppPayload, ConfigSnapshot, Target};
@@ -20,10 +20,21 @@ pub struct RouteCatalog {
     pub diagnostics: Vec<RouteDiagnostic>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RoutePlatform {
+    Android,
+    Linux,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ResolvedAndroidComponent {
     pub package_name: String,
     pub class_name: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ResolvedLinuxLauncher {
+    pub executable_env: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -32,6 +43,7 @@ pub struct ResolvedRuntime {
     pub kind: String,
     pub app: String,
     pub path: String,
+    pub linux_path_env: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -53,6 +65,7 @@ pub struct ResolvedRoute {
     pub integration_token: String,
     pub flattened_target: String,
     pub android_component: Option<ResolvedAndroidComponent>,
+    pub linux_launcher: Option<ResolvedLinuxLauncher>,
     pub runtime: Option<ResolvedRuntime>,
     pub file_target: Option<ResolvedFileTarget>,
 }
@@ -80,6 +93,7 @@ struct RouteLauncher {
     command: Option<String>,
     systems: Option<Vec<String>>,
     android: Option<AndroidLauncherRecord>,
+    linux: Option<LinuxLauncherRecord>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -98,6 +112,20 @@ pub fn resolve_launchable_routes<'a>(
     registry: &PluginRegistry,
     static_playable_ids: impl IntoIterator<Item = &'a str>,
 ) -> RouteCatalog {
+    resolve_launchable_routes_for_platform(
+        snapshot,
+        registry,
+        static_playable_ids,
+        RoutePlatform::Android,
+    )
+}
+
+pub fn resolve_launchable_routes_for_platform<'a>(
+    snapshot: &ConfigSnapshot,
+    registry: &PluginRegistry,
+    static_playable_ids: impl IntoIterator<Item = &'a str>,
+    platform: RoutePlatform,
+) -> RouteCatalog {
     let contributions = compose_contributions(snapshot, registry);
     let static_playable_ids: BTreeSet<String> =
         static_playable_ids.into_iter().map(str::to_owned).collect();
@@ -110,7 +138,7 @@ pub fn resolve_launchable_routes<'a>(
             continue;
         }
 
-        match resolve_route_with_contributions(snapshot, &contributions, playable_id) {
+        match resolve_route_with_contributions(snapshot, &contributions, playable_id, platform) {
             Ok(route) => routes.push(route),
             Err(diagnostic) => diagnostics.push(diagnostic),
         }
@@ -128,6 +156,22 @@ pub fn resolve_route<'a>(
     static_playable_ids: impl IntoIterator<Item = &'a str>,
     playable_id: &str,
 ) -> Result<ResolvedRoute, RouteUnavailable> {
+    resolve_route_for_platform(
+        snapshot,
+        registry,
+        static_playable_ids,
+        playable_id,
+        RoutePlatform::Android,
+    )
+}
+
+pub fn resolve_route_for_platform<'a>(
+    snapshot: &ConfigSnapshot,
+    registry: &PluginRegistry,
+    static_playable_ids: impl IntoIterator<Item = &'a str>,
+    playable_id: &str,
+    platform: RoutePlatform,
+) -> Result<ResolvedRoute, RouteUnavailable> {
     if static_playable_ids
         .into_iter()
         .any(|static_playable_id| static_playable_id == playable_id)
@@ -136,13 +180,14 @@ pub fn resolve_route<'a>(
     }
 
     let contributions = compose_contributions(snapshot, registry);
-    resolve_route_with_contributions(snapshot, &contributions, playable_id)
+    resolve_route_with_contributions(snapshot, &contributions, playable_id, platform)
 }
 
 fn resolve_route_with_contributions(
     snapshot: &ConfigSnapshot,
     contributions: &Contributions,
     playable_id: &str,
+    platform: RoutePlatform,
 ) -> Result<ResolvedRoute, RouteUnavailable> {
     let item = snapshot.library.get(playable_id).ok_or_else(|| {
         unavailable(
@@ -238,6 +283,12 @@ fn resolve_route_with_contributions(
                 "launcher {} command {command} is not supported",
                 launcher.id
             ),
+        ));
+    }
+    if platform == RoutePlatform::Linux && command == ANDROID_APP_COMMAND {
+        return Err(unavailable(
+            Some(playable_id),
+            format!("launcher {} has no Linux implementation", launcher.id),
         ));
     }
 
@@ -382,6 +433,7 @@ fn resolve_route_with_contributions(
                 kind: runtime.kind.clone(),
                 app: runtime.app.clone(),
                 path: runtime.path.clone(),
+                linux_path_env: runtime.linux.as_ref().map(|linux| linux.path_env.clone()),
             })
         }
         _ => unreachable!("integration token was validated above"),
@@ -394,11 +446,29 @@ fn resolve_route_with_contributions(
             package_name: component.package_name.clone(),
             class_name: component.class_name.clone(),
         });
-    if command == RETROARCH_COMMAND && android_component.is_none() {
-        return Err(unavailable(
-            Some(playable_id),
-            format!("launcher {} has no Android component", launcher.id),
-        ));
+    let linux_launcher = launcher.linux.as_ref().map(|linux| ResolvedLinuxLauncher {
+        executable_env: linux.executable_env.clone(),
+    });
+    if command == RETROARCH_COMMAND {
+        let missing_platform = match platform {
+            RoutePlatform::Android => android_component.is_none(),
+            RoutePlatform::Linux => {
+                linux_launcher.is_none()
+                    || runtime
+                        .as_ref()
+                        .and_then(|runtime| runtime.linux_path_env.as_ref())
+                        .is_none()
+            }
+        };
+        if missing_platform {
+            return Err(unavailable(
+                Some(playable_id),
+                format!(
+                    "launcher {} has no {platform:?} implementation",
+                    launcher.id
+                ),
+            ));
+        }
     }
 
     Ok(ResolvedRoute {
@@ -413,6 +483,7 @@ fn resolve_route_with_contributions(
         integration_token: command.to_owned(),
         flattened_target,
         android_component,
+        linux_launcher,
         runtime,
         file_target,
     })
@@ -497,6 +568,7 @@ fn launcher_from_plugin(record: &LauncherRecord) -> RouteLauncher {
         command: record.command.clone(),
         systems: record.systems.clone(),
         android: record.android.clone(),
+        linux: record.linux.clone(),
     }
 }
 
@@ -507,6 +579,7 @@ fn launcher_from_snapshot(id: &str, payload: &AppPayload) -> RouteLauncher {
         command: payload.command.as_ref().map(|value| value.0.clone()),
         systems: payload.systems.clone(),
         android: None,
+        linux: None,
     }
 }
 

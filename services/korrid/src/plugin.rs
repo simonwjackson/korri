@@ -46,6 +46,12 @@ pub struct AndroidLauncherRecord {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LinuxLauncherRecord {
+    pub executable_env: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct LauncherRecord {
     pub id: String,
@@ -57,6 +63,8 @@ pub struct LauncherRecord {
     pub systems: Option<Vec<String>>,
     #[serde(default, deserialize_with = "deserialize_optional_non_null")]
     pub android: Option<AndroidLauncherRecord>,
+    #[serde(default, deserialize_with = "deserialize_optional_non_null")]
+    pub linux: Option<LinuxLauncherRecord>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
@@ -67,12 +75,20 @@ pub struct RuntimeSupportsRecord {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LinuxRuntimeRecord {
+    pub path_env: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct RuntimeRecord {
     pub id: String,
     pub kind: String,
     pub app: String,
     pub path: String,
+    #[serde(default, deserialize_with = "deserialize_optional_non_null")]
+    pub linux: Option<LinuxRuntimeRecord>,
     #[serde(default, deserialize_with = "deserialize_optional_non_null")]
     pub supports: Option<RuntimeSupportsRecord>,
 }
@@ -404,6 +420,17 @@ fn normalize_plugin(declaration: PluginDeclaration) -> Result<Plugin, PluginErro
                 });
             }
         }
+        if launcher
+            .linux
+            .as_ref()
+            .is_some_and(|linux| !is_environment_key(&linux.executable_env))
+        {
+            return Err(PluginError::InvalidContribution {
+                kind: "launcher",
+                record_id: local_id.clone(),
+                reason: "Linux executable environment key is invalid".to_owned(),
+            });
+        }
     }
 
     for (local_id, runtime) in &declaration.contributes.config.runtimes {
@@ -421,13 +448,16 @@ fn normalize_plugin(declaration: PluginDeclaration) -> Result<Plugin, PluginErro
         if runtime.kind.is_empty()
             || runtime.app.is_empty()
             || !is_safe_absolute_path(&runtime.path)
+            || runtime
+                .linux
+                .as_ref()
+                .is_some_and(|linux| !is_environment_key(&linux.path_env))
         {
             return Err(PluginError::InvalidContribution {
                 kind: "runtime",
                 record_id: local_id.clone(),
-                reason:
-                    "runtime kind and app must be non-empty and path must be a safe absolute path"
-                        .to_owned(),
+                reason: "runtime kind and app must be non-empty, Android path must be a safe absolute path, and Linux environment key must be valid"
+                    .to_owned(),
             });
         }
     }
@@ -488,6 +518,14 @@ fn is_android_identifier(value: &str, allow_dollar: bool) -> bool {
                     || (allow_dollar && character == '$')
             })
     }) && value.contains('.')
+}
+
+fn is_environment_key(value: &str) -> bool {
+    let mut characters = value.chars();
+    matches!(characters.next(), Some(first) if first.is_ascii_uppercase() || first == '_')
+        && characters.all(|character| {
+            character.is_ascii_uppercase() || character.is_ascii_digit() || character == '_'
+        })
 }
 
 fn is_safe_absolute_path(value: &str) -> bool {

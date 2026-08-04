@@ -238,11 +238,13 @@ mod tests {
                 package_name: "com.korri.retroarch".into(),
                 class_name: "com.retroarch.browser.retroactivity.RetroActivityFuture".into(),
             }),
+            linux_launcher: None,
             runtime: Some(crate::config::resolver::ResolvedRuntime {
                 id: "@korri:mgba/mgba".into(),
                 kind: LIBRETRO_CORE_KIND.into(),
                 app: RETROARCH_LAUNCHER.into(),
                 path: "/plugin/owned/mgba_libretro_android.so".into(),
+                linux_path_env: None,
             }),
             file_target: Some(crate::config::resolver::ResolvedFileTarget {
                 storage_id: ANDROID_ROM_STORAGE.into(),

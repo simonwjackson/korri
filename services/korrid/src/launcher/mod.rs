@@ -1,4 +1,5 @@
 mod android_app;
+pub(crate) mod linux_retroarch;
 mod retroarch;
 mod types;
 

@@ -42,6 +42,7 @@ let
     nativeBuildInputs = [
       pkgs.clang
       pkgs.llvmPackages.libclang
+      pkgs.makeWrapper
     ];
     LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
   };
@@ -65,4 +66,9 @@ craneLib.buildPackage (commonArgs // {
   # the full repository gate remains `nix run .#korrid-check`.
   cargoBuildExtraArgs = "--bin korrid --lib";
   cargoTestExtraArgs = "--bin korrid";
+  postInstall = ''
+    wrapProgram "$out/bin/korrid" \
+      --set KORRI_RETROARCH_EXECUTABLE ${pkgs.retroarch-bare}/bin/retroarch \
+      --set KORRI_MGBA_CORE ${pkgs.libretro.mgba}/lib/retroarch/cores/mgba_libretro.so
+  '';
 })

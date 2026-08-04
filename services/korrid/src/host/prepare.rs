@@ -34,6 +34,14 @@ impl HostLauncher {
             code: "HostGameNotFound".into(),
             message: format!("host game {game_id:?} is not configured"),
         })?;
+        self.prepare_command(game_id, &game.command)
+    }
+
+    pub fn prepare_command(
+        &self,
+        game_id: &str,
+        configured_command: &[String],
+    ) -> Result<SessionPrepared, RpcFailure> {
         let mut running = self.running.lock().expect("host child mutex poisoned");
         if running.contains(game_id) {
             return Ok(SessionPrepared {
@@ -41,7 +49,7 @@ impl HostLauncher {
             });
         }
 
-        let (program, arguments) = game.command.split_first().ok_or_else(|| RpcFailure {
+        let (program, arguments) = configured_command.split_first().ok_or_else(|| RpcFailure {
             code: "HostLaunchFailed".into(),
             message: format!("host game {game_id:?} has an empty command"),
         })?;
