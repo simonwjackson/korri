@@ -82,9 +82,17 @@ final class KorriLocalLaunchSpec {
     }
 
     static void applyTaskPolicy(Parsed spec, Intent intent) {
-        if (!spec.isAndroidApp) return;
+        if (spec.isAndroidApp) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                    | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            return;
+        }
+        // Emulator activities must not join Korri's task. If the same session
+        // already has a live RetroArch activity, bring that exact window back
+        // rather than constructing a second NativeActivity in the same process
+        // (which RetroArch cannot reinitialise and leaves black).
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+                | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
     }
 
     static Parsed parse(String specJson, File storageRoot) throws Invalid {

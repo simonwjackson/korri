@@ -86,7 +86,7 @@ public class KorriLocalLaunchSpecTest {
     }
 
     @Test
-    public void appliesSeparateTaskPolicyOnlyToAndroidApps() throws Exception {
+    public void appliesLauncherSpecificTaskPolicies() throws Exception {
         KorriLocalLaunchSpec.Parsed androidApp =
                 KorriLocalLaunchSpec.parse(androidAppSpec().toString(), ROOT);
         Intent androidIntent = new Intent();
@@ -100,9 +100,11 @@ public class KorriLocalLaunchSpecTest {
                 KorriLocalLaunchSpec.parse(validSpec().toString(), ROOT);
         Intent retroarchIntent = retroarch.intent();
         KorriLocalLaunchSpec.applyTaskPolicy(retroarch, retroarchIntent);
-        assertEquals(0, retroarchIntent.getFlags()
-                & (Intent.FLAG_ACTIVITY_NEW_TASK
-                | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
+        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT,
+                retroarchIntent.getFlags()
+                        & (Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                        | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
     }
 
     @Test

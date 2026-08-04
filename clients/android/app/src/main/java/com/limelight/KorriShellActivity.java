@@ -459,7 +459,6 @@ public class KorriShellActivity extends AppCompatActivity {
                 if (launch == null) {
                     return launchFailed("NotInstalled", "local launcher is not installed");
                 }
-                KorriLocalLaunchSpec.applyTaskPolicy(spec, launch);
                 intent = launch;
             } else {
                 intent = spec.intent();
@@ -469,6 +468,7 @@ public class KorriShellActivity extends AppCompatActivity {
                     return launchFailed("NotInstalled", "local launcher is not installed");
                 }
             }
+            KorriLocalLaunchSpec.applyTaskPolicy(spec, intent);
 
             boolean hasProvisioning = !spec.directories.isEmpty() || !spec.files.isEmpty();
             if (hasProvisioning
