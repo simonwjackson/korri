@@ -63,6 +63,26 @@ describe("surfaceModelFrom", () => {
     expect(game.subtitle).toBe("GBA")
   })
 
+  test("reports retained host copies without adding another game", () => {
+    const model = surfaceModelFrom(
+      ready([
+        {
+          ...localGame,
+          alternatives: [
+            {
+              kind: "remote",
+              game: { id: "wl4", title: "Wario Land 4", host: "zao" },
+            },
+          ],
+        },
+      ]),
+    )
+
+    if (model.catalog._tag !== "Ready") throw new Error("expected Ready")
+    expect(model.catalog.games).toHaveLength(1)
+    expect(model.catalog.games[0]?.subtitle).toBe("GBA · Also on zao")
+  })
+
   test("the running session is resumable and leads the catalog", () => {
     const model = surfaceModelFrom(ready([nowPlaying, localGame]))
 

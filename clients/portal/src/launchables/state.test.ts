@@ -78,6 +78,60 @@ describe("LaunchablesState.fromSources", () => {
     })
   })
 
+  it("shows matching local and Zao copies as one local-first game", () => {
+    const identity = { kind: "hash" as const, value: "sha256:wario" }
+    const state = LaunchablesState.fromSources(
+      [officeApps],
+      {
+        _tag: "Ok",
+        payload: {
+          games: [
+            { id: "wl4", title: "Wario Land 4", host: "zao", identity },
+          ],
+        },
+      },
+      undefined,
+      undefined,
+      {
+        _tag: "Ok",
+        payload: {
+          games: [
+            {
+              id: "wl4",
+              title: "Wario Land 4",
+              system: "Game Boy Advance",
+              identity,
+            },
+          ],
+        },
+      },
+    )
+
+    if (state._tag !== "Ready") throw new Error("unreachable")
+    expect(state.entries.filter(entry => entry.kind.includes("game"))).toEqual([
+      {
+        kind: "local-game",
+        game: {
+          id: "wl4",
+          title: "Wario Land 4",
+          system: "Game Boy Advance",
+          identity,
+        },
+        alternatives: [
+          {
+            kind: "remote",
+            game: {
+              id: "wl4",
+              title: "Wario Land 4",
+              host: "zao",
+              identity,
+            },
+          },
+        ],
+      },
+    ])
+  })
+
   it("does not turn Sunshine's advertised apps into Korri games", () => {
     expect(ready._tag).toBe("Ready")
     if (ready._tag !== "Ready") throw new Error("unreachable")

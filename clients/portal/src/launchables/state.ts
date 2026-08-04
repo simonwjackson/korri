@@ -17,6 +17,7 @@ import type {
   SessionStatusOutcome,
   SessionStopOutcome,
 } from "@contracts/generated/korrid"
+import { foldGameCopies, type PortalGameCopy } from "./fold-games"
 
 /**
  * Launchables screen state. Raw bridge results are converted into this ADT
@@ -47,8 +48,16 @@ export type PortalEntry =
    */
   | { readonly kind: "pairing" }
   | { readonly kind: "now-playing"; readonly session: ActiveSession }
-  | { readonly kind: "local-game"; readonly game: LocalGame }
-  | { readonly kind: "game"; readonly game: Game }
+  | {
+      readonly kind: "local-game"
+      readonly game: LocalGame
+      readonly alternatives?: readonly PortalGameCopy[]
+    }
+  | {
+      readonly kind: "game"
+      readonly game: Game
+      readonly alternatives?: readonly PortalGameCopy[]
+    }
 
 /** One paired host's app-query outcome, as gathered by the Root. */
 export interface StreamSource {
@@ -171,10 +180,29 @@ export const LaunchablesState = {
       entries.push({ kind: "now-playing", session: session.payload.active })
     }
 
-    if (localGames?._tag === "Ok") {
-      for (const game of localGames.payload.games) {
-        entries.push({ kind: "local-game", game })
+    const localCatalog = localGames?._tag === "Ok" ? localGames.payload.games : []
+    const remoteCatalog = korrid._tag === "Ok" ? korrid.payload.games : []
+    for (const folded of foldGameCopies(localCatalog, remoteCatalog)) {
+      const alternatives =
+        folded.alternatives.length === 0
+          ? {}
+          : { alternatives: folded.alternatives }
+      if (folded.primary.kind === "local") {
+        entries.push({
+          kind: "local-game",
+          game: folded.primary.game,
+          ...alternatives,
+        })
+      } else {
+        entries.push({
+          kind: "game",
+          game: folded.primary.game,
+          ...alternatives,
+        })
       }
+    }
+
+    if (localGames?._tag === "Ok") {
       for (const failure of localGames.payload.failures ?? []) {
         failures.push(`local games: ${failure.code}`)
       }
@@ -183,14 +211,12 @@ export const LaunchablesState = {
     }
 
     if (korrid._tag === "Ok") {
-      for (const game of korrid.payload.games) entries.push({ kind: "game", game })
       for (const failure of korrid.payload.failures ?? []) {
         failures.push(`${failure.host}: ${failure.code}`)
       }
     } else {
       failures.push(`games: ${korrid.payload.code}`)
     }
-
 
     // Pairing is always reachable. It is how a device joins at all, so
     // it cannot be conditional on already having something to show.

@@ -66,6 +66,15 @@ function actionFromEntry(entry: PortalEntry): SurfaceAction | null {
   }
 }
 
+function alternativeLocation(entry: PortalEntry): string | undefined {
+  if (entry.kind !== "local-game" && entry.kind !== "game") return undefined
+  const locations = entry.alternatives?.map(copy =>
+    copy.kind === "local" ? "this device" : copy.game.host,
+  )
+  const visible = [...new Set(locations?.filter(Boolean) ?? [])]
+  return visible.length === 0 ? undefined : `Also on ${visible.join(", ")}`
+}
+
 function gameFromEntry(entry: PortalEntry): SurfaceGame | null {
   switch (entry.kind) {
     case "now-playing":
@@ -77,20 +86,28 @@ function gameFromEntry(entry: PortalEntry): SurfaceGame | null {
         subtitle: entry.session.host ?? "Running now",
         resumable: true,
       }
-    case "local-game":
+    case "local-game": {
+      const alternative = alternativeLocation(entry)
       return {
         id: entryKey(entry),
         title: entry.game.title,
         section: SECTION_THIS_DEVICE,
-        subtitle: entry.game.system,
+        subtitle:
+          alternative === undefined
+            ? entry.game.system
+            : `${entry.game.system} · ${alternative}`,
       }
-    case "game":
+    }
+    case "game": {
+      const alternative = alternativeLocation(entry)
+      const subtitle = [entry.game.host, alternative].filter(Boolean).join(" · ")
       return {
         id: entryKey(entry),
         title: entry.game.title,
         section: entry.game.host ?? "Other devices",
-        ...(entry.game.host === undefined ? {} : { subtitle: entry.game.host }),
+        ...(subtitle.length === 0 ? {} : { subtitle }),
       }
+    }
     default:
       return null
   }
