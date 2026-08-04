@@ -3,12 +3,12 @@ package com.limelight.korri.overlay;
 import android.accessibilityservice.AccessibilityService;
 import android.app.ActivityManager;
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
 
 import com.simonwjackson.korri.korrid.KorriBrainService;
-
-import java.util.List;
 
 /**
  * Production Guide/session scope for the global gameplay overlay.
@@ -17,12 +17,23 @@ import java.util.List;
  * origin-locked WebView. The service requests no screen content or gestures.
  */
 public final class KorriOverlayService extends AccessibilityService {
+    private static final long LIVENESS_CHECK_DELAY_MS = 500;
+    private static final int MAX_LIVENESS_CHECKS = 8;
+
     private StateMachine state;
+    private KorriLaunchContinuity continuity;
 
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
         state = new StateMachine(getPackageName());
+        Handler handler = new Handler(Looper.getMainLooper());
+        continuity = new KorriLaunchContinuity(
+                new KorriLaunchContinuity.ActivityManagerProcessInspector(
+                        (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE)),
+                callback -> handler.postDelayed(callback, LIVENESS_CHECK_DELAY_MS),
+                KorriBrainService::clearActiveLaunchOnEnd,
+                MAX_LIVENESS_CHECKS);
         syncSession();
     }
 
@@ -43,14 +54,10 @@ public final class KorriOverlayService extends AccessibilityService {
         String packageName = event.getPackageName().toString();
         String className = event.getClassName() == null ? null : event.getClassName().toString();
         state.updateForeground(packageName, className);
-
-        KorriActiveLaunch launch = KorriBrainService.activeLaunch();
-        if (launch != null
-                && state.hasMatchedLaunch(launch.launchId())
-                && !launch.matchesForeground(packageName, className)
-                && !isTargetProcessRunning(launch.targetPackage())) {
-            KorriBrainService.clearActiveLaunchOnEnd(launch.launchId());
-            syncSession();
+        if (continuity != null
+                && !(getPackageName().equals(packageName)
+                        && KorriOverlayService.class.getName().equals(className))) {
+            continuity.updateForeground(packageName, className);
         }
     }
 
@@ -62,31 +69,20 @@ public final class KorriOverlayService extends AccessibilityService {
     @Override
     public void onDestroy() {
         if (state != null) state.destroy();
+        if (continuity != null) continuity.updateSession(null);
         state = null;
+        continuity = null;
         super.onDestroy();
     }
 
     private void syncSession() {
+        KorriActiveLaunch launch = KorriBrainService.activeLaunch();
         if (state != null) {
-            state.updateSession(
-                    KorriBrainService.activeLaunch(), KorriBrainService.isOverlayArmed());
+            state.updateSession(launch, KorriBrainService.isOverlayArmed());
         }
-    }
-
-    private boolean isTargetProcessRunning(String targetPackage) {
-        ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
-        List<ActivityManager.RunningAppProcessInfo> processes =
-                manager == null ? null : manager.getRunningAppProcesses();
-        if (processes == null) return true; // absence of evidence is not end evidence
-        for (ActivityManager.RunningAppProcessInfo process : processes) {
-            if (targetPackage.equals(process.processName)) return true;
-            if (process.pkgList != null) {
-                for (String packageName : process.pkgList) {
-                    if (targetPackage.equals(packageName)) return true;
-                }
-            }
+        if (continuity != null) {
+            continuity.updateSession(launch);
         }
-        return false;
     }
 
     /** Pure public state machine; Android callbacks are only adapters. */
