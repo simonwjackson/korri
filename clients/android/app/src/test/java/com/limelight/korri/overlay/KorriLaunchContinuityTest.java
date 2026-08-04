@@ -99,6 +99,11 @@ public class KorriLaunchContinuityTest {
 
         assertTrue(continuity.hasBoundIdentity(LAUNCH_A, 41));
         assertEquals(Collections.emptyList(), end.launchIds);
+        assertEquals(1, scheduler.pending());
+
+        inspector.add(complete());
+        scheduler.runNext();
+        assertEquals(Collections.singletonList(LAUNCH_A), end.launchIds);
         assertEquals(0, scheduler.pending());
     }
 

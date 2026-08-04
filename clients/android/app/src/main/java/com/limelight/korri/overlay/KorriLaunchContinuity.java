@@ -205,6 +205,10 @@ public final class KorriLaunchContinuity {
             return;
         }
 
+        if (kind == CheckKind.LIVENESS) {
+            schedule(kind, 0);
+            return;
+        }
         int nextCompletedChecks = completedChecks + 1;
         if (nextCompletedChecks < maxChecks) {
             schedule(kind, nextCompletedChecks);
