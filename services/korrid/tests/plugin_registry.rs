@@ -3,6 +3,7 @@ use korrid::plugin::{decode_plugin_declaration, load_plugin_source, PluginRegist
 const ANDROID_PLUGIN: &str = include_str!("../plugins/android-app.plugin.ts");
 const MGBA_PLUGIN: &str = include_str!("../../../plugins/mgba/plugin.ts");
 const RETROARCH_PLUGIN: &str = include_str!("../../../plugins/retroarch/plugin.ts");
+const MOONLIGHT_PLUGIN: &str = include_str!("../../../plugins/moonlight/plugin.ts");
 
 #[test]
 fn enabled_android_plugin_announces_its_legacy_contributions() {
@@ -80,6 +81,64 @@ fn enabled_mgba_plugin_announces_its_system_and_runtime() {
         runtime.path,
         "/data/data/com.korri.retroarch/cores/mgba_libretro_android.so"
     );
+}
+
+#[test]
+fn enabled_moonlight_plugin_declares_artemis_streaming_and_the_full_control_inventory() {
+    let plugin = load_plugin_source(MOONLIGHT_PLUGIN).expect("Moonlight plugin should load");
+    let registry = PluginRegistry::new(vec![plugin], vec!["@korri:moonlight".to_owned()])
+        .expect("Moonlight plugin should register");
+
+    assert_eq!(registry.registered_plugin_ids(), ["@korri:moonlight"]);
+    let transport = registry
+        .transports()
+        .get("@korri:moonlight/moonlight")
+        .expect("stable Moonlight transport");
+    let android = transport.android.as_ref().expect("Android implementation");
+    assert_eq!(android.implementation.as_str(), "artemis");
+    assert_eq!(android.sunshine_app, "Korri Stream");
+    assert_eq!(
+        registry
+            .session_controls()
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        [
+            "@korri:moonlight/disconnect",
+            "@korri:moonlight/face-button-flip",
+            "@korri:moonlight/fill",
+            "@korri:moonlight/floating-menu",
+            "@korri:moonlight/full-keyboard",
+            "@korri:moonlight/hud",
+            "@korri:moonlight/keyboard",
+            "@korri:moonlight/keyboard-controller",
+            "@korri:moonlight/local-cursor",
+            "@korri:moonlight/mouse-mode",
+            "@korri:moonlight/pan-zoom",
+            "@korri:moonlight/picture-in-picture",
+            "@korri:moonlight/quit-host",
+            "@korri:moonlight/rotate-screen",
+            "@korri:moonlight/rumble",
+            "@korri:moonlight/sgsr-edge-threshold",
+            "@korri:moonlight/sgsr-sharpness",
+            "@korri:moonlight/touch-sensitivity",
+        ]
+    );
+}
+
+#[test]
+fn malformed_moonlight_android_implementation_is_rejected_strictly() {
+    for source in [
+        MOONLIGHT_PLUGIN.replace("implementation: \"artemis\"", "implementation: \"other\""),
+        MOONLIGHT_PLUGIN.replace("sunshineApp: \"Korri Stream\"", "sunshineApp: \"\""),
+        MOONLIGHT_PLUGIN.replace(
+            "sunshineApp: \"Korri Stream\"",
+            "sunshineApp: \"Korri Stream\", unknown: true",
+        ),
+        MOONLIGHT_PLUGIN.replace("android: {", "android: null, ignored: {"),
+    ] {
+        load_plugin_source(&source).expect_err("invalid Artemis declaration must fail");
+    }
 }
 
 #[test]

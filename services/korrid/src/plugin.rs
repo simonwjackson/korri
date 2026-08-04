@@ -94,10 +94,33 @@ pub struct RuntimeRecord {
     pub supports: Option<RuntimeSupportsRecord>,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum AndroidTransportImplementation {
+    Artemis,
+}
+
+impl AndroidTransportImplementation {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Artemis => "artemis",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AndroidTransportRecord {
+    pub implementation: AndroidTransportImplementation,
+    pub sunshine_app: String,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct TransportRecord {
     pub id: String,
+    #[serde(default, deserialize_with = "deserialize_optional_non_null")]
+    pub android: Option<AndroidTransportRecord>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
@@ -665,6 +688,17 @@ fn normalize_plugin(mut declaration: PluginDeclaration) -> Result<Plugin, Plugin
                 kind: "transport",
                 record_id: local_id.clone(),
                 reason: format!("record id {} must be {expected_id}", transport.id),
+            });
+        }
+        if transport
+            .android
+            .as_ref()
+            .is_some_and(|android| android.sunshine_app.trim().is_empty())
+        {
+            return Err(PluginError::InvalidContribution {
+                kind: "transport",
+                record_id: local_id.clone(),
+                reason: "Android Sunshine app must not be empty".to_owned(),
             });
         }
     }

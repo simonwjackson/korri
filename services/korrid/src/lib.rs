@@ -86,6 +86,34 @@ pub struct SessionPrepared {
 }
 
 #[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct MoonlightResolveRequest {}
+
+#[typeshare]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MoonlightImplementation {
+    Artemis,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedMoonlight {
+    pub transport_id: String,
+    pub implementation: MoonlightImplementation,
+    pub sunshine_app: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
+pub enum MoonlightResolveOutcome {
+    Available(ResolvedMoonlight),
+    Unavailable(RpcFailure),
+}
+
+#[typeshare]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "payload", rename_all = "kebab-case")]
 pub enum SessionControlInteraction {
@@ -524,6 +552,8 @@ pub enum HealthOutcome {
 pub enum RpcRequest {
     #[serde(rename = "app.catalog.snapshot")]
     CatalogSnapshot(CatalogSnapshotRequest),
+    #[serde(rename = "app.moonlight.resolve")]
+    MoonlightResolve(MoonlightResolveRequest),
     #[serde(rename = "app.session.prepare")]
     SessionPrepare(SessionPrepareRequest),
     #[serde(rename = "app.session.status")]
@@ -552,6 +582,8 @@ pub enum RpcRequest {
 pub enum RpcResponse {
     #[serde(rename = "app.catalog.snapshot")]
     CatalogSnapshot(CatalogSnapshotOutcome),
+    #[serde(rename = "app.moonlight.resolve")]
+    MoonlightResolve(MoonlightResolveOutcome),
     #[serde(rename = "app.session.prepare")]
     SessionPrepare(SessionPrepareOutcome),
     #[serde(rename = "app.session.status")]
@@ -754,6 +786,41 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                     .unwrap_or_else(CatalogSnapshotOutcome::Err),
             };
             RpcResponse::CatalogSnapshot(outcome)
+        }
+        RpcRequest::MoonlightResolve(_) => {
+            let outcome = match &state.mode {
+                ServerMode::Brain(brain) => {
+                    let config_state = brain.config_snapshot.reload();
+                    match plugin_policy::registry_for_snapshot(&config_state.snapshot) {
+                        Ok(registry) => config::resolver::resolve_moonlight_transport(
+                            &registry,
+                            config::resolver::RoutePlatform::Android,
+                        )
+                        .map(|resolved| {
+                            MoonlightResolveOutcome::Available(ResolvedMoonlight {
+                                transport_id: resolved.transport_id,
+                                implementation: MoonlightImplementation::Artemis,
+                                sunshine_app: resolved.sunshine_app,
+                            })
+                        })
+                        .unwrap_or_else(|| {
+                            MoonlightResolveOutcome::Unavailable(RpcFailure {
+                                code: "MoonlightUnavailable".into(),
+                                message: "Moonlight is disabled or Artemis is unavailable".into(),
+                            })
+                        }),
+                        Err(error) => MoonlightResolveOutcome::Unavailable(RpcFailure {
+                            code: "PluginPolicyInvalid".into(),
+                            message: error.to_string(),
+                        }),
+                    }
+                }
+                ServerMode::Host(_) => MoonlightResolveOutcome::Unavailable(RpcFailure {
+                    code: "MoonlightUnavailable".into(),
+                    message: "Artemis is available only at the Android edge".into(),
+                }),
+            };
+            RpcResponse::MoonlightResolve(outcome)
         }
         RpcRequest::SessionPrepare(request) => {
             let outcome = match &state.mode {
@@ -1830,7 +1897,7 @@ command = ["sh", "-c", "sleep 1"]
                 .as_array()
                 .unwrap()
                 .len(),
-            3
+            4
         );
         let revision = before["outcome"]["payload"]["revision"].as_str().unwrap();
         let request = serde_json::json!({

@@ -21,11 +21,21 @@ fn bundled_policy_enables_first_party_android_plugins_by_default() {
 
     assert_eq!(
         registry.registered_plugin_ids(),
-        ["@korri:android-app", "@korri:mgba", "@korri:retroarch"]
+        [
+            "@korri:android-app",
+            "@korri:mgba",
+            "@korri:moonlight",
+            "@korri:retroarch"
+        ]
     );
     assert_eq!(
         registry.enabled_plugin_ids(),
-        ["@korri:android-app", "@korri:mgba", "@korri:retroarch"]
+        [
+            "@korri:android-app",
+            "@korri:mgba",
+            "@korri:moonlight",
+            "@korri:retroarch"
+        ]
     );
     assert!(registry.providers().contains_key("@korri:android-app"));
     assert!(registry.providers().contains_key("@korri:mgba"));
@@ -43,31 +53,36 @@ fn bundled_policy_enables_first_party_android_plugins_by_default() {
 }
 
 #[test]
-fn later_policy_layer_disables_bundled_android_plugin() {
+fn later_user_policy_layer_disables_bundled_moonlight_normally() {
     let plugins = bundled_plugins().expect("bundled plugins should load");
     let enabled_ids = resolve_enabled_plugin_ids([
         bundled_plugin_policy_layer(),
-        PluginPolicyLayer::from_enabled([("@korri:android-app", false)]),
+        PluginPolicyLayer::from_enabled([("@korri:moonlight", false)]),
     ]);
     let registry = PluginRegistry::new(plugins, enabled_ids)
         .expect("disabled plugin should remain registered");
 
     assert_eq!(
         registry.registered_plugin_ids(),
-        ["@korri:android-app", "@korri:mgba", "@korri:retroarch"]
+        [
+            "@korri:android-app",
+            "@korri:mgba",
+            "@korri:moonlight",
+            "@korri:retroarch"
+        ]
     );
     assert_eq!(
         registry.enabled_plugin_ids(),
-        ["@korri:mgba", "@korri:retroarch"]
+        ["@korri:android-app", "@korri:mgba", "@korri:retroarch"]
     );
-    assert!(!registry.providers().contains_key("@korri:android-app"));
-    assert!(registry.providers().contains_key("@korri:mgba"));
-    assert!(registry.providers().contains_key("@korri:retroarch"));
-    assert!(registry.systems().contains_key("@korri:mgba/gba"));
-    assert!(registry
-        .launchers()
-        .contains_key("@korri:retroarch/retroarch"));
-    assert!(registry.runtimes().contains_key("@korri:mgba/mgba"));
+    assert!(registry.owns_registered_transport_id("@korri:moonlight/moonlight"));
+    assert!(!registry
+        .transports()
+        .contains_key("@korri:moonlight/moonlight"));
+    assert!(!registry
+        .session_controls()
+        .keys()
+        .any(|id| id.starts_with("@korri:moonlight/")));
 }
 
 #[test]

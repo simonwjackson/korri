@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     plugin::{
-        AndroidLauncherRecord, LauncherRecord, LinuxLauncherRecord, PluginRegistry, ProviderRecord,
-        RuntimeRecord, SessionControlExecutor, SessionControlOwnerKind, SessionControlPlatform,
-        SessionControlRecord, SystemRecord,
+        AndroidLauncherRecord, AndroidTransportImplementation, LauncherRecord, LinuxLauncherRecord,
+        PluginRegistry, ProviderRecord, RuntimeRecord, SessionControlExecutor,
+        SessionControlOwnerKind, SessionControlPlatform, SessionControlRecord, SystemRecord,
     },
     GameIdentity,
 };
@@ -28,6 +28,32 @@ pub struct RouteCatalog {
 pub enum RoutePlatform {
     Android,
     Linux,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ResolvedMoonlightTransport {
+    pub transport_id: String,
+    pub implementation: AndroidTransportImplementation,
+    pub sunshine_app: String,
+}
+
+/** Resolve the enabled Moonlight declaration for the platform that can
+ * actually provide its native transport edge. Registration alone is not
+ * availability, and Linux intentionally has no Artemis implementation. */
+pub fn resolve_moonlight_transport(
+    registry: &PluginRegistry,
+    platform: RoutePlatform,
+) -> Option<ResolvedMoonlightTransport> {
+    if platform != RoutePlatform::Android {
+        return None;
+    }
+    let transport = registry.transports().get("@korri:moonlight/moonlight")?;
+    let android = transport.android.as_ref()?;
+    Some(ResolvedMoonlightTransport {
+        transport_id: transport.id.clone(),
+        implementation: android.implementation,
+        sunshine_app: android.sunshine_app.clone(),
+    })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

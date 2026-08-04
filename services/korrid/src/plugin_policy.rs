@@ -16,6 +16,8 @@ pub const ANDROID_APP_PLUGIN_ID: &str = "@korri:android-app";
 pub const ANDROID_APP_PLUGIN_SOURCE: &str = include_str!("../plugins/android-app.plugin.ts");
 pub const MGBA_PLUGIN_ID: &str = "@korri:mgba";
 pub const MGBA_PLUGIN_SOURCE: &str = include_str!("../plugins/mgba.plugin.ts");
+pub const MOONLIGHT_PLUGIN_ID: &str = "@korri:moonlight";
+pub const MOONLIGHT_PLUGIN_SOURCE: &str = include_str!("../plugins/moonlight.plugin.ts");
 pub const RETROARCH_PLUGIN_ID: &str = "@korri:retroarch";
 pub const RETROARCH_PLUGIN_SOURCE: &str = include_str!("../plugins/retroarch.plugin.ts");
 
@@ -39,6 +41,7 @@ pub fn bundled_plugins() -> Result<Vec<Plugin>, PluginError> {
     Ok(vec![
         load_plugin_source(ANDROID_APP_PLUGIN_SOURCE)?,
         load_plugin_source(MGBA_PLUGIN_SOURCE)?,
+        load_plugin_source(MOONLIGHT_PLUGIN_SOURCE)?,
         load_plugin_source(RETROARCH_PLUGIN_SOURCE)?,
     ])
 }
@@ -47,6 +50,7 @@ pub fn bundled_plugin_policy_layer() -> PluginPolicyLayer {
     PluginPolicyLayer::from_enabled([
         (ANDROID_APP_PLUGIN_ID, true),
         (MGBA_PLUGIN_ID, true),
+        (MOONLIGHT_PLUGIN_ID, true),
         (RETROARCH_PLUGIN_ID, true),
     ])
 }

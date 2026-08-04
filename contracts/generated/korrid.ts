@@ -93,6 +93,9 @@ export interface LocalGames {
 export interface LocalGamesListRequest {
 }
 
+export interface MoonlightResolveRequest {
+}
+
 export type SessionControlValue =
 	| { kind: "toggle", value: boolean }
 	| { kind: "choice", value: string }
@@ -118,6 +121,16 @@ export interface PluginSetting {
 	id: string;
 	title: string;
 	enabled: boolean;
+}
+
+export enum MoonlightImplementation {
+	Artemis = "artemis",
+}
+
+export interface ResolvedMoonlight {
+	transportId: string;
+	implementation: MoonlightImplementation;
+	sunshineApp: string;
 }
 
 export type SessionControlInteraction =
@@ -276,8 +289,13 @@ export type LocalGamesListOutcome =
 	| { _tag: "Ok", payload: LocalGames }
 	| { _tag: "Err", payload: RpcFailure };
 
+export type MoonlightResolveOutcome =
+	| { _tag: "Available", payload: ResolvedMoonlight }
+	| { _tag: "Unavailable", payload: RpcFailure };
+
 export type RpcRequest =
 	| { _tag: "app.catalog.snapshot", payload: CatalogSnapshotRequest }
+	| { _tag: "app.moonlight.resolve", payload: MoonlightResolveRequest }
 	| { _tag: "app.session.prepare", payload: SessionPrepareRequest }
 	| { _tag: "app.session.status", payload: SessionStatusRequest }
 	| { _tag: "app.session.stop", payload: SessionStopRequest }
@@ -291,6 +309,7 @@ export type RpcRequest =
 
 export type RpcResponse =
 	| { _tag: "app.catalog.snapshot", outcome: CatalogSnapshotOutcome }
+	| { _tag: "app.moonlight.resolve", outcome: MoonlightResolveOutcome }
 	| { _tag: "app.session.prepare", outcome: SessionPrepareOutcome }
 	| { _tag: "app.session.status", outcome: SessionStatusOutcome }
 	| { _tag: "app.session.stop", outcome: SessionStopOutcome }

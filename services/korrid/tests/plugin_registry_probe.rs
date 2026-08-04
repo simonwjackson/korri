@@ -6,6 +6,10 @@ const RETROARCH_PLUGIN: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../plugins/retroarch/plugin.ts"
 );
+const MOONLIGHT_PLUGIN: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../plugins/moonlight/plugin.ts"
+);
 
 const ENABLED_REPORT: &str = concat!(
     "plugin: @korri:android-app\n",
@@ -96,6 +100,12 @@ fn review_probe_explains_enabled_and_disabled_announcements() {
     );
     assert_eq!(run_probe(&[MGBA_PLUGIN]), MGBA_ENABLED_REPORT);
     assert_eq!(run_probe(&[RETROARCH_PLUGIN]), RETROARCH_ENABLED_REPORT);
+
+    let moonlight = run_probe(&[MOONLIGHT_PLUGIN]);
+    assert!(moonlight.contains("plugin: @korri:moonlight\nregistered: yes\nenabled: yes\n"));
+    assert!(moonlight.contains("transport: @korri:moonlight/moonlight\n"));
+    assert!(moonlight.contains("session-control: @korri:moonlight/disconnect\n"));
+    assert!(moonlight.contains("session-control: @korri:moonlight/sgsr-sharpness\n"));
 }
 
 #[test]

@@ -41,7 +41,10 @@ fn registry_from_sources(retroarch_source: &str, mgba_source: &str) -> PluginReg
             load_plugin_source(retroarch_source).unwrap(),
             load_plugin_source(mgba_source).unwrap(),
         ],
-        resolve_enabled_plugin_ids([bundled_plugin_policy_layer()]),
+        resolve_enabled_plugin_ids([
+            bundled_plugin_policy_layer(),
+            PluginPolicyLayer::from_enabled([("@korri:moonlight", false)]),
+        ]),
     )
     .unwrap()
 }

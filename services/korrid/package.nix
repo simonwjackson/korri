@@ -8,6 +8,7 @@ let
   bundledPluginSources = [
     "plugins/android-app.plugin.ts"
     "plugins/mgba.plugin.ts"
+    "plugins/moonlight.plugin.ts"
     "plugins/retroarch.plugin.ts"
   ];
   relativeSourcePath = path: lib.removePrefix "${sourceRootString}/" (toString path);
@@ -30,8 +31,9 @@ let
   src = pkgs.runCommand "korrid-source-with-bundled-plugins" { } ''
     mkdir -p "$out"
     cp -R --no-preserve=mode,ownership ${composedSource}/. "$out/"
-    rm -f "$out/plugins/mgba.plugin.ts" "$out/plugins/retroarch.plugin.ts"
+    rm -f "$out/plugins/mgba.plugin.ts" "$out/plugins/moonlight.plugin.ts" "$out/plugins/retroarch.plugin.ts"
     cp ${../../plugins/mgba/plugin.ts} "$out/plugins/mgba.plugin.ts"
+    cp ${../../plugins/moonlight/plugin.ts} "$out/plugins/moonlight.plugin.ts"
     cp ${../../plugins/retroarch/plugin.ts} "$out/plugins/retroarch.plugin.ts"
   '';
   commonArgs = {
@@ -54,7 +56,7 @@ craneLib.buildPackage (commonArgs // {
   inherit cargoArtifacts;
   preConfigure = ''
     plugin_sources="$(${pkgs.findutils}/bin/find plugins -type f -name '*.plugin.ts' -printf '%P\n' | sort)"
-    expected_plugin_sources=$'android-app.plugin.ts\nmgba.plugin.ts\nretroarch.plugin.ts'
+    expected_plugin_sources=$'android-app.plugin.ts\nmgba.plugin.ts\nmoonlight.plugin.ts\nretroarch.plugin.ts'
     if [[ "$plugin_sources" != "$expected_plugin_sources" ]]; then
       echo "unexpected bundled plugin source set:" >&2
       printf '%s\n' "$plugin_sources" >&2

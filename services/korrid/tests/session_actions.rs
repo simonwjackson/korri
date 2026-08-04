@@ -3,13 +3,15 @@ use axum::{
     http::{header, Request, StatusCode},
 };
 use korrid::config::resolver::{
-    resolve_session_controls, ActiveRouteContext, RouteContribution, RoutePlatform,
-    SessionExecutorAvailability,
+    resolve_moonlight_transport, resolve_session_controls, ActiveRouteContext, RouteContribution,
+    RoutePlatform, SessionExecutorAvailability,
 };
 use korrid::plugin::{
     load_plugin_source, PluginRegistry, SessionControlExecutor, SessionControlOwnerKind,
 };
 use tower::ServiceExt;
+
+const CANONICAL_MOONLIGHT_PLUGIN: &str = include_str!("../../../plugins/moonlight/plugin.ts");
 
 const MOONLIGHT_PLUGIN: &str = r#"
 ({
@@ -188,6 +190,38 @@ fn active_route_owns_the_only_controls_that_resolve_in_deterministic_order() {
 }
 
 #[test]
+fn canonical_moonlight_resolves_typed_artemis_availability_only_when_enabled() {
+    let plugin = load_plugin_source(CANONICAL_MOONLIGHT_PLUGIN).expect("Moonlight declaration");
+    let enabled = PluginRegistry::new(vec![plugin.clone()], vec!["@korri:moonlight".to_owned()])
+        .expect("enabled Moonlight registry");
+
+    let resolved = resolve_moonlight_transport(&enabled, RoutePlatform::Android)
+        .expect("Android Artemis should be available");
+    assert_eq!(resolved.transport_id, "@korri:moonlight/moonlight");
+    assert_eq!(resolved.implementation.as_str(), "artemis");
+    assert_eq!(resolved.sunshine_app, "Korri Stream");
+    let controls = resolve_session_controls(
+        &enabled,
+        &ActiveRouteContext {
+            platform: RoutePlatform::Android,
+            contributors: vec![RouteContribution {
+                kind: SessionControlOwnerKind::Transport,
+                id: resolved.transport_id.clone(),
+            }],
+            executor_availability: SessionExecutorAvailability::from_available([
+                SessionControlExecutor::AndroidMoonlight,
+            ]),
+        },
+    );
+    assert_eq!(controls.len(), 18);
+
+    let disabled = PluginRegistry::new(vec![plugin], Vec::new())
+        .expect("disabled Moonlight should remain registered");
+    assert!(resolve_moonlight_transport(&disabled, RoutePlatform::Android).is_none());
+    assert!(resolve_moonlight_transport(&enabled, RoutePlatform::Linux).is_none());
+}
+
+#[test]
 fn platform_and_live_executor_availability_are_both_required() {
     let registry = registry(&["@korri:moonlight", "@korri:retroarch"]);
 
@@ -241,6 +275,65 @@ async fn rpc_list_and_invoke_stay_unavailable_without_current_route_context() {
             .expect("failure message")
             .contains("current active-session route"));
     }
+}
+
+#[tokio::test]
+async fn brain_rpc_publishes_resolved_artemis_and_honors_user_disable() {
+    let root = tempfile::tempdir().expect("Moonlight config root");
+    std::fs::write(root.path().join("config.yaml"), "{}\n").expect("default config");
+    std::fs::write(root.path().join("library.yaml"), "{}\n").expect("empty library");
+    let app = korrid::router_with_capability_and_local_root(
+        "moonlight-test-capability",
+        "https://appassets.androidplatform.net",
+        root.path(),
+    );
+
+    let request = || {
+        Request::builder()
+            .method("POST")
+            .uri("/rpc")
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::AUTHORIZATION, "Bearer moonlight-test-capability")
+            .body(Body::from(
+                r#"{"_tag":"app.moonlight.resolve","payload":{}}"#,
+            ))
+            .expect("Moonlight RPC request")
+    };
+
+    let response = app
+        .clone()
+        .oneshot(request())
+        .await
+        .expect("Moonlight RPC response");
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("Moonlight RPC body");
+    let body: serde_json::Value = serde_json::from_slice(&body).expect("typed response");
+    assert_eq!(body["outcome"]["_tag"], "Available");
+    assert_eq!(
+        body["outcome"]["payload"],
+        serde_json::json!({
+            "transportId": "@korri:moonlight/moonlight",
+            "implementation": "artemis",
+            "sunshineApp": "Korri Stream",
+        })
+    );
+
+    std::fs::write(
+        root.path().join("config.yaml"),
+        "host:\n  plugin:\n    '@korri:moonlight': false\n",
+    )
+    .expect("user-disabled config");
+    let response = app
+        .oneshot(request())
+        .await
+        .expect("disabled Moonlight RPC response");
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("disabled Moonlight RPC body");
+    let body: serde_json::Value = serde_json::from_slice(&body).expect("typed response");
+    assert_eq!(body["outcome"]["_tag"], "Unavailable");
+    assert_eq!(body["outcome"]["payload"]["code"], "MoonlightUnavailable");
 }
 
 #[test]
