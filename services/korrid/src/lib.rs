@@ -730,6 +730,14 @@ fn session_stop_outcome(
     }
 }
 
+fn session_route_context_unavailable() -> SessionControlFailure {
+    SessionControlFailure {
+        reason: SessionControlFailureReason::Unavailable,
+        message: "Gameplay controls need a current active-session route and live executor state."
+            .into(),
+    }
+}
+
 async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
     match request {
         RpcRequest::CatalogSnapshot(_) => {
@@ -785,17 +793,15 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                 message: "host session stop is not implemented".into(),
             })),
         },
-        RpcRequest::SessionControls(_) => {
-            RpcResponse::SessionControls(SessionControlsOutcome::Err(SessionControlFailure {
-                reason: SessionControlFailureReason::Unavailable,
-                message: "Gameplay controls are not available for this session yet.".into(),
-            }))
-        }
+        // U2 can resolve declarations from an explicit route plus live executor
+        // state. The existing upstream session status carries neither, so U3/U4
+        // must publish that context before these RPCs can honestly materialize or
+        // invoke a control. Never infer a route from game/title/provider strings.
+        RpcRequest::SessionControls(_) => RpcResponse::SessionControls(
+            SessionControlsOutcome::Err(session_route_context_unavailable()),
+        ),
         RpcRequest::SessionControlInvoke(_) => RpcResponse::SessionControlInvoke(
-            SessionControlInvokeOutcome::Err(SessionControlFailure {
-                reason: SessionControlFailureReason::Unavailable,
-                message: "Gameplay controls are not available for this session yet.".into(),
-            }),
+            SessionControlInvokeOutcome::Err(session_route_context_unavailable()),
         ),
         RpcRequest::LocalGamesList(_) => match &state.mode {
             ServerMode::Brain(brain) => {

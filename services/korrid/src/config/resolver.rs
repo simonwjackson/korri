@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     plugin::{
         AndroidLauncherRecord, LauncherRecord, LinuxLauncherRecord, PluginRegistry, ProviderRecord,
-        RuntimeRecord, SystemRecord,
+        RuntimeRecord, SessionControlExecutor, SessionControlOwnerKind, SessionControlPlatform,
+        SessionControlRecord, SystemRecord,
     },
     GameIdentity,
 };
@@ -27,6 +28,72 @@ pub struct RouteCatalog {
 pub enum RoutePlatform {
     Android,
     Linux,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RouteContribution {
+    pub kind: SessionControlOwnerKind,
+    pub id: String,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SessionExecutorAvailability {
+    available: BTreeSet<SessionControlExecutor>,
+}
+
+impl SessionExecutorAvailability {
+    pub fn from_available(executors: impl IntoIterator<Item = SessionControlExecutor>) -> Self {
+        Self {
+            available: executors.into_iter().collect(),
+        }
+    }
+
+    pub fn is_available(&self, executor: SessionControlExecutor) -> bool {
+        self.available.contains(&executor)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ActiveRouteContext {
+    pub platform: RoutePlatform,
+    /** Active launcher/transport/runtime contributions in chosen-route order. */
+    pub contributors: Vec<RouteContribution>,
+    /** Live executors for this exact session; registration is not availability. */
+    pub executor_availability: SessionExecutorAvailability,
+}
+
+/** Resolve declaration-only controls for the current route. Overlay-owned
+ * controls are composed by the caller before these route-ordered records. */
+pub fn resolve_session_controls(
+    registry: &PluginRegistry,
+    context: &ActiveRouteContext,
+) -> Vec<SessionControlRecord> {
+    let mut resolved = Vec::new();
+    let mut emitted = BTreeSet::new();
+
+    for contributor in &context.contributors {
+        let mut controls: Vec<_> = registry
+            .session_controls()
+            .values()
+            .filter(|control| {
+                control.owner.kind == contributor.kind
+                    && control.owner.id == contributor.id
+                    && matches!(
+                        (control.effect.platform(), context.platform),
+                        (SessionControlPlatform::Android, RoutePlatform::Android)
+                    )
+                    && context
+                        .executor_availability
+                        .is_available(control.effect.executor())
+                    && emitted.insert(control.id.clone())
+            })
+            .cloned()
+            .collect();
+        controls.sort_by(|left, right| left.local_id.cmp(&right.local_id));
+        resolved.extend(controls);
+    }
+
+    resolved
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

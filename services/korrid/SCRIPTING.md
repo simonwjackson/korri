@@ -41,17 +41,33 @@ itself to one machine by reaching for local resources.
 korrid strictly decodes evaluated declarations into the narrow legacy plugin
 seam proven by the Android application schema checkpoint. Bundled plugins are
 registered from repository-owned source, and generic policy layers keyed by
-plugin ID decide enablement. The built-in layer enables `@korri:android-app` and
-`@korri:retroarch` by default; a later layer can disable either ID without
-changing registry code or adding an integration-specific switch. The user
-policy layer is intentionally empty for these slices.
+plugin ID decide enablement. The built-in layer enables `@korri:android-app`, `@korri:mgba`, and
+`@korri:retroarch` by default; a later layer can disable any ID without changing
+registry code or adding an integration-specific switch.
 
-An enabled plugin can currently contribute provider, system, launcher, and
-runtime records; disabled plugins remain registered but contribute nothing while
-still reserving their identities. Unsupported declaration fields fail explicitly
-rather than disappearing. As in legacy, system, launcher, and runtime
-contribution keys retain the contributing plugin's identity; the records inside
-those entries retain their schema IDs for route resolution.
+An enabled plugin can contribute provider, system, launcher, transport, runtime,
+and contextual session-control records. Disabled plugins remain registered but
+contribute nothing while still reserving every declared identity, including
+control identities. Unsupported fields and explicit `null` values fail rather
+than disappearing. As in legacy, contribution keys retain the contributing
+plugin's identity; records retain strict schema IDs for route resolution.
+
+Session controls are declaration-only and attach to one launcher, transport, or
+runtime contribution owned by the same plugin. Their strict record contains a
+stable ID, label and optional description, one of `command`, `toggle`, `choice`,
+or bounded `range`, presentation flags, and one opaque allowlisted effect ID.
+Choice options and range metadata are validated while the plugin is loaded. An
+effect is a closed identifier such as `@korri:retroarch/open-menu` or an existing
+Moonlight gameplay operation; it cannot contain a process, URL, Android intent,
+socket address, Java method, or other payload.
+
+Registration and enablement still do not prove that a control can run. korrid
+resolves enabled declarations only against the active route's ordered
+contributions, the current platform, and live executor availability for that
+exact session. Unrelated, disabled, unsupported-platform, and unavailable-
+executor controls are omitted. The Android launch/session seam will publish that
+live context; until it does, the list and invoke RPCs return the tagged
+`Unavailable` outcome rather than inferring a route from titles or game IDs.
 
 Review that boundary without reading Rust:
 

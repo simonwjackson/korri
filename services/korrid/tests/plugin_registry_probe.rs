@@ -11,41 +11,80 @@ const ENABLED_REPORT: &str = concat!(
     "plugin: @korri:android-app\n",
     "registered: yes\n",
     "enabled: yes\n",
+    "registered-session-control: none\n",
     "provider: @korri:android-app\n",
     "system: android\n",
     "launcher: @korri:android-app/android-app\n",
+    "transport: none\n",
     "runtime: none\n",
+    "session-control: none\n",
 );
 
 const DISABLED_REPORT: &str = concat!(
     "plugin: @korri:android-app\n",
     "registered: yes\n",
     "enabled: no\n",
+    "registered-session-control: none\n",
     "provider: none\n",
     "system: none\n",
     "launcher: none\n",
+    "transport: none\n",
     "runtime: none\n",
+    "session-control: none\n",
 );
 
 const MGBA_ENABLED_REPORT: &str = concat!(
     "plugin: @korri:mgba\n",
     "registered: yes\n",
     "enabled: yes\n",
+    "registered-session-control: none\n",
     "provider: @korri:mgba\n",
     "system: gba\n",
     "launcher: none\n",
+    "transport: none\n",
     "runtime: @korri:mgba/mgba\n",
+    "session-control: none\n",
 );
 
 const RETROARCH_ENABLED_REPORT: &str = concat!(
     "plugin: @korri:retroarch\n",
     "registered: yes\n",
     "enabled: yes\n",
+    "registered-session-control: none\n",
     "provider: @korri:retroarch\n",
     "system: none\n",
     "launcher: @korri:retroarch/retroarch\n",
+    "transport: none\n",
     "runtime: none\n",
+    "session-control: none\n",
 );
+
+const SESSION_CONTROL_PLUGIN: &str = r#"
+({
+  namespace: "@korri",
+  name: "retroarch",
+  contributes: {
+    config: {
+      launchers: {
+        retroarch: {
+          id: "@korri:retroarch/retroarch",
+          plugin: "@korri:retroarch",
+          command: "retroarch",
+        },
+      },
+    },
+    sessionControls: {
+      openMenu: {
+        id: "@korri:retroarch/open-menu",
+        owner: { kind: "launcher", id: "@korri:retroarch/retroarch" },
+        label: "Open RetroArch menu",
+        interaction: { kind: "command" },
+        effect: "@korri:retroarch/open-menu",
+      },
+    },
+  },
+})
+"#;
 
 #[test]
 fn review_probe_explains_enabled_and_disabled_announcements() {
@@ -57,6 +96,22 @@ fn review_probe_explains_enabled_and_disabled_announcements() {
     );
     assert_eq!(run_probe(&[MGBA_PLUGIN]), MGBA_ENABLED_REPORT);
     assert_eq!(run_probe(&[RETROARCH_PLUGIN]), RETROARCH_ENABLED_REPORT);
+}
+
+#[test]
+fn probe_distinguishes_registered_and_enabled_session_controls() {
+    let root = tempfile::tempdir().expect("temporary plugin directory");
+    let path = root.path().join("retroarch.plugin.ts");
+    std::fs::write(&path, SESSION_CONTROL_PLUGIN).expect("write session-control plugin");
+    let path = path.to_str().expect("UTF-8 fixture path");
+
+    let enabled = run_probe(&[path]);
+    assert!(enabled.contains("registered-session-control: @korri:retroarch/open-menu\n"));
+    assert!(enabled.contains("session-control: @korri:retroarch/open-menu\n"));
+
+    let disabled = run_probe(&[path, "--disabled"]);
+    assert!(disabled.contains("registered-session-control: @korri:retroarch/open-menu\n"));
+    assert!(disabled.contains("session-control: none\n"));
 }
 
 fn run_probe(args: &[&str]) -> String {

@@ -408,6 +408,198 @@ fn multiple_plugins_announce_only_when_each_is_enabled() {
 }
 
 #[test]
+fn strict_session_control_declarations_reserve_disabled_identities() {
+    let source = r#"
+      ({
+        namespace: "@korri",
+        name: "retroarch",
+        contributes: {
+          config: {
+            launchers: {
+              retroarch: {
+                id: "@korri:retroarch/retroarch",
+                plugin: "@korri:retroarch",
+                command: "retroarch",
+              },
+            },
+          },
+          sessionControls: {
+            openMenu: {
+              id: "@korri:retroarch/open-menu",
+              owner: { kind: "launcher", id: "@korri:retroarch/retroarch" },
+              label: "Open RetroArch menu",
+              interaction: { kind: "command" },
+              effect: "@korri:retroarch/open-menu",
+              dismissOnSuccess: true,
+            },
+          },
+        },
+      })
+    "#;
+    let plugin = load_plugin_source(source).expect("session-control declaration should load");
+
+    let disabled = PluginRegistry::new(vec![plugin.clone()], Vec::new())
+        .expect("disabled plugin should remain registered");
+    assert!(disabled.owns_registered_session_control_id("@korri:retroarch/open-menu"));
+    assert!(disabled.session_controls().is_empty());
+
+    let enabled = PluginRegistry::new(vec![plugin], vec!["@korri:retroarch".to_owned()])
+        .expect("enabled plugin should announce its control");
+    let control = enabled
+        .session_controls()
+        .get("@korri:retroarch/open-menu")
+        .expect("enabled control");
+    assert_eq!(control.plugin_id, "@korri:retroarch");
+    assert_eq!(control.local_id, "openMenu");
+    assert_eq!(control.label, "Open RetroArch menu");
+}
+
+#[test]
+fn malformed_session_controls_and_arbitrary_effect_payloads_are_rejected() {
+    let valid = r#"
+      ({
+        namespace: "@korri",
+        name: "moonlight",
+        contributes: {
+          config: {
+            transports: {
+              moonlight: { id: "@korri:moonlight/moonlight" },
+            },
+          },
+          sessionControls: {
+            sharpness: {
+              id: "@korri:moonlight/sharpness",
+              owner: { kind: "transport", id: "@korri:moonlight/moonlight" },
+              label: "Sharpness",
+              interaction: { kind: "range", min: 0, max: 100, step: 5 },
+              effect: "@korri:moonlight/set-sgsr-sharpness",
+            },
+          },
+        },
+      })
+    "#;
+
+    let malformed = [
+        valid.replace("step: 5", "step: 0"),
+        valid.replace("min: 0, max: 100", "min: 101, max: 100"),
+        valid.replace("label: \"Sharpness\"", "label: \"\""),
+        valid.replace(
+            "effect: \"@korri:moonlight/set-sgsr-sharpness\"",
+            "effect: \"\"",
+        ),
+        valid.replace(
+            "effect: \"@korri:moonlight/set-sgsr-sharpness\"",
+            "effect: { process: \"sh\", args: [\"-c\", \"id\"] }",
+        ),
+        valid.replace(
+            "effect: \"@korri:moonlight/set-sgsr-sharpness\"",
+            "effect: { url: \"https://example.invalid\" }",
+        ),
+        valid.replace(
+            "effect: \"@korri:moonlight/set-sgsr-sharpness\"",
+            "effect: { intent: \"android.intent.action.VIEW\" }",
+        ),
+        valid.replace(
+            "effect: \"@korri:moonlight/set-sgsr-sharpness\"",
+            "effect: { socket: \"127.0.0.1:55355\" }",
+        ),
+        valid.replace(
+            "effect: \"@korri:moonlight/set-sgsr-sharpness\"",
+            "effect: { javaMethod: \"finish\" }",
+        ),
+        valid.replace("step: 5", "step: 5, unknown: true"),
+        valid.replace(
+            "owner: { kind: \"transport\", id: \"@korri:moonlight/moonlight\" }",
+            "owner: { kind: \"transport\", id: \"@korri:moonlight/moonlight\", unknown: true }",
+        ),
+        valid.replace(
+            "id: \"@korri:moonlight/sharpness\"",
+            "pluginId: \"@korri:moonlight\", id: \"@korri:moonlight/sharpness\"",
+        ),
+        valid.replace(
+            "id: \"@korri:moonlight/sharpness\"",
+            "localId: \"sharpness\", id: \"@korri:moonlight/sharpness\"",
+        ),
+        valid.replace("label: \"Sharpness\"", "label: null"),
+        valid.replace("kind: \"range\"", "kind: \"slider\""),
+        valid.replace(
+            "owner: { kind: \"transport\", id: \"@korri:moonlight/moonlight\" }",
+            "owner: { kind: \"transport\", id: \"@korri:retroarch/retroarch\" }",
+        ),
+        valid.replace(
+            "effect: \"@korri:moonlight/set-sgsr-sharpness\"",
+            "effect: \"@korri:retroarch/open-menu\"",
+        ),
+        valid.replace(
+            "id: \"@korri:moonlight/sharpness\"",
+            "id: \"@korri:retroarch/open-menu\"",
+        ),
+    ];
+
+    for source in malformed {
+        load_plugin_source(&source).expect_err("unsafe session-control declaration must fail");
+    }
+}
+
+#[test]
+fn malformed_choice_and_duplicate_session_control_identities_are_rejected() {
+    let empty_options = r#"
+      ({
+        namespace: "@korri",
+        name: "moonlight",
+        contributes: {
+          config: { transports: { moonlight: { id: "@korri:moonlight/moonlight" } } },
+          sessionControls: {
+            mouse: {
+              id: "@korri:moonlight/mouse",
+              owner: { kind: "transport", id: "@korri:moonlight/moonlight" },
+              label: "Mouse",
+              interaction: { kind: "choice", options: [] },
+              effect: "@korri:moonlight/set-mouse-mode",
+            },
+          },
+        },
+      })
+    "#;
+    load_plugin_source(empty_options).expect_err("choice controls need options");
+    load_plugin_source(&empty_options.replace(
+        "options: []",
+        "options: [{ value: \"direct\", label: \"Direct\" }, { value: \"direct\", label: \"Again\" }]",
+    ))
+    .expect_err("choice option identities must be unique");
+
+    let duplicate_global_id = r#"
+      ({
+        namespace: "@korri",
+        name: "moonlight",
+        contributes: {
+          config: { transports: { moonlight: { id: "@korri:moonlight/moonlight" } } },
+          sessionControls: {
+            first: {
+              id: "@korri:moonlight/shared",
+              owner: { kind: "transport", id: "@korri:moonlight/moonlight" },
+              label: "First",
+              interaction: { kind: "command" },
+              effect: "@korri:moonlight/set-local-cursor",
+            },
+            second: {
+              id: "@korri:moonlight/shared",
+              owner: { kind: "transport", id: "@korri:moonlight/moonlight" },
+              label: "Second",
+              interaction: { kind: "command" },
+              effect: "@korri:moonlight/set-local-cursor",
+            },
+          },
+        },
+      })
+    "#;
+    let plugin = load_plugin_source(duplicate_global_id)
+        .expect("duplicate global ids are a registry-level collision");
+    PluginRegistry::new(vec![plugin], vec!["@korri:moonlight".to_owned()])
+        .expect_err("duplicate global session-control ids must fail registry construction");
+}
+
+#[test]
 fn duplicate_plugin_ids_are_rejected() {
     let first = load_plugin_source(ANDROID_PLUGIN).expect("first plugin should load");
     let second = load_plugin_source(ANDROID_PLUGIN).expect("second plugin should load");

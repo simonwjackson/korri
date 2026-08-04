@@ -2,7 +2,8 @@
 //!
 //! Registration and enablement stay separate: bundled source registers the
 //! plugins available to this korrid build, and semantic policy layers decide
-//! which registered plugin ids are enabled. Later layers override earlier ones.
+//! which registered plugin ids are enabled. Later layers override earlier ones,
+//! and the result gates every contribution category, including session controls.
 
 use std::collections::BTreeMap;
 

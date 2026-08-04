@@ -77,6 +77,13 @@ fn print_report(plugin: Plugin, enabled: bool) -> Result<(), String> {
         yes_no(registry.enabled_plugin_ids().contains(&plugin_id.as_str()))
     );
     print_records(
+        "registered-session-control",
+        registry
+            .registered_session_controls()
+            .values()
+            .map(|record| record.id.as_str()),
+    );
+    print_records(
         "provider",
         registry
             .providers()
@@ -95,9 +102,23 @@ fn print_report(plugin: Plugin, enabled: bool) -> Result<(), String> {
             .map(|record| record.id.as_str()),
     );
     print_records(
+        "transport",
+        registry
+            .transports()
+            .values()
+            .map(|record| record.id.as_str()),
+    );
+    print_records(
         "runtime",
         registry
             .runtimes()
+            .values()
+            .map(|record| record.id.as_str()),
+    );
+    print_records(
+        "session-control",
+        registry
+            .session_controls()
             .values()
             .map(|record| record.id.as_str()),
     );
