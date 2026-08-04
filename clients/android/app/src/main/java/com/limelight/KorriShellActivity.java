@@ -698,12 +698,9 @@ public class KorriShellActivity extends AppCompatActivity {
                             "host is not paired — pair once in Artemis setup");
                 }
 
-                NvApp app = spec.selectExpectedApp(cachedAppList(spec.hostUuid));
-                if (app == null) {
-                    return streamFailed("AppNotFound",
-                            "cached app " + spec.appId
-                                    + " does not match plugin-owned app " + spec.sunshineApp);
-                }
+                NvApp app = KorriMoonlightAppResolver
+                        .artemis(KorriShellActivity.this, binder, computer)
+                        .refreshExpected(spec);
 
                 final Intent intent = ServerHelper.createStartIntent(
                         KorriShellActivity.this, app, computer, binder);
@@ -714,6 +711,8 @@ public class KorriShellActivity extends AppCompatActivity {
                 return "{\"_tag\":\"StreamStarted\"}";
             } catch (KorriMoonlightLaunchSpec.Invalid error) {
                 return streamFailed("StartFailed", error.getMessage());
+            } catch (KorriMoonlightAppResolver.Failure error) {
+                return streamFailed(error.reason, error.getMessage());
             } catch (Exception e) {
                 return streamFailed("StartFailed",
                         e.getMessage() != null ? e.getMessage() : "start failed");
