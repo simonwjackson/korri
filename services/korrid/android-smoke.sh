@@ -16,6 +16,7 @@ ANDROID_APP_PACKAGE="${KORRI_ANDROID_APP_PACKAGE:-com.playdigious.tmnt}"
 EXPECT_RETROARCH_ROUTE="${KORRI_EXPECT_RETROARCH_ROUTE:-false}"
 UPSTREAMS_CONFIG="${KORRI_ANDROID_UPSTREAMS_CONFIG:-$ROOT/services/korrid/deploy/upstreams.android.json}"
 CURL=(curl --connect-timeout 2 --max-time 5 --retry 2 --retry-connrefused)
+DEBUG_CAPABILITY_SH="${KORRI_ANDROID_DEBUG_CAPABILITY_SH:-$ROOT/services/korrid/android-debug-capability.sh}"
 
 require_wl4_local_launch_response() {
   local response="$1"
@@ -154,24 +155,28 @@ adb -s "$DEVICE" logcat -c
 adb -s "$DEVICE" shell am start -S -n "$PACKAGE/com.limelight.KorriShellActivity" >/dev/null
 
 port=""
-capability=""
 portal_ready=""
 for _ in $(seq 1 20); do
   line="$(adb -s "$DEVICE" logcat -d -s KorridServer:I 2>/dev/null | grep 'listening on 127.0.0.1:' | tail -1 || true)"
   port="$(printf '%s' "$line" | sed -n 's/.*127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p')"
-  capability_line="$(adb -s "$DEVICE" logcat -d -s KorridServer:I 2>/dev/null | grep 'debug capability=' | tail -1 || true)"
-  capability="$(printf '%s' "$capability_line" | sed -n 's/.*debug capability=\([0-9a-f][0-9a-f]*\).*/\1/p')"
   portal_ready="$(adb -s "$DEVICE" logcat -d -s KorriPortal:I 2>/dev/null | grep 'title="Korri"' | tail -1 || true)"
-  if [[ -n "$port" && -n "$capability" && -n "$portal_ready" ]]; then
+  if [[ -n "$port" && -n "$portal_ready" ]]; then
     break
   fi
   sleep 1
 done
 
-if [[ -z "$port" || -z "$capability" || -z "$portal_ready" ]]; then
-  echo "Complete app smoke failed (Rust port='$port', capability=${capability:+present}, portal='$portal_ready')" >&2
+if [[ -z "$port" || -z "$portal_ready" ]]; then
+  echo "Complete app smoke failed (Rust port='$port', portal='$portal_ready')" >&2
   adb -s "$DEVICE" logcat -d -t 300 >&2
   exit 1
+fi
+
+# Readiness is established without a bearer. Deeper debug acceptance obtains
+# it directly from the inspected bridge, never from logcat.
+capability="${KORRI_ANDROID_DEBUG_CAPABILITY:-}"
+if [[ -z "$capability" ]]; then
+  capability="$("$DEBUG_CAPABILITY_SH" "$DEVICE" "$PACKAGE")"
 fi
 
 webview_errors="$(adb -s "$DEVICE" logcat -d -s WebViewAssetLoader:E)"

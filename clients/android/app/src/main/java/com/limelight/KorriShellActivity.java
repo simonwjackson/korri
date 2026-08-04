@@ -99,11 +99,6 @@ public class KorriShellActivity extends AppCompatActivity {
         korridPort = KorriBrainService.ensureRunning(
                 this, portalOrigin(portalUrl), localStorageRoot());
         korridCapability = KorridServer.capability();
-        if (BuildConfig.DEBUG) {
-            // Device smoke needs to probe the protected endpoint. Release
-            // builds never expose the capability through logcat.
-            Log.i("KorridServer", "debug capability=" + korridCapability);
-        }
 
         bindService(new Intent(this, ComputerManagerService.class),
                 serviceConnection, BIND_AUTO_CREATE);

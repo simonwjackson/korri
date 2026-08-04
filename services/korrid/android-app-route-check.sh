@@ -14,6 +14,7 @@ set -euo pipefail
 
 SERIAL="${1:?usage: android-app-route-check.sh <adb-serial>}"
 GAME="${KORRI_ANDROID_APP_PACKAGE:-com.playdigious.tmnt}"
+KORRI_PACKAGE="${KORRI_ANDROID_PACKAGE:-com.simonwjackson.korri.debug}"
 HOST_PORT="${KORRI_ANDROID_APP_ROUTE_HOST_PORT:-43120}"
 ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
 ANDROID_STORAGE_ROOT="/sdcard/korri"
@@ -30,6 +31,7 @@ LOCK_REMOTE="$ANDROID_STORAGE_ROOT/.android-app-route-check.lock"
 LOCK_OWNER_REMOTE="$LOCK_REMOTE/owner"
 ANDROID_SMOKE="${KORRI_ANDROID_APP_ROUTE_SMOKE_SH:-$ROOT/services/korrid/android-smoke.sh}"
 JOURNEY_RESUME="${KORRI_ANDROID_APP_ROUTE_JOURNEY_SH:-$ROOT/services/korrid/journey-resume.sh}"
+DEBUG_CAPABILITY_SH="${KORRI_ANDROID_DEBUG_CAPABILITY_SH:-$ROOT/services/korrid/android-debug-capability.sh}"
 ADB_BIN="${KORRI_ADB_BIN:-$(command -v adb)}"
 CURL=(curl --connect-timeout 2 --max-time 5 --retry 2 --retry-connrefused)
 CONFIG_WAS_PRESENT=false
@@ -222,23 +224,22 @@ if [[ -z "$pid" ]]; then
 fi
 
 port=""
-capability=""
 for _ in $(seq 1 10); do
   logcat_output=""
   if logcat_output="$(adb_capture logcat -d -s KorridServer:I 2>/dev/null)"; then
     line="$(grep 'listening on 127.0.0.1:' <<<"$logcat_output" | tail -1 || true)"
     port="$(printf '%s' "$line" | sed -n 's/.*127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p')"
-    capability_line="$(grep 'debug capability=' <<<"$logcat_output" | tail -1 || true)"
-    capability="$(printf '%s' "$capability_line" | sed -n 's/.*debug capability=\([0-9a-f][0-9a-f]*\).*/\1/p')"
   fi
-  if [[ -n "$port" && -n "$capability" ]]; then
-    break
-  fi
+  [[ -n "$port" ]] && break
   sleep 1
 done
-if [[ -z "$port" || -z "$capability" ]]; then
-  echo "Could not recover embedded brain RPC details after portal journey (port='$port', capability=${capability:+present})" >&2
+if [[ -z "$port" ]]; then
+  echo "Could not recover embedded brain readiness after portal journey" >&2
   exit 1
+fi
+capability="${KORRI_ANDROID_DEBUG_CAPABILITY:-}"
+if [[ -z "$capability" ]]; then
+  capability="$("$DEBUG_CAPABILITY_SH" "$SERIAL" "$KORRI_PACKAGE" 43121)"
 fi
 
 adb_target -s "$SERIAL" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true

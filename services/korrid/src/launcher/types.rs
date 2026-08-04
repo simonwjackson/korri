@@ -171,19 +171,22 @@ pub enum MoonlightLaunchVerificationFailure {
     Replay,
 }
 
+struct CurrentMoonlightLaunch {
+    id: String,
+    consumed: bool,
+}
+
 /** Per-server signer and one-use native verifier for Moonlight startup. */
 pub struct MoonlightLaunchAuthority {
     key: Vec<u8>,
-    current_launch_id: Option<String>,
-    consumed_launch_ids: HashSet<String>,
+    current_launch: Option<CurrentMoonlightLaunch>,
 }
 
 impl MoonlightLaunchAuthority {
     pub fn new(key: Vec<u8>) -> Self {
         Self {
             key,
-            current_launch_id: None,
-            consumed_launch_ids: HashSet::new(),
+            current_launch: None,
         }
     }
 
@@ -206,7 +209,10 @@ impl MoonlightLaunchAuthority {
             integrity: String::new(),
         }
         .sign(&self.key);
-        self.current_launch_id = Some(launch_id);
+        self.current_launch = Some(CurrentMoonlightLaunch {
+            id: launch_id,
+            consumed: false,
+        });
         spec
     }
 
@@ -217,12 +223,16 @@ impl MoonlightLaunchAuthority {
         if !spec.verify(&self.key) {
             return Err(MoonlightLaunchVerificationFailure::Integrity);
         }
-        if self.current_launch_id.as_deref() != Some(spec.launch_id.as_str()) {
+        let Some(current) = self.current_launch.as_mut() else {
+            return Err(MoonlightLaunchVerificationFailure::Stale);
+        };
+        if current.id != spec.launch_id {
             return Err(MoonlightLaunchVerificationFailure::Stale);
         }
-        if !self.consumed_launch_ids.insert(spec.launch_id.clone()) {
+        if current.consumed {
             return Err(MoonlightLaunchVerificationFailure::Replay);
         }
+        current.consumed = true;
         Ok(())
     }
 }
@@ -422,6 +432,13 @@ mod tests {
         );
         assert_ne!(second.launch_id, first.launch_id);
         assert_eq!(
+            authority
+                .current_launch
+                .as_ref()
+                .map(|launch| (launch.id.as_str(), launch.consumed)),
+            Some((second.launch_id.as_str(), false))
+        );
+        assert_eq!(
             authority.authorize(&first),
             Err(MoonlightLaunchVerificationFailure::Stale)
         );
@@ -433,6 +450,10 @@ mod tests {
             Err(MoonlightLaunchVerificationFailure::Integrity)
         );
         assert!(authority.authorize(&second).is_ok());
+        assert!(authority
+            .current_launch
+            .as_ref()
+            .is_some_and(|launch| launch.consumed));
         assert_eq!(
             authority.authorize(&second),
             Err(MoonlightLaunchVerificationFailure::Replay)

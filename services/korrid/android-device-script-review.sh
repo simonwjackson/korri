@@ -9,6 +9,7 @@ CRATE="$ROOT/services/korrid"
 ANDROID_SMOKE="$CRATE/android-smoke.sh"
 ANDROID_APP_ROUTE="$CRATE/android-app-route-check.sh"
 JOURNEY_RESUME="$CRATE/journey-resume.sh"
+KORRI_SHELL="$ROOT/clients/android/app/src/main/java/com/limelight/KorriShellActivity.java"
 
 # The review's canonical cases must stay deterministic even when a developer's
 # shell is primed for an alternate device-gate run. Individual alternate cases
@@ -26,6 +27,7 @@ unset \
   KORRI_ANDROID_APP_ROUTE_JOURNEY_SH \
   KORRI_ANDROID_APP_ROUTE_SMOKE_SH \
   KORRI_ANDROID_DEVICE \
+  KORRI_ANDROID_DEBUG_CAPABILITY \
   KORRI_ANDROID_SMOKE_LIBRARY \
   KORRI_ANDROID_UPSTREAMS_CONFIG \
   KORRI_JOURNEY_EXPECTED_TITLE \
@@ -33,7 +35,16 @@ unset \
   KORRI_TESSERACT_BIN \
   SHOTS
 
-bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$JOURNEY_RESUME"
+# Child gates exercise their authenticated assertions with a deterministic
+# test-only value rather than recovering one from the fake logcat stream.
+export KORRI_ANDROID_DEBUG_CAPABILITY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$JOURNEY_RESUME" "$CRATE/android-debug-capability.sh"
+
+if grep -F 'debug capability=' "$KORRI_SHELL" "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$CRATE/brain-service-check.sh" >/dev/null; then
+  echo 'Android runtime and device gates must never log or recover the full RPC capability from logcat' >&2
+  exit 1
+fi
 
 for resumed_activity_script in \
   "$ANDROID_APP_ROUTE" \
@@ -1063,7 +1074,6 @@ case "$subcommand" in
     ;;
   logcat)
     printf '08-01 00:00:00.000 I/KorridServer: listening on 127.0.0.1:43210\n'
-    printf '08-01 00:00:00.001 I/KorridServer: debug capability=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n'
     ;;
   *)
     exit 0

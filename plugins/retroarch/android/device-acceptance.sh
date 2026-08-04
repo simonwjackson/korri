@@ -17,6 +17,7 @@ SAVE_FILE="$SAVE_DIR/wl4.srm"
 SCREENSHOTS_DIR="/storage/emulated/0/korri/screenshots"
 HOST_PORT="${KORRI_ACCEPTANCE_HOST_PORT:-43119}"
 ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
+DEBUG_CAPABILITY_SH="${KORRI_ANDROID_DEBUG_CAPABILITY_SH:-$ROOT/services/korrid/android-debug-capability.sh}"
 ANDROID_STORAGE_ROOT="/sdcard/korri"
 CONFIG_REMOTE="$ANDROID_STORAGE_ROOT/config.yaml"
 LIBRARY_REMOTE="$ANDROID_STORAGE_ROOT/library.yaml"
@@ -306,20 +307,25 @@ fi
 "${ADB[@]}" shell am start --display 0 -n "$KORRI_ACTIVITY" >/dev/null
 
 port=''
-capability=''
 portal_ready=''
 for _ in $(seq 1 30); do
   logs="$("${ADB[@]}" logcat -d -s KorridServer:I KorriPortal:I 2>/dev/null || true)"
   port="$(sed -n 's/.*listening on 127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p' <<<"$logs" | tail -1)"
-  capability="$(sed -n 's/.*debug capability=\([0-9a-f][0-9a-f]*\).*/\1/p' <<<"$logs" | tail -1)"
   portal_ready="$(grep 'title="Korri"' <<<"$logs" | tail -1 || true)"
-  [[ -n "$port" && -n "$capability" && -n "$portal_ready" ]] && break
+  [[ -n "$port" && -n "$portal_ready" ]] && break
   sleep 1
 done
-[[ -n "$port" && -n "$capability" && -n "$portal_ready" ]] || {
+[[ -n "$port" && -n "$portal_ready" ]] || {
   echo 'Korri portal or embedded korrid did not become ready' >&2
   exit 1
 }
+
+# Deeper debug acceptance reads the bridge directly through WebView inspection;
+# readiness above never depends on a bearer and no secret crosses logcat.
+capability="${KORRI_ANDROID_DEBUG_CAPABILITY:-}"
+if [[ -z "$capability" ]]; then
+  capability="$("$DEBUG_CAPABILITY_SH" "$SERIAL" "$KORRI_PACKAGE")"
+fi
 "${ADB[@]}" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
 "${ADB[@]}" forward "tcp:$HOST_PORT" "tcp:$port" >/dev/null
 FORWARD_ACTIVE=true

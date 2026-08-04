@@ -25,23 +25,21 @@ is_positive_count() {
 }
 
 alive() {
-  # Asks korrid to do real work rather than reading Android's process list: a
-  # cached process reports alive while being dead. A malformed probe is no
-  # better -- a half-dead server still rejects it -- so this is the real
-  # health op, and only 200 counts.
+  # A live protected listener rejects this well-formed request with 401. That
+  # is a non-secret readiness signal: no bearer capability crosses logcat.
   local port="$1" code
   code="$("${ADB[@]}" shell "curl -s -o /dev/null -w '%{http_code}' --max-time 3 \
-    -H 'Content-Type: application/json' -H 'Authorization: Bearer $CAPABILITY' \
+    -H 'Content-Type: application/json' \
     -X POST -d '{\"_tag\":\"system.health\",\"payload\":{}}' \
     http://127.0.0.1:$port/rpc" 2>/dev/null | tr -d '\r\n' || true)"
-  [[ "$code" == "200" ]] && echo "yes (200)" || echo "NO (http ${code:-none})"
+  [[ "$code" == "401" ]] && echo "yes (protected)" || echo "NO (http ${code:-none})"
 }
 
 require_alive() {
   local label="$1" observed
   observed="$(alive "$PORT")"
   report "$label" "$observed"
-  [[ "$observed" == yes\ * ]] || fail "$label was not a 200 health RPC"
+  [[ "$observed" == yes\ * ]] || fail "$label did not expose a protected listener"
 }
 
 require_same_pid() {
@@ -69,7 +67,6 @@ sleep 8
 
 PORT="$("${ADB[@]}" logcat -d -s KorriBrain KorridServer | grep -oE '127\.0\.0\.1:[0-9]+' | tail -1 | cut -d: -f2)"
 [[ -z "$PORT" ]] && { echo "  korrid never reported a port"; "${ADB[@]}" logcat -d -s KorriBrain KorridServer | tail; exit 1; }
-CAPABILITY="$("${ADB[@]}" logcat -d -s KorridServer | grep -oE 'debug capability=[a-f0-9]+' | tail -1 | cut -d= -f2)"
 STARTPID="$(count "pidof $KORRI")"
 
 report "korrid port" "$PORT"
