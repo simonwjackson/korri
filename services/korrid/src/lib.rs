@@ -881,7 +881,9 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                     brain.native_platform,
                 ) {
                     MoonlightResolveOutcome::Available(resolved)
-                        if !request.host_uuid.is_empty() && request.app_id > 0 =>
+                        if !request.host_uuid.is_empty()
+                            && request.app_id > 0
+                            && request.app_id <= i32::MAX as u32 =>
                     {
                         let spec = brain
                             .moonlight_launch_authority
@@ -899,7 +901,8 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                     MoonlightResolveOutcome::Available(_) => {
                         MoonlightLaunchPrepareOutcome::Err(RpcFailure {
                             code: "InvalidMoonlightLaunchTarget".into(),
-                            message: "Moonlight host UUID and positive app ID are required".into(),
+                            message: "Moonlight host UUID and positive Android app ID are required"
+                                .into(),
                         })
                     }
                     MoonlightResolveOutcome::Unavailable(failure) => {

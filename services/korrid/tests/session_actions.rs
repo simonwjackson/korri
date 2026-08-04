@@ -418,6 +418,7 @@ async fn only_embedded_android_prepares_fresh_signed_moonlight_launches() {
     for payload in [
         r#"{"hostUuid":"","appId":7}"#,
         r#"{"hostUuid":"host-uuid","appId":0}"#,
+        r#"{"hostUuid":"host-uuid","appId":2147483648}"#,
     ] {
         let response = android
             .clone()
