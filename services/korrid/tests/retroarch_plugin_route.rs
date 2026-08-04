@@ -56,6 +56,12 @@ fn composes_retroarch_launcher_with_mgba_runtime_from_independent_plugins() {
         .expect("composed RetroArch and mGBA route");
 
     assert_eq!(route.launcher_id, "@korri:retroarch/retroarch");
+    assert_eq!(
+        route.identity,
+        Some(korrid::GameIdentity::Hash(
+            "sha256:d16c7bf6e62bb84049fff1b387108fbd1e6e2cd38ca994ab5310dd9cbf9ba414".into(),
+        ))
+    );
     assert_eq!(route.integration_token, "retroarch");
     assert_eq!(
         route.android_component.unwrap().package_name,

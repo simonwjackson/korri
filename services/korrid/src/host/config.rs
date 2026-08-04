@@ -1,3 +1,4 @@
+use crate::GameIdentity;
 use serde::Deserialize;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -19,6 +20,8 @@ pub struct HostGame {
     pub id: String,
     pub title: String,
     pub command: Vec<String>,
+    #[serde(default)]
+    pub identity: Option<GameIdentity>,
 }
 
 #[derive(Clone, Debug, thiserror::Error)]
@@ -68,6 +71,35 @@ mod tests {
         assert_eq!(config.label, "zao");
         assert!(config.games.is_empty());
         assert!(config.environment.is_empty());
+    }
+
+    #[test]
+    fn reads_an_optional_static_game_identity() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("host.toml");
+        std::fs::write(
+            &path,
+            r#"
+label = "zao"
+
+[[games]]
+id = "neverball"
+title = "Neverball"
+command = ["neverball"]
+identity = { kind = "provider", value = { provider = "@korri:store", ref = "neverball" } }
+"#,
+        )
+        .unwrap();
+
+        let config = HostConfig::read(&path).unwrap();
+
+        assert_eq!(
+            config.games[0].identity,
+            Some(GameIdentity::Provider(crate::GameProviderIdentity {
+                provider: "@korri:store".into(),
+                provider_ref: "neverball".into(),
+            }))
+        );
     }
 
     #[test]

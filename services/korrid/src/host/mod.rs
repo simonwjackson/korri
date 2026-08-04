@@ -7,7 +7,7 @@ use crate::{
         snapshot::{ConfigSnapshotCoordinator, SnapshotAuthorization},
     },
     launcher::linux_retroarch,
-    plugin_policy, CatalogSnapshot, Game, RpcFailure, SessionPrepared,
+    plugin_policy, CatalogSnapshot, Game, GameIdentity, RpcFailure, SessionPrepared,
 };
 use config::{HostConfig, HostConfigError};
 use prepare::HostLauncher;
@@ -20,6 +20,7 @@ use std::{
 struct DynamicHostGame {
     id: String,
     title: String,
+    identity: Option<GameIdentity>,
     command: Vec<String>,
 }
 
@@ -75,6 +76,7 @@ impl DynamicHostRuntime {
             games.push(DynamicHostGame {
                 id: route.playable_id,
                 title: route.title.unwrap_or(route.release_id),
+                identity: route.identity,
                 command: launch.command,
             });
         }
@@ -114,6 +116,7 @@ impl HostRuntime {
                 id: game.id.clone(),
                 title: game.title.clone(),
                 host: Some(config.label.clone()),
+                identity: game.identity.clone(),
             })
             .collect();
         if let Some(dynamic) = &self.dynamic {
@@ -129,6 +132,7 @@ impl HostRuntime {
                     id: game.id.clone(),
                     title: game.title.clone(),
                     host: Some(config.label.clone()),
+                    identity: game.identity.clone(),
                 });
             }
         }
@@ -185,6 +189,7 @@ library:
       - id: gba
         system: gba
         target: { kind: file, storage: roms, path: wl4.gba }
+        identity: { kind: hash, value: "sha256:d16c7bf6e62bb84049fff1b387108fbd1e6e2cd38ca994ab5310dd9cbf9ba414" }
         launch:
           use: "@korri:retroarch/retroarch"
           runtime: "@korri:mgba/mgba"
@@ -211,6 +216,12 @@ library:
 
         assert_eq!(runtime.games.len(), 1);
         assert_eq!(runtime.games[0].id, "wl4");
+        assert_eq!(
+            runtime.games[0].identity,
+            Some(GameIdentity::Hash(
+                "sha256:d16c7bf6e62bb84049fff1b387108fbd1e6e2cd38ca994ab5310dd9cbf9ba414".into()
+            ))
+        );
         assert_eq!(
             runtime.games[0].command[0],
             executable.display().to_string()

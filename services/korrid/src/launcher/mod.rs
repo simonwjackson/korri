@@ -133,6 +133,7 @@ fn local_game_from_route(route: ResolvedRoute) -> LocalGame {
         id: route.playable_id,
         title: route.title.unwrap_or(route.release_id),
         system: route.system_title.unwrap_or(route.system_id),
+        identity: route.identity,
     }
 }
 
@@ -247,6 +248,16 @@ mod tests {
                 .map(|game| game.id.as_str())
                 .collect::<Vec<_>>(),
             vec!["tmnt-shredders-revenge", "wl4"]
+        );
+        assert_eq!(
+            catalog
+                .games
+                .iter()
+                .find(|game| game.id == "wl4")
+                .and_then(|game| game.identity.as_ref()),
+            Some(&crate::GameIdentity::Hash(
+                "sha256:d16c7bf6e62bb84049fff1b387108fbd1e6e2cd38ca994ab5310dd9cbf9ba414".into(),
+            ))
         );
         assert!(catalog.diagnostics.is_empty());
     }

@@ -206,6 +206,7 @@ mod tests {
             playable_id: "wl4".into(),
             title: Some("Wario Land 4".into()),
             release_id: "gba".into(),
+            identity: None,
             provider_id: RETROARCH_PROVIDER.into(),
             system_id: "gba".into(),
             system_title: Some("Game Boy Advance".into()),

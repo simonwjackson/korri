@@ -141,7 +141,8 @@ case "$action" in
         [[ "$response" == *'"id":"neverball"'* ]] && \
         [[ "$response" == *'"id":"wl4"'* ]] && \
         [[ "$response" == *'"title":"Wario Land 4"'* ]] && \
-        [[ "$response" == *'"host":"zao"'* ]]; then
+        [[ "$response" == *'"host":"zao"'* ]] && \
+        [[ "$response" == *'"kind":"hash","value":"sha256:d16c7bf6e62bb84049fff1b387108fbd1e6e2cd38ca994ab5310dd9cbf9ba414"'* ]]; then
         healthy=true
         break
       fi

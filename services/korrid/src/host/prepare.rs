@@ -126,6 +126,7 @@ mod tests {
         let launcher = launcher(HostGame {
             id: "neverball".into(),
             title: "Neverball".into(),
+            identity: None,
             command: vec![
                 "sh".into(),
                 "-c".into(),
@@ -145,6 +146,7 @@ mod tests {
         let launcher = launcher(HostGame {
             id: "neverball".into(),
             title: "Neverball".into(),
+            identity: None,
             command: vec!["neverball".into()],
         });
 
@@ -158,6 +160,7 @@ mod tests {
         let launcher = launcher(HostGame {
             id: "broken".into(),
             title: "Broken".into(),
+            identity: None,
             command: vec!["/definitely/not/a/program".into()],
         });
 
@@ -172,6 +175,7 @@ mod tests {
         let launcher = launcher(HostGame {
             id: "broken".into(),
             title: "Broken".into(),
+            identity: None,
             command: vec!["sh".into(), "-c".into(), "exit 0".into()],
         });
 
@@ -188,6 +192,7 @@ mod tests {
         let launcher = launcher(HostGame {
             id: "slow".into(),
             title: "Slow".into(),
+            identity: None,
             command: vec![
                 "sh".into(),
                 "-c".into(),

@@ -4,6 +4,8 @@ use sha2::Sha256;
 use std::collections::HashMap;
 use typeshare::typeshare;
 
+use crate::GameIdentity;
+
 type HmacSha256 = Hmac<Sha256>;
 const RETROARCH_CONTROL_TOKEN: &str = "KORRI_CONTROL_TOKEN";
 const RETROARCH_CONTROL_CONTEXT: &[u8] = b"korri-retroarch-control-v1";
@@ -14,6 +16,8 @@ pub struct LocalGame {
     pub id: String,
     pub title: String,
     pub system: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity: Option<GameIdentity>,
 }
 
 #[typeshare]

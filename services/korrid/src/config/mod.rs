@@ -881,13 +881,6 @@ pub struct LibraryReleasePayload {
 
 impl LibraryReleasePayload {
     fn collect_support_issues(&self, path: &str, issues: &mut Vec<SupportIssue>) {
-        if self.identity.is_some() {
-            push_issue(
-                issues,
-                &format!("{path}.identity"),
-                "release identity metadata is not executable in this slice",
-            );
-        }
         if self.display.is_some() {
             push_issue(
                 issues,

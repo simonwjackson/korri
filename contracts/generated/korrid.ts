@@ -21,10 +21,15 @@ export interface CatalogHostFailure {
 	message: string;
 }
 
+export type GameIdentity =
+	| { kind: "hash", value: string }
+	| { kind: "provider", value: GameProviderIdentity };
+
 export interface Game {
 	id: string;
 	title: string;
 	host?: string;
+	identity?: GameIdentity;
 }
 
 export interface CatalogSnapshot {
@@ -33,6 +38,11 @@ export interface CatalogSnapshot {
 }
 
 export interface CatalogSnapshotRequest {
+}
+
+export interface GameProviderIdentity {
+	provider: string;
+	ref: string;
 }
 
 export interface Health {
@@ -61,6 +71,7 @@ export interface LocalGame {
 	id: string;
 	title: string;
 	system: string;
+	identity?: GameIdentity;
 }
 
 export interface LocalGameLaunchRequest {

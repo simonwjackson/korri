@@ -11,7 +11,7 @@
 //! can orchestrate today's TS daemon on the host. When the host daemon is
 //! rewritten, this module is replaced by the Rust-owned treaty.
 
-use crate::upstreams::UpstreamError;
+use crate::{upstreams::UpstreamError, GameIdentity};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -42,6 +42,27 @@ pub struct UpstreamCatalogEntry {
     pub title: Option<String>,
     #[serde(default)]
     pub launchable: bool,
+    #[serde(default)]
+    pub releases: Vec<UpstreamCatalogRelease>,
+}
+
+impl UpstreamCatalogEntry {
+    pub fn single_identity(&self) -> Option<GameIdentity> {
+        let mut identities = self
+            .releases
+            .iter()
+            .filter_map(|release| release.identity.clone());
+        let first = identities.next()?;
+        identities
+            .all(|identity| identity == first)
+            .then_some(first)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct UpstreamCatalogRelease {
+    #[serde(default)]
+    pub identity: Option<GameIdentity>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -220,6 +241,37 @@ mod tests {
         assert_eq!(catalog.entries.len(), 1);
         assert_eq!(catalog.entries[0].title.as_deref(), Some("Skate 3"));
         assert!(catalog.entries[0].launchable);
+    }
+
+    #[test]
+    fn preserves_one_unambiguous_legacy_release_identity() {
+        let hash: UpstreamCatalogEntry = serde_json::from_value(json!({
+            "id": "wl4",
+            "launchable": true,
+            "releases": [{
+                "identity": {
+                    "kind": "hash",
+                    "value": "sha256:d16c7bf6e62bb84049fff1b387108fbd1e6e2cd38ca994ab5310dd9cbf9ba414"
+                }
+            }]
+        }))
+        .unwrap();
+        assert_eq!(
+            hash.single_identity(),
+            Some(GameIdentity::Hash(
+                "sha256:d16c7bf6e62bb84049fff1b387108fbd1e6e2cd38ca994ab5310dd9cbf9ba414".into()
+            ))
+        );
+
+        let ambiguous: UpstreamCatalogEntry = serde_json::from_value(json!({
+            "id": "collection",
+            "releases": [
+                {"identity": {"kind": "provider", "value": {"provider": "steam", "ref": "1"}}},
+                {"identity": {"kind": "provider", "value": {"provider": "steam", "ref": "2"}}}
+            ]
+        }))
+        .unwrap();
+        assert_eq!(ambiguous.single_identity(), None);
     }
 
     #[test]

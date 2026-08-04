@@ -122,6 +122,7 @@ mod tests {
             playable_id: "configured-game".into(),
             title: Some("Configured Game".into()),
             release_id: "android".into(),
+            identity: None,
             provider_id: "@korri:android-app".into(),
             system_id: "android".into(),
             system_title: Some("Android".into()),

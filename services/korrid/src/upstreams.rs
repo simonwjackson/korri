@@ -98,10 +98,14 @@ impl RegisteredHost {
                     .entries
                     .into_iter()
                     .filter(|entry| entry.launchable)
-                    .map(|entry| Game {
-                        title: entry.title.unwrap_or_else(|| entry.id.clone()),
-                        id: entry.id,
-                        host: qualify_legacy_host.then(|| self.label.clone()),
+                    .map(|entry| {
+                        let identity = entry.single_identity();
+                        Game {
+                            title: entry.title.unwrap_or_else(|| entry.id.clone()),
+                            id: entry.id,
+                            host: qualify_legacy_host.then(|| self.label.clone()),
+                            identity,
+                        }
                     })
                     .collect()
             }),

@@ -25,12 +25,30 @@ pub const VERSION: &str = "korrid-v0";
 pub struct CatalogSnapshotRequest {}
 
 #[typeshare]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", rename_all = "kebab-case")]
+pub enum GameIdentity {
+    Hash(String),
+    Provider(GameProviderIdentity),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct GameProviderIdentity {
+    pub provider: String,
+    #[serde(rename = "ref")]
+    pub provider_ref: String,
+}
+
+#[typeshare]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Game {
     pub id: String,
     pub title: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity: Option<GameIdentity>,
 }
 
 #[typeshare]

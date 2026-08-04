@@ -2,12 +2,15 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::plugin::{
-    AndroidLauncherRecord, LauncherRecord, LinuxLauncherRecord, PluginRegistry, ProviderRecord,
-    RuntimeRecord, SystemRecord,
+use crate::{
+    plugin::{
+        AndroidLauncherRecord, LauncherRecord, LinuxLauncherRecord, PluginRegistry, ProviderRecord,
+        RuntimeRecord, SystemRecord,
+    },
+    GameIdentity,
 };
 
-use super::{AppPayload, ConfigSnapshot, Target};
+use super::{AppPayload, ConfigSnapshot, LibraryItemPayload, Target};
 
 const PROCESS_LAUNCHER_KIND: &str = "@korri:process";
 const ANDROID_APP_COMMAND: &str = "android-app";
@@ -57,6 +60,7 @@ pub struct ResolvedRoute {
     pub playable_id: String,
     pub title: Option<String>,
     pub release_id: String,
+    pub identity: Option<GameIdentity>,
     pub provider_id: String,
     pub system_id: String,
     pub system_title: Option<String>,
@@ -475,6 +479,7 @@ fn resolve_route_with_contributions(
         playable_id: playable_id.to_owned(),
         title: item.title.clone(),
         release_id: release.id.0.clone(),
+        identity: single_release_identity(item),
         provider_id,
         system_id: system_id.to_owned(),
         system_title: system.title.clone(),
@@ -487,6 +492,19 @@ fn resolve_route_with_contributions(
         runtime,
         file_target,
     })
+}
+
+fn single_release_identity(item: &LibraryItemPayload) -> Option<GameIdentity> {
+    let mut identities = item
+        .releases
+        .0
+        .iter()
+        .filter_map(|release| release.identity.as_ref())
+        .map(|identity| identity.value.0.as_str());
+    let first = identities.next()?;
+    identities
+        .all(|identity| identity == first)
+        .then(|| GameIdentity::Hash(first.to_owned()))
 }
 
 fn compose_contributions(snapshot: &ConfigSnapshot, registry: &PluginRegistry) -> Contributions {
