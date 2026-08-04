@@ -216,6 +216,18 @@ impl MoonlightLaunchAuthority {
         spec
     }
 
+    /** Invalidate only the named current reservation while it remains unused. */
+    pub fn cancel(&mut self, launch_id: &str) -> bool {
+        let cancellable = self
+            .current_launch
+            .as_ref()
+            .is_some_and(|current| current.id == launch_id && !current.consumed);
+        if cancellable {
+            self.current_launch = None;
+        }
+        cancellable
+    }
+
     pub fn authorize(
         &mut self,
         spec: &MoonlightLaunchSpec,
@@ -456,6 +468,52 @@ mod tests {
             .is_some_and(|launch| launch.consumed));
         assert_eq!(
             authority.authorize(&second),
+            Err(MoonlightLaunchVerificationFailure::Replay)
+        );
+    }
+
+    #[test]
+    fn exact_unused_moonlight_reservation_can_be_cancelled() {
+        let mut authority = MoonlightLaunchAuthority::new(b"private per-server key".to_vec());
+        let reservation = authority.prepare(
+            "@korri:moonlight/moonlight",
+            crate::MoonlightImplementation::Artemis,
+            "Korri Stream",
+            "host-uuid",
+            7,
+        );
+
+        assert!(authority.cancel(&reservation.launch_id));
+        assert_eq!(
+            authority.authorize(&reservation),
+            Err(MoonlightLaunchVerificationFailure::Stale)
+        );
+        assert!(!authority.cancel(&reservation.launch_id));
+    }
+
+    #[test]
+    fn cancelling_an_older_moonlight_reservation_preserves_its_replacement() {
+        let mut authority = MoonlightLaunchAuthority::new(b"private per-server key".to_vec());
+        let older = authority.prepare(
+            "@korri:moonlight/moonlight",
+            crate::MoonlightImplementation::Artemis,
+            "Korri Stream",
+            "host-uuid",
+            7,
+        );
+        let replacement = authority.prepare(
+            "@korri:moonlight/moonlight",
+            crate::MoonlightImplementation::Artemis,
+            "Korri Stream",
+            "host-uuid",
+            7,
+        );
+
+        assert!(!authority.cancel(&older.launch_id));
+        assert!(authority.authorize(&replacement).is_ok());
+        assert!(!authority.cancel(&replacement.launch_id));
+        assert_eq!(
+            authority.authorize(&replacement),
             Err(MoonlightLaunchVerificationFailure::Replay)
         );
     }

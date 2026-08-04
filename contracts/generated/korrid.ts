@@ -93,6 +93,14 @@ export interface LocalGames {
 export interface LocalGamesListRequest {
 }
 
+export interface MoonlightLaunchCancelRequest {
+	launchId: string;
+}
+
+export interface MoonlightLaunchCancelled {
+	launchId: string;
+}
+
 export interface MoonlightLaunchPrepareRequest {
 	hostUuid: string;
 	appId: number;
@@ -306,6 +314,10 @@ export type LocalGamesListOutcome =
 	| { _tag: "Ok", payload: LocalGames }
 	| { _tag: "Err", payload: RpcFailure };
 
+export type MoonlightLaunchCancelOutcome =
+	| { _tag: "Ok", payload: MoonlightLaunchCancelled }
+	| { _tag: "Err", payload: RpcFailure };
+
 export type MoonlightLaunchPrepareOutcome =
 	| { _tag: "Ok", payload: MoonlightLaunchSpec }
 	| { _tag: "Err", payload: RpcFailure };
@@ -318,6 +330,7 @@ export type RpcRequest =
 	| { _tag: "app.catalog.snapshot", payload: CatalogSnapshotRequest }
 	| { _tag: "app.moonlight.resolve", payload: MoonlightResolveRequest }
 	| { _tag: "app.moonlight.launch.prepare", payload: MoonlightLaunchPrepareRequest }
+	| { _tag: "app.moonlight.launch.cancel", payload: MoonlightLaunchCancelRequest }
 	| { _tag: "app.session.prepare", payload: SessionPrepareRequest }
 	| { _tag: "app.session.status", payload: SessionStatusRequest }
 	| { _tag: "app.session.stop", payload: SessionStopRequest }
@@ -333,6 +346,7 @@ export type RpcResponse =
 	| { _tag: "app.catalog.snapshot", outcome: CatalogSnapshotOutcome }
 	| { _tag: "app.moonlight.resolve", outcome: MoonlightResolveOutcome }
 	| { _tag: "app.moonlight.launch.prepare", outcome: MoonlightLaunchPrepareOutcome }
+	| { _tag: "app.moonlight.launch.cancel", outcome: MoonlightLaunchCancelOutcome }
 	| { _tag: "app.session.prepare", outcome: SessionPrepareOutcome }
 	| { _tag: "app.session.status", outcome: SessionStatusOutcome }
 	| { _tag: "app.session.stop", outcome: SessionStopOutcome }

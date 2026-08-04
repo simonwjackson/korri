@@ -19,7 +19,6 @@ import type {
 import type {
   MoonlightLaunchPrepareOutcome,
   MoonlightResolveOutcome,
-  SessionPrepareOutcome,
 } from "@contracts/generated/korrid"
 
 /**
@@ -94,7 +93,10 @@ interface MoonlightLaunchPreparer {
   ): Promise<MoonlightLaunchPrepareOutcome>
 }
 
-async function prepareResolvedMoonlightLaunch(
+/** Obtain korrid's current signed launch instruction. Native startup remains
+ * explicit in the state owner so every intervening await has a cancellation
+ * checkpoint before Artemis can start. */
+export async function reserveResolvedMoonlightLaunch(
   resolution: MoonlightResolveOutcome,
   preparer: MoonlightLaunchPreparer,
   hostUuid: string,
@@ -103,59 +105,6 @@ async function prepareResolvedMoonlightLaunch(
   return resolution._tag === "Available"
     ? preparer.moonlightLaunchPrepare(hostUuid, appId)
     : { _tag: "Err", payload: resolution.payload }
-}
-
-/** Obtain korrid's current signed launch instruction before the native edge
- * can start a stream; raw host/app startup is not part of this seam. */
-export async function startResolvedMoonlight(
-  resolution: MoonlightResolveOutcome,
-  preparer: MoonlightLaunchPreparer,
-  bridge: Pick<LauncherBridge, "startStream">,
-  hostUuid: string,
-  appId: number,
-): Promise<StartStreamResult> {
-  const prepared = await prepareResolvedMoonlightLaunch(
-    resolution,
-    preparer,
-    hostUuid,
-    appId,
-  )
-  if (prepared._tag !== "Ok") {
-    return {
-      _tag: "StreamFailed",
-      reason: "StartFailed",
-      message: prepared.payload.message,
-    }
-  }
-  return bridge.startStream(prepared.payload)
-}
-
-export async function prepareSessionAndStartResolvedMoonlight(
-  resolution: MoonlightResolveOutcome,
-  preparer: MoonlightLaunchPreparer,
-  bridge: Pick<LauncherBridge, "startStream">,
-  hostUuid: string,
-  appId: number,
-  prepareSession: () => Promise<SessionPrepareOutcome>,
-): Promise<
-  StartStreamResult | Extract<SessionPrepareOutcome, { _tag: "Err" }>
-> {
-  const prepared = await prepareResolvedMoonlightLaunch(
-    resolution,
-    preparer,
-    hostUuid,
-    appId,
-  )
-  if (prepared._tag !== "Ok") {
-    return {
-      _tag: "StreamFailed",
-      reason: "StartFailed",
-      message: prepared.payload.message,
-    }
-  }
-  const session = await prepareSession()
-  if (session._tag !== "Ok") return session
-  return bridge.startStream(prepared.payload)
 }
 
 export function createKorriNativeLauncherBridge(

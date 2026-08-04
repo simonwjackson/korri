@@ -14,6 +14,7 @@ import type {
   LocalGame,
   LocalGameLaunchOutcome,
   LocalGamesListOutcome,
+  MoonlightLaunchCancelOutcome,
   MoonlightLaunchPrepareOutcome,
   MoonlightResolveOutcome,
   RpcRequest,
@@ -46,6 +47,7 @@ export interface KorridClient {
     hostUuid: string,
     appId: number,
   ): Promise<MoonlightLaunchPrepareOutcome>
+  moonlightLaunchCancel(launchId: string): Promise<MoonlightLaunchCancelOutcome>
   localGames(): Promise<LocalGamesListOutcome>
   localGameLaunch(gameId: string): Promise<LocalGameLaunchOutcome>
   sessionPrepare(gameId: string, host?: string): Promise<SessionPrepareOutcome>
@@ -167,6 +169,17 @@ export function createHttpKorridClient(
         return unreachable(error)
       }
     },
+    async moonlightLaunchCancel(launchId) {
+      try {
+        const response = await callKorrid(baseUrl, capability, {
+          _tag: "app.moonlight.launch.cancel",
+          payload: { launchId },
+        })
+        return response.outcome
+      } catch (error) {
+        return unreachable(error)
+      }
+    },
     async localGames() {
       try {
         const response = await callKorrid(baseUrl, capability, {
@@ -282,6 +295,7 @@ export function createInMemoryKorridClient(
   }
   let settingsRevision = 0
   let moonlightLaunchSequence = 0
+  let currentMoonlightLaunchId: string | undefined
   const currentMoonlight = (): MoonlightResolveOutcome => {
     const enabled = settings.plugins.some(
       plugin => plugin.id === "@korri:moonlight" && plugin.enabled,
@@ -342,10 +356,12 @@ export function createInMemoryKorridClient(
         return { _tag: "Err", payload: resolved.payload }
       }
       moonlightLaunchSequence += 1
+      const launchId = `in-memory-moonlight-${moonlightLaunchSequence}`
+      currentMoonlightLaunchId = launchId
       return {
         _tag: "Ok",
         payload: {
-          launchId: `in-memory-moonlight-${moonlightLaunchSequence}`,
+          launchId,
           transportId: resolved.payload.transportId,
           implementation: resolved.payload.implementation,
           sunshineApp: resolved.payload.sunshineApp,
@@ -354,6 +370,19 @@ export function createInMemoryKorridClient(
           integrity: "in-memory-integrity",
         },
       }
+    },
+    async moonlightLaunchCancel(launchId) {
+      if (currentMoonlightLaunchId !== launchId) {
+        return {
+          _tag: "Err",
+          payload: {
+            code: "MoonlightLaunchReservationNotCurrent",
+            message: "Moonlight launch reservation is not current and unused",
+          },
+        }
+      }
+      currentMoonlightLaunchId = undefined
+      return { _tag: "Ok", payload: { launchId } }
     },
     async localGames() {
       if (behavior === "local-list-fail") {

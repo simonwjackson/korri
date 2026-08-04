@@ -13,8 +13,7 @@ import type { SurfaceSettingsStatus } from "@contracts/surface/korri-surface"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   discoverResolvedMoonlight,
-  prepareSessionAndStartResolvedMoonlight,
-  startResolvedMoonlight,
+  reserveResolvedMoonlightLaunch,
   type LauncherBridge,
 } from "../bridge/launcher-bridge"
 import type { MoonlightResolveOutcome } from "@contracts/generated/korrid"
@@ -98,15 +97,16 @@ export function useLaunchables(
     [korrid],
   )
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (preserveAction = false) => {
     const preservingStop = stateRef.current._tag === "Stopping"
-    if (!preservingStop) {
+    if (!preserveAction && !preservingStop) {
       // A normal full reload supersedes pending UI work. A reload while
       // Stopping is observational only and must not cancel the stop poll.
       actionSeq.current += 1
       stopPollSeq.current += 1
       publish(LaunchablesState.loading())
     }
+    const action = actionSeq.current
     // Overlapping loads: only the latest invocation may write state.
     const seq = ++loadSeq.current
     const [
@@ -145,7 +145,11 @@ export function useLaunchables(
           ? moonlightDiscovery.resolution.payload.message
           : "Moonlight discovery unavailable",
     }
-    if (!mountedRef.current || seq !== loadSeq.current) return
+    if (
+      !mountedRef.current ||
+      seq !== loadSeq.current ||
+      (preserveAction && action !== actionSeq.current)
+    ) return
     streamsRef.current = streams
     moonlightRef.current = moonlightDiscovery.resolution
     setFacts({
@@ -162,6 +166,12 @@ export function useLaunchables(
         : {}),
     })
     const current = stateRef.current
+    // Recovery reads must not replace a newer launch operation's visible lock.
+    if (
+      preserveAction &&
+      current._tag !== "Loading" &&
+      current._tag !== "Ready"
+    ) return
     const loaded = LaunchablesState.fromSources(
       streams,
       games,
@@ -388,16 +398,38 @@ export function useLaunchables(
           )
           return
         }
-        void startResolvedMoonlight(
-          moonlightRef.current,
-          korrid,
-          bridge,
-          target.value.hostUuid,
-          target.value.appId,
-        ).then(result => {
-          if (!mountedRef.current || operation !== actionSeq.current) return
+        void (async () => {
+          const reservation = await reserveResolvedMoonlightLaunch(
+            moonlightRef.current,
+            korrid,
+            target.value.hostUuid,
+            target.value.appId,
+          )
+          if (reservation._tag !== "Ok") {
+            if (!mountedRef.current || operation !== actionSeq.current) return
+            publish(
+              LaunchablesState.withStartStreamResult(launching, {
+                _tag: "StreamFailed",
+                reason: "StartFailed",
+                message: reservation.payload.message,
+              }),
+            )
+            return
+          }
+          if (!mountedRef.current || operation !== actionSeq.current) {
+            await korrid.moonlightLaunchCancel(reservation.payload.launchId)
+            return
+          }
+          // This checkpoint is deliberately adjacent to the native call. No
+          // helper may hide an await between cancellation authority and start.
+          const result = await bridge.startStream(reservation.payload)
+          if (!mountedRef.current || operation !== actionSeq.current) {
+            if (mountedRef.current) void load(true)
+            return
+          }
           publish(LaunchablesState.withStartStreamResult(launching, result))
-        })
+          if (result._tag === "StreamFailed") void load(true)
+        })()
         return
       }
 
@@ -445,26 +477,63 @@ export function useLaunchables(
       // prepare. A signing failure must not leave an unmanaged remote game.
       // Preparing is visible immediately so there is no dead gap before swap.
       publish(preparing)
-      void prepareSessionAndStartResolvedMoonlight(
-        moonlightRef.current,
-        korrid,
-        bridge,
-        target.value.hostUuid,
-        target.value.appId,
-        () => korrid.sessionPrepare(entry.game.id, entry.game.host),
-      ).then(result => {
-        if (!mountedRef.current || operation !== actionSeq.current) return
-        if (result._tag === "Err") {
-          publish(LaunchablesState.withPrepareOutcome(preparing, result))
+      void (async () => {
+        const reservation = await reserveResolvedMoonlightLaunch(
+          moonlightRef.current,
+          korrid,
+          target.value.hostUuid,
+          target.value.appId,
+        )
+        if (reservation._tag !== "Ok") {
+          if (!mountedRef.current || operation !== actionSeq.current) return
+          publish(
+            LaunchablesState.withStartStreamResult(preparing, {
+              _tag: "StreamFailed",
+              reason: "StartFailed",
+              message: reservation.payload.message,
+            }),
+          )
+          return
+        }
+        if (!mountedRef.current || operation !== actionSeq.current) {
+          await korrid.moonlightLaunchCancel(reservation.payload.launchId)
+          return
+        }
+
+        const prepared = await korrid.sessionPrepare(
+          entry.game.id,
+          entry.game.host,
+        )
+        if (prepared._tag !== "Ok") {
+          await korrid.moonlightLaunchCancel(reservation.payload.launchId)
+          if (!mountedRef.current || operation !== actionSeq.current) return
+          publish(LaunchablesState.withPrepareOutcome(preparing, prepared))
+          return
+        }
+        if (!mountedRef.current || operation !== actionSeq.current) {
+          await korrid.moonlightLaunchCancel(reservation.payload.launchId)
+          if (mountedRef.current) void load(true)
+          return
+        }
+
+        // Host preparation has completed, so cancellation authority is checked
+        // immediately before Artemis starts, with no hidden await in between.
+        const result = await bridge.startStream(reservation.payload)
+        if (!mountedRef.current || operation !== actionSeq.current) {
+          if (mountedRef.current) void load(true)
           return
         }
         publish(LaunchablesState.withStartStreamResult(preparing, result))
-      })
+        // Native failure does not mean the host stopped. Re-read status so the
+        // prepared session is visible and resumable instead of being stranded.
+        if (result._tag === "StreamFailed") void load(true)
+      })()
     },
     [
       bridge,
       findKorriStreamTarget,
       korrid,
+      load,
       moonlightTargetFailure,
       noticeOnReady,
       publish,

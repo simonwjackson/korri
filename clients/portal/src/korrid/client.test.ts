@@ -133,6 +133,37 @@ describe("callKorrid", () => {
     })
   })
 
+  it("cancels only the named Moonlight launch reservation", async () => {
+    let body: unknown
+    globalThis.fetch = (async (_input, init) => {
+      body = JSON.parse(String(init?.body))
+      return new Response(
+        JSON.stringify({
+          _tag: "app.moonlight.launch.cancel",
+          outcome: {
+            _tag: "Ok",
+            payload: { launchId: "0123456789abcdef0123456789abcdef" },
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    }) as typeof fetch
+
+    const outcome = await createHttpKorridClient(
+      "http://127.0.0.1:43117",
+      "capability",
+    ).moonlightLaunchCancel("0123456789abcdef0123456789abcdef")
+
+    expect(body).toEqual({
+      _tag: "app.moonlight.launch.cancel",
+      payload: { launchId: "0123456789abcdef0123456789abcdef" },
+    })
+    expect(outcome).toEqual({
+      _tag: "Ok",
+      payload: { launchId: "0123456789abcdef0123456789abcdef" },
+    })
+  })
+
   it("aborts session status at its UI deadline", async () => {
     globalThis.fetch = ((_input, init) =>
       new Promise((_resolve, reject) => {

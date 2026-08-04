@@ -98,6 +98,20 @@ pub struct MoonlightLaunchPrepareRequest {
 }
 
 #[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MoonlightLaunchCancelRequest {
+    pub launch_id: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MoonlightLaunchCancelled {
+    pub launch_id: String,
+}
+
+#[typeshare]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum MoonlightImplementation {
@@ -126,6 +140,14 @@ pub enum MoonlightResolveOutcome {
 #[serde(tag = "_tag", content = "payload")]
 pub enum MoonlightLaunchPrepareOutcome {
     Ok(launcher::MoonlightLaunchSpec),
+    Err(RpcFailure),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
+pub enum MoonlightLaunchCancelOutcome {
+    Ok(MoonlightLaunchCancelled),
     Err(RpcFailure),
 }
 
@@ -572,6 +594,8 @@ pub enum RpcRequest {
     MoonlightResolve(MoonlightResolveRequest),
     #[serde(rename = "app.moonlight.launch.prepare")]
     MoonlightLaunchPrepare(MoonlightLaunchPrepareRequest),
+    #[serde(rename = "app.moonlight.launch.cancel")]
+    MoonlightLaunchCancel(MoonlightLaunchCancelRequest),
     #[serde(rename = "app.session.prepare")]
     SessionPrepare(SessionPrepareRequest),
     #[serde(rename = "app.session.status")]
@@ -604,6 +628,8 @@ pub enum RpcResponse {
     MoonlightResolve(MoonlightResolveOutcome),
     #[serde(rename = "app.moonlight.launch.prepare")]
     MoonlightLaunchPrepare(MoonlightLaunchPrepareOutcome),
+    #[serde(rename = "app.moonlight.launch.cancel")]
+    MoonlightLaunchCancel(MoonlightLaunchCancelOutcome),
     #[serde(rename = "app.session.prepare")]
     SessionPrepare(SessionPrepareOutcome),
     #[serde(rename = "app.session.status")]
@@ -937,6 +963,33 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                 }),
             };
             RpcResponse::MoonlightLaunchPrepare(outcome)
+        }
+        RpcRequest::MoonlightLaunchCancel(request) => {
+            let outcome = match &state.mode {
+                ServerMode::Brain(brain) => {
+                    let cancelled = brain
+                        .moonlight_launch_authority
+                        .lock()
+                        .expect("Moonlight launch authority poisoned")
+                        .cancel(&request.launch_id);
+                    if cancelled {
+                        MoonlightLaunchCancelOutcome::Ok(MoonlightLaunchCancelled {
+                            launch_id: request.launch_id,
+                        })
+                    } else {
+                        MoonlightLaunchCancelOutcome::Err(RpcFailure {
+                            code: "MoonlightLaunchReservationNotCurrent".into(),
+                            message: "Moonlight launch reservation is not current and unused"
+                                .into(),
+                        })
+                    }
+                }
+                ServerMode::Host(_) => MoonlightLaunchCancelOutcome::Err(RpcFailure {
+                    code: "MoonlightUnavailable".into(),
+                    message: "Artemis is available only at the Android edge".into(),
+                }),
+            };
+            RpcResponse::MoonlightLaunchCancel(outcome)
         }
         RpcRequest::SessionPrepare(request) => {
             let outcome = match &state.mode {
