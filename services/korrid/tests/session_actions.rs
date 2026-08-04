@@ -153,6 +153,24 @@ fn active_route_owns_the_only_controls_that_resolve_in_deterministic_order() {
     assert_eq!(controls[0].plugin_id, "@korri:moonlight");
     assert_eq!(controls[4].plugin_id, "@korri:retroarch");
 
+    let reversed_route = ActiveRouteContext {
+        contributors: context.contributors.iter().cloned().rev().collect(),
+        ..context.clone()
+    };
+    assert_eq!(
+        resolve_session_controls(&registry, &reversed_route)
+            .iter()
+            .map(|control| control.id.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "@korri:retroarch/open-menu",
+            "@korri:moonlight/disconnect",
+            "@korri:moonlight/fill",
+            "@korri:moonlight/mouse-mode",
+            "@korri:moonlight/sharpness",
+        ]
+    );
+
     let retroarch_only = ActiveRouteContext {
         contributors: vec![RouteContribution {
             kind: SessionControlOwnerKind::Launcher,
