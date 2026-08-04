@@ -129,7 +129,7 @@ pub enum AndroidMoonlightEffect {
     SwitchTouchSensitivity,
     SetMouseMode,
     SetLocalCursor,
-    SetSgsrQuality,
+    SetSgsrEdgeThreshold,
     SetSgsrSharpness,
     SetFaceButtonFlip,
     SetRumble,

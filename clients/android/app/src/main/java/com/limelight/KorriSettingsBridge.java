@@ -104,8 +104,8 @@ final class KorriSettingsBridge {
                 toggle("checkbox_unlock_fps", "Unlock FPS limit", false),
                 toggle("checkbox_prevent_packet_loss", "Prevent packet loss", false),
                 // Apollo-only features (virtual display, resolution scale,
-                // custom refresh rate) are intentionally absent: Korri
-                // targets sunshine-korri as the only server.
+                // custom refresh rate) are intentionally absent. The enabled
+                // Moonlight plugin owns Korri's Sunshine app selection.
                 toggle("checkbox_auto_orientation", "Auto orientation", false),
                 toggle("checkbox_auto_invert_video_resolution", "Auto invert resolution in portrait", true),
                 toggle("checkbox_full_screen", "Hide system bars (full screen)", true)));

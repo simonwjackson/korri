@@ -80,7 +80,7 @@ const declaration = {
       localCursor: {
         id: "@korri:moonlight/local-cursor",
         owner: { kind: "transport", id: transport },
-        label: "Toggle local mouse cursor",
+        label: "Toggle local mouse cursor (physical mouse needed)",
         interaction: { kind: "command" },
         effect: "@korri:moonlight/set-local-cursor",
         dismissOnSuccess: true,
@@ -137,7 +137,7 @@ const declaration = {
         owner: { kind: "transport", id: transport },
         label: "SGSR edge threshold",
         interaction: { kind: "range", min: 1, max: 32, step: 1 },
-        effect: "@korri:moonlight/set-sgsr-quality",
+        effect: "@korri:moonlight/set-sgsr-edge-threshold",
       },
       faceButtonFlip: {
         id: "@korri:moonlight/face-button-flip",

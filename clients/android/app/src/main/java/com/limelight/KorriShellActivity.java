@@ -58,9 +58,9 @@ import okhttp3.Response;
  *
  * Proves the one-APK architecture: a WebView owns the launcher surface and a
  * narrow typed bridge (not art:// deep links) drives the orchestrated Korri
- * flow — korrid catalog -> korrid prepare -> native Game activity against the
- * stable "Korri Stream" Sunshine app. No trampoline hop, no second launcher
- * icon: the streaming Activity is an implementation detail of one app.
+ * flow — korrid catalog -> signed Moonlight preparation -> native Game
+ * activity against the plugin-owned Sunshine app selection. No trampoline hop,
+ * no second launcher icon: streaming is an implementation detail of one app.
  */
 public class KorriShellActivity extends AppCompatActivity {
     private static final String NOTIFICATION_PREFS = "korri-notifications";

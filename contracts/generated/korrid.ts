@@ -266,7 +266,7 @@ export enum AndroidMoonlightEffect {
 	SwitchTouchSensitivity = "switch-touch-sensitivity",
 	SetMouseMode = "set-mouse-mode",
 	SetLocalCursor = "set-local-cursor",
-	SetSgsrQuality = "set-sgsr-quality",
+	SetSgsrEdgeThreshold = "set-sgsr-edge-threshold",
 	SetSgsrSharpness = "set-sgsr-sharpness",
 	SetFaceButtonFlip = "set-face-button-flip",
 	SetRumble = "set-rumble",

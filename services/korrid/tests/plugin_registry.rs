@@ -1,6 +1,6 @@
 use korrid::plugin::{
     decode_plugin_declaration, load_plugin_source, PluginRegistry,
-    SessionControlDeclarationInteraction,
+    SessionControlDeclarationInteraction, SessionControlEffect,
 };
 
 const ANDROID_PLUGIN: &str = include_str!("../plugins/android-app.plugin.ts");
@@ -122,6 +122,19 @@ fn enabled_moonlight_plugin_declares_artemis_streaming_and_the_full_control_inve
             ("4", "Disabled"),
             ("5", "Absolute touch (left/right click swapped)"),
         ]
+    );
+    let local_cursor = registry
+        .session_controls()
+        .get("@korri:moonlight/local-cursor")
+        .expect("local cursor control");
+    assert!(local_cursor.label.contains("physical mouse needed"));
+    assert_eq!(
+        registry
+            .session_controls()
+            .get("@korri:moonlight/sgsr-edge-threshold")
+            .expect("SGSR edge threshold control")
+            .effect,
+        SessionControlEffect::MoonlightSetSgsrEdgeThreshold
     );
     assert_eq!(
         registry

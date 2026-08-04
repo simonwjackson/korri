@@ -184,8 +184,8 @@ pub enum SessionControlEffect {
     MoonlightSetMouseMode,
     #[serde(rename = "@korri:moonlight/set-local-cursor")]
     MoonlightSetLocalCursor,
-    #[serde(rename = "@korri:moonlight/set-sgsr-quality")]
-    MoonlightSetSgsrQuality,
+    #[serde(rename = "@korri:moonlight/set-sgsr-edge-threshold")]
+    MoonlightSetSgsrEdgeThreshold,
     #[serde(rename = "@korri:moonlight/set-sgsr-sharpness")]
     MoonlightSetSgsrSharpness,
     #[serde(rename = "@korri:moonlight/set-face-button-flip")]
@@ -230,7 +230,7 @@ impl SessionControlEffect {
             | Self::MoonlightSwitchTouchSensitivity
             | Self::MoonlightSetMouseMode
             | Self::MoonlightSetLocalCursor
-            | Self::MoonlightSetSgsrQuality
+            | Self::MoonlightSetSgsrEdgeThreshold
             | Self::MoonlightSetSgsrSharpness
             | Self::MoonlightSetFaceButtonFlip
             | Self::MoonlightSetRumble
@@ -824,7 +824,7 @@ impl SessionControlEffect {
             | Self::MoonlightSetRumble
             | Self::MoonlightSetPictureInPicture => SessionControlKind::Toggle,
             Self::MoonlightSetMouseMode => SessionControlKind::Choice,
-            Self::MoonlightSetSgsrQuality | Self::MoonlightSetSgsrSharpness => {
+            Self::MoonlightSetSgsrEdgeThreshold | Self::MoonlightSetSgsrSharpness => {
                 SessionControlKind::Range
             }
             Self::RetroarchOpenMenu
