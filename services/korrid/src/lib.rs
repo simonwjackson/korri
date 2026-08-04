@@ -235,6 +235,7 @@ fn valid_range_value(value: f64, min: f64, max: f64, step: f64) -> bool {
         || !max.is_finite()
         || !step.is_finite()
         || step <= 0.0
+        || min + step == min
         || min > max
         || value < min
         || value > max
@@ -260,10 +261,12 @@ fn valid_range_value(value: f64, min: f64, max: f64, step: f64) -> bool {
     }
 
     // Subtraction, division, rounding, and the fused grid reconstruction can
-    // each move the result by an ULP. Compare in value space so a large step
-    // cannot turn a materially off-grid value into a tiny quotient error.
-    let tolerance = 4.0 * ulp_at(value).max(ulp_at(min)).max(ulp_at(nearest));
-    (value - nearest).abs() <= tolerance
+    // each move the result by an ULP. Compare in value space, but cap that
+    // tolerance to the declared step so absolute magnitude cannot admit a
+    // material fraction of one step.
+    let arithmetic_tolerance = 4.0 * ulp_at(value).max(ulp_at(min)).max(ulp_at(nearest));
+    let grid_tolerance = step * 1e-9;
+    (value - nearest).abs() <= arithmetic_tolerance.min(grid_tolerance)
 }
 
 /** Validate the invocation against the current materialized control before an
@@ -1338,6 +1341,41 @@ mod tests {
                 step: 1_000_000_000_000.0,
             },
             1.0,
+        );
+    }
+
+    #[test]
+    fn range_validation_bounds_grid_tolerance_for_translated_large_ranges() {
+        let min = 1_000_000_000_000_000.0;
+        let interaction = SessionControlInteraction::Range {
+            value: min,
+            min,
+            max: min + 10.0,
+            step: 1.0,
+        };
+
+        assert_invalid_range(interaction.clone(), min + 0.5);
+        for submitted in [min, min + 1.0, min + 10.0] {
+            assert!(validate_session_control_invocation(
+                "current",
+                &invocation(Some(SessionControlValue::Range(submitted))),
+                &control(interaction.clone()),
+            )
+            .is_ok());
+        }
+    }
+
+    #[test]
+    fn range_validation_rejects_steps_that_cannot_advance_from_min() {
+        let min = 1_000_000_000_000_000.0;
+        assert_invalid_range(
+            SessionControlInteraction::Range {
+                value: min,
+                min,
+                max: min + 10.0,
+                step: 0.01,
+            },
+            min,
         );
     }
 
