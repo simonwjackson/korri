@@ -1,0 +1,4 @@
+# Zao's device-owned Korri configuration. Platform implementations come from
+# the same first-party RetroArch and mGBA plugins used by Android.
+host:
+  title: zao

@@ -7,6 +7,7 @@ Wants=network-online.target
 Environment=KORRID_MODE=host
 Environment=KORRID_ADDRESS=0.0.0.0:43117
 Environment=KORRID_HOST_CONFIG=%h/.config/korrid/host.toml
+Environment=KORRID_STORAGE_ROOT=%h/.local/share/korri
 ExecStart=%h/.local/state/korrid/current/bin/korrid
 Restart=on-failure
 RestartSec=2s

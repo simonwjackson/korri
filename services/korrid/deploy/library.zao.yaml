@@ -1,0 +1,13 @@
+library:
+  wl4:
+    title: "Wario Land 4"
+    releases:
+      - id: gba
+        system: gba
+        target:
+          kind: file
+          storage: roms
+          path: wl4.gba
+        launch:
+          use: "@korri:retroarch/retroarch"
+          runtime: "@korri:mgba/mgba"

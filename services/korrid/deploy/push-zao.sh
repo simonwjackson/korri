@@ -3,7 +3,13 @@ set -euo pipefail
 
 root="$(git rev-parse --show-toplevel)"
 started="$(date +%s)"
-package_paths=(flake.nix flake.lock services/korrid)
+package_paths=(
+  flake.nix
+  flake.lock
+  services/korrid
+  plugins/mgba/plugin.ts
+  plugins/retroarch/plugin.ts
+)
 untracked_package="$(git -C "$root" ls-files --others --exclude-standard -- "${package_paths[@]}")"
 revision="$(git -C "$root" describe --always --dirty)"
 flake_ref="path:$root"
@@ -42,6 +48,12 @@ scp "${ssh_options[@]}" \
   "$root/services/korrid/deploy/host.zao.toml" \
   "zao:$remote_tmp/host.toml"
 scp "${ssh_options[@]}" \
+  "$root/services/korrid/deploy/config.zao.yaml" \
+  "zao:$remote_tmp/config.yaml"
+scp "${ssh_options[@]}" \
+  "$root/services/korrid/deploy/library.zao.yaml" \
+  "zao:$remote_tmp/library.yaml"
+scp "${ssh_options[@]}" \
   "$root/services/korrid/deploy/zao-remote.sh" \
   "zao:$remote_tmp/zao-remote.sh"
 scp "${ssh_options[@]}" "$revision_file" "zao:$remote_tmp/revision"
@@ -55,14 +67,15 @@ for _ in $(seq 1 40); do
     -d '{"_tag":"app.catalog.snapshot","payload":{}}')" && \
     jq -e '._tag == "app.catalog.snapshot"
       and .outcome._tag == "Ok"
-      and any(.outcome.payload.games[]; .id == "neverball" and .host == "zao")' \
+      and any(.outcome.payload.games[]; .id == "neverball" and .host == "zao")
+      and any(.outcome.payload.games[]; .id == "wl4" and .title == "Wario Land 4" and .host == "zao")' \
       <<<"$response" >/dev/null; then
     elapsed="$(( $(date +%s) - started ))"
-    echo "zao korrid deployed with Neverball in ${elapsed}s ($revision)"
+    echo "zao korrid deployed with Neverball and Wario Land 4 in ${elapsed}s ($revision)"
     exit 0
   fi
   sleep 0.25
 done
 
-echo "zao korrid did not serve the expected Neverball catalog" >&2
+echo "zao korrid did not serve the expected Neverball and Wario Land 4 catalog" >&2
 exit 1

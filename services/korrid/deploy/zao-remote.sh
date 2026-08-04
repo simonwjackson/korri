@@ -11,11 +11,36 @@ case "$action" in
       echo "Neverball is not provisioned; run the provision-game action first" >&2
       exit 1
     fi
+    if [[ ! -f "$HOME/.local/share/korri/roms/wl4.gba" ]]; then
+      echo "Wario Land 4 is not provisioned outside the Nix store" >&2
+      exit 1
+    fi
     mkdir -p \
       "$HOME/.config/korrid" \
       "$HOME/.config/systemd/user" \
       "$HOME/.local/libexec" \
+      "$HOME/.local/share/korri" \
       "$HOME/.local/state/korrid/profiles"
+    deployed_documents="$HOME/.local/state/korrid/deployed-documents.sha256"
+    candidate_documents="$(cat "$handoff/config.yaml" "$handoff/library.yaml" | sha256sum | cut -d' ' -f1)"
+    current_config="$HOME/.local/share/korri/config.yaml"
+    current_library="$HOME/.local/share/korri/library.yaml"
+    if [[ -f "$current_config" || -f "$current_library" ]]; then
+      if [[ ! -f "$current_config" || ! -f "$current_library" ]]; then
+        echo "refusing to overwrite a partial external Korri configuration" >&2
+        exit 1
+      fi
+      current_documents="$(cat "$current_config" "$current_library" | sha256sum | cut -d' ' -f1)"
+      if [[ -f "$deployed_documents" ]]; then
+        if [[ "$current_documents" != "$(< "$deployed_documents")" ]]; then
+          echo "refusing to overwrite externally edited Korri configuration" >&2
+          exit 1
+        fi
+      elif [[ "$current_documents" != "$candidate_documents" ]]; then
+        echo "refusing to replace untracked Korri configuration" >&2
+        exit 1
+      fi
+    fi
     profile="$HOME/.local/state/korrid/profiles/$(basename "$package")"
     if [[ ! -e "$profile" ]]; then
       nix profile install --profile "$profile" "$package"
@@ -30,6 +55,18 @@ case "$action" in
     if [[ -f "$HOME/.config/korrid/host.toml" ]]; then
       cp "$HOME/.config/korrid/host.toml" "$previous_config"
       had_previous_config=true
+    fi
+    previous_device_config="$handoff/config.yaml.previous"
+    previous_library="$handoff/library.yaml.previous"
+    had_previous_device_config=false
+    had_previous_library=false
+    if [[ -f "$HOME/.local/share/korri/config.yaml" ]]; then
+      cp "$HOME/.local/share/korri/config.yaml" "$previous_device_config"
+      had_previous_device_config=true
+    fi
+    if [[ -f "$HOME/.local/share/korri/library.yaml" ]]; then
+      cp "$HOME/.local/share/korri/library.yaml" "$previous_library"
+      had_previous_library=true
     fi
     previous_unit="$handoff/korrid.service.previous"
     had_previous_unit=false
@@ -51,6 +88,16 @@ case "$action" in
         install -m 0644 "$previous_config" "$HOME/.config/korrid/host.toml"
       else
         rm -f "$HOME/.config/korrid/host.toml"
+      fi
+      if [[ "$had_previous_device_config" == true ]]; then
+        install -m 0644 "$previous_device_config" "$HOME/.local/share/korri/config.yaml"
+      else
+        rm -f "$HOME/.local/share/korri/config.yaml"
+      fi
+      if [[ "$had_previous_library" == true ]]; then
+        install -m 0644 "$previous_library" "$HOME/.local/share/korri/library.yaml"
+      else
+        rm -f "$HOME/.local/share/korri/library.yaml"
       fi
       if [[ "$had_previous_unit" == true ]]; then
         install -m 0644 "$previous_unit" "$HOME/.config/systemd/user/korrid.service"
@@ -75,6 +122,10 @@ case "$action" in
       "$HOME/.config/systemd/user/korrid.service"
     install -m 0644 "$handoff/host.toml" \
       "$HOME/.config/korrid/host.toml"
+    install -m 0644 "$handoff/config.yaml" \
+      "$HOME/.local/share/korri/config.yaml"
+    install -m 0644 "$handoff/library.yaml" \
+      "$HOME/.local/share/korri/library.yaml"
     install -m 0755 "$handoff/zao-remote.sh" \
       "$HOME/.local/libexec/korrid-deploy"
     systemctl --user daemon-reload
@@ -88,6 +139,8 @@ case "$action" in
         -H 'content-type: application/json' \
         -d '{"_tag":"app.catalog.snapshot","payload":{}}')" && \
         [[ "$response" == *'"id":"neverball"'* ]] && \
+        [[ "$response" == *'"id":"wl4"'* ]] && \
+        [[ "$response" == *'"title":"Wario Land 4"'* ]] && \
         [[ "$response" == *'"host":"zao"'* ]]; then
         healthy=true
         break
@@ -95,10 +148,12 @@ case "$action" in
       sleep 0.25
     done
     if [[ "$healthy" != true ]]; then
-      echo "candidate korrid did not serve the expected Neverball catalog" >&2
+      echo "candidate korrid did not serve the expected Neverball and Wario Land 4 catalog" >&2
       false
     fi
 
+    printf '%s\n' "$candidate_documents" > "$deployed_documents.next"
+    mv -f "$deployed_documents.next" "$deployed_documents"
     printf '%s\n' "$revision" > "$HOME/.local/state/korrid/deployed-revision"
     trap - ERR
     ;;
