@@ -9,6 +9,7 @@ import {
   shiftHomeGamesFromCatalog,
   ShiftSurface,
 } from "../src/ShiftSurface"
+import { shiftPartPreviews } from "../src/preview"
 
 const model = (overrides: Partial<SurfaceModel> = {}): SurfaceModel => ({
   ...fixtureModel,
@@ -507,5 +508,16 @@ describe("Shift settings", () => {
 
     expect(screen.getByRole("button", { name: "Library" })).toBeDefined()
     expect(host.calls).toEqual([])
+  })
+
+  test("publishes every currently rendered design part as a preview", () => {
+    expect(shiftPartPreviews).toHaveLength(49)
+    expect(shiftPartPreviews.map(part => part.id)).toContain("shift.clock")
+    expect(shiftPartPreviews.map(part => part.id)).toContain(
+      "shift.library-tile",
+    )
+    expect(new Set(shiftPartPreviews.map(part => part.id)).size).toBe(
+      shiftPartPreviews.length,
+    )
   })
 })
