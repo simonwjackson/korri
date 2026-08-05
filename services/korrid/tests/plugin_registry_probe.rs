@@ -54,13 +54,15 @@ const RETROARCH_ENABLED_REPORT: &str = concat!(
     "plugin: @korri:retroarch\n",
     "registered: yes\n",
     "enabled: yes\n",
-    "registered-session-control: none\n",
+    "registered-session-control: @korri:retroarch/open-menu\n",
+    "registered-session-control: @korri:retroarch/quit\n",
     "provider: @korri:retroarch\n",
     "system: none\n",
     "launcher: @korri:retroarch/retroarch\n",
     "transport: none\n",
     "runtime: none\n",
-    "session-control: none\n",
+    "session-control: @korri:retroarch/open-menu\n",
+    "session-control: @korri:retroarch/quit\n",
 );
 
 const SESSION_CONTROL_PLUGIN: &str = r#"

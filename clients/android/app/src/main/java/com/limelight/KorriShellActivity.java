@@ -490,6 +490,11 @@ public class KorriShellActivity extends AppCompatActivity {
                 }
             }
             KorriLocalLaunchSpec.applyTaskPolicy(spec, intent);
+            if (!spec.isAndroidApp
+                    && !KorridServer.attachRetroarchControlAuthority(specJson, intent)) {
+                return launchFailed(
+                        "InvalidSpec", "RetroArch control authority could not be attached");
+            }
 
             boolean hasProvisioning = !spec.directories.isEmpty() || !spec.files.isEmpty();
             if (hasProvisioning

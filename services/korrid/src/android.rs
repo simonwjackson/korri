@@ -5,11 +5,12 @@ use crate::{
     active_android_launch, authorize_moonlight_launch_spec, authorize_platform_instruction,
     clear_active_android_launch, clear_moonlight_executor_state, korrid_version,
     local_server_capability, publish_local_active_launch, publish_moonlight_active_launch,
-    publish_moonlight_executor_state, start_embedded_android_server, stop_local_server,
-    verify_local_launch_spec, MoonlightLaunchAuthorization,
+    publish_moonlight_executor_state, retroarch_control_token_for_verified_launch,
+    start_embedded_android_server, stop_local_server, verify_local_launch_spec,
+    MoonlightLaunchAuthorization,
 };
 use jni::{
-    objects::{JClass, JString},
+    objects::{JClass, JObject, JString, JValue},
     sys::{jboolean, jint, jstring},
     JNIEnv,
 };
@@ -123,6 +124,39 @@ pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_verifyLa
         }
     };
     verify_local_launch_spec(&spec_json).into()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_attachRetroarchControlAuthority(
+    mut env: JNIEnv,
+    _class: JClass,
+    spec_json: JString,
+    intent: JObject,
+) -> jboolean {
+    let spec_json: String = match env.get_string(&spec_json) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error.to_string());
+            return 0;
+        }
+    };
+    let Some(token) = retroarch_control_token_for_verified_launch(&spec_json) else {
+        return 0;
+    };
+    let Ok(key) = env.new_string("KORRI_CONTROL_TOKEN") else {
+        return 0;
+    };
+    let Ok(value) = env.new_string(token) else {
+        return 0;
+    };
+    env.call_method(
+        intent,
+        "putExtra",
+        "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;",
+        &[JValue::Object(&key), JValue::Object(&value)],
+    )
+    .is_ok()
+    .into()
 }
 
 #[no_mangle]

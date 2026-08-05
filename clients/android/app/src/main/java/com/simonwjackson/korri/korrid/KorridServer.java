@@ -1,5 +1,6 @@
 package com.simonwjackson.korri.korrid;
 
+import android.content.Intent;
 import android.util.Log;
 
 /**
@@ -22,6 +23,9 @@ public final class KorridServer {
     public static native String authorizeMoonlightLaunchSpec(String specJson);
     /** Consumes the latest untampered local reservation before Android starts it. */
     public static native boolean verifyLaunchSpec(String specJson);
+    /** Adds launch-bound RetroArch authority without exposing it as a Java/JS string. */
+    public static native boolean attachRetroarchControlAuthority(
+            String specJson, Intent intent);
     /** Verify the signed local handoff and publish its launch context. */
     public static native String publishLocalActiveLaunch(String specJson);
     /** Verify the signed Moonlight handoff; Java supplies its own Game component. */

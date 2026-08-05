@@ -7,8 +7,7 @@ use typeshare::typeshare;
 use crate::{GameIdentity, SessionControlValue};
 
 type HmacSha256 = Hmac<Sha256>;
-const RETROARCH_CONTROL_TOKEN: &str = "KORRI_CONTROL_TOKEN";
-const RETROARCH_CONTROL_CONTEXT: &[u8] = b"korri-retroarch-control-v1";
+const RETROARCH_CONTROL_CONTEXT: &[u8] = b"korri-retroarch-control-v2";
 
 fn deserialize_optional_non_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
@@ -209,16 +208,17 @@ impl LaunchSpec {
         self
     }
 
-    pub(crate) fn sign(mut self, key: &[u8]) -> Self {
-        if self.launcher_id == "retroarch" {
-            let mut control_mac =
-                HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
-            control_mac.update(RETROARCH_CONTROL_CONTEXT);
-            self.extras.insert(
-                RETROARCH_CONTROL_TOKEN.into(),
-                hex::encode(control_mac.finalize().into_bytes()),
-            );
+    pub(crate) fn retroarch_control_token(&self, key: &[u8]) -> Option<String> {
+        if self.launcher_id != "retroarch" || self.launch_id.is_empty() {
+            return None;
         }
+        let mut control_mac = HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
+        control_mac.update(RETROARCH_CONTROL_CONTEXT);
+        control_mac.update(self.launch_id.as_bytes());
+        Some(hex::encode(control_mac.finalize().into_bytes()))
+    }
+
+    pub(crate) fn sign(mut self, key: &[u8]) -> Self {
         let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
         mac.update(&self.signing_bytes());
         self.integrity = hex::encode(mac.finalize().into_bytes());
@@ -1010,18 +1010,19 @@ mod tests {
         let key = b"private per-server key";
         let signed = spec().sign(key);
         assert!(signed.verify(key));
-        let control_token = signed
-            .extras
-            .get("KORRI_CONTROL_TOKEN")
-            .expect("signed RetroArch spec has a control token");
+        assert!(!signed.extras.contains_key("KORRI_CONTROL_TOKEN"));
+        let control_token = signed.retroarch_control_token(key).unwrap();
         assert_eq!(control_token.len(), 64);
         assert_ne!(
             control_token,
-            spec()
-                .sign(b"another server key")
-                .extras
-                .get("KORRI_CONTROL_TOKEN")
+            signed
+                .retroarch_control_token(b"another server key")
                 .unwrap()
+        );
+        let replacement = spec().with_launch_id("launch-2".into()).sign(key);
+        assert_ne!(
+            control_token,
+            replacement.retroarch_control_token(key).unwrap()
         );
 
         let mut tampered_content = signed.clone();

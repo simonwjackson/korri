@@ -237,9 +237,7 @@ enum SessionControlIntegration {
 impl SessionControlEffect {
     fn integration(self) -> SessionControlIntegration {
         match self {
-            Self::RetroarchOpenMenu | Self::RetroarchQuit => {
-                SessionControlIntegration::Retroarch
-            }
+            Self::RetroarchOpenMenu | Self::RetroarchQuit => SessionControlIntegration::Retroarch,
             Self::MoonlightDisconnect
             | Self::MoonlightQuitHost
             | Self::MoonlightToggleKeyboard
@@ -265,6 +263,17 @@ impl SessionControlEffect {
         match self.integration() {
             SessionControlIntegration::Moonlight => SessionControlExecutor::AndroidMoonlight,
             SessionControlIntegration::Retroarch => SessionControlExecutor::RetroarchControl,
+        }
+    }
+
+    pub(crate) fn retroarch_control_command(
+        self,
+    ) -> Option<crate::launcher::retroarch_control::RetroarchControlCommand> {
+        use crate::launcher::retroarch_control::RetroarchControlCommand as Command;
+        match self {
+            Self::RetroarchOpenMenu => Some(Command::ShowMenu),
+            Self::RetroarchQuit => Some(Command::Quit),
+            _ => None,
         }
     }
 

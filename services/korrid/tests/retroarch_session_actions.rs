@@ -12,9 +12,7 @@ fn controls(enabled: bool) -> Vec<korrid::plugin::SessionControlRecord> {
     let plugin = load_plugin_source(RETROARCH_PLUGIN).expect("canonical RetroArch declaration");
     let registry = PluginRegistry::new(
         vec![plugin],
-        enabled
-            .then(|| "@korri:retroarch".to_owned())
-            .into_iter(),
+        enabled.then(|| "@korri:retroarch".to_owned()).into_iter(),
     )
     .expect("RetroArch registry");
     resolve_session_controls(
@@ -54,13 +52,7 @@ fn canonical_retroarch_declares_ordered_menu_and_truthful_quit_controls() {
                 false,
                 true,
             ),
-            (
-                "@korri:retroarch/quit",
-                "Quit game",
-                1,
-                true,
-                true,
-            ),
+            ("@korri:retroarch/quit", "Quit game", 1, true, true,),
         ]
     );
 }

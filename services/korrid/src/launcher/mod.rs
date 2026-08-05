@@ -1,6 +1,7 @@
 mod android_app;
 pub(crate) mod linux_retroarch;
 mod retroarch;
+pub mod retroarch_control;
 mod types;
 
 use crate::{
@@ -172,8 +173,7 @@ fn local_launch_context(route: &ResolvedRoute) -> LaunchContext {
         contributors,
         executor: (route.launcher_kind == "@korri:retroarch").then(|| LaunchExecutor {
             id: "retroarch-control".into(),
-            // U7 proves and enables the authenticated command executor.
-            available: false,
+            available: true,
         }),
         foreground,
     }
