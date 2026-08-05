@@ -306,6 +306,36 @@ public class KorriOverlayServiceTest {
     }
 
     @Test
+    public void focusedWindowTranslatesHatAndStickEdgesWithoutSyntheticKeys() {
+        KorriOverlayService.OverlayMotionInput input =
+                new KorriOverlayService.OverlayMotionInput();
+
+        assertEquals(java.util.Arrays.asList("right", "up"),
+                input.directions(7, 1f, -1f, -1f, 1f));
+        assertTrue(input.directions(7, 1f, -1f, 0f, 0f).isEmpty());
+        assertTrue(input.directions(7, 0f, 0f, 0f, 0f).isEmpty());
+        assertEquals(java.util.Collections.singletonList("left"),
+                input.directions(7, 0f, 0f, -0.51f, 0f));
+        assertTrue(input.directions(7, 0f, 0f, -1f, 0f).isEmpty());
+        assertTrue(input.directions(7, 0f, 0f, 0f, 0f).isEmpty());
+        assertEquals(java.util.Collections.singletonList("left"),
+                input.directions(7, 0f, 0f, -1f, 0f));
+    }
+
+    @Test
+    public void focusedWindowMotionEdgesAreIndependentPerController() {
+        KorriOverlayService.OverlayMotionInput input =
+                new KorriOverlayService.OverlayMotionInput();
+        assertEquals(java.util.Collections.singletonList("down"),
+                input.directions(7, 0f, 1f, 0f, 0f));
+        assertEquals(java.util.Collections.singletonList("down"),
+                input.directions(8, 0f, 1f, 0f, 0f));
+        input.reset();
+        assertEquals(java.util.Collections.singletonList("down"),
+                input.directions(7, 0f, 1f, 0f, 0f));
+    }
+
+    @Test
     public void removedOverlayPassesGameplayInputThrough() {
         KorriOverlayService.OverlayInput.Decision decision =
                 new KorriOverlayService.OverlayInput().route(

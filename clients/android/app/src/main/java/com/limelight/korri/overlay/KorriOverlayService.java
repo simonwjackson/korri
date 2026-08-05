@@ -8,7 +8,10 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.InputDevice;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
+import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
@@ -239,6 +242,28 @@ public final class KorriOverlayService extends AccessibilityService {
             if (!bridge.attachTo(web)) {
                 throw new IllegalStateException("WebMessageListener is unavailable");
             }
+            OverlayMotionInput motionInput = new OverlayMotionInput();
+            View.OnGenericMotionListener motionListener = (view, event) -> {
+                if ((event.getSource() & InputDevice.SOURCE_CLASS_JOYSTICK) == 0) {
+                    return false;
+                }
+                for (String direction : motionInput.directions(
+                        event.getDeviceId(),
+                        event.getAxisValue(MotionEvent.AXIS_HAT_X),
+                        event.getAxisValue(MotionEvent.AXIS_HAT_Y),
+                        event.getAxisValue(MotionEvent.AXIS_X),
+                        event.getAxisValue(MotionEvent.AXIS_Y))) {
+                    bridge.sendInput(directionInput(direction));
+                }
+                return true;
+            };
+            root.setOnGenericMotionListener(motionListener);
+            web.setOnGenericMotionListener(motionListener);
+            resources.add(() -> {
+                root.setOnGenericMotionListener(null);
+                web.setOnGenericMotionListener(null);
+                motionInput.reset();
+            });
             web.setWebViewClient(new LockedWebViewClient(assets, bootstrap));
             root.addView(web, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -296,6 +321,18 @@ public final class KorriOverlayService extends AccessibilityService {
     private static String identity(KorriOverlayBridge.Authority authority) {
         if (authority == null) return null;
         return authority.port() + ":" + authority.capability() + ":" + authority.launchId();
+    }
+
+    private static String directionInput(String direction) {
+        try {
+            return new JSONObject()
+                    .put("type", "direction")
+                    .put("direction", direction)
+                    .put("source", "gamepad")
+                    .toString();
+        } catch (Exception impossible) {
+            throw new IllegalStateException(impossible);
+        }
     }
 
     @SuppressWarnings("deprecation")
@@ -540,6 +577,38 @@ public final class KorriOverlayService extends AccessibilityService {
                 window.destroy();
                 window = null;
             }
+        }
+    }
+
+    /** Old-overlay-compatible hat/stick edge translation for the focused window. */
+    public static final class OverlayMotionInput {
+        private final Map<Integer, int[]> edges = new HashMap<>();
+
+        public List<String> directions(
+                int deviceId, float hatX, float hatY, float stickX, float stickY) {
+            float x = hatX;
+            float y = hatY;
+            if (Math.abs(x) < 0.5f && Math.abs(y) < 0.5f) {
+                x = stickX;
+                y = stickY;
+            }
+            int navX = x > 0.5f ? 1 : (x < -0.5f ? -1 : 0);
+            int navY = y > 0.5f ? 1 : (y < -0.5f ? -1 : 0);
+            int[] prior = edges.computeIfAbsent(deviceId, ignored -> new int[] { 0, 0 });
+            List<String> directions = new ArrayList<>(2);
+            if (navX != prior[0] && navX != 0) {
+                directions.add(navX > 0 ? "right" : "left");
+            }
+            if (navY != prior[1] && navY != 0) {
+                directions.add(navY > 0 ? "down" : "up");
+            }
+            prior[0] = navX;
+            prior[1] = navY;
+            return directions;
+        }
+
+        public void reset() {
+            edges.clear();
         }
     }
 
