@@ -1,5 +1,15 @@
 # Android SDK/NDK composition shared by devshells and Nix tasks.
-{ pkgs }:
+{
+  pkgs,
+  platformVersions ? [
+    "36"
+    "34"
+  ],
+  includeEmulator ? false,
+  includeSystemImages ? false,
+  systemImageTypes ? [ "google_apis" ],
+  abiVersions ? [ "x86_64" ],
+}:
 let
   buildToolsVersion = "35.0.0";
   ndkVersion = "27.0.12077973";
@@ -9,13 +19,8 @@ let
       buildToolsVersion
       "34.0.0"
     ];
-    platformVersions = [
-      "36"
-      "34"
-    ];
+    inherit platformVersions includeEmulator includeSystemImages systemImageTypes abiVersions;
     ndkVersions = [ ndkVersion ];
-    includeEmulator = false;
-    includeSystemImages = false;
     includeSources = false;
     includeNDK = true;
     cmakeVersions = [ "3.22.1" ];

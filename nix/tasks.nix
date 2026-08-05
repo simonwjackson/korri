@@ -4,9 +4,20 @@
 let
   proseqlSource = import ../services/korrid/proseql-source.nix { inherit pkgs proseql; };
   android = import ../clients/android/sdk.nix { inherit pkgs; };
+  androidBridgeEmulator = import ../clients/android/sdk.nix {
+    inherit pkgs;
+    platformVersions = [ "34" ];
+    includeEmulator = true;
+    includeSystemImages = true;
+    systemImageTypes = [ "google_apis" ];
+    abiVersions = [ "x86_64" ];
+  };
 
   rustToolchain = pkgs.rust-bin.stable.latest.default.override {
     targets = [ "aarch64-linux-android" ];
+  };
+  androidBridgeRustToolchain = pkgs.rust-bin.stable.latest.default.override {
+    targets = [ "x86_64-linux-android" ];
   };
 
   retroarch = import ../plugins/retroarch/android/sdk.nix { inherit pkgs; };
@@ -32,6 +43,28 @@ let
     # shellcheck source=/dev/null
     source "$KORRI_ROOT/nix/android-sdk-env.sh"
   '';
+  androidBridgeInputs = androidInputs ++ [
+    androidBridgeEmulator.androidSdk
+    androidBridgeRustToolchain
+    pkgs.android-tools
+    pkgs.bun
+    pkgs.cargo-ndk
+    pkgs.clang
+    pkgs.gawk
+    pkgs.gnugrep
+    pkgs.gnused
+    pkgs.llvmPackages.libclang
+  ];
+  androidBridgeEnv = androidEnv // {
+    ANDROID_NDK_HOME = android.ndkRoot;
+    ANDROID_NDK_ROOT = android.ndkRoot;
+    BINDGEN_EXTRA_CLANG_ARGS = "--target=x86_64-linux-android21 --sysroot=${android.ndkRoot}/toolchains/llvm/prebuilt/linux-x86_64/sysroot";
+    BINDGEN_EXTRA_CLANG_ARGS_x86_64_linux_android = "--target=x86_64-linux-android21 --sysroot=${android.ndkRoot}/toolchains/llvm/prebuilt/linux-x86_64/sysroot";
+    CC_x86_64_unknown_linux_gnu = "${pkgs.clang}/bin/clang";
+    HOST_CC = "${pkgs.clang}/bin/clang";
+    KORRI_EMULATOR_NIX_SDK = androidBridgeEmulator.sdkRoot;
+    LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+  };
 
   retroarchInputs = [
     retroarch.jdk
@@ -127,6 +160,17 @@ let
         ${androidSetup}
         cd "$KORRI_ROOT/clients/android"
         exec ./gradlew testDebugUnitTest "$@"
+      '';
+    };
+
+    android-bridge-contract-check = {
+      description = "Run the native bridge contract check in an isolated API 34 x86_64 emulator.";
+      runtimeInputs = androidBridgeInputs;
+      env = androidBridgeEnv;
+      script = ''
+        ${androidSetup}
+        export CARGO_TARGET_DIR="$KORRI_ROOT/.cache/korrid-target"
+        exec "$KORRI_ROOT/clients/android/bridge-contract-check.sh" "$@"
       '';
     };
 
