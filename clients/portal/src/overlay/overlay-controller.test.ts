@@ -172,15 +172,22 @@ describe("overlay controller", () => {
   })
 
   test("dismisses locally for Resume and after a dismissing success", async () => {
+    const localPlatform = recordingPlatform()
+    const local = createOverlayController({
+      launchId: LAUNCH_A,
+      korrid: recordingKorrid(),
+      platform: localPlatform,
+    })
+    local.dismiss()
+    expect(localPlatform.calls).toEqual(["dismiss"])
+
     const platform = recordingPlatform()
     const korrid = recordingKorrid()
     const controller = createOverlayController({ launchId: LAUNCH_A, korrid, platform })
     await controller.refresh()
-
-    controller.dismiss()
     await controller.invoke("keyboard")
 
-    expect(platform.calls).toEqual(["dismiss", "dismiss"])
+    expect(platform.calls).toEqual(["dismiss"])
     expect(korrid.calls).toEqual([
       `list:${LAUNCH_A}`,
       `invoke:${LAUNCH_A}:keyboard`,
@@ -266,6 +273,156 @@ describe("overlay controller", () => {
     })
     controller.dismiss()
     expect(platform.calls).toEqual(["refresh-authority", "dismiss"])
+  })
+
+  test("deduplicates an in-flight command invocation", async () => {
+    const result = deferred<SessionControlInvokeOutcome>()
+    const korrid = recordingKorrid()
+    let invokes = 0
+    korrid.invokeSessionControl = async () => {
+      invokes += 1
+      return result.promise
+    }
+    const controller = createOverlayController({
+      launchId: LAUNCH_A,
+      korrid,
+      platform: recordingPlatform(),
+    })
+    await controller.refresh()
+
+    const first = controller.invoke("keyboard")
+    const duplicate = controller.invoke("keyboard")
+    expect(invokes).toBe(1)
+    result.resolve({
+      _tag: "Ok",
+      payload: { _tag: "Completed", payload: { launchId: LAUNCH_A } },
+    })
+    await Promise.all([first, duplicate])
+
+    expect(invokes).toBe(1)
+  })
+
+  test("serializes value updates and coalesces each control to its latest value", async () => {
+    const firstResult = deferred<SessionControlInvokeOutcome>()
+    const korrid = recordingKorrid()
+    const values: SurfaceGameplayControlValue[] = []
+    let active = 0
+    let maximumActive = 0
+    korrid.invokeSessionControl = async (_launchId, _controlId, value) => {
+      values.push(value!)
+      active += 1
+      maximumActive = Math.max(maximumActive, active)
+      const outcome = values.length === 1
+        ? await firstResult.promise
+        : { _tag: "Ok" as const, payload: {
+            _tag: "Completed" as const,
+            payload: { launchId: LAUNCH_A },
+          } }
+      active -= 1
+      return outcome
+    }
+    const controller = createOverlayController({
+      launchId: LAUNCH_A,
+      korrid,
+      platform: recordingPlatform(),
+    })
+    await controller.refresh()
+
+    const first = controller.invoke("fill", { kind: "toggle", value: true })
+    const superseded = controller.invoke("fill", { kind: "toggle", value: false })
+    const latest = controller.invoke("fill", { kind: "toggle", value: true })
+    expect(values).toEqual([{ kind: "toggle", value: true }])
+    firstResult.resolve({
+      _tag: "Ok",
+      payload: { _tag: "Completed", payload: { launchId: LAUNCH_A } },
+    })
+    await Promise.all([first, superseded, latest])
+
+    expect(values).toEqual([
+      { kind: "toggle", value: true },
+      { kind: "toggle", value: true },
+    ])
+    expect(maximumActive).toBe(1)
+  })
+
+  test("requests automatic authority refresh at most once until authority changes", async () => {
+    const korrid = recordingKorrid({
+      listed: [{
+        _tag: "Err",
+        payload: {
+          reason: SessionControlFailureReason.Unavailable,
+          message: "offline",
+        },
+      }],
+    })
+    const platform = recordingPlatform()
+    const controller = createOverlayController({ launchId: LAUNCH_A, korrid, platform })
+
+    await controller.refresh()
+    await controller.refresh()
+    expect(platform.calls).toEqual(["refresh-authority"])
+    expect(controller.model().status).toMatchObject({ _tag: "Problem", canRetry: true })
+
+    controller.replaceAuthority(LAUNCH_B, recordingKorrid({
+      listed: [{
+        _tag: "Err",
+        payload: {
+          reason: SessionControlFailureReason.Unavailable,
+          message: "offline",
+        },
+      }],
+    }))
+    await controller.refresh()
+    expect(platform.calls).toEqual(["refresh-authority", "refresh-authority"])
+  })
+
+  test("a newer same-authority operation wins over an older refresh", async () => {
+    const oldList = deferred<SessionControlsOutcome>()
+    const korrid = recordingKorrid({
+      listed: [{ _tag: "Ok", payload: controls(LAUNCH_A, true) }],
+    })
+    let calls = 0
+    korrid.sessionControls = () => calls++ === 0
+      ? oldList.promise
+      : Promise.resolve({ _tag: "Ok", payload: controls(LAUNCH_A, true) })
+    const controller = createOverlayController({
+      launchId: LAUNCH_A,
+      korrid,
+      platform: recordingPlatform(),
+    })
+
+    const old = controller.refresh()
+    await controller.refresh()
+    oldList.resolve({ _tag: "Ok", payload: controls(LAUNCH_A, false) })
+    await old
+
+    expect(controller.model().presentation).toMatchObject({
+      groups: [{ controls: [{ id: "keyboard" }, { interaction: { value: true } }] }],
+    })
+  })
+
+  test("successful dismiss drops queued value updates", async () => {
+    const firstResult = deferred<SessionControlInvokeOutcome>()
+    const korrid = recordingKorrid()
+    let invokes = 0
+    korrid.invokeSessionControl = async () => {
+      invokes += 1
+      return firstResult.promise
+    }
+    const platform = recordingPlatform()
+    const controller = createOverlayController({ launchId: LAUNCH_A, korrid, platform })
+    await controller.refresh()
+
+    const first = controller.invoke("keyboard")
+    const duplicate = controller.invoke("keyboard")
+    firstResult.resolve({
+      _tag: "Ok",
+      payload: { _tag: "Completed", payload: { launchId: LAUNCH_A } },
+    })
+    await Promise.all([first, duplicate])
+
+    expect(invokes).toBe(1)
+    expect(platform.calls).toEqual(["dismiss"])
   })
 
   test("requests narrow native execution for the exact protected instruction", async () => {

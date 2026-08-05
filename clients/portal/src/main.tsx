@@ -21,6 +21,7 @@ import {
 } from "./korrid/client"
 import { createInMemoryOverlayController } from "./overlay/in-memory-overlay-controller"
 import { createOverlayController } from "./overlay/overlay-controller"
+import { createNativeOverlayHost } from "./overlay/overlay-host"
 import { createNativeOverlayConnection } from "./overlay/overlay-native"
 import { OverlayRoot } from "./overlay/OverlayRoot"
 import { createSessionLifecycleAdapter } from "./session/lifecycle-adapter"
@@ -66,22 +67,26 @@ if (isSessionScreen) {
   createSpatialFocusController(bus)
   if (window.KorriOverlay) {
     const connection = createNativeOverlayConnection(window.KorriOverlay, bus)
-    connection.start(config => {
-      const korrid = createHttpKorridClient(
-        `http://127.0.0.1:${config.korridPort}`,
-        config.korridCapability,
-      )
-      root.render(
-        <OverlayRoot
-          key={`${config.korridPort}:${config.korridCapability}:${config.launchId}`}
-          bus={bus}
-          controller={createOverlayController({
-            launchId: config.launchId,
-            korrid,
-            platform: connection.platform,
-          })}
-        />,
-      )
+    createNativeOverlayHost({
+      connection,
+      page: window,
+      createController(config) {
+        const korrid = createHttpKorridClient(
+          `http://127.0.0.1:${config.korridPort}`,
+          config.korridCapability,
+        )
+        return createOverlayController({
+          launchId: config.launchId,
+          korrid,
+          platform: connection.platform,
+        })
+      },
+      mount(controller) {
+        root.render(<OverlayRoot bus={bus} controller={controller} />)
+      },
+      unmount() {
+        root.unmount()
+      },
     })
   } else {
     bus.use(createKeyboardAdapter())

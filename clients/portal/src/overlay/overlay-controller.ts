@@ -144,11 +144,31 @@ export function createOverlayController({
   let korrid = initialKorrid
   let currentModel = initialModel()
   let generation = 0
+  let operationEpoch = 0
+  let authorityRefreshGeneration = -1
+  let accepting = true
   let destroyed = false
   const listeners = new Set<() => void>()
+  const commandFlights = new Map<string, Promise<void>>()
+  type ValueRequest = {
+    readonly value: SurfaceGameplayControlValue
+    readonly generation: number
+    readonly epoch: number
+    readonly resolve: readonly (() => void)[]
+  }
+  type ValueQueue = { running: boolean; pending?: ValueRequest }
+  const valueQueues = new Map<string, ValueQueue>()
 
-  const publish = (next: SurfaceModel, expectedGeneration: number) => {
-    if (destroyed || expectedGeneration !== generation) return false
+  const current = (expectedGeneration: number, expectedEpoch: number) =>
+    !destroyed && accepting && expectedGeneration === generation &&
+    expectedEpoch === operationEpoch
+
+  const publish = (
+    next: SurfaceModel,
+    expectedGeneration: number,
+    expectedEpoch: number,
+  ) => {
+    if (!current(expectedGeneration, expectedEpoch)) return false
     currentModel = next
     for (const listener of [...listeners]) listener()
     return true
@@ -157,21 +177,33 @@ export function createOverlayController({
   const fail = (
     reason: string,
     expectedGeneration: number,
+    expectedEpoch: number,
     refreshAuthority: boolean,
   ) => {
-    if (!publish(unavailableModel(currentModel, reason), expectedGeneration)) return
-    if (refreshAuthority) platform.requestAuthorityRefresh()
+    if (!publish(
+      unavailableModel(currentModel, reason),
+      expectedGeneration,
+      expectedEpoch,
+    )) return
+    if (refreshAuthority && authorityRefreshGeneration !== expectedGeneration) {
+      authorityRefreshGeneration = expectedGeneration
+      platform.requestAuthorityRefresh()
+    }
   }
 
-  const refresh = async () => {
-    const expectedGeneration = generation
-    const expectedLaunchId = launchId
-    const outcome = await korrid.sessionControls(expectedLaunchId)
-    if (destroyed || generation !== expectedGeneration) return
+  const load = async (
+    expectedGeneration: number,
+    expectedEpoch: number,
+    expectedLaunchId: string,
+    expectedKorrid: KorridClient,
+  ) => {
+    const outcome = await expectedKorrid.sessionControls(expectedLaunchId)
+    if (!current(expectedGeneration, expectedEpoch)) return
     if (outcome._tag === "Err") {
       fail(
         failureCopy(outcome.payload),
         expectedGeneration,
+        expectedEpoch,
         outcome.payload.reason === SessionControlFailureReason.StaleSession ||
           outcome.payload.reason === SessionControlFailureReason.Unavailable,
       )
@@ -181,6 +213,7 @@ export function createOverlayController({
       fail(
         "The gameplay session changed. Resume still works.",
         expectedGeneration,
+        expectedEpoch,
         true,
       )
       return
@@ -192,28 +225,52 @@ export function createOverlayController({
         status: { _tag: "Browsing" },
       },
       expectedGeneration,
+      expectedEpoch,
     )
   }
 
-  const invoke = async (
-    controlId: string,
-    value?: SurfaceGameplayControlValue,
-  ) => {
-    if (currentModel.presentation.kind !== "gameplay-overlay") return
-    const control = controlFrom(currentModel.presentation, controlId)
-    if (!control || !control.enabled || control.id === "overlay:resume") return
+  const refresh = async () => {
+    if (destroyed || !accepting) return
     const expectedGeneration = generation
-    const expectedLaunchId = launchId
-    const outcome = await korrid.invokeSessionControl(
+    const expectedEpoch = ++operationEpoch
+    await load(expectedGeneration, expectedEpoch, launchId, korrid)
+  }
+
+  const clearPending = () => {
+    operationEpoch += 1
+    for (const queue of valueQueues.values()) {
+      for (const resolve of queue.pending?.resolve ?? []) resolve()
+      queue.pending = undefined
+    }
+    valueQueues.clear()
+  }
+
+  const dismiss = () => {
+    if (destroyed || !accepting) return
+    accepting = false
+    clearPending()
+    platform.dismiss()
+  }
+
+  const execute = async (
+    control: SurfaceGameplayControl,
+    value: SurfaceGameplayControlValue | undefined,
+    expectedGeneration: number,
+    expectedEpoch: number,
+    expectedLaunchId: string,
+    expectedKorrid: KorridClient,
+  ) => {
+    const outcome = await expectedKorrid.invokeSessionControl(
       expectedLaunchId,
-      controlId,
+      control.id,
       generatedValue(value),
     )
-    if (destroyed || generation !== expectedGeneration) return
+    if (destroyed || !accepting || generation !== expectedGeneration) return
     if (outcome._tag === "Err") {
       fail(
         failureCopy(outcome.payload),
         expectedGeneration,
+        expectedEpoch,
         outcome.payload.reason === SessionControlFailureReason.StaleSession ||
           outcome.payload.reason === SessionControlFailureReason.Unavailable,
       )
@@ -224,15 +281,103 @@ export function createOverlayController({
       const execution = await platform.executeProtectedInstruction(
         outcome.payload.payload,
       )
-      if (destroyed || generation !== expectedGeneration) return
+      if (destroyed || !accepting || generation !== expectedGeneration) return
       if (execution._tag !== "Executed") {
-        fail(execution.message, expectedGeneration, execution._tag === "Rejected")
+        fail(
+          execution.message,
+          expectedGeneration,
+          expectedEpoch,
+          execution._tag === "Rejected",
+        )
         return
       }
     }
 
-    if (control.dismissOnSuccess) platform.dismiss()
-    else await refresh()
+    if (control.dismissOnSuccess) dismiss()
+    else if (current(expectedGeneration, expectedEpoch)) {
+      await load(
+        expectedGeneration,
+        expectedEpoch,
+        expectedLaunchId,
+        expectedKorrid,
+      )
+    }
+  }
+
+  const runValueQueue = async (controlId: string, queue: ValueQueue) => {
+    if (queue.running) return
+    queue.running = true
+    while (!destroyed && accepting && queue.pending) {
+      const request = queue.pending
+      queue.pending = undefined
+      const control = currentModel.presentation.kind === "gameplay-overlay"
+        ? controlFrom(currentModel.presentation, controlId)
+        : undefined
+      if (control?.enabled && control.id !== "overlay:resume") {
+        await execute(
+          control,
+          request.value,
+          request.generation,
+          request.epoch,
+          launchId,
+          korrid,
+        )
+      }
+      for (const resolve of request.resolve) resolve()
+    }
+    queue.running = false
+    if (!queue.pending) valueQueues.delete(controlId)
+  }
+
+  const invoke = (
+    controlId: string,
+    value?: SurfaceGameplayControlValue,
+  ): Promise<void> => {
+    if (destroyed || !accepting || currentModel.presentation.kind !== "gameplay-overlay") {
+      return Promise.resolve()
+    }
+    const control = controlFrom(currentModel.presentation, controlId)
+    if (!control || !control.enabled || control.id === "overlay:resume") {
+      return Promise.resolve()
+    }
+    if (value === undefined) {
+      const existing = commandFlights.get(controlId)
+      if (existing) return existing
+      const expectedGeneration = generation
+      const expectedEpoch = ++operationEpoch
+      const expectedLaunchId = launchId
+      const expectedKorrid = korrid
+      const flight = execute(
+        control,
+        undefined,
+        expectedGeneration,
+        expectedEpoch,
+        expectedLaunchId,
+        expectedKorrid,
+      ).finally(() => {
+        if (commandFlights.get(controlId) === flight) commandFlights.delete(controlId)
+      })
+      commandFlights.set(controlId, flight)
+      return flight
+    }
+
+    const expectedGeneration = generation
+    const expectedEpoch = ++operationEpoch
+    let queue = valueQueues.get(controlId)
+    if (!queue) {
+      queue = { running: false }
+      valueQueues.set(controlId, queue)
+    }
+    return new Promise(resolve => {
+      const prior = queue?.pending
+      queue!.pending = {
+        value,
+        generation: expectedGeneration,
+        epoch: expectedEpoch,
+        resolve: [...(prior?.resolve ?? []), resolve],
+      }
+      void runValueQueue(controlId, queue!)
+    })
   }
 
   return {
@@ -243,16 +388,22 @@ export function createOverlayController({
     },
     refresh,
     invoke,
-    dismiss: () => platform.dismiss(),
+    dismiss,
     replaceAuthority(nextLaunchId, nextKorrid) {
+      clearPending()
       generation += 1
+      authorityRefreshGeneration = -1
+      accepting = true
       launchId = nextLaunchId
       korrid = nextKorrid
       currentModel = initialModel()
       for (const listener of [...listeners]) listener()
     },
     destroy() {
+      if (destroyed) return
       destroyed = true
+      accepting = false
+      clearPending()
       generation += 1
       listeners.clear()
     },
