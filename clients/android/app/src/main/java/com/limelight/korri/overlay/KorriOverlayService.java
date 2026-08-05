@@ -101,8 +101,9 @@ public final class KorriOverlayService extends AccessibilityService {
         }
 
         OverlayInput.Decision decision = overlayInput.route(
-                event.getDeviceId(), event.getKeyCode(), event.getAction(),
-                event.getRepeatCount(), state.isShowing(), event.isCanceled());
+                event.getDeviceId(), event.getKeyCode(), event.getSource(),
+                event.getAction(), event.getRepeatCount(),
+                state.isShowing(), event.isCanceled());
         if (!decision.consumed()) return false;
         if (decision.inputJson() != null && windowController != null) {
             windowController.sendInput(decision.inputJson());
@@ -745,12 +746,31 @@ public final class KorriOverlayService extends AccessibilityService {
         public Decision route(
                 int deviceId,
                 int keyCode,
+                int source,
                 int action,
                 int repeatCount,
                 boolean showing,
                 boolean canceled) {
             if (destroyed) return new Decision(false, null, false);
-            String type;
+
+            OwnedKey key = new OwnedKey(deviceId, keyCode);
+            boolean isOwned = owned.contains(key);
+            if (canceled || action == KeyEvent.ACTION_UP) {
+                if (isOwned) owned.remove(key);
+                return new Decision(isOwned, null, false);
+            }
+            if (action != KeyEvent.ACTION_DOWN) {
+                return new Decision(isOwned, null, false);
+            }
+            if (!isOwned) {
+                if (!showing || repeatCount != 0 || !isGameplaySource(source)
+                        || isAndroidReservedKey(keyCode)) {
+                    return new Decision(false, null, false);
+                }
+                owned.add(key);
+            }
+
+            String type = null;
             String direction = null;
             switch (keyCode) {
                 case KeyEvent.KEYCODE_DPAD_UP:
@@ -785,22 +805,9 @@ public final class KorriOverlayService extends AccessibilityService {
                     type = "options";
                     break;
                 default:
-                    return new Decision(false, null, false);
+                    break;
             }
-
-            OwnedKey key = new OwnedKey(deviceId, keyCode);
-            boolean isOwned = owned.contains(key);
-            if (canceled || action == KeyEvent.ACTION_UP) {
-                if (isOwned) owned.remove(key);
-                return new Decision(isOwned, null, false);
-            }
-            if (action != KeyEvent.ACTION_DOWN) {
-                return new Decision(isOwned, null, false);
-            }
-            if (!isOwned) {
-                if (!showing || repeatCount != 0) return new Decision(false, null, false);
-                owned.add(key);
-            } else if (repeatCount > 0 && direction == null) {
+            if (type == null || (repeatCount > 0 && direction == null)) {
                 return new Decision(true, null, false);
             }
 
@@ -815,6 +822,40 @@ public final class KorriOverlayService extends AccessibilityService {
                 return new Decision(true, input.toString(), dismiss);
             } catch (Exception error) {
                 return new Decision(true, null, dismiss);
+            }
+        }
+
+        private static boolean isGameplaySource(int source) {
+            return (source & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+                    || (source & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK;
+        }
+
+        private static boolean isAndroidReservedKey(int keyCode) {
+            switch (keyCode) {
+                case KeyEvent.KEYCODE_BUTTON_MODE:
+                case KeyEvent.KEYCODE_HOME:
+                case KeyEvent.KEYCODE_POWER:
+                case KeyEvent.KEYCODE_VOLUME_UP:
+                case KeyEvent.KEYCODE_VOLUME_DOWN:
+                case KeyEvent.KEYCODE_VOLUME_MUTE:
+                case KeyEvent.KEYCODE_MUTE:
+                case KeyEvent.KEYCODE_APP_SWITCH:
+                case KeyEvent.KEYCODE_SYSRQ:
+                case KeyEvent.KEYCODE_SLEEP:
+                case KeyEvent.KEYCODE_WAKEUP:
+                case KeyEvent.KEYCODE_BRIGHTNESS_UP:
+                case KeyEvent.KEYCODE_BRIGHTNESS_DOWN:
+                case KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP:
+                case KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN:
+                case KeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT:
+                case KeyEvent.KEYCODE_SYSTEM_NAVIGATION_RIGHT:
+                case KeyEvent.KEYCODE_SETTINGS:
+                case KeyEvent.KEYCODE_ALL_APPS:
+                case KeyEvent.KEYCODE_ASSIST:
+                case KeyEvent.KEYCODE_VOICE_ASSIST:
+                    return true;
+                default:
+                    return false;
             }
         }
 

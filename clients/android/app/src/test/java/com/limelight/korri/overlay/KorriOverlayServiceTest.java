@@ -301,10 +301,54 @@ public class KorriOverlayServiceTest {
                 "{\"type\":\"options\",\"source\":\"gamepad\"}", false);
 
         KorriOverlayService.OverlayInput.Decision release = input.route(
-                        1, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_UP, 0, true, false);
+                1, KeyEvent.KEYCODE_BUTTON_A, InputDevice.SOURCE_GAMEPAD,
+                KeyEvent.ACTION_UP, 0, true, false);
+
         assertTrue(release.consumed());
         assertNull(release.inputJson());
         assertFalse(release.dismiss());
+    }
+
+    @Test
+    public void gamepadButtonsWithoutOverlaySemanticsAreStillOwnedUntilRelease() {
+        for (int keyCode : new int[] {
+                KeyEvent.KEYCODE_BUTTON_X,
+                KeyEvent.KEYCODE_BUTTON_Y,
+                KeyEvent.KEYCODE_BUTTON_L1,
+                KeyEvent.KEYCODE_BUTTON_R1,
+                KeyEvent.KEYCODE_BUTTON_L2,
+                KeyEvent.KEYCODE_BUTTON_R2,
+                KeyEvent.KEYCODE_BUTTON_THUMBL,
+                KeyEvent.KEYCODE_BUTTON_THUMBR,
+        }) {
+            KorriOverlayService.OverlayInput input = new KorriOverlayService.OverlayInput();
+            KorriOverlayService.OverlayInput.Decision down = input.route(
+                    7, keyCode, InputDevice.SOURCE_GAMEPAD,
+                    KeyEvent.ACTION_DOWN, 0, true, false);
+            assertTrue(down.consumed());
+            assertNull(down.inputJson());
+            assertTrue(input.route(7, keyCode, InputDevice.SOURCE_JOYSTICK,
+                    KeyEvent.ACTION_DOWN, 1, true, false).consumed());
+            assertTrue(input.route(7, keyCode, InputDevice.SOURCE_GAMEPAD,
+                    KeyEvent.ACTION_UP, 0, false, false).consumed());
+        }
+    }
+
+    @Test
+    public void androidReservedGamepadKeysPassThrough() {
+        for (int keyCode : new int[] {
+                KeyEvent.KEYCODE_VOLUME_UP,
+                KeyEvent.KEYCODE_VOLUME_DOWN,
+                KeyEvent.KEYCODE_VOLUME_MUTE,
+                KeyEvent.KEYCODE_POWER,
+                KeyEvent.KEYCODE_HOME,
+                KeyEvent.KEYCODE_APP_SWITCH,
+                KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP,
+        }) {
+            assertFalse(new KorriOverlayService.OverlayInput().route(
+                    7, keyCode, InputDevice.SOURCE_GAMEPAD,
+                    KeyEvent.ACTION_DOWN, 0, true, false).consumed());
+        }
     }
 
     @Test
@@ -355,54 +399,79 @@ public class KorriOverlayServiceTest {
     public void removedOverlayPassesGameplayInputThrough() {
         KorriOverlayService.OverlayInput.Decision decision =
                 new KorriOverlayService.OverlayInput().route(
-                        1, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.ACTION_DOWN,
-                        0, false, false);
+                        1, KeyEvent.KEYCODE_DPAD_LEFT, InputDevice.SOURCE_GAMEPAD,
+                        KeyEvent.ACTION_DOWN, 0, false, false);
         assertFalse(decision.consumed());
         assertNull(decision.inputJson());
         assertFalse(decision.dismiss());
     }
 
     @Test
-    public void heldPreOverlayKeyRemainsUnownedThroughRepeatAndRelease() {
-        KorriOverlayService.OverlayInput input = new KorriOverlayService.OverlayInput();
+    public void heldPreOverlayMappedAndUnknownKeysRemainUnownedThroughRelease() {
+        for (int keyCode : new int[] {
+                KeyEvent.KEYCODE_BUTTON_A,
+                KeyEvent.KEYCODE_BUTTON_X,
+                KeyEvent.KEYCODE_BUTTON_12,
+        }) {
+            KorriOverlayService.OverlayInput input = new KorriOverlayService.OverlayInput();
+            assertFalse(input.route(7, keyCode, InputDevice.SOURCE_GAMEPAD,
+                    KeyEvent.ACTION_DOWN, 0, false, false).consumed());
+            assertFalse(input.route(7, keyCode, InputDevice.SOURCE_GAMEPAD,
+                    KeyEvent.ACTION_DOWN, 1, true, false).consumed());
+            assertFalse(input.route(7, keyCode, InputDevice.SOURCE_GAMEPAD,
+                    KeyEvent.ACTION_UP, 0, true, false).consumed());
+        }
+    }
 
-        assertFalse(input.route(7, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_DOWN,
-                0, false, false).consumed());
-        assertFalse(input.route(7, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_DOWN,
-                1, true, false).consumed());
-        assertFalse(input.route(7, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_UP,
-                0, true, false).consumed());
+    @Test
+    public void nonGamepadKeysPassThroughWhileOverlayIsVisible() {
+        for (int source : new int[] {
+                InputDevice.SOURCE_KEYBOARD,
+                InputDevice.SOURCE_TOUCHSCREEN,
+        }) {
+            for (int keyCode : new int[] {
+                    KeyEvent.KEYCODE_DPAD_UP,
+                    KeyEvent.KEYCODE_BUTTON_A,
+                    KeyEvent.KEYCODE_BUTTON_X,
+            }) {
+                assertFalse(new KorriOverlayService.OverlayInput().route(
+                        7, keyCode, source,
+                        KeyEvent.ACTION_DOWN, 0, true, false).consumed());
+            }
+        }
     }
 
     @Test
     public void ownedKeyReleaseRemainsConsumedAfterOverlayCloses() {
         KorriOverlayService.OverlayInput input = new KorriOverlayService.OverlayInput();
 
-        assertTrue(input.route(7, KeyEvent.KEYCODE_BACK, KeyEvent.ACTION_DOWN,
-                0, true, false).dismiss());
+        assertTrue(input.route(7, KeyEvent.KEYCODE_BACK, InputDevice.SOURCE_GAMEPAD,
+                KeyEvent.ACTION_DOWN, 0, true, false).dismiss());
         KorriOverlayService.OverlayInput.Decision release = input.route(
-                7, KeyEvent.KEYCODE_BACK, KeyEvent.ACTION_UP, 0, false, false);
+                7, KeyEvent.KEYCODE_BACK, InputDevice.SOURCE_GAMEPAD,
+                KeyEvent.ACTION_UP, 0, false, false);
 
         assertTrue(release.consumed());
         assertFalse(release.dismiss());
-        assertFalse(input.route(7, KeyEvent.KEYCODE_BACK, KeyEvent.ACTION_UP,
-                0, false, false).consumed());
+        assertFalse(input.route(7, KeyEvent.KEYCODE_BACK, InputDevice.SOURCE_GAMEPAD,
+                KeyEvent.ACTION_UP, 0, false, false).consumed());
     }
 
     @Test
     public void ownershipIsPerDeviceAndConfirmRepeatHasNoDuplicateSemanticAction() {
         KorriOverlayService.OverlayInput input = new KorriOverlayService.OverlayInput();
-        assertTrue(input.route(7, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_DOWN,
-                0, true, false).consumed());
+        assertTrue(input.route(7, KeyEvent.KEYCODE_BUTTON_A, InputDevice.SOURCE_GAMEPAD,
+                KeyEvent.ACTION_DOWN, 0, true, false).consumed());
 
         KorriOverlayService.OverlayInput.Decision repeat = input.route(
-                7, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_DOWN, 2, true, false);
+                7, KeyEvent.KEYCODE_BUTTON_A, InputDevice.SOURCE_GAMEPAD,
+                KeyEvent.ACTION_DOWN, 2, true, false);
         assertTrue(repeat.consumed());
         assertNull(repeat.inputJson());
-        assertFalse(input.route(8, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_UP,
-                0, true, false).consumed());
-        assertTrue(input.route(7, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_UP,
-                0, false, true).consumed());
+        assertFalse(input.route(8, KeyEvent.KEYCODE_BUTTON_A, InputDevice.SOURCE_GAMEPAD,
+                KeyEvent.ACTION_UP, 0, true, false).consumed());
+        assertTrue(input.route(7, KeyEvent.KEYCODE_BUTTON_A, InputDevice.SOURCE_GAMEPAD,
+                KeyEvent.ACTION_UP, 0, false, true).consumed());
     }
 
     @Test
@@ -541,10 +610,12 @@ public class KorriOverlayServiceTest {
             KorriOverlayService.OverlayInput input,
             int keyCode, String json, boolean dismiss, int repeatCount) {
         if (repeatCount > 0) {
-            input.route(1, keyCode, KeyEvent.ACTION_DOWN, 0, true, false);
+            input.route(1, keyCode, InputDevice.SOURCE_GAMEPAD,
+                    KeyEvent.ACTION_DOWN, 0, true, false);
         }
         KorriOverlayService.OverlayInput.Decision decision = input.route(
-                1, keyCode, KeyEvent.ACTION_DOWN, repeatCount, true, false);
+                1, keyCode, InputDevice.SOURCE_GAMEPAD,
+                KeyEvent.ACTION_DOWN, repeatCount, true, false);
         assertTrue(decision.consumed());
         assertEquals(json, decision.inputJson());
         assertEquals(dismiss, decision.dismiss());
