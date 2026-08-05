@@ -58,6 +58,7 @@ let
     BINDGEN_EXTRA_CLANG_ARGS_x86_64_linux_android = "--target=x86_64-linux-android21 --sysroot=${android.ndkRoot}/toolchains/llvm/prebuilt/linux-x86_64/sysroot";
     CC_x86_64_unknown_linux_gnu = "${pkgs.clang}/bin/clang";
     HOST_CC = "${pkgs.clang}/bin/clang";
+    KORRI_BRIDGE_AVD_PACKAGE = androidBridgeEmulator.bridgeEmulatorAvdPackage;
     KORRI_EMULATOR_NIX_SDK = androidBridgeEmulator.sdkRoot;
     LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
   };

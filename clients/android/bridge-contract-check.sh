@@ -8,11 +8,16 @@ ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
 ANDROID_CLIENT="$ROOT/clients/android"
 ANDROID_LIBS="$ANDROID_CLIENT/app/src/main/jniLibs"
 BRIDGE_VERSION_PROJECTION="$ANDROID_CLIENT/test/bridge-contract-version.ts"
-AVD_PACKAGE="system-images;android-34;google_apis;x86_64"
+AVD_PACKAGE=""
+AVD_PLATFORM=""
+AVD_IMAGE_TYPE=""
+AVD_ABI=""
 AVD_NAME="korri-bridge-contract-$$"
 EMULATOR_PORT="${KORRI_BRIDGE_EMULATOR_PORT:-5554}"
 SERIAL="emulator-$EMULATOR_PORT"
 BOOT_TIMEOUT_SECONDS="${KORRI_BRIDGE_BOOT_TIMEOUT_SECONDS:-240}"
+CONTRACT_TEST_TIMEOUT_SECONDS="${KORRI_BRIDGE_TEST_TIMEOUT_SECONDS:-300}"
+ADB_TIMEOUT_SECONDS=10
 RUN_DIR=""
 EMULATOR_PID=""
 EMULATOR_LOG=""
@@ -27,9 +32,17 @@ if [[ -z "$BUILD_ANDROID_HOME" || -z "$BUILD_ANDROID_SDK_ROOT" || -z "$BUILD_AND
   echo "bridge contract check requires the Android build SDK environment; run through nix run .#android-bridge-contract-check" >&2
   exit 1
 fi
+: "${KORRI_BRIDGE_AVD_PACKAGE:?bridge contract check needs KORRI_BRIDGE_AVD_PACKAGE}"
 : "${KORRI_EMULATOR_NIX_SDK:?bridge contract check needs KORRI_EMULATOR_NIX_SDK}"
 : "${KORRI_NDK_VERSION:?bridge contract check needs KORRI_NDK_VERSION}"
 : "${KORRI_PORTAL_BUNDLE:?bridge contract check needs KORRI_PORTAL_BUNDLE}"
+
+AVD_PACKAGE="$KORRI_BRIDGE_AVD_PACKAGE"
+IFS=';' read -r avd_kind AVD_PLATFORM AVD_IMAGE_TYPE AVD_ABI <<<"$AVD_PACKAGE"
+if [[ "$avd_kind" != "system-images" || -z "$AVD_PLATFORM" || -z "$AVD_IMAGE_TYPE" || -z "$AVD_ABI" ]]; then
+  echo "bridge contract check received invalid AVD package: $AVD_PACKAGE" >&2
+  exit 1
+fi
 
 cleanup() {
   local status=$?
@@ -38,7 +51,7 @@ cleanup() {
   set +e
 
   if [[ -n "$EMULATOR_PID" ]]; then
-    adb -s "$SERIAL" emu kill >/dev/null 2>&1 || true
+    timeout "$ADB_TIMEOUT_SECONDS" adb -s "$SERIAL" emu kill >/dev/null 2>&1 || true
     for _ in $(seq 1 20); do
       if ! kill -0 "$EMULATOR_PID" >/dev/null 2>&1; then
         break
@@ -64,7 +77,12 @@ cleanup() {
     rm -rf "$RUN_DIR" || cleanup_failed=true
   fi
   if [[ "$LOCK_ACQUIRED" == true ]]; then
-    rmdir "$LOCK_DIR" || cleanup_failed=true
+    if [[ "$(cat "$LOCK_DIR/owner-pid" 2>/dev/null)" == "$$" ]]; then
+      rm -rf "$LOCK_DIR" || cleanup_failed=true
+    else
+      echo "bridge contract check no longer owns lock $LOCK_DIR" >&2
+      cleanup_failed=true
+    fi
   fi
 
   if [[ "$cleanup_failed" == true && "$status" -eq 0 ]]; then
@@ -80,31 +98,57 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-fail_with_emulator_diagnostics() {
-  local message="$1"
-  echo "$message" >&2
+print_emulator_diagnostics() {
   echo "-- adb devices" >&2
-  adb devices -l >&2 || true
+  timeout "$ADB_TIMEOUT_SECONDS" adb devices -l >&2 || true
   if [[ -n "$EMULATOR_LOG" && -f "$EMULATOR_LOG" ]]; then
     echo "-- emulator log tail ($EMULATOR_LOG)" >&2
     tail -120 "$EMULATOR_LOG" >&2 || true
   fi
+}
+
+fail_with_emulator_diagnostics() {
+  echo "$1" >&2
+  print_emulator_diagnostics
   exit 1
 }
 
 acquire_lock() {
+  local owner_pid=""
+  local stale_lock=""
+
   mkdir -p "$(dirname "$LOCK_DIR")"
   if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-    echo "android-bridge-contract-check uses fixed emulator port $EMULATOR_PORT and another run appears active: $LOCK_DIR" >&2
-    echo "If this is stale, remove it only after verifying no bridge contract check emulator is running." >&2
-    exit 1
+    owner_pid="$(cat "$LOCK_DIR/owner-pid" 2>/dev/null || true)"
+    if [[ "$owner_pid" =~ ^[0-9]+$ ]] && kill -0 "$owner_pid" >/dev/null 2>&1; then
+      echo "android-bridge-contract-check uses fixed emulator port $EMULATOR_PORT and process $owner_pid owns $LOCK_DIR" >&2
+      exit 1
+    fi
+
+    stale_lock="$LOCK_DIR.stale.$$"
+    if ! mv "$LOCK_DIR" "$stale_lock" 2>/dev/null; then
+      echo "android-bridge-contract-check could not claim stale lock $LOCK_DIR" >&2
+      exit 1
+    fi
+    rm -rf "$stale_lock"
+    if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+      echo "android-bridge-contract-check lost the race to claim $LOCK_DIR" >&2
+      exit 1
+    fi
+    echo "-- recovered stale bridge contract check lock"
   fi
+  printf '%s\n' "$$" >"$LOCK_DIR/owner-pid"
   LOCK_ACQUIRED=true
 }
 
 reject_unsafe_emulator_concurrency() {
-  local devices
-  devices="$(adb devices | sed -n '2,$p' | awk '$1 ~ /^emulator-/ { print $1 " " $2 }')"
+  local adb_output=""
+  local devices=""
+  if ! adb_output="$(timeout "$ADB_TIMEOUT_SECONDS" adb devices)"; then
+    echo "android-bridge-contract-check could not enumerate Android devices" >&2
+    exit 1
+  fi
+  devices="$(printf '%s\n' "$adb_output" | sed -n '2,$p' | awk '$1 ~ /^emulator-/ { print $1 " " $2 }')"
   if [[ -n "$devices" ]]; then
     echo "android-bridge-contract-check owns emulator port $EMULATOR_PORT and refuses to run while another emulator is visible:" >&2
     printf '%s\n' "$devices" >&2
@@ -140,7 +184,7 @@ use_emulator_sdk_env() {
 }
 
 create_avd() {
-  local image_dir="$EMULATOR_ANDROID_SDK_ROOT/system-images/android-34/google_apis/x86_64"
+  local image_dir="$EMULATOR_ANDROID_SDK_ROOT/system-images/$AVD_PLATFORM/$AVD_IMAGE_TYPE/$AVD_ABI"
   local avdmanager=""
   local candidate
 
@@ -169,7 +213,7 @@ create_avd() {
 boot_emulator() {
   local emulator="$EMULATOR_ANDROID_SDK_ROOT/emulator/emulator"
   use_emulator_sdk_env
-  echo "== boot API 34 google_apis x86_64 emulator ($SERIAL)"
+  echo "== boot ${AVD_PLATFORM#android-} $AVD_IMAGE_TYPE $AVD_ABI emulator ($SERIAL)"
   if [[ ! -e /dev/kvm ]]; then
     echo "-- /dev/kvm is absent; emulator will rely on software acceleration and may time out under the bounded boot wait" >&2
   fi
@@ -192,11 +236,11 @@ boot_emulator() {
     if ! kill -0 "$EMULATOR_PID" >/dev/null 2>&1; then
       fail_with_emulator_diagnostics "Emulator process exited before Android boot completed"
     fi
-    device_state="$(adb -s "$SERIAL" get-state 2>/dev/null || true)"
+    device_state="$(timeout "$ADB_TIMEOUT_SECONDS" adb -s "$SERIAL" get-state 2>/dev/null || true)"
     if [[ "$device_state" == "device" ]]; then
-      boot_completed="$(adb -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+      boot_completed="$(timeout "$ADB_TIMEOUT_SECONDS" adb -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
       if [[ "$boot_completed" == "1" ]]; then
-        adb -s "$SERIAL" shell input keyevent 82 >/dev/null 2>&1 || true
+        timeout "$ADB_TIMEOUT_SECONDS" adb -s "$SERIAL" shell input keyevent 82 >/dev/null 2>&1 || true
         echo "-- emulator boot completed"
         return 0
       fi
@@ -228,14 +272,23 @@ build_x86_64_korrid() {
 
 run_contract_test() {
   local bridge_version="$1"
+  local status=0
   echo "== run KorriNativeBridgeContractTest against $SERIAL (bridgeVersion=$bridge_version)"
   use_build_sdk_env
   export ANDROID_SERIAL="$SERIAL"
   cd "$ANDROID_CLIENT"
-  ./gradlew \
+  set +e
+  timeout --foreground "$CONTRACT_TEST_TIMEOUT_SECONDS" ./gradlew \
     :app:connectedDebugAndroidTest \
     -Pandroid.testInstrumentationRunnerArguments.bridgeVersion="$bridge_version" \
     -Pandroid.testInstrumentationRunnerArguments.class=com.limelight.KorriNativeBridgeContractTest
+  status=$?
+  set -e
+  if [[ "$status" -ne 0 ]]; then
+    echo "bridge contract instrumentation failed with status $status" >&2
+    print_emulator_diagnostics
+    return "$status"
+  fi
 }
 
 acquire_lock
