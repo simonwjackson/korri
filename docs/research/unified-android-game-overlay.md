@@ -86,6 +86,55 @@ RG405M stick/hat routing remains **Device blocked**.
 stage-complete, connected, failed, and terminated JSON bytes are a regression
 contract. U6 must not move or rename that event vocabulary.
 
+## U8 acceptance evidence rules and current status
+
+**Current status (2026-08-05): pre-cutover, device proof pending.** Repository
+coverage proves the global host, exact launch scoping, semantic input adapter,
+control materialization, and native executors. A process-local current-service
+request seam now routes `Game`'s floating button, performance HUD, five-finger,
+Back, and controller triggers to the exact armed global session. Stale,
+replacement, foreground-mismatched, and direct cases fail closed. An absent
+service is reported distinctly as unavailable; only that result may use the
+clearly marked temporary old-host fallback.
+
+This is not installed-device parity. `KorriGameOverlay.java` and
+`overlay.html` intentionally remain until the device gate passes. The cutover
+contract test is still in its pre-cutover state and must be flipped only in the
+later removal change.
+
+Acceptance evidence follows these rules:
+
+- Every screenshot has a same-label sidecar containing explicit device
+  serial/model, top activity, relevant PIDs, read-only accessibility state,
+  overlay-window state, exact active controls, and available session or
+  RetroArch telemetry.
+- A screenshot never proves moving stream frames, input ownership, a native
+  menu transition, host survival, or permission recovery by itself. Those are
+  named human checkpoints.
+- Guide, D-pad, A/confirm, B/Back, and supported stick/hat checks use the
+  physical controller. `adb input` cannot stand in for hardware routing or
+  host observation.
+- Local and stream positives require an exact active `launchId` and controls
+  response. Direct-launch and unrelated-app negatives require the expected top
+  package plus absence of the Korri overlay window.
+- Permission checks inspect Android's accessibility state but never write it.
+  The user owns disable/re-enable actions in Settings, including any restricted
+  settings step Android actually exposes.
+- The gate locks and backs up mutable config, RetroArch save/state, Artemis
+  preferences, and rotation before mutation. Cleanup must prove local and
+  remote sessions quiescent and restore exact prior state; otherwise it retains
+  the backup and lock for manual recovery.
+
+The gate is:
+
+```sh
+nix run .#overlay-accept -- <adb-serial> <exact-device-model> \
+  <direct-launch-package> <unrelated-package> [evidence-dir]
+```
+
+A successful script run records evidence for review; it does not by itself
+change this document to “passed” or authorize cutover.
+
 ## U8 device checklist
 
 - Exercise all nineteen rows above over a live stream.
