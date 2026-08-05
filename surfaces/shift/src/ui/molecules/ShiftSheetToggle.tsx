@@ -50,7 +50,7 @@ export function ShiftSheetToggle({ control, onChange }: ShiftSheetToggleProps) {
         ) : null}
       </span>
       <span className="shift-sheet-control-value" aria-hidden="true">
-        {value ? "On" : "Off"}
+        {value ? control.interaction.trueLabel : control.interaction.falseLabel}
       </span>
     </button>
   )

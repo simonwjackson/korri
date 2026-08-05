@@ -255,6 +255,7 @@ pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_clearMoo
     mut env: JNIEnv,
     _class: JClass,
     launch_id: JString,
+    generation: JString,
 ) -> jboolean {
     let launch_id: String = match env.get_string(&launch_id) {
         Ok(value) => value.into(),
@@ -263,7 +264,14 @@ pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_clearMoo
             return 0;
         }
     };
-    clear_moonlight_executor_state(&launch_id).into()
+    let generation: String = match env.get_string(&generation) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error.to_string());
+            return 0;
+        }
+    };
+    clear_moonlight_executor_state(&launch_id, &generation).into()
 }
 
 #[no_mangle]

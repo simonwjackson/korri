@@ -26,6 +26,7 @@ const MOONLIGHT_PLUGIN: &str = r#"
     },
     sessionControls: {
       disconnect: {
+        order: 0,
         id: "@korri:moonlight/disconnect",
         owner: { kind: "transport", id: "@korri:moonlight/moonlight" },
         label: "Disconnect",
@@ -36,13 +37,15 @@ const MOONLIGHT_PLUGIN: &str = r#"
         dismissOnSuccess: true,
       },
       fill: {
+        order: 1,
         id: "@korri:moonlight/fill",
         owner: { kind: "transport", id: "@korri:moonlight/moonlight" },
         label: "Fill screen",
-        interaction: { kind: "toggle" },
+        interaction: { kind: "toggle", trueLabel: "Crop", falseLabel: "Fit" },
         effect: "@korri:moonlight/set-fill-mode",
       },
       mouseMode: {
+        order: 2,
         id: "@korri:moonlight/mouse-mode",
         owner: { kind: "transport", id: "@korri:moonlight/moonlight" },
         label: "Mouse mode",
@@ -56,6 +59,7 @@ const MOONLIGHT_PLUGIN: &str = r#"
         effect: "@korri:moonlight/set-mouse-mode",
       },
       sharpness: {
+        order: 3,
         id: "@korri:moonlight/sharpness",
         owner: { kind: "transport", id: "@korri:moonlight/moonlight" },
         label: "Sharpness",
@@ -88,6 +92,7 @@ const RETROARCH_PLUGIN: &str = r#"
     },
     sessionControls: {
       openMenu: {
+        order: 0,
         id: "@korri:retroarch/open-menu",
         owner: { kind: "launcher", id: "@korri:retroarch/retroarch" },
         label: "Open RetroArch menu",
@@ -213,15 +218,62 @@ fn canonical_moonlight_resolves_typed_artemis_availability_only_when_enabled() {
             ]),
         },
     );
-    assert_eq!(controls.len(), 18);
+    assert_eq!(
+        controls
+            .iter()
+            .map(|control| control.id.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "@korri:moonlight/fill",
+            "@korri:moonlight/keyboard",
+            "@korri:moonlight/full-keyboard",
+            "@korri:moonlight/pan-zoom",
+            "@korri:moonlight/mouse-mode",
+            "@korri:moonlight/local-cursor",
+            "@korri:moonlight/rotate-screen",
+            "@korri:moonlight/hud",
+            "@korri:moonlight/floating-menu",
+            "@korri:moonlight/keyboard-controller",
+            "@korri:moonlight/touch-sensitivity",
+            "@korri:moonlight/sgsr-sharpness",
+            "@korri:moonlight/sgsr-edge-threshold",
+            "@korri:moonlight/face-button-flip",
+            "@korri:moonlight/rumble",
+            "@korri:moonlight/picture-in-picture",
+            "@korri:moonlight/disconnect",
+            "@korri:moonlight/quit-host",
+        ]
+    );
     let by_id = |id: &str| controls.iter().find(|control| control.id == id).unwrap();
     assert_eq!(by_id("@korri:moonlight/fill").label, "Screen fit");
+    assert_eq!(
+        by_id("@korri:moonlight/fill").interaction,
+        korrid::plugin::SessionControlDeclarationInteraction::Toggle {
+            true_label: Some("crop to fill".into()),
+            false_label: Some("fit (letterbox)".into()),
+        }
+    );
     assert_eq!(
         by_id("@korri:moonlight/disconnect").description.as_deref(),
         Some("Leave the host game running")
     );
     assert!(by_id("@korri:moonlight/quit-host").destructive);
-    assert!(by_id("@korri:moonlight/keyboard").dismiss_on_success);
+    for id in [
+        "@korri:moonlight/keyboard",
+        "@korri:moonlight/full-keyboard",
+        "@korri:moonlight/pan-zoom",
+        "@korri:moonlight/mouse-mode",
+        "@korri:moonlight/local-cursor",
+        "@korri:moonlight/rotate-screen",
+        "@korri:moonlight/hud",
+        "@korri:moonlight/floating-menu",
+        "@korri:moonlight/keyboard-controller",
+        "@korri:moonlight/touch-sensitivity",
+        "@korri:moonlight/disconnect",
+        "@korri:moonlight/quit-host",
+    ] {
+        assert!(by_id(id).dismiss_on_success, "{id} must hide before effect");
+    }
     match &by_id("@korri:moonlight/mouse-mode").interaction {
         korrid::plugin::SessionControlDeclarationInteraction::Choice { options } => {
             assert_eq!(

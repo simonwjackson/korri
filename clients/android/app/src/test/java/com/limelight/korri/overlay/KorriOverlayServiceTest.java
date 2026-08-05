@@ -1,7 +1,9 @@
 package com.limelight.korri.overlay;
 
 import android.content.ComponentName;
+import android.view.InputDevice;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -323,6 +325,20 @@ public class KorriOverlayServiceTest {
     }
 
     @Test
+    public void joystickWindowConsumesAllActionsButMutatesOnlyMove() {
+        assertTrue(KorriOverlayService.OverlayMotionInput.owns(
+                InputDevice.SOURCE_JOYSTICK));
+        assertTrue(KorriOverlayService.OverlayMotionInput.mutates(
+                MotionEvent.ACTION_MOVE));
+        assertFalse(KorriOverlayService.OverlayMotionInput.mutates(
+                MotionEvent.ACTION_DOWN));
+        assertFalse(KorriOverlayService.OverlayMotionInput.mutates(
+                MotionEvent.ACTION_UP));
+        assertFalse(KorriOverlayService.OverlayMotionInput.owns(
+                InputDevice.SOURCE_TOUCHSCREEN));
+    }
+
+    @Test
     public void focusedWindowMotionEdgesAreIndependentPerController() {
         KorriOverlayService.OverlayMotionInput input =
                 new KorriOverlayService.OverlayMotionInput();
@@ -491,6 +507,16 @@ public class KorriOverlayServiceTest {
         assertEquals(1, factory.created.size());
         assertEquals(1, factory.created.get(0).refreshCount);
 
+        windows.preDismiss();
+        windows.preDismiss();
+        assertTrue(windows.isPreDismissed());
+        assertEquals(1, factory.created.get(0).preDismissCount);
+        windows.refreshAuthority();
+        assertEquals(1, factory.created.get(0).refreshCount);
+        windows.restoreAfterFailure();
+        assertFalse(windows.isPreDismissed());
+        assertEquals(1, factory.created.get(0).restoreCount);
+
         windows.setVisible(false);
         windows.setVisible(false);
         assertFalse(windows.isVisible());
@@ -539,6 +565,8 @@ public class KorriOverlayServiceTest {
     private static final class RecordingWindow
             implements KorriOverlayService.OverlayWindow {
         int refreshCount;
+        int preDismissCount;
+        int restoreCount;
         int destroyCount;
 
         @Override
@@ -547,6 +575,17 @@ public class KorriOverlayServiceTest {
         @Override
         public void refreshAuthority() {
             refreshCount++;
+        }
+
+        @Override
+        public boolean preDismiss() {
+            preDismissCount++;
+            return true;
+        }
+
+        @Override
+        public void restoreAfterFailure() {
+            restoreCount++;
         }
 
         @Override

@@ -22,7 +22,12 @@ function presentationInteraction(
     case "command":
       return { kind: "command" }
     case "toggle":
-      return { kind: "toggle", value: interaction.payload.value }
+      return {
+        kind: "toggle",
+        value: interaction.payload.value,
+        trueLabel: interaction.payload.trueLabel,
+        falseLabel: interaction.payload.falseLabel,
+      }
     case "choice":
       return {
         kind: "choice",

@@ -43,6 +43,9 @@ public final class KorriOverlayBridge {
     public interface Commands {
         void ready();
         void dismiss();
+        boolean preDismiss();
+        void restoreAfterFailure();
+        boolean prepareAuthority(String launchId);
         String authorizeInstruction(String instructionJson);
     }
 
@@ -158,7 +161,7 @@ public final class KorriOverlayBridge {
 
     public void sendAuthority() {
         Authority authority = authorityProvider.current();
-        if (authority == null) {
+        if (authority == null || !commands.prepareAuthority(authority.launchId())) {
             commands.dismiss();
             return;
         }
@@ -177,6 +180,17 @@ public final class KorriOverlayBridge {
     }
 
     private void execute(String requestId, JSONObject instruction) throws Exception {
+        boolean preDismiss = instruction.getBoolean("dismissOnSuccess");
+        if (preDismiss && !commands.preDismiss()) {
+            sender.send(new JSONObject()
+                    .put("type", "instruction-result")
+                    .put("requestId", requestId)
+                    .put("outcome", new JSONObject()
+                            .put("_tag", "Unavailable")
+                            .put("message", "The overlay could not safely yield focus."))
+                    .toString());
+            return;
+        }
         KorriMoonlightActionExecutor.Request request = authorizedRequest(
                 commands.authorizeInstruction(instruction.toString()));
         JSONObject outcome = new JSONObject();
@@ -203,6 +217,9 @@ public final class KorriOverlayBridge {
                     break;
             }
         }
+        if (preDismiss && !"Executed".equals(outcome.getString("_tag"))) {
+            commands.restoreAfterFailure();
+        }
         sender.send(new JSONObject()
                 .put("type", "instruction-result")
                 .put("requestId", requestId)
@@ -216,13 +233,17 @@ public final class KorriOverlayBridge {
             if (authorization.length() != 2 || !"Authorized".equals(
                     authorization.getString("_tag"))) return null;
             JSONObject payload = authorization.getJSONObject("payload");
-            if (payload.length() < 2 || payload.length() > 3) return null;
+            if (payload.length() < 4 || payload.length() > 5) return null;
             String launchId = payload.getString("launchId");
+            String executorId = payload.getString("executorId");
+            String generation = payload.getString("generation");
             KorriMoonlightActionExecutor.Effect effect =
                     KorriMoonlightActionExecutor.Effect.fromWire(payload.getString("effect"));
-            if (launchId.isEmpty() || effect == null) return null;
+            if (launchId.isEmpty() || !"android-moonlight".equals(executorId)
+                    || generation.isEmpty() || effect == null) return null;
             if (!payload.has("value")) {
-                return KorriMoonlightActionExecutor.Request.command(launchId, effect);
+                return KorriMoonlightActionExecutor.Request.command(
+                        launchId, generation, effect);
             }
             JSONObject value = payload.getJSONObject("value");
             if (value.length() != 2) return null;
@@ -231,18 +252,18 @@ public final class KorriOverlayBridge {
                 case "toggle":
                     if (!(rawValue instanceof Boolean)) return null;
                     return KorriMoonlightActionExecutor.Request.toggle(
-                            launchId, effect, (Boolean) rawValue);
+                            launchId, generation, effect, (Boolean) rawValue);
                 case "choice":
                     if (!(rawValue instanceof String)) return null;
                     return KorriMoonlightActionExecutor.Request.choice(
-                            launchId, effect, (String) rawValue);
+                            launchId, generation, effect, (String) rawValue);
                 case "range":
                     if (!(rawValue instanceof Number)) return null;
                     double range = ((Number) rawValue).doubleValue();
                     if (!Double.isFinite(range) || range != Math.rint(range)
                             || range < Integer.MIN_VALUE || range > Integer.MAX_VALUE) return null;
                     return KorriMoonlightActionExecutor.Request.range(
-                            launchId, effect, (int) range);
+                            launchId, generation, effect, (int) range);
                 default:
                     return null;
             }

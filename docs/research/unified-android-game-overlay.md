@@ -13,6 +13,18 @@ Proof status meanings:
   U8. Repository proof does not claim installed-device parity.
 
 Every row below is device blocked until U8 exercises it over a live stream.
+Repository proof now also covers the U6 review hardening: each `Game`
+registration receives a random process-local executor generation; korrid signs
+that generation and the exact executor, control declaration, value, and
+dismissal policy into one-use instructions; Android rechecks the exact
+executor object and generation on the `Game` UI thread. Same-`launchId`
+replacement tests include delayed Disconnect and Quit instructions.
+
+Before each overlay authority publication, Android asks the exact live
+coordinator to republish values from `Game`. A failed publication withholds the
+remote control list. After a stateful effect, publication failure does not
+rewrite an already executed effect as retryable; korrid state is cleared until
+a later fresh publication succeeds.
 
 | R8 control | Old UI / bridge method or setting key | Canonical plugin control / effect | Form and exact options/range | Successful dismissal | New executor operation | Expected refresh | Proof status |
 |---|---|---|---|---|---|---|---|
@@ -36,11 +48,37 @@ Every row below is device blocked until U8 exercises it over a live stream.
 | Disconnect | `Disconnect`; guidance: `game keeps running`; `disconnect()` | `@korri:moonlight/disconnect` / `@korri:moonlight/disconnect` | command | closes | `Disconnect` | none; current graceful return lifecycle continues | Repository proven: declaration and executor coverage; Device blocked |
 | Quit game on host | `Quit game on host`; `quitSession()`; confirmation title `Really want to quit?`; confirmation guidance `Please make sure you have no unsaved progress. Quitting the session will terminate your current running application.` | `@korri:moonlight/quit-host` / `@korri:moonlight/quit-host` | destructive command | closes before the existing confirmation path | `QuitHost` | none; confirmed quit retains `quitOnStop` host termination | Repository proven: declaration and executor coverage; Device blocked |
 
+## Availability and ordering policy (R5)
+
+Session controls are ordered by declaration `order`, then plugin-local id;
+duplicate order values for one route contributor and values outside the
+unsigned 16-bit declaration range are rejected. The canonical Moonlight order
+is exactly the table above, with Disconnect and then Quit terminal. The 18-row
+order and Screen fit's declaration-owned `crop to fill` / `fit (letterbox)`
+labels are repository-pinned; undeclared toggle labels materialize as `On` /
+`Off`.
+
+Availability is per effect, not per executor. `Game` reports platform and live
+object constraints, and each state getter is isolated. An unavailable or
+throwing effect is omitted from materialized controls while healthy effects
+remain. This is the R5 policy: do not fail the entire executor and do not show
+a control that the current `Game` cannot execute.
+
+For every signed declaration with `dismissOnSuccess`, the accessibility service
+transactionally hides its window, removes focus/touch ownership, and returns
+focus to the underlying `Game` before executor dispatch while retaining the
+WebView/message channel. Success is reported before normal portal dismissal
+destroys the window; rejection or execution failure restores the same window.
+The old in-Activity overlay remains present until U8.
+
 ## Input and lifecycle gate
 
 The global focused accessibility-overlay window must translate stick and hat
 edges to semantic `direction` events and consume controller motion while it is
-visible. Neutral motion resets the relevant edge. It must not synthesize key
+visible. Only `ACTION_MOVE` mutates navigation edges; other joystick-class
+actions are consumed without navigation. Neutral motion resets the relevant
+edge. Start's semantic `menu` action dismisses the sheet like the old overlay.
+It must not synthesize key
 codes into JavaScript. Repository tests can pin translation and consumption;
 RG405M stick/hat routing remains **Device blocked**.
 

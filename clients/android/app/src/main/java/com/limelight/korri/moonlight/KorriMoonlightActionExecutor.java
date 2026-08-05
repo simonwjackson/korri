@@ -63,35 +63,72 @@ public final class KorriMoonlightActionExecutor {
 
     public static final class Request {
         private final String launchId;
+        private final String executorId;
+        private final String generation;
         private final Effect effect;
         private final ValueKind kind;
         private final Object value;
 
-        private Request(String launchId, Effect effect, ValueKind kind, Object value) {
+        private Request(
+                String launchId, String generation, Effect effect,
+                ValueKind kind, Object value) {
             this.launchId = launchId;
+            this.executorId = "android-moonlight";
+            this.generation = generation;
             this.effect = effect;
             this.kind = kind;
             this.value = value;
         }
 
         public static Request command(String launchId, Effect effect) {
-            return new Request(launchId, effect, ValueKind.NONE, null);
+            return command(launchId, "direct", effect);
+        }
+
+        public static Request command(String launchId, String generation, Effect effect) {
+            return new Request(launchId, generation, effect, ValueKind.NONE, null);
         }
 
         public static Request toggle(String launchId, Effect effect, boolean value) {
-            return new Request(launchId, effect, ValueKind.TOGGLE, value);
+            return toggle(launchId, "direct", effect, value);
+        }
+
+        public static Request toggle(
+                String launchId, String generation, Effect effect, boolean value) {
+            return new Request(launchId, generation, effect, ValueKind.TOGGLE, value);
         }
 
         public static Request choice(String launchId, Effect effect, String value) {
-            return new Request(launchId, effect, ValueKind.CHOICE, value);
+            return choice(launchId, "direct", effect, value);
+        }
+
+        public static Request choice(
+                String launchId, String generation, Effect effect, String value) {
+            return new Request(launchId, generation, effect, ValueKind.CHOICE, value);
         }
 
         public static Request range(String launchId, Effect effect, int value) {
-            return new Request(launchId, effect, ValueKind.RANGE, value);
+            return range(launchId, "direct", effect, value);
+        }
+
+        public static Request range(
+                String launchId, String generation, Effect effect, int value) {
+            return new Request(launchId, generation, effect, ValueKind.RANGE, value);
         }
 
         public String launchId() {
             return launchId;
+        }
+
+        public String executorId() {
+            return executorId;
+        }
+
+        public String generation() {
+            return generation;
+        }
+
+        public boolean needsStatePublication() {
+            return effect != null && effect.form != Form.COMMAND;
         }
     }
 
@@ -100,8 +137,13 @@ public final class KorriMoonlightActionExecutor {
         void dispatch(Runnable action);
     }
 
+    public interface Authorization {
+        boolean isCurrent();
+    }
+
     /** Live Game operations and current values. Production's implementation is Game itself. */
     public interface Actions {
+        boolean available(Effect effect);
         boolean fillMode();
         void setFillMode(boolean value);
         boolean zoomMode();
@@ -140,14 +182,21 @@ public final class KorriMoonlightActionExecutor {
     }
 
     public Outcome execute(Request request) {
-        if (request == null || request.effect == null || !valid(request)) {
-            return Outcome.INVALID_VALUE;
-        }
-        return onUiThread(() -> apply(request));
+        return execute(request, () -> true);
     }
 
-    public String stateJson(String launchId) {
-        return onUiThread(() -> buildState(launchId), "");
+    public Outcome execute(Request request, Authorization authorization) {
+        if (request == null || request.effect == null || authorization == null
+                || !valid(request)) {
+            return Outcome.INVALID_VALUE;
+        }
+        return onUiThread(() -> authorization.isCurrent()
+                ? apply(request)
+                : Outcome.STALE);
+    }
+
+    public String stateJson(String launchId, String generation) {
+        return onUiThread(() -> buildState(launchId, generation), "");
     }
 
     private boolean valid(Request request) {
@@ -173,6 +222,7 @@ public final class KorriMoonlightActionExecutor {
 
     private Outcome apply(Request request) {
         try {
+            if (!actions.available(request.effect)) return Outcome.UNAVAILABLE;
             switch (request.effect) {
                 case DISCONNECT: actions.disconnect(); break;
                 case QUIT_HOST: actions.quitHost(); break;
@@ -223,17 +273,28 @@ public final class KorriMoonlightActionExecutor {
         }
     }
 
-    private String buildState(String launchId) throws Exception {
+    private String buildState(String launchId, String generation) throws Exception {
         JSONArray effects = new JSONArray();
         for (Effect effect : Effect.values()) {
-            JSONObject entry = new JSONObject()
-                    .put("effect", effect.wire)
-                    .put("fulfillable", true);
-            JSONObject value = currentValue(effect);
-            if (value != null) entry.put("value", value);
+            JSONObject entry = new JSONObject().put("effect", effect.wire);
+            try {
+                boolean fulfillable = actions.available(effect);
+                entry.put("fulfillable", fulfillable);
+                if (fulfillable) {
+                    JSONObject value = currentValue(effect);
+                    if (value != null) entry.put("value", value);
+                }
+            } catch (RuntimeException error) {
+                entry.put("fulfillable", false);
+            }
             effects.put(entry);
         }
-        return new JSONObject().put("launchId", launchId).put("effects", effects).toString();
+        return new JSONObject()
+                .put("launchId", launchId)
+                .put("executorId", "android-moonlight")
+                .put("generation", generation)
+                .put("effects", effects)
+                .toString();
     }
 
     private JSONObject currentValue(Effect effect) throws Exception {

@@ -1,5 +1,5 @@
 use hmac::{Hmac, Mac};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use sha2::Sha256;
 use std::collections::{HashMap, HashSet};
 use typeshare::typeshare;
@@ -9,6 +9,14 @@ use crate::{GameIdentity, SessionControlValue};
 type HmacSha256 = Hmac<Sha256>;
 const RETROARCH_CONTROL_TOKEN: &str = "KORRI_CONTROL_TOKEN";
 const RETROARCH_CONTROL_CONTEXT: &[u8] = b"korri-retroarch-control-v1";
+
+fn deserialize_optional_non_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
+}
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -516,10 +524,17 @@ pub enum PlatformEffect {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PlatformInstruction {
     pub launch_id: String,
+    pub executor_id: String,
+    pub generation: String,
     pub action_id: String,
+    pub dismiss_on_success: bool,
     /** Cryptographically random, consumed once for the active launch. */
     pub nonce: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_non_null"
+    )]
     pub value: Option<SessionControlValue>,
     pub effect: PlatformEffect,
     /** Per-server HMAC verified at the native platform edge. */
@@ -535,7 +550,10 @@ impl PlatformInstruction {
 
         let mut bytes = Vec::new();
         push(self.launch_id.as_bytes(), &mut bytes);
+        push(self.executor_id.as_bytes(), &mut bytes);
+        push(self.generation.as_bytes(), &mut bytes);
         push(self.action_id.as_bytes(), &mut bytes);
+        push(&[u8::from(self.dismiss_on_success)], &mut bytes);
         push(self.nonce.as_bytes(), &mut bytes);
         push(
             &serde_json::to_vec(&self.value).expect("control values serialize"),
@@ -550,7 +568,10 @@ impl PlatformInstruction {
 
     pub fn protect(
         launch_id: impl Into<String>,
+        executor_id: impl Into<String>,
+        generation: impl Into<String>,
         action_id: impl Into<String>,
+        dismiss_on_success: bool,
         value: Option<SessionControlValue>,
         effect: PlatformEffect,
         key: &[u8],
@@ -558,7 +579,10 @@ impl PlatformInstruction {
         let nonce: [u8; 32] = rand::random();
         let mut instruction = Self {
             launch_id: launch_id.into(),
+            executor_id: executor_id.into(),
+            generation: generation.into(),
             action_id: action_id.into(),
+            dismiss_on_success,
             nonce: hex::encode(nonce),
             value,
             effect,
@@ -602,8 +626,8 @@ impl PlatformInstructionVerifier {
         }
     }
 
-    pub fn authorize(
-        &mut self,
+    pub fn verify_current(
+        &self,
         instruction: &PlatformInstruction,
         key: &[u8],
     ) -> Result<(), PlatformInstructionVerificationFailure> {
@@ -613,10 +637,29 @@ impl PlatformInstructionVerifier {
         if instruction.launch_id != self.active_launch_id {
             return Err(PlatformInstructionVerificationFailure::StaleSession);
         }
+        if self.consumed_nonces.contains(&instruction.nonce) {
+            return Err(PlatformInstructionVerificationFailure::Replay);
+        }
+        Ok(())
+    }
+
+    pub fn consume_nonce(
+        &mut self,
+        instruction: &PlatformInstruction,
+    ) -> Result<(), PlatformInstructionVerificationFailure> {
         if !self.consumed_nonces.insert(instruction.nonce.clone()) {
             return Err(PlatformInstructionVerificationFailure::Replay);
         }
         Ok(())
+    }
+
+    pub fn authorize(
+        &mut self,
+        instruction: &PlatformInstruction,
+        key: &[u8],
+    ) -> Result<(), PlatformInstructionVerificationFailure> {
+        self.verify_current(instruction, key)?;
+        self.consume_nonce(instruction)
     }
 }
 
@@ -814,7 +857,10 @@ mod tests {
         let key = b"private per-server key";
         let instruction = PlatformInstruction::protect(
             "launch-1",
+            "android-moonlight",
+            "generation-a",
             "fill",
+            false,
             Some(SessionControlValue::Toggle(true)),
             PlatformEffect::AndroidMoonlight(AndroidMoonlightEffect::SetFillMode),
             key,
@@ -831,7 +877,10 @@ mod tests {
         );
 
         let mutations: Vec<Box<dyn Fn(&mut PlatformInstruction)>> = vec![
+            Box::new(|value| value.executor_id = "replacement".into()),
+            Box::new(|value| value.generation = "generation-b".into()),
             Box::new(|value| value.action_id = "quit".into()),
+            Box::new(|value| value.dismiss_on_success = true),
             Box::new(|value| value.value = Some(SessionControlValue::Toggle(false))),
             Box::new(|value| value.launch_id = "launch-2".into()),
             Box::new(|value| value.nonce = "other".into()),
@@ -927,7 +976,10 @@ mod tests {
 
         let instruction = PlatformInstruction::protect(
             "launch-1",
+            "android-moonlight",
+            "generation-a",
             "fill",
+            false,
             Some(SessionControlValue::Toggle(true)),
             PlatformEffect::AndroidMoonlight(AndroidMoonlightEffect::SetFillMode),
             key,
@@ -945,9 +997,12 @@ mod tests {
         let mut instruction_effect = instruction_json.clone();
         instruction_effect["effect"]["unexpected"] = serde_json::json!(true);
         assert!(serde_json::from_value::<PlatformInstruction>(instruction_effect).is_err());
-        let mut instruction_value = instruction_json;
+        let mut instruction_value = instruction_json.clone();
         instruction_value["value"]["unexpected"] = serde_json::json!(true);
         assert!(serde_json::from_value::<PlatformInstruction>(instruction_value).is_err());
+        let mut null_value = instruction_json;
+        null_value["value"] = serde_json::Value::Null;
+        assert!(serde_json::from_value::<PlatformInstruction>(null_value).is_err());
     }
 
     #[test]

@@ -523,6 +523,7 @@ fn strict_session_control_declarations_reserve_disabled_identities() {
           },
           sessionControls: {
             openMenu: {
+              order: 0,
               id: "@korri:retroarch/open-menu",
               owner: { kind: "launcher", id: "@korri:retroarch/retroarch" },
               label: "Open RetroArch menu",
@@ -566,6 +567,7 @@ fn malformed_session_controls_and_arbitrary_effect_payloads_are_rejected() {
           },
           sessionControls: {
             sharpness: {
+              order: 0,
               id: "@korri:moonlight/sharpness",
               owner: { kind: "transport", id: "@korri:moonlight/moonlight" },
               label: "Sharpness",
@@ -578,6 +580,9 @@ fn malformed_session_controls_and_arbitrary_effect_payloads_are_rejected() {
     "#;
 
     let malformed = [
+        valid.replace("order: 0,", ""),
+        valid.replace("order: 0", "order: -1"),
+        valid.replace("order: 0", "order: 65536"),
         valid.replace("step: 5", "step: 0"),
         valid.replace("min: 0, max: 100", "min: 101, max: 100"),
         valid.replace("label: \"Sharpness\"", "label: \"\""),
@@ -649,6 +654,7 @@ fn malformed_choice_and_duplicate_session_control_identities_are_rejected() {
           config: { transports: { moonlight: { id: "@korri:moonlight/moonlight" } } },
           sessionControls: {
             mouse: {
+              order: 0,
               id: "@korri:moonlight/mouse",
               owner: { kind: "transport", id: "@korri:moonlight/moonlight" },
               label: "Mouse",
@@ -674,6 +680,7 @@ fn malformed_choice_and_duplicate_session_control_identities_are_rejected() {
           config: { transports: { moonlight: { id: "@korri:moonlight/moonlight" } } },
           sessionControls: {
             first: {
+              order: 0,
               id: "@korri:moonlight/shared",
               owner: { kind: "transport", id: "@korri:moonlight/moonlight" },
               label: "First",
@@ -681,6 +688,7 @@ fn malformed_choice_and_duplicate_session_control_identities_are_rejected() {
               effect: "@korri:moonlight/set-local-cursor",
             },
             second: {
+              order: 1,
               id: "@korri:moonlight/shared",
               owner: { kind: "transport", id: "@korri:moonlight/moonlight" },
               label: "Second",
@@ -695,6 +703,14 @@ fn malformed_choice_and_duplicate_session_control_identities_are_rejected() {
         .expect("duplicate global ids are a registry-level collision");
     PluginRegistry::new(vec![plugin], vec!["@korri:moonlight".to_owned()])
         .expect_err("duplicate global session-control ids must fail registry construction");
+
+    load_plugin_source(
+        &duplicate_global_id
+            .replacen("@korri:moonlight/shared", "@korri:moonlight/first", 1)
+            .replacen("@korri:moonlight/shared", "@korri:moonlight/second", 1)
+            .replace("order: 1", "order: 0"),
+    )
+    .expect_err("session-control order collisions for one contributor must fail");
 }
 
 #[test]

@@ -149,9 +149,28 @@ pub struct SessionControlOption {
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum SessionControlDeclarationInteraction {
     Command,
-    Toggle,
-    Choice { options: Vec<SessionControlOption> },
-    Range { min: f64, max: f64, step: f64 },
+    Toggle {
+        #[serde(
+            default,
+            rename = "trueLabel",
+            deserialize_with = "deserialize_optional_non_null"
+        )]
+        true_label: Option<String>,
+        #[serde(
+            default,
+            rename = "falseLabel",
+            deserialize_with = "deserialize_optional_non_null"
+        )]
+        false_label: Option<String>,
+    },
+    Choice {
+        options: Vec<SessionControlOption>,
+    },
+    Range {
+        min: f64,
+        max: f64,
+        step: f64,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
@@ -296,6 +315,7 @@ pub struct SessionControlRecord {
     pub id: String,
     pub owner: SessionControlOwner,
     pub label: String,
+    pub order: u16,
     #[serde(default, deserialize_with = "deserialize_optional_non_null")]
     pub description: Option<String>,
     pub interaction: SessionControlDeclarationInteraction,
@@ -783,6 +803,7 @@ fn normalize_plugin(mut declaration: PluginDeclaration) -> Result<Plugin, Plugin
         .map(|record| record.id.clone())
         .collect();
 
+    let mut session_control_orders = BTreeMap::new();
     for (local_id, control) in &mut declaration.contributes.session_controls {
         if local_id.is_empty() {
             return Err(PluginError::EmptyContributionId {
@@ -808,6 +829,19 @@ fn normalize_plugin(mut declaration: PluginDeclaration) -> Result<Plugin, Plugin
                 reason: format!(
                     "owner {} is not a {:?} contribution of {id}",
                     control.owner.id, control.owner.kind
+                ),
+            });
+        }
+        if let Some(existing) = session_control_orders.insert(
+            (control.owner.kind, control.owner.id.clone(), control.order),
+            local_id.clone(),
+        ) {
+            return Err(PluginError::InvalidContribution {
+                kind: "session control",
+                record_id: local_id.clone(),
+                reason: format!(
+                    "order {} collides with session control {existing}",
+                    control.order
                 ),
             });
         }
@@ -894,7 +928,17 @@ fn validate_session_control(
 
     let declared_kind = match &control.interaction {
         SessionControlDeclarationInteraction::Command => SessionControlKind::Command,
-        SessionControlDeclarationInteraction::Toggle => SessionControlKind::Toggle,
+        SessionControlDeclarationInteraction::Toggle {
+            true_label,
+            false_label,
+        } => {
+            if true_label.as_ref().is_some_and(String::is_empty)
+                || false_label.as_ref().is_some_and(String::is_empty)
+            {
+                return Err(invalid("toggle display labels must not be empty"));
+            }
+            SessionControlKind::Toggle
+        }
         SessionControlDeclarationInteraction::Choice { options } => {
             if options.is_empty() {
                 return Err(invalid("choice controls must declare at least one option"));

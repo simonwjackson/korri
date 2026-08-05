@@ -79,6 +79,7 @@ const SESSION_CONTROL_PLUGIN: &str = r#"
     },
     sessionControls: {
       openMenu: {
+        order: 0,
         id: "@korri:retroarch/open-menu",
         owner: { kind: "launcher", id: "@korri:retroarch/retroarch" },
         label: "Open RetroArch menu",

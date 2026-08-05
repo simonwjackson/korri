@@ -248,7 +248,12 @@ describe("Shift gameplay overlay", () => {
             enabled: true,
             destructive: false,
             dismissOnSuccess: false,
-            interaction: { kind: "toggle", value: true },
+            interaction: {
+              kind: "toggle",
+              value: true,
+              trueLabel: "crop to fill",
+              falseLabel: "fit (letterbox)",
+            },
           },
           {
             id: "mouse-mode",
@@ -362,8 +367,10 @@ describe("Shift gameplay overlay", () => {
     const host = createFixtureHost()
     render(<ShiftSurface model={overlayModel()} host={host} />)
 
+    expect(screen.getByText("crop to fill")).toBeDefined()
     fireEvent.click(screen.getByRole("button", { name: "Keyboard" }))
     fireEvent.click(screen.getByRole("switch", { name: "Fill screen" }))
+    expect(screen.getByText("fit (letterbox)")).toBeDefined()
     fireEvent.change(screen.getByRole("combobox", { name: "Mouse mode" }), {
       target: { value: "direct" },
     })
@@ -580,8 +587,8 @@ describe("Shift gameplay overlay", () => {
     )
   })
 
-  test("Resume, Back, Guide, and scrim dismiss locally", () => {
-    for (const dismiss of ["resume", "back", "system", "scrim"] as const) {
+  test("Resume, Back, Guide, Start, and scrim dismiss locally", () => {
+    for (const dismiss of ["resume", "back", "system", "menu", "scrim"] as const) {
       const host = createFixtureHost()
       const rendered = render(<ShiftSurface model={overlayModel()} host={host} />)
       if (dismiss === "resume") {

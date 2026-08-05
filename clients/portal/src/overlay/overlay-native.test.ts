@@ -50,7 +50,10 @@ describe("native overlay message connection", () => {
     connection.platform.requestAuthorityRefresh()
     const instruction = {
       launchId: "0123456789abcdef0123456789abcdef",
+      executorId: "android-moonlight",
+      generation: "executor-generation",
       actionId: "fill",
+      dismissOnSuccess: false,
       nonce: "nonce",
       value: { kind: "toggle" as const, value: true },
       effect: {
@@ -155,7 +158,10 @@ describe("native overlay message connection", () => {
     const stop = connection.start(() => {})
     const instruction = {
       launchId: "0123456789abcdef0123456789abcdef",
+      executorId: "android-moonlight",
+      generation: "executor-generation",
       actionId: "fill",
+      dismissOnSuccess: false,
       nonce: "nonce",
       value: { kind: "toggle" as const, value: true },
       effect: {

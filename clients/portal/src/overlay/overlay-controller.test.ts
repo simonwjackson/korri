@@ -42,7 +42,10 @@ function controls(launchId = LAUNCH_A, value = false): SessionControls {
             enabled: true,
             destructive: false,
             dismissOnSuccess: false,
-            interaction: { kind: "toggle", payload: { value } },
+            interaction: {
+              kind: "toggle",
+              payload: { value, trueLabel: "On", falseLabel: "Off" },
+            },
           },
         ],
       },
@@ -468,7 +471,10 @@ describe("overlay controller", () => {
   test("requests narrow native execution for the exact protected instruction", async () => {
     const instruction: PlatformInstruction = {
       launchId: LAUNCH_A,
+      executorId: "android-moonlight",
+      generation: "executor-generation",
       actionId: "fill",
+      dismissOnSuccess: false,
       nonce: "one-use",
       value: { kind: "toggle", value: true },
       effect: {

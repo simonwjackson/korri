@@ -85,6 +85,14 @@ public class PipIntentTest {
     }
 
     @Test
+    public void desiredValueExplicitlyClearsAutoEnterWhenPipIsDisabled() {
+        assertTrue(Game.desiredPipAutoEnter(true, true, 0));
+        assertFalse(Game.desiredPipAutoEnter(false, true, 0));
+        assertFalse(Game.desiredPipAutoEnter(true, false, 0));
+        assertFalse(Game.desiredPipAutoEnter(true, true, 1));
+    }
+
+    @Test
     public void testPipOverrideLogic_InvalidValue() {
         String intentPip = "invalid";
         boolean enablePip = true;  // Start with true

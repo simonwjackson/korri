@@ -188,7 +188,9 @@ function isSessionControls(value: unknown): value is SessionControls {
 
 function isPlatformInstruction(value: unknown): value is PlatformInstruction {
   if (!isRecord(value) || typeof value.launchId !== "string" ||
-    typeof value.actionId !== "string" || typeof value.nonce !== "string" ||
+    typeof value.executorId !== "string" || typeof value.generation !== "string" ||
+    typeof value.actionId !== "string" ||
+    typeof value.dismissOnSuccess !== "boolean" || typeof value.nonce !== "string" ||
     typeof value.integrity !== "string" || !isRecord(value.effect) ||
     value.effect.kind !== "android-moonlight" ||
     !Object.values(AndroidMoonlightEffect).includes(
@@ -451,8 +453,11 @@ function updateInMemoryControl(
               ? {
                   ...control,
                   interaction: {
-                    kind: "toggle" as const,
-                    payload: { value: value.value },
+                    ...control.interaction,
+                    payload: {
+                      ...control.interaction.payload,
+                      value: value.value,
+                    },
                   },
                 }
               : control

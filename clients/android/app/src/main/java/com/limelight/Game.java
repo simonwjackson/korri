@@ -284,6 +284,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     // overlay replacing the native spinner. Null for stock entry points.
     private KorriSessionOverlay korriSessionOverlay;
     private String korriLaunchId;
+    private String korriMoonlightExecutorGeneration;
     private KorriMoonlightActionExecutor korriMoonlightExecutor;
     private int activeMouseMode;
     private final KorriGameLaunchScope korriLaunchScope =
@@ -1391,12 +1392,15 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         return builder.build();
     }
 
-    public void updatePipAutoEnter() {
-        if (!prefConfig.enablePip) {
-            return;
-        }
+    static boolean desiredPipAutoEnter(
+            boolean enabled, boolean connected, int suppressRefCount) {
+        return enabled && connected && suppressRefCount == 0;
+    }
 
-        boolean autoEnter = connected && suppressPipRefCount == 0;
+    public void updatePipAutoEnter() {
+        boolean autoEnter = desiredPipAutoEnter(
+                prefConfig.enablePip, connected, suppressPipRefCount);
+
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             setPictureInPictureParams(getPictureInPictureParams(autoEnter));
@@ -3349,16 +3353,22 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                         runOnUiThread(action);
                     }
                 });
-        if (KorriMoonlightActionCoordinator.process().register(korriLaunchId, next)) {
+        String generation =
+                KorriMoonlightActionCoordinator.process().register(korriLaunchId, next);
+        if (generation != null) {
             korriMoonlightExecutor = next;
+            korriMoonlightExecutorGeneration = generation;
         }
     }
 
     private void unregisterMoonlightExecutor() {
         if (korriLaunchId == null || korriMoonlightExecutor == null) return;
         KorriMoonlightActionExecutor current = korriMoonlightExecutor;
+        String generation = korriMoonlightExecutorGeneration;
         korriMoonlightExecutor = null;
-        KorriMoonlightActionCoordinator.process().unregister(korriLaunchId, current);
+        korriMoonlightExecutorGeneration = null;
+        KorriMoonlightActionCoordinator.process().unregister(
+                korriLaunchId, generation, current);
     }
 
     @Override
@@ -4173,6 +4183,22 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     }
 
     @Override
+    public boolean available(KorriMoonlightActionExecutor.Effect effect) {
+        switch (effect) {
+            case SET_MOUSE_MODE:
+                return allowChangeMouseMode;
+            case TOGGLE_FLOATING_MENU:
+                return floatingMenuButton != null;
+            case SET_PICTURE_IN_PICTURE:
+                return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                        && getPackageManager().hasSystemFeature(
+                                PackageManager.FEATURE_PICTURE_IN_PICTURE);
+            default:
+                return true;
+        }
+    }
+
+    @Override
     public String mouseMode() {
         return String.valueOf(activeMouseMode);
     }
@@ -4247,6 +4273,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         KorriSettingsBridge.applySetting(
                 this, "checkbox_enable_pip", String.valueOf(value));
         applyLivePrefs();
+        updatePipAutoEnter();
     }
 
     @Override

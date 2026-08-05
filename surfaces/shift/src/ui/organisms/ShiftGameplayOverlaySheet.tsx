@@ -71,6 +71,7 @@ export function ShiftGameplayOverlaySheet({
   const host = useSurfaceHost()
   const dismiss = () => host.dismissGameplayOverlay()
   useSurfaceAction("system", dismiss)
+  useSurfaceAction("menu", dismiss)
 
   const title = presentation.title ?? "Gameplay"
   return (

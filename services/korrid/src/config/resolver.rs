@@ -115,7 +115,11 @@ pub fn resolve_session_controls(
             })
             .cloned()
             .collect();
-        controls.sort_by(|left, right| left.local_id.cmp(&right.local_id));
+        controls.sort_by(|left, right| {
+            left.order
+                .cmp(&right.order)
+                .then_with(|| left.local_id.cmp(&right.local_id))
+        });
         resolved.extend(controls);
     }
 

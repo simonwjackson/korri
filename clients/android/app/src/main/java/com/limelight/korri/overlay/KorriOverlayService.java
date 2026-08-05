@@ -27,6 +27,7 @@ import android.widget.FrameLayout;
 import androidx.webkit.WebViewAssetLoader;
 
 import com.limelight.BuildConfig;
+import com.limelight.korri.moonlight.KorriMoonlightActionCoordinator;
 import com.simonwjackson.korri.korrid.KorriBrainService;
 import com.simonwjackson.korri.korrid.KorridServer;
 
@@ -231,6 +232,21 @@ public final class KorriOverlayService extends AccessibilityService {
                         }
 
                         @Override
+                        public boolean preDismiss() {
+                            return windowController != null && windowController.preDismiss();
+                        }
+
+                        @Override
+                        public void restoreAfterFailure() {
+                            if (windowController != null) windowController.restoreAfterFailure();
+                        }
+
+                        @Override
+                        public boolean prepareAuthority(String launchId) {
+                            return KorriMoonlightActionCoordinator.process().republish(launchId);
+                        }
+
+                        @Override
                         public String authorizeInstruction(String instructionJson) {
                             return KorridServer.authorizePlatformInstruction(instructionJson);
                         }
@@ -244,16 +260,16 @@ public final class KorriOverlayService extends AccessibilityService {
             }
             OverlayMotionInput motionInput = new OverlayMotionInput();
             View.OnGenericMotionListener motionListener = (view, event) -> {
-                if ((event.getSource() & InputDevice.SOURCE_CLASS_JOYSTICK) == 0) {
-                    return false;
-                }
-                for (String direction : motionInput.directions(
-                        event.getDeviceId(),
-                        event.getAxisValue(MotionEvent.AXIS_HAT_X),
-                        event.getAxisValue(MotionEvent.AXIS_HAT_Y),
-                        event.getAxisValue(MotionEvent.AXIS_X),
-                        event.getAxisValue(MotionEvent.AXIS_Y))) {
-                    bridge.sendInput(directionInput(direction));
+                if (!OverlayMotionInput.owns(event.getSource())) return false;
+                if (OverlayMotionInput.mutates(event.getAction())) {
+                    for (String direction : motionInput.directions(
+                            event.getDeviceId(),
+                            event.getAxisValue(MotionEvent.AXIS_HAT_X),
+                            event.getAxisValue(MotionEvent.AXIS_HAT_Y),
+                            event.getAxisValue(MotionEvent.AXIS_X),
+                            event.getAxisValue(MotionEvent.AXIS_Y))) {
+                        bridge.sendInput(directionInput(direction));
+                    }
                 }
                 return true;
             };
@@ -305,6 +321,40 @@ public final class KorriOverlayService extends AccessibilityService {
                         authorityIdentity = next;
                         bridge.sendAuthority();
                     }
+                }
+
+                private boolean preDismissed;
+
+                @Override
+                public boolean preDismiss() {
+                    if (resources.isDestroyed()) return false;
+                    if (preDismissed) return true;
+                    root.setVisibility(View.INVISIBLE);
+                    root.clearFocus();
+                    params.flags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                    try {
+                        windows.updateViewLayout(root, params);
+                        preDismissed = true;
+                        return true;
+                    } catch (RuntimeException failure) {
+                        params.flags &= ~(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+                        root.setVisibility(View.VISIBLE);
+                        web.requestFocus();
+                        return false;
+                    }
+                }
+
+                @Override
+                public void restoreAfterFailure() {
+                    if (resources.isDestroyed() || !preDismissed) return;
+                    preDismissed = false;
+                    params.flags &= ~(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+                    windows.updateViewLayout(root, params);
+                    root.setVisibility(View.VISIBLE);
+                    web.requestFocus();
                 }
 
                 @Override
@@ -523,6 +573,8 @@ public final class KorriOverlayService extends AccessibilityService {
     public interface OverlayWindow {
         void sendInput(String inputJson);
         void refreshAuthority();
+        boolean preDismiss();
+        void restoreAfterFailure();
         void destroy();
     }
 
@@ -534,6 +586,7 @@ public final class KorriOverlayService extends AccessibilityService {
     public static final class WindowController {
         private final WindowFactory factory;
         private OverlayWindow window;
+        private boolean preDismissed;
         private boolean destroyed;
 
         public WindowController(WindowFactory factory) {
@@ -546,6 +599,7 @@ public final class KorriOverlayService extends AccessibilityService {
                 if (window != null) {
                     window.destroy();
                     window = null;
+                    preDismissed = false;
                 }
                 return;
             }
@@ -566,7 +620,24 @@ public final class KorriOverlayService extends AccessibilityService {
         }
 
         public void refreshAuthority() {
-            if (window != null) window.refreshAuthority();
+            if (window != null && !preDismissed) window.refreshAuthority();
+        }
+
+        public boolean preDismiss() {
+            if (window == null || destroyed) return false;
+            if (preDismissed) return true;
+            preDismissed = window.preDismiss();
+            return preDismissed;
+        }
+
+        public void restoreAfterFailure() {
+            if (window == null || !preDismissed || destroyed) return;
+            window.restoreAfterFailure();
+            preDismissed = false;
+        }
+
+        public boolean isPreDismissed() {
+            return preDismissed;
         }
 
         public void destroy() {
@@ -583,6 +654,14 @@ public final class KorriOverlayService extends AccessibilityService {
     /** Old-overlay-compatible hat/stick edge translation for the focused window. */
     public static final class OverlayMotionInput {
         private final Map<Integer, int[]> edges = new HashMap<>();
+
+        public static boolean owns(int source) {
+            return (source & InputDevice.SOURCE_CLASS_JOYSTICK) != 0;
+        }
+
+        public static boolean mutates(int action) {
+            return action == MotionEvent.ACTION_MOVE;
+        }
 
         public List<String> directions(
                 int deviceId, float hatX, float hatY, float stickX, float stickY) {

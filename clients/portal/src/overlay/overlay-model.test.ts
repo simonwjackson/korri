@@ -25,7 +25,10 @@ const controls: SessionControls = {
           enabled: true,
           destructive: false,
           dismissOnSuccess: false,
-          interaction: { kind: "toggle", payload: { value: true } },
+          interaction: {
+            kind: "toggle",
+            payload: { value: true, trueLabel: "crop to fill", falseLabel: "fit (letterbox)" },
+          },
         },
         {
           id: "mouse-mode",
@@ -106,7 +109,12 @@ describe("gameplayOverlayPresentationFrom", () => {
         disabledReason: undefined,
         destructive: false,
         dismissOnSuccess: false,
-        interaction: { kind: "toggle", value: true },
+        interaction: {
+          kind: "toggle",
+          value: true,
+          trueLabel: "crop to fill",
+          falseLabel: "fit (letterbox)",
+        },
       },
       {
         id: "mouse-mode",

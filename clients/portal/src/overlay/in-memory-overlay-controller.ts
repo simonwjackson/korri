@@ -31,7 +31,10 @@ const fixtureControls: SessionControls = {
           enabled: true,
           destructive: false,
           dismissOnSuccess: false,
-          interaction: { kind: "toggle", payload: { value: false } },
+          interaction: {
+            kind: "toggle",
+            payload: { value: false, trueLabel: "On", falseLabel: "Off" },
+          },
         },
         {
           id: "fixture-choice",

@@ -140,7 +140,10 @@ public class KorriOverlayBridgeTest {
                 KorriOverlayBridgeTest::authority, commands, sender);
         String instruction = "{"
                 + "\"launchId\":\"" + LAUNCH + "\","
+                + "\"executorId\":\"android-moonlight\","
+                + "\"generation\":\"executor-generation\","
                 + "\"actionId\":\"fill\","
+                + "\"dismissOnSuccess\":true,"
                 + "\"nonce\":\"nonce\","
                 + "\"value\":{\"kind\":\"toggle\",\"value\":true},"
                 + "\"effect\":{\"kind\":\"android-moonlight\","
@@ -155,6 +158,8 @@ public class KorriOverlayBridgeTest {
                 KorriOverlayBridge.ASSET_ORIGIN, true);
 
         assertEquals(1, commands.dismissCount);
+        assertEquals(java.util.Arrays.asList("pre-dismiss", "authorize", "restore"),
+                commands.executionOrder);
         assertEquals(Collections.singletonList(instruction), commands.instructions);
         JSONObject response = new JSONObject(sender.messages.get(0));
         assertEquals("instruction-result", response.getString("type"));
@@ -166,6 +171,8 @@ public class KorriOverlayBridgeTest {
     public void authorizationResultIsStrictTypedEffectAndValue() {
         String authorized = "{\"_tag\":\"Authorized\",\"payload\":{"
                 + "\"launchId\":\"" + LAUNCH + "\","
+                + "\"executorId\":\"android-moonlight\","
+                + "\"generation\":\"executor-generation\","
                 + "\"effect\":\"set-fill-mode\","
                 + "\"value\":{\"kind\":\"toggle\",\"value\":true}}}";
         assertTrue(KorriOverlayBridge.authorizedRequest(authorized) != null);
@@ -211,7 +218,10 @@ public class KorriOverlayBridgeTest {
         assertTrue(source.contains("setJavaScriptCanOpenWindowsAutomatically(false)"));
         assertTrue(source.contains("setSupportMultipleWindows(false)"));
         assertTrue(source.contains("setWebContentsDebuggingEnabled(BuildConfig.DEBUG)"));
-        assertFalse(source.contains("FLAG_NOT_FOCUSABLE"));
+        assertTrue(source.contains(
+                "WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,"));
+        assertTrue(source.contains("params.flags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE"));
+        assertTrue(source.contains("root.setVisibility(View.INVISIBLE)"));
         assertFalse(source.contains("addJavascriptInterface"));
     }
 
@@ -260,6 +270,7 @@ public class KorriOverlayBridgeTest {
         int readyCount;
         int dismissCount;
         final List<String> instructions = new ArrayList<>();
+        final List<String> executionOrder = new ArrayList<>();
 
         @Override
         public void ready() {
@@ -272,7 +283,24 @@ public class KorriOverlayBridgeTest {
         }
 
         @Override
+        public boolean preDismiss() {
+            executionOrder.add("pre-dismiss");
+            return true;
+        }
+
+        @Override
+        public void restoreAfterFailure() {
+            executionOrder.add("restore");
+        }
+
+        @Override
+        public boolean prepareAuthority(String launchId) {
+            return true;
+        }
+
+        @Override
         public String authorizeInstruction(String instructionJson) {
+            executionOrder.add("authorize");
             instructions.add(instructionJson);
             try {
                 JSONObject instruction = new JSONObject(instructionJson);
@@ -280,6 +308,8 @@ public class KorriOverlayBridgeTest {
                         .put("_tag", "Authorized")
                         .put("payload", new JSONObject()
                                 .put("launchId", instruction.getString("launchId"))
+                                .put("executorId", instruction.getString("executorId"))
+                                .put("generation", instruction.getString("generation"))
                                 .put("effect", instruction.getJSONObject("effect")
                                         .getString("payload"))
                                 .put("value", instruction.opt("value")))

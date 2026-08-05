@@ -187,7 +187,10 @@ export type PlatformEffect =
 
 export interface PlatformInstruction {
 	launchId: string;
+	executorId: string;
+	generation: string;
 	actionId: string;
+	dismissOnSuccess: boolean;
 	/** Cryptographically random, consumed once for the active launch. */
 	nonce: string;
 	value?: SessionControlValue;
@@ -212,6 +215,8 @@ export type SessionControlInteraction =
 	| { kind: "command", payload?: undefined }
 	| { kind: "toggle", payload: {
 	value: boolean;
+	trueLabel: string;
+	falseLabel: string;
 }}
 	| { kind: "choice", payload: {
 	value: string;

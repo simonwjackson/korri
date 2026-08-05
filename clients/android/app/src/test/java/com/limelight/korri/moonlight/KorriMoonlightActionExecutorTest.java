@@ -33,8 +33,9 @@ public class KorriMoonlightActionExecutorTest {
         KorriMoonlightActionExecutor executor = new KorriMoonlightActionExecutor(
                 actions, new KorriMoonlightActionCoordinatorTest.ImmediateUiDispatcher());
 
-        JSONObject state = new JSONObject(executor.stateJson(LAUNCH));
+        JSONObject state = new JSONObject(executor.stateJson(LAUNCH, "executor-generation"));
         assertEquals(LAUNCH, state.getString("launchId"));
+        assertEquals("executor-generation", state.getString("generation"));
         assertEquals(18, state.getJSONArray("effects").length());
         assertEquals(true, value(state, "set-fill-mode").getBoolean("value"));
         assertEquals(true, value(state, "set-zoom-mode").getBoolean("value"));
@@ -46,6 +47,23 @@ public class KorriMoonlightActionExecutorTest {
         assertEquals(true, value(state, "set-picture-in-picture").getBoolean("value"));
         assertFalse(state.toString().contains("Activity"));
         assertFalse(state.toString().contains("checkbox_"));
+    }
+
+    @Test
+    public void isolatesPerEffectUnavailabilityWithoutDroppingHealthyEffects() throws Exception {
+        KorriMoonlightActionCoordinatorTest.RecordingActions actions =
+                new KorriMoonlightActionCoordinatorTest.RecordingActions();
+        actions.unavailable.add(KorriMoonlightActionExecutor.Effect.SET_MOUSE_MODE);
+        KorriMoonlightActionExecutor executor = new KorriMoonlightActionExecutor(
+                actions, new KorriMoonlightActionCoordinatorTest.ImmediateUiDispatcher());
+
+        JSONObject state = new JSONObject(executor.stateJson(LAUNCH, "generation"));
+        assertFalse(effect(state, "set-mouse-mode").getBoolean("fulfillable"));
+        assertFalse(effect(state, "set-mouse-mode").has("value"));
+        assertTrue(effect(state, "disconnect").getBoolean("fulfillable"));
+        assertEquals(KorriMoonlightActionExecutor.Outcome.UNAVAILABLE,
+                executor.execute(KorriMoonlightActionExecutor.Request.choice(
+                        LAUNCH, KorriMoonlightActionExecutor.Effect.SET_MOUSE_MODE, "0")));
     }
 
     @Test
@@ -155,19 +173,22 @@ public class KorriMoonlightActionExecutorTest {
         assertFalse(worker.isAlive());
     }
 
-    private static JSONObject value(JSONObject state, String effect) throws Exception {
+    private static JSONObject effect(JSONObject state, String effect) throws Exception {
         JSONArray effects = state.getJSONArray("effects");
         for (int index = 0; index < effects.length(); index++) {
             JSONObject entry = effects.getJSONObject(index);
-            if (effect.equals(entry.getString("effect"))) {
-                assertTrue(entry.getBoolean("fulfillable"));
-                return entry.getJSONObject("value");
-            }
+            if (effect.equals(entry.getString("effect"))) return entry;
         }
         throw new AssertionError("missing effect " + effect);
     }
 
-    private static final class QueuedUiDispatcher
+    private static JSONObject value(JSONObject state, String effect) throws Exception {
+        JSONObject entry = effect(state, effect);
+        assertTrue(entry.getBoolean("fulfillable"));
+        return entry.getJSONObject("value");
+    }
+
+    static final class QueuedUiDispatcher
             implements KorriMoonlightActionExecutor.UiDispatcher {
         private final List<Runnable> queued = new ArrayList<>();
         private Thread uiThread;
@@ -184,7 +205,11 @@ public class KorriMoonlightActionExecutorTest {
             notifyAll();
         }
 
-        synchronized void drainOnTestUiThread() {
+        synchronized void markCurrentUiThread() {
+            uiThread = Thread.currentThread();
+        }
+
+        synchronized void awaitQueued() {
             long deadline = System.currentTimeMillis() + 1000;
             while (queued.isEmpty() && System.currentTimeMillis() < deadline) {
                 try {
@@ -193,6 +218,11 @@ public class KorriMoonlightActionExecutorTest {
                     throw new AssertionError(error);
                 }
             }
+            if (queued.isEmpty()) throw new AssertionError("UI action was not queued");
+        }
+
+        synchronized void drainOnTestUiThread() {
+            awaitQueued();
             uiThread = Thread.currentThread();
             for (Runnable action : new ArrayList<>(queued)) {
                 action.run();

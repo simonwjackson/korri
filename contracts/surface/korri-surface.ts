@@ -177,7 +177,12 @@ export type SurfaceStatus =
  * platform instructions deliberately have no representation in this treaty. */
 export type SurfaceGameplayControlInteraction =
   | { readonly kind: "command" }
-  | { readonly kind: "toggle"; readonly value: boolean }
+  | {
+      readonly kind: "toggle"
+      readonly value: boolean
+      readonly trueLabel: string
+      readonly falseLabel: string
+    }
   | {
       readonly kind: "choice"
       readonly value: string

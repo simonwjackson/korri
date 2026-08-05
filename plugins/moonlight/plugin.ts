@@ -25,14 +25,20 @@ const declaration = {
     },
     sessionControls: {
       fill: {
+        order: 0,
         id: "@korri:moonlight/fill",
         owner: { kind: "transport", id: transport },
         label: "Screen fit",
         description: "Switch between fit and crop to fill",
-        interaction: { kind: "toggle" },
+        interaction: {
+          kind: "toggle",
+          trueLabel: "crop to fill",
+          falseLabel: "fit (letterbox)",
+        },
         effect: "@korri:moonlight/set-fill-mode",
       },
       keyboard: {
+        order: 1,
         id: "@korri:moonlight/keyboard",
         owner: { kind: "transport", id: transport },
         label: "Toggle keyboard",
@@ -41,6 +47,7 @@ const declaration = {
         dismissOnSuccess: true,
       },
       fullKeyboard: {
+        order: 2,
         id: "@korri:moonlight/full-keyboard",
         owner: { kind: "transport", id: transport },
         label: "Full keyboard",
@@ -49,6 +56,7 @@ const declaration = {
         dismissOnSuccess: true,
       },
       panZoom: {
+        order: 3,
         id: "@korri:moonlight/pan-zoom",
         owner: { kind: "transport", id: transport },
         label: "Pan & zoom",
@@ -57,6 +65,7 @@ const declaration = {
         dismissOnSuccess: true,
       },
       mouseMode: {
+        order: 4,
         id: "@korri:moonlight/mouse-mode",
         owner: { kind: "transport", id: transport },
         label: "Mouse mode",
@@ -78,6 +87,7 @@ const declaration = {
         dismissOnSuccess: true,
       },
       localCursor: {
+        order: 5,
         id: "@korri:moonlight/local-cursor",
         owner: { kind: "transport", id: transport },
         label: "Toggle local mouse cursor(physical mouse needed)",
@@ -86,6 +96,7 @@ const declaration = {
         dismissOnSuccess: true,
       },
       rotateScreen: {
+        order: 6,
         id: "@korri:moonlight/rotate-screen",
         owner: { kind: "transport", id: transport },
         label: "Rotate screen",
@@ -94,6 +105,7 @@ const declaration = {
         dismissOnSuccess: true,
       },
       hud: {
+        order: 7,
         id: "@korri:moonlight/hud",
         owner: { kind: "transport", id: transport },
         label: "Toggle HUD",
@@ -102,6 +114,7 @@ const declaration = {
         dismissOnSuccess: true,
       },
       floatingMenu: {
+        order: 8,
         id: "@korri:moonlight/floating-menu",
         owner: { kind: "transport", id: transport },
         label: "Floating menu button",
@@ -110,6 +123,7 @@ const declaration = {
         dismissOnSuccess: true,
       },
       keyboardController: {
+        order: 9,
         id: "@korri:moonlight/keyboard-controller",
         owner: { kind: "transport", id: transport },
         label: "Keyboard as controller",
@@ -118,6 +132,7 @@ const declaration = {
         dismissOnSuccess: true,
       },
       touchSensitivity: {
+        order: 10,
         id: "@korri:moonlight/touch-sensitivity",
         owner: { kind: "transport", id: transport },
         label: "Touch sensitivity",
@@ -126,6 +141,7 @@ const declaration = {
         dismissOnSuccess: true,
       },
       sgsrSharpness: {
+        order: 11,
         id: "@korri:moonlight/sgsr-sharpness",
         owner: { kind: "transport", id: transport },
         label: "SGSR sharpness",
@@ -133,6 +149,7 @@ const declaration = {
         effect: "@korri:moonlight/set-sgsr-sharpness",
       },
       sgsrEdgeThreshold: {
+        order: 12,
         id: "@korri:moonlight/sgsr-edge-threshold",
         owner: { kind: "transport", id: transport },
         label: "SGSR edge threshold",
@@ -140,6 +157,7 @@ const declaration = {
         effect: "@korri:moonlight/set-sgsr-edge-threshold",
       },
       faceButtonFlip: {
+        order: 13,
         id: "@korri:moonlight/face-button-flip",
         owner: { kind: "transport", id: transport },
         label: "Flip A/B and X/Y",
@@ -147,6 +165,7 @@ const declaration = {
         effect: "@korri:moonlight/set-face-button-flip",
       },
       rumble: {
+        order: 14,
         id: "@korri:moonlight/rumble",
         owner: { kind: "transport", id: transport },
         label: "Rumble",
@@ -154,6 +173,7 @@ const declaration = {
         effect: "@korri:moonlight/set-rumble",
       },
       pictureInPicture: {
+        order: 15,
         id: "@korri:moonlight/picture-in-picture",
         owner: { kind: "transport", id: transport },
         label: "Picture-in-picture",
@@ -161,6 +181,7 @@ const declaration = {
         effect: "@korri:moonlight/set-picture-in-picture",
       },
       disconnect: {
+        order: 16,
         id: "@korri:moonlight/disconnect",
         owner: { kind: "transport", id: transport },
         label: "Disconnect",
@@ -170,6 +191,7 @@ const declaration = {
         dismissOnSuccess: true,
       },
       quitHost: {
+        order: 17,
         id: "@korri:moonlight/quit-host",
         owner: { kind: "transport", id: transport },
         label: "Quit game on host",
