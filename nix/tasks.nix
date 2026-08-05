@@ -412,6 +412,7 @@ let
       ];
       script = ''
         cd "$KORRI_ROOT/clients/portal"
+        bun install --frozen-lockfile --ignore-scripts
         bun run build
         rm -rf "$KORRI_ROOT/clients/android/app/src/main/assets/portal"
         cp -r dist "$KORRI_ROOT/clients/android/app/src/main/assets/portal"
@@ -423,6 +424,7 @@ let
       runtimeInputs = [ pkgs.bun ];
       script = ''
         cd "$KORRI_ROOT/clients/portal"
+        bun install --frozen-lockfile --ignore-scripts
         bun test
         bun run typecheck
       '';
@@ -433,6 +435,7 @@ let
       runtimeInputs = [ pkgs.bun ];
       script = ''
         cd "$KORRI_ROOT/surfaces/shift"
+        bun install --frozen-lockfile --ignore-scripts
         bun test
         bun run typecheck
       '';
