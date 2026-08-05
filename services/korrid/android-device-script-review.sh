@@ -10,6 +10,7 @@ ANDROID_SMOKE="$CRATE/android-smoke.sh"
 ANDROID_APP_ROUTE="$CRATE/android-app-route-check.sh"
 JOURNEY_RESUME="$CRATE/journey-resume.sh"
 OVERLAY_ACCEPTANCE="$ROOT/clients/android/overlay-acceptance.sh"
+RETROARCH_ACCEPTANCE="$ROOT/plugins/retroarch/android/device-acceptance.sh"
 KORRI_SHELL="$ROOT/clients/android/app/src/main/java/com/limelight/KorriShellActivity.java"
 
 # The review's canonical cases must stay deterministic even when a developer's
@@ -41,7 +42,7 @@ unset \
 export KORRI_ANDROID_DEBUG_CAPABILITY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$JOURNEY_RESUME" \
-  "$OVERLAY_ACCEPTANCE" "$CRATE/android-debug-capability.sh"
+  "$OVERLAY_ACCEPTANCE" "$RETROARCH_ACCEPTANCE" "$CRATE/android-debug-capability.sh"
 
 # Unified-overlay acceptance remains human-led and state restoring. These
 # source contracts deliberately do not substitute for the device gate.
@@ -72,8 +73,16 @@ grep -F 'retroarch.cfg' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'wl4.state.auto' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'wl4.srm' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'PREFS_BACKUP=' "$OVERLAY_ACCEPTANCE" >/dev/null
-grep -F 'PRIOR_AUTO_ROTATION=' "$OVERLAY_ACCEPTANCE" >/dev/null
+if sed '/^[[:space:]]*#/d' "$OVERLAY_ACCEPTANCE" | grep -Eq 'settings[[:space:]]+(put|delete)'; then
+  echo 'overlay acceptance must not rewrite Android settings during grant-sensitive acceptance' >&2
+  exit 1
+fi
 grep -F 'enabled_accessibility_services' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'assert_accessibility_service_enabled' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'semantic_control_values' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'value: .interaction.payload.value' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'close_exact_acceptance_paths' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'recovery: restore every changed control through the Korri gameplay overlay' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'capture_evidence' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F '[active controls and telemetry]' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'could not establish safe quiescence; backup and lock retained' "$OVERLAY_ACCEPTANCE" >/dev/null
@@ -101,9 +110,26 @@ if grep -F "|| printf '{\"expected\"" "$OVERLAY_ACCEPTANCE" >/dev/null; then
   echo 'overlay acceptance must never synthesize expected RPC evidence after transport failure' >&2
   exit 1
 fi
-if sed '/^[[:space:]]*#/d' "$OVERLAY_ACCEPTANCE" \
-  | grep -Eq 'pm[[:space:]]+(install|uninstall|clear|grant)([;&|[:space:]]|$)|adb[^[:cntrl:]]+[[:space:]]install([;&|[:space:]]|$)'; then
-  echo 'overlay acceptance must not install, uninstall, clear, or grant packages/permissions' >&2
+for acceptance_script in "$OVERLAY_ACCEPTANCE" "$RETROARCH_ACCEPTANCE"; do
+  if sed '/^[[:space:]]*#/d' "$acceptance_script" \
+    | grep -Eq 'pm[[:space:]]+(install|uninstall|clear|grant)([;&|[:space:]]|$)|adb[^[:cntrl:]]+[[:space:]]install([;&|[:space:]]|$)|(^|[[:space:]"])install[[:space:]]+-'; then
+    echo "$(basename "$acceptance_script") must not install, uninstall, clear, or grant packages/permissions" >&2
+    exit 1
+  fi
+  if sed '/^[[:space:]]*#/d' "$acceptance_script" \
+    | grep -Eq '(force-stop|am[[:space:]]+kill|kill[[:space:]]+[^-]).*(KORRI_PACKAGE|KORRI_PID|com\.simonwjackson\.korri)'; then
+    echo "$(basename "$acceptance_script") must never force-stop or kill Korri" >&2
+    exit 1
+  fi
+done
+if sed '/^[[:space:]]*#/d' "$OVERLAY_ACCEPTANCE" | grep -F 'rm -rf shared_prefs' >/dev/null \
+  || sed '/^[[:space:]]*#/d' "$OVERLAY_ACCEPTANCE" | grep -F "cp -R '\$PREFS_BACKUP/shared_prefs' shared_prefs" >/dev/null; then
+  echo 'overlay acceptance must keep its SharedPreferences backup read-only and restore controls through product actions' >&2
+  exit 1
+fi
+final_service_assertion="$(sed -n '/cleanup() {/,/^}/p' "$OVERLAY_ACCEPTANCE")"
+if ! grep -F 'assert_accessibility_service_enabled' <<<"$final_service_assertion" >/dev/null; then
+  echo 'overlay acceptance cleanup must finally assert that the accessibility service remains enabled' >&2
   exit 1
 fi
 if sed '/^[[:space:]]*#/d' "$OVERLAY_ACCEPTANCE" \
@@ -224,6 +250,20 @@ fi
 TMP="$(mktemp -d)"
 cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
+SEMANTIC_FUNCTION="$TMP/semantic-control-values.sh"
+sed -n '/^semantic_control_values() {/,/^}/p' "$OVERLAY_ACCEPTANCE" >"$SEMANTIC_FUNCTION"
+# shellcheck source=/dev/null
+source "$SEMANTIC_FUNCTION"
+semantic_fixture='{"outcome":{"payload":{"groups":[{"controls":[{"id":"command","interaction":{"kind":"command"}},{"id":"range","interaction":{"kind":"range","payload":{"value":7,"min":0,"max":10,"step":1}}},{"id":"toggle","interaction":{"kind":"toggle","payload":{"value":false,"trueLabel":"On","falseLabel":"Off"}}}]}]}}}'
+semantic_values="$(semantic_control_values <<<"$semantic_fixture")"
+jq -e '
+  length == 2
+  and .[0] == {id:"range",kind:"range",value:7}
+  and .[1] == {id:"toggle",kind:"toggle",value:false}
+' <<<"$semantic_values" >/dev/null || {
+  echo 'overlay acceptance semantic control comparison lost typed values or included commands' >&2
+  exit 1
+}
 ADB_LOG="$TMP/adb.log"
 CHILD_LOG="$TMP/children.log"
 FAKE_ADB="$TMP/adb"

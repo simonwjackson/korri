@@ -29,9 +29,13 @@ measurements; only the real BLAST SurfaceView was useful.
 
 The accessibility grant disappeared repeatedly during early work. A later app
 update preserved it, correcting the initial attribution to reinstall. Writes to
-`enabled_accessibility_services` / `accessibility_enabled` were the demonstrated
-hazard. Product and acceptance tooling therefore read those values only;
-Android Settings remains the user-owned grant path.
+`enabled_accessibility_services` / `accessibility_enabled` were one demonstrated
+hazard. On 2026-08-05, the RG405M running Android 14 also measurably lost the
+user-owned Korri accessibility-service grant when Korri was force-stopped.
+Acceptance tooling must therefore leave the granted Korri process alive: no
+force-stop, process kill, install, uninstall, clear, or automated restart is a
+valid setup or cleanup action. Product and acceptance tooling read secure
+settings only; Android Settings remains the user-owned grant path.
 
 ## What changed since the spike
 

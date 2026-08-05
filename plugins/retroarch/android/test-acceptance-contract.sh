@@ -31,6 +31,16 @@ grep -F 'invoke_overlay_row 1' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_overlay_window_absent' "$ACCEPTANCE" >/dev/null
 grep -F 'Korri gameplay overlay' "$ACCEPTANCE" >/dev/null
 grep -F 'authenticated_retroarch_status' "$ACCEPTANCE" >/dev/null
+grep -F 'discover_live_korri_authority' "$ACCEPTANCE" >/dev/null
+grep -F 'new_logcat_marker' "$ACCEPTANCE" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F 'logcat_since "$AUTO_LOAD_LOG_MARKER"' "$ACCEPTANCE" >/dev/null
+grep -F '"_tag":"system.health"' "$ACCEPTANCE" >/dev/null
+grep -F 'existing_korri_pid=' "$ACCEPTANCE" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F 'am start --display 0 -n "$KORRI_ACTIVITY"' "$ACCEPTANCE" >/dev/null
+grep -F 'assert_accessibility_service_enabled' "$ACCEPTANCE" >/dev/null
+grep -F 'assert_shell_foreground' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_menu_status 1' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_selection_advanced' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_DPAD_DOWN' "$ACCEPTANCE" >/dev/null
@@ -51,7 +61,16 @@ if grep -Eq 'input (tap|swipe)' "$ACCEPTANCE"; then
   exit 1
 fi
 if grep -Eq 'pm (clear|grant|install|uninstall)| adb install' "$ACCEPTANCE"; then
-  echo 'RetroArch acceptance must not mutate the installed target package' >&2
+  echo 'RetroArch acceptance must not mutate installed packages' >&2
+  exit 1
+fi
+if sed '/^[[:space:]]*#/d' "$ACCEPTANCE" \
+  | grep -Eq '(force-stop|am[[:space:]]+kill|kill[[:space:]]+[^-]).*(KORRI_PACKAGE|existing_korri_pid|com\.simonwjackson\.korri)'; then
+  echo 'RetroArch acceptance must never stop or kill Korri after the user-owned grant' >&2
+  exit 1
+fi
+if grep -Eq 'logcat[[:space:]]+-c' "$ACCEPTANCE"; then
+  echo 'RetroArch acceptance must retain prior logcat while discovering the live authority' >&2
   exit 1
 fi
 if grep -Eq 'settings (put|delete) secure (enabled_accessibility_services|accessibility_enabled)' "$ACCEPTANCE"; then

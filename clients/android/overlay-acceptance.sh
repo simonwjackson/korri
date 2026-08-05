@@ -21,6 +21,7 @@ ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
 ADB_BIN="${KORRI_ADB_BIN:-$(command -v adb)}"
 KORRI_PACKAGE="${KORRI_PACKAGE:-com.simonwjackson.korri.debug}"
 KORRI_ACTIVITY="$KORRI_PACKAGE/com.limelight.KorriShellActivity"
+KORRI_SERVICE_COMPONENT="$KORRI_PACKAGE/com.limelight.korri.overlay.KorriOverlayService"
 RETROARCH_PACKAGE="${KORRI_RETROARCH_PACKAGE:-com.korri.retroarch}"
 ANDROID_PACKAGE_PATTERN='^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$'
 [[ "$SERIAL" =~ ^[A-Za-z0-9._:-]+$ ]] || {
@@ -65,7 +66,9 @@ LOCK_ACQUIRED=false
 BACKUP_CLASSIFIED=false
 FORWARD_ACTIVE=false
 RPC_READY=false
-KORRI_STARTED=false
+SHELL_BROUGHT_FORWARD=false
+SEMANTIC_COMPARISON_REQUIRED=false
+SEMANTIC_VALUES_EQUAL=false
 CONFIG_WAS_PRESENT=false
 LIBRARY_WAS_PRESENT=false
 RETROARCH_CONFIG_WAS_PRESENT=false
@@ -76,9 +79,8 @@ STATE_DIR_WAS_PRESENT=false
 SAVE_DIR_WAS_PRESENT=false
 SYSTEM_DIR_WAS_PRESENT=false
 SCREENSHOTS_DIR_WAS_PRESENT=false
-PREFS_WAS_PRESENT=false
-PRIOR_AUTO_ROTATION=''
-PRIOR_USER_ROTATION=''
+PREFS_BACKUP_READY=false
+KORRI_PID=''
 CAPABILITY=''
 
 adb_target() {
@@ -182,19 +184,13 @@ backup_before_mutation() {
   record_directory "$SYSTEM_DIR" SYSTEM_DIR_WAS_PRESENT
   record_directory "$SCREENSHOTS_DIR" SCREENSHOTS_DIR_WAS_PRESENT
 
-  if adb_shell "run-as '$KORRI_PACKAGE' test -d shared_prefs" >/dev/null 2>&1; then
-    PREFS_WAS_PRESENT=true
-    adb_shell "run-as '$KORRI_PACKAGE' sh -c \"rm -rf '$PREFS_BACKUP'; mkdir -p '$PREFS_BACKUP'; cp -R shared_prefs '$PREFS_BACKUP/'; diff -r shared_prefs '$PREFS_BACKUP/shared_prefs'\""
-  else
-    adb_shell "run-as '$KORRI_PACKAGE' sh -c \"rm -rf '$PREFS_BACKUP'; mkdir -p '$PREFS_BACKUP'\""
-  fi
+  # SharedPreferences are diagnostic evidence only. The live Korri process owns
+  # these files; acceptance never overwrites or removes shared_prefs. Stateful
+  # controls are restored through their public overlay actions and compared
+  # semantically before the gate can pass.
+  adb_shell "run-as '$KORRI_PACKAGE' sh -c \"rm -rf '$PREFS_BACKUP'; mkdir -p '$PREFS_BACKUP'; if test -d shared_prefs; then cp -R shared_prefs '$PREFS_BACKUP/'; diff -r shared_prefs '$PREFS_BACKUP/shared_prefs'; fi; chmod -R a-w '$PREFS_BACKUP'\""
+  PREFS_BACKUP_READY=true
 
-  PRIOR_AUTO_ROTATION="$(adb_shell settings get system accelerometer_rotation | tr -d '\r\n')"
-  PRIOR_USER_ROTATION="$(adb_shell settings get system user_rotation | tr -d '\r\n')"
-  [[ "$PRIOR_AUTO_ROTATION" =~ ^[01]$ && "$PRIOR_USER_ROTATION" =~ ^[0-3]$ ]] || {
-    echo 'could not classify system rotation before mutation' >&2
-    exit 1
-  }
   # Every mutable path is classified and every present value has a verified
   # backup. Only now may cleanup interpret a false flag as original absence.
   BACKUP_CLASSIFIED=true
@@ -207,15 +203,6 @@ restore_exact_state() {
   restore_file "$RETROARCH_CONFIG_REMOTE" retroarch.cfg "$RETROARCH_CONFIG_WAS_PRESENT" || failed=true
   restore_file "$STATE_FILE" wl4.state.auto "$STATE_WAS_PRESENT" || failed=true
   restore_file "$SAVE_FILE" wl4.srm "$SAVE_WAS_PRESENT" || failed=true
-
-  if [[ "$PREFS_WAS_PRESENT" == true ]]; then
-    adb_shell "run-as '$KORRI_PACKAGE' sh -c \"rm -rf shared_prefs; cp -R '$PREFS_BACKUP/shared_prefs' shared_prefs; diff -r '$PREFS_BACKUP/shared_prefs' shared_prefs\"" >/dev/null || failed=true
-  else
-    adb_shell "run-as '$KORRI_PACKAGE' rm -rf shared_prefs" >/dev/null || failed=true
-  fi
-  adb_shell "settings put system accelerometer_rotation '$PRIOR_AUTO_ROTATION'; settings put system user_rotation '$PRIOR_USER_ROTATION'" >/dev/null || failed=true
-  [[ "$(adb_shell settings get system accelerometer_rotation | tr -d '\r\n')" == "$PRIOR_AUTO_ROTATION" ]] || failed=true
-  [[ "$(adb_shell settings get system user_rotation | tr -d '\r\n')" == "$PRIOR_USER_ROTATION" ]] || failed=true
 
   local state
   for state in \
@@ -233,7 +220,16 @@ restore_exact_state() {
     echo "exact restoration failed; backup and lock retained at $BACKUP_REMOTE and $LOCK_REMOTE" >&2
     return 1
   }
-  adb_shell "run-as '$KORRI_PACKAGE' rm -rf '$PREFS_BACKUP'" >/dev/null || return 1
+  if [[ "$SEMANTIC_COMPARISON_REQUIRED" == true && "$SEMANTIC_VALUES_EQUAL" != true ]]; then
+    echo "semantic control restoration is incomplete; read-only preference backup retained at $PREFS_BACKUP" >&2
+    echo "recovery: restore every changed control through the Korri gameplay overlay, using $EVIDENCE_DIR/stream-controls-original.json as the source of truth" >&2
+    echo "external backup and lock retained at $BACKUP_REMOTE and $LOCK_REMOTE until semantic values are verified equal" >&2
+    return 1
+  fi
+  if [[ "$PREFS_BACKUP_READY" == true ]]; then
+    adb_shell "run-as '$KORRI_PACKAGE' sh -c \"chmod -R u+w '$PREFS_BACKUP'; rm -rf '$PREFS_BACKUP'\"" >/dev/null || return 1
+    PREFS_BACKUP_READY=false
+  fi
   adb_shell "rm -rf '$BACKUP_REMOTE'" >/dev/null || return 1
   BACKUP_CLASSIFIED=false
 }
@@ -251,23 +247,77 @@ session_is_idle() {
   jq -e '.outcome._tag == "Ok" and (.outcome.payload.active | not)' <<<"$status" >/dev/null
 }
 
+close_exact_acceptance_paths() {
+  local failed=false
+  local pid=''
+  local session=''
+  local launch_id=''
+  local controls=''
+  local close_response=''
+  local current_korri_pid=''
+
+  # Active local emulation uses its authenticated Quit control; an active
+  # stream uses Disconnect to finish the exact Game Activity without
+  # terminating the host game. A stray fork RetroArch process is the only
+  # package cleanup target.
+  if [[ "$RPC_READY" == true ]]; then
+    session="$(rpc '{"_tag":"app.session.status","payload":{}}' 2>/dev/null || true)"
+    launch_id="$(jq -r '.outcome.payload.active.launchId // empty' <<<"$session" 2>/dev/null || true)"
+    if [[ -n "$launch_id" ]]; then
+      controls="$(controls_for_launch "$launch_id" 2>/dev/null || true)"
+      if jq -e --arg id '@korri:retroarch/quit' \
+          '[.outcome.payload.groups[].controls[].id] | index($id) != null' <<<"$controls" >/dev/null 2>&1; then
+        close_response="$(invoke_control "$launch_id" '@korri:retroarch/quit' 2>/dev/null || true)"
+      elif jq -e --arg id '@korri:moonlight/disconnect' \
+          '[.outcome.payload.groups[].controls[].id] | index($id) != null' <<<"$controls" >/dev/null 2>&1; then
+        close_response="$(invoke_control "$launch_id" '@korri:moonlight/disconnect' 2>/dev/null || true)"
+      else
+        failed=true
+      fi
+      if [[ -z "$close_response" ]] \
+        || ! jq -e '.outcome._tag == "Ok" and .outcome.payload._tag == "Completed"' \
+          <<<"$close_response" >/dev/null 2>&1; then
+        failed=true
+      fi
+      for _ in $(seq 1 20); do
+        session_is_idle && break
+        sleep 0.25
+      done
+      session_is_idle || failed=true
+    fi
+  fi
+
+  pid="$(package_pid "$RETROARCH_PACKAGE" 2>/dev/null || printf probe-failed)"
+  if [[ -n "$pid" ]]; then
+    adb_shell "am force-stop '$RETROARCH_PACKAGE'" >/dev/null 2>&1 || failed=true
+  fi
+  pid="$(package_pid "$RETROARCH_PACKAGE" 2>/dev/null || printf probe-failed)"
+  [[ -z "$pid" ]] || failed=true
+
+  if [[ "$SHELL_BROUGHT_FORWARD" == true ]]; then
+    adb_shell "am start --display 0 --activity-clear-top -n '$KORRI_ACTIVITY'" >/dev/null 2>&1 || failed=true
+    for _ in $(seq 1 20); do
+      assert_top_component "$KORRI_ACTIVITY" && assert_overlay_window absent && break
+      sleep 0.25
+    done
+    assert_top_component "$KORRI_ACTIVITY" || failed=true
+    assert_overlay_window absent || failed=true
+    current_korri_pid="$(package_pid "$KORRI_PACKAGE" 2>/dev/null || printf probe-failed)"
+    [[ -n "$current_korri_pid" && "$current_korri_pid" == "$KORRI_PID" ]] || failed=true
+  fi
+
+  [[ "$failed" == false ]]
+}
+
 cleanup() {
   local status=$?
   local safe=true
-  local pid=''
   trap - EXIT
 
+  if [[ "$BACKUP_CLASSIFIED" == true ]] && ! close_exact_acceptance_paths; then
+    safe=false
+  fi
   if [[ "$BACKUP_CLASSIFIED" == true ]]; then
-    pid="$(package_pid "$RETROARCH_PACKAGE" 2>/dev/null || printf probe-failed)"
-    [[ -z "$pid" ]] || safe=false
-    if [[ "$RPC_READY" == true ]] && ! session_is_idle; then
-      safe=false
-    fi
-    if [[ "$safe" == true && "$KORRI_STARTED" == true ]]; then
-      adb_shell "am force-stop '$KORRI_PACKAGE'" >/dev/null 2>&1 || safe=false
-      pid="$(package_pid "$KORRI_PACKAGE" 2>/dev/null || printf probe-failed)"
-      [[ -z "$pid" ]] || safe=false
-    fi
     if [[ "$safe" != true ]]; then
       echo "could not establish safe quiescence; backup and lock retained at $BACKUP_REMOTE and $LOCK_REMOTE" >&2
       status=1
@@ -284,6 +334,7 @@ cleanup() {
     adb_target -s "$SERIAL" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
     FORWARD_ACTIVE=false
   fi
+  assert_accessibility_service_enabled || status=1
   exit "$status"
 }
 
@@ -304,6 +355,24 @@ checkpoint() {
 accessibility_snapshot() {
   printf 'accessibility_enabled=%s\n' "$(adb_shell settings get secure accessibility_enabled | tr -d '\r')"
   printf 'enabled_accessibility_services=%s\n' "$(adb_shell settings get secure enabled_accessibility_services | tr -d '\r')"
+}
+
+assert_accessibility_service_enabled() {
+  local enabled_services
+  enabled_services="$(adb_shell settings get secure enabled_accessibility_services | tr -d '\r')" || return 1
+  grep -Fq "$KORRI_SERVICE_COMPONENT" <<<"$enabled_services" || {
+    echo 'Korri gameplay overlay accessibility service is no longer enabled.' >&2
+    echo 'Re-enable it manually in Android Settings; acceptance never writes secure settings.' >&2
+    return 1
+  }
+}
+
+semantic_control_values() {
+  jq -cS '[
+    .outcome.payload.groups[].controls[]
+    | select(.interaction.kind != "command")
+    | {id, kind: .interaction.kind, value: .interaction.payload.value}
+  ] | sort_by(.id)'
 }
 
 assert_overlay_window() {
@@ -417,12 +486,17 @@ trap cleanup EXIT
 for package in "$KORRI_PACKAGE" "$RETROARCH_PACKAGE" "$DIRECT_PACKAGE" "$UNRELATED_PACKAGE"; do
   require_preinstalled "$package"
 done
-for package in "$KORRI_PACKAGE" "$RETROARCH_PACKAGE"; do
-  [[ -z "$(package_pid "$package")" ]] || {
-    echo "$package must be stopped before acceptance backs up mutable state" >&2
-    exit 1
-  }
-done
+[[ -z "$(package_pid "$RETROARCH_PACKAGE")" ]] || {
+  echo "$RETROARCH_PACKAGE must be stopped before acceptance backs up mutable state" >&2
+  exit 1
+}
+assert_accessibility_service_enabled
+KORRI_PID="$(package_pid "$KORRI_PACKAGE")"
+[[ -n "$KORRI_PID" ]] || {
+  echo 'Korri must already be running before acceptance; open it normally and leave Shell visible.' >&2
+  echo 'Do not force-stop, reinstall, clear, or restart Korri after granting accessibility access.' >&2
+  exit 1
+}
 mkdir -p "$EVIDENCE_DIR"
 [[ -z "$(find "$EVIDENCE_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]] || {
   echo "evidence directory must be empty: $EVIDENCE_DIR" >&2
@@ -434,31 +508,39 @@ adb_target -s "$SERIAL" push "$CHECKPOINT_CONFIG" "$CONFIG_REMOTE" >/dev/null
 adb_target -s "$SERIAL" push "$CHECKPOINT_LIBRARY" "$LIBRARY_REMOTE" >/dev/null
 adb_target -s "$SERIAL" exec-out cat "$CONFIG_REMOTE" | cmp -s "$CHECKPOINT_CONFIG" -
 adb_target -s "$SERIAL" exec-out cat "$LIBRARY_REMOTE" | cmp -s "$CHECKPOINT_LIBRARY" -
-adb_shell "settings put system accelerometer_rotation 0; settings put system user_rotation 0" >/dev/null
 
 # Accessibility is Android-owned. This gate only reads it; permission changes
 # below are performed by the device owner in Settings.
-enabled_services="$(adb_shell settings get secure enabled_accessibility_services | tr -d '\r')"
-grep -Fq 'com.limelight.korri.overlay.KorriOverlayService' <<<"$enabled_services" || {
-  echo 'enable the Korri accessibility service by hand before starting acceptance' >&2
-  exit 1
-}
+assert_accessibility_service_enabled
 
 adb_shell "am start --display 0 -n '$KORRI_ACTIVITY'" >/dev/null
-KORRI_STARTED=true
+SHELL_BROUGHT_FORWARD=true
+[[ "$(package_pid "$KORRI_PACKAGE")" == "$KORRI_PID" ]] || {
+  echo 'Bringing Shell foreground changed the Korri process; refusing acceptance with uncertain grant state.' >&2
+  exit 1
+}
 port=''
 for _ in $(seq 1 30); do
-  logs="$(adb_shell "logcat -d -s KorridServer:I KorriPortal:I" 2>/dev/null || true)"
+  logs="$(adb_shell "logcat -d --pid='$KORRI_PID' -s KorridServer:I KorriPortal:I" 2>/dev/null || true)"
   port="$(sed -n 's/.*listening on 127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p' <<<"$logs" | tail -1)"
   grep -Fq 'title="Korri"' <<<"$logs" && [[ -n "$port" ]] && break
   sleep 1
 done
-[[ -n "$port" ]] || { echo 'embedded korrid/portal did not become ready' >&2; exit 1; }
+[[ -n "$port" ]] || { echo 'embedded korrid/portal did not become ready in the existing Korri process' >&2; exit 1; }
 CAPABILITY="${KORRI_ANDROID_DEBUG_CAPABILITY:-}"
 [[ -n "$CAPABILITY" ]] || CAPABILITY="$($DEBUG_CAPABILITY_SH "$SERIAL" "$KORRI_PACKAGE")"
 adb_target -s "$SERIAL" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
 adb_target -s "$SERIAL" forward "tcp:$HOST_PORT" "tcp:$port" >/dev/null
 FORWARD_ACTIVE=true
+health="$(rpc '{"_tag":"system.health","payload":{}}')"
+jq -e '
+  ._tag == "system.health"
+  and .outcome._tag == "Ok"
+  and (.outcome.payload.version | type == "string" and length > 0)
+' <<<"$health" >/dev/null || {
+  echo 'discovered Korri endpoint did not validate as the live authenticated brain' >&2
+  exit 1
+}
 RPC_READY=true
 
 checkpoint 'LOCAL OVERLAY VERIFIED' \
@@ -594,13 +676,44 @@ assert_overlay_window absent
 session_is_idle || { echo 'session became active during graceful lifecycle return' >&2; exit 1; }
 capture_evidence stream-graceful-return '{"activeControls":[],"telemetry":"asserted portal foreground and idle session"}'
 
+checkpoint 'STREAM PARITY STARTED' \
+  'Start the configured Moonlight stream again, wait for moving host frames, and leave the stream active.' \
+  'Do not exercise any gameplay-overlay control until the gate records original semantic values.'
+parity_status="$(rpc '{"_tag":"app.session.status","payload":{}}')"
+parity_launch_id="$(jq -er '.outcome.payload.active.launchId' <<<"$parity_status")"
+parity_controls_original="$(controls_for_launch "$parity_launch_id")"
+jq -e '.outcome._tag == "Ok" and ([.outcome.payload.groups[].controls[]] | length == 19)' \
+  <<<"$parity_controls_original" >/dev/null
+semantic_original="$(semantic_control_values <<<"$parity_controls_original")"
+jq -e 'length == 8 and all(.value != null)' <<<"$semantic_original" >/dev/null || {
+  echo 'could not capture all eight reversible gameplay-control values' >&2
+  exit 1
+}
+printf '%s\n' "$semantic_original" >"$EVIDENCE_DIR/stream-controls-original.json"
+SEMANTIC_COMPARISON_REQUIRED=true
+
 checkpoint 'STREAM PARITY VERIFIED' \
-  'Start the configured Moonlight stream again and exercise every control in docs/research/unified-android-game-overlay.md.' \
-  'Observe values after nondismissing controls; confirm Disconnect returns to Korri while the host game keeps running.' \
+  'Exercise every non-terminal control in docs/research/unified-android-game-overlay.md through the physical Korri gameplay overlay.' \
+  'Restore every toggle, choice, and range to its recorded original value through that same product action; never edit app files.' \
+  'Leave the same stream active after every reversible value visibly matches its original value.'
+parity_controls_final="$(controls_for_launch "$parity_launch_id")"
+semantic_final="$(semantic_control_values <<<"$parity_controls_final")"
+printf '%s\n' "$semantic_final" >"$EVIDENCE_DIR/stream-controls-final.json"
+if [[ "$semantic_final" != "$semantic_original" ]]; then
+  diff -u "$EVIDENCE_DIR/stream-controls-original.json" \
+    "$EVIDENCE_DIR/stream-controls-final.json" >"$EVIDENCE_DIR/stream-controls-recovery.diff" || true
+  echo 'reversible gameplay controls were not restored to their semantic original values' >&2
+  echo "recovery: restore every changed control through the Korri gameplay overlay; evidence is in $EVIDENCE_DIR" >&2
+  exit 1
+fi
+SEMANTIC_VALUES_EQUAL=true
+
+checkpoint 'STREAM TERMINALS VERIFIED' \
+  'Use Disconnect and confirm Korri returns while the host game keeps running.' \
   'Reconnect and confirm moving host frames resume, then use Quit game on host and confirm termination.'
-session_is_idle || { echo 'stream/host session is still active after parity checkpoint' >&2; exit 1; }
+session_is_idle || { echo 'stream/host session is still active after terminal-control checkpoint' >&2; exit 1; }
 assert_overlay_window absent
-capture_evidence stream-after-host-quit '{"activeControls":[],"telemetry":"asserted session status is idle after host quit"}'
+capture_evidence stream-after-host-quit '{"activeControls":[],"telemetry":"asserted session status is idle after host quit; reversible semantic values restored"}'
 printf '%s\n' 'DECODER/HOST FAILURE: REPOSITORY-ONLY — deterministic repository tests cover these failures; this device run does not claim them as passed.'
 
 checkpoint 'PERMISSION DISABLED BY HUMAN' \
@@ -627,6 +740,7 @@ grep -Fq 'com.limelight.korri.overlay.KorriOverlayService' <<<"$enabled_services
 [[ -z "$(package_pid "$RETROARCH_PACKAGE")" ]] || { echo 'RetroArch still running after permission recovery' >&2; exit 1; }
 session_is_idle
 assert_overlay_window absent
+assert_accessibility_service_enabled
 capture_evidence permission-recovered '{"activeControls":[],"telemetry":"human grant recovery; no screenshot-only claim"}'
 
 printf '\nPre-cutover overlay acceptance evidence captured at %s\n' "$EVIDENCE_DIR"

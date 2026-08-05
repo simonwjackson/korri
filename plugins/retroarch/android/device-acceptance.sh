@@ -41,7 +41,9 @@ CHECKPOINT_RESTORE_NEEDED=false
 FORWARD_ACTIVE=false
 LOCK_ACQUIRED=false
 TARGET_STARTED_BY_GATE=false
+SHELL_BROUGHT_FORWARD=false
 PORTAL_EVIDENCE_DIR=""
+KORRI_SERVICE_COMPONENT="$KORRI_PACKAGE/com.limelight.korri.overlay.KorriOverlayService"
 ADB_BIN="$(command -v adb)"
 adb() {
   if ! timeout 15 "$ADB_BIN" "$@"; then
@@ -91,6 +93,36 @@ package_pid() {
     return 1
   fi
   printf '%s' "$output" | tr -d '\r\n'
+}
+
+assert_accessibility_service_enabled() {
+  local enabled_services
+  enabled_services="$("${ADB[@]}" shell settings get secure enabled_accessibility_services | tr -d '\r')" || return 1
+  grep -Fq "$KORRI_SERVICE_COMPONENT" <<<"$enabled_services" || {
+    echo 'Korri gameplay overlay accessibility service is no longer enabled.' >&2
+    echo 'Re-enable it manually in Android Settings before relying on Guide.' >&2
+    return 1
+  }
+}
+
+assert_shell_foreground() {
+  "${ADB[@]}" shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" \
+    | grep -F "$KORRI_ACTIVITY" >/dev/null
+}
+
+new_logcat_marker() {
+  local label="$1"
+  local marker
+  marker="korri-retroarch-acceptance-$label-$$-$(date -u +%s)"
+  "${ADB[@]}" shell log -t KorriAcceptance "$marker" >/dev/null
+  printf '%s' "$marker"
+}
+
+logcat_since() {
+  local marker="$1"
+  shift
+  "${ADB[@]}" logcat -d "$@" \
+    | awk -v marker="$marker" 'index($0, marker) { found = 1; next } found'
 }
 
 backup_path_if_present() {
@@ -212,6 +244,14 @@ cleanup() {
       cleanup_failed=true
     fi
   fi
+  if [[ "$SHELL_BROUGHT_FORWARD" == true ]]; then
+    "${ADB[@]}" shell am start --display 0 -n "$KORRI_ACTIVITY" >/dev/null 2>&1 || cleanup_failed=true
+    for _ in $(seq 1 20); do
+      assert_shell_foreground && break
+      sleep 0.25
+    done
+    assert_shell_foreground || cleanup_failed=true
+  fi
   if [[ -n "$PORTAL_EVIDENCE_DIR" && "$status" -eq 0 ]]; then
     rm -rf "$PORTAL_EVIDENCE_DIR"
   fi
@@ -225,6 +265,7 @@ cleanup() {
       cleanup_failed=true
     fi
   fi
+  assert_accessibility_service_enabled || cleanup_failed=true
   if [[ "$cleanup_failed" == true && "$status" -eq 0 ]]; then
     status=1
   fi
@@ -284,6 +325,13 @@ fi
   echo 'Korri RetroArch must be stopped before acceptance can back up save state' >&2
   exit 1
 }
+assert_accessibility_service_enabled
+existing_korri_pid="$(package_pid "$KORRI_PACKAGE")"
+[[ -n "$existing_korri_pid" ]] || {
+  echo 'Korri is not already running, so its live brain cannot be safely discovered.' >&2
+  echo 'Open Korri normally, leave its Shell visible, and rerun this gate; do not force-stop or reinstall Korri.' >&2
+  exit 1
+}
 provision_checkpoint_files
 PORTAL_EVIDENCE_DIR="$(mktemp -d)"
 permission_info="$("${ADB[@]}" shell dumpsys package permissions | \
@@ -302,33 +350,71 @@ if [[ "$sdk_level" -ge 30 ]]; then
     exit 1
   }
 fi
-"${ADB[@]}" shell am force-stop "$KORRI_PACKAGE"
-"${ADB[@]}" logcat -c
 "${ADB[@]}" shell am start --display 0 -n "$KORRI_ACTIVITY" >/dev/null
-
-port=''
-portal_ready=''
-for _ in $(seq 1 30); do
-  logs="$("${ADB[@]}" logcat -d -s KorridServer:I KorriPortal:I 2>/dev/null || true)"
-  port="$(sed -n 's/.*listening on 127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p' <<<"$logs" | tail -1)"
-  portal_ready="$(grep 'title="Korri"' <<<"$logs" | tail -1 || true)"
-  [[ -n "$port" && -n "$portal_ready" ]] && break
-  sleep 1
-done
-[[ -n "$port" && -n "$portal_ready" ]] || {
-  echo 'Korri portal or embedded korrid did not become ready' >&2
+SHELL_BROUGHT_FORWARD=true
+foreground_korri_pid="$(package_pid "$KORRI_PACKAGE")"
+[[ "$foreground_korri_pid" == "$existing_korri_pid" ]] || {
+  echo 'Bringing Korri Shell forward changed the existing Korri process; refusing uncertain brain authority.' >&2
+  echo 'Leave Korri open and rerun after confirming its accessibility service is still enabled. Do not force-stop or reinstall it.' >&2
   exit 1
 }
 
 # Deeper debug acceptance reads the bridge directly through WebView inspection;
-# readiness above never depends on a bearer and no secret crosses logcat.
+# no secret crosses logcat. Prior logcat is retained and filtered to the exact
+# existing Korri process before candidate endpoints are authenticated.
 capability="${KORRI_ANDROID_DEBUG_CAPABILITY:-}"
 if [[ -z "$capability" ]]; then
   capability="$("$DEBUG_CAPABILITY_SH" "$SERIAL" "$KORRI_PACKAGE")"
 fi
-"${ADB[@]}" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
-"${ADB[@]}" forward "tcp:$HOST_PORT" "tcp:$port" >/dev/null
-FORWARD_ACTIVE=true
+port=''
+discover_live_korri_authority() {
+  local logs=''
+  local portal_ready=''
+  local candidate=''
+  local health=''
+  local -a candidates=()
+
+  logs="$("${ADB[@]}" logcat -d --pid="$existing_korri_pid" -s KorridServer:I KorriPortal:I 2>/dev/null || true)"
+  portal_ready="$(grep 'title="Korri"' <<<"$logs" | tail -1 || true)"
+  [[ -n "$portal_ready" ]] || return 1
+  mapfile -t candidates < <(
+    sed -n 's/.*listening on 127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p' <<<"$logs" \
+      | tac | awk '!seen[$0]++'
+  )
+  for candidate in "${candidates[@]}"; do
+    [[ "$candidate" =~ ^[0-9]+$ && "$candidate" -ge 1024 && "$candidate" -le 65535 ]] || continue
+    "${ADB[@]}" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
+    "${ADB[@]}" forward "tcp:$HOST_PORT" "tcp:$candidate" >/dev/null || continue
+    FORWARD_ACTIVE=true
+    health="$(curl --fail --silent --show-error \
+      --connect-timeout 2 --max-time 5 \
+      -H 'content-type: application/json' \
+      -H "authorization: Bearer $capability" \
+      -d '{"_tag":"system.health","payload":{}}' \
+      "http://127.0.0.1:$HOST_PORT/rpc" 2>/dev/null || true)"
+    if jq -e '
+      ._tag == "system.health"
+      and .outcome._tag == "Ok"
+      and (.outcome.payload.version | type == "string" and length > 0)
+    ' <<<"$health" >/dev/null 2>&1; then
+      port="$candidate"
+      return 0
+    fi
+    "${ADB[@]}" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
+    FORWARD_ACTIVE=false
+  done
+  return 1
+}
+for _ in $(seq 1 30); do
+  discover_live_korri_authority && break
+  sleep 1
+done
+[[ -n "$port" ]] || {
+  echo 'No live Korri brain/portal authority could be safely discovered and validated.' >&2
+  echo 'Open Korri normally, leave its Shell visible, and rerun; do not force-stop, reinstall, or clear Korri.' >&2
+  exit 1
+}
+ACCEPTANCE_LOG_MARKER="$(new_logcat_marker gate-start)"
 rpc() {
   curl --fail --silent --show-error \
     --connect-timeout 2 --max-time 5 --retry 2 --retry-connrefused \
@@ -590,20 +676,20 @@ done
   exit 1
 }
 "${ADB[@]}" shell am force-stop "$FORK_PACKAGE"
-pause_error_logs="$("${ADB[@]}" logcat -d -s DEBUG:E AndroidRuntime:E)"
+pause_error_logs="$(logcat_since "$ACCEPTANCE_LOG_MARKER" -s KorriAcceptance:I DEBUG:E AndroidRuntime:E)"
 if grep -qE 'Fatal signal|FATAL EXCEPTION' <<<"$pause_error_logs"; then
   echo 'runtime emitted a fatal process error during pause acceptance' >&2
   exit 1
 fi
-"${ADB[@]}" logcat -c
 
 # Relaunch through Korri again; verbose runtime logging proves the non-empty
 # auto-state was loaded successfully rather than merely left on disk.
+AUTO_LOAD_LOG_MARKER="$(new_logcat_marker auto-load)"
 "${ADB[@]}" shell am start --display 0 -n "$KORRI_ACTIVITY" >/dev/null
 launch_wario_entry second
 status_second="$(wait_playing)"
 "${ADB[@]}" shell "test -s '$STATE_FILE'"
-auto_load_log="$("${ADB[@]}" logcat -d 2>/dev/null | \
+auto_load_log="$(logcat_since "$AUTO_LOAD_LOG_MARKER" 2>/dev/null | \
   grep -F '[State] Auto-loading save state from' | \
   grep -F "$STATE_FILE" | grep 'succeeded' | tail -1 || true)"
 [[ -n "$auto_load_log" ]] || {
@@ -641,11 +727,12 @@ stock_after="$("${ADB[@]}" shell pm path "$STOCK_PACKAGE" 2>/dev/null || true)"
   echo 'stock RetroArch package path changed during acceptance' >&2
   exit 1
 }
-acceptance_error_logs="$("${ADB[@]}" logcat -d -s DEBUG:E AndroidRuntime:E)"
+acceptance_error_logs="$(logcat_since "$ACCEPTANCE_LOG_MARKER" -s KorriAcceptance:I DEBUG:E AndroidRuntime:E)"
 if grep -qE 'Fatal signal|FATAL EXCEPTION' <<<"$acceptance_error_logs"; then
   echo 'runtime emitted a fatal process error during acceptance' >&2
   exit 1
 fi
+assert_accessibility_service_enabled
 
 printf 'First launch: %s\n' "$status_first"
 printf 'Pause state: %s bytes at %s\n' "$state_size" "$after_mtime"

@@ -119,11 +119,18 @@ Acceptance evidence follows these rules:
   package plus absence of the Korri overlay window.
 - Permission checks inspect Android's accessibility state but never write it.
   The user owns disable/re-enable actions in Settings, including any restricted
-  settings step Android actually exposes.
-- The gate locks and backs up mutable config, RetroArch save/state, Artemis
-  preferences, and rotation before mutation. Cleanup must prove local and
-  remote sessions quiescent and restore exact prior state; otherwise it retains
-  the backup and lock for manual recovery.
+  settings step Android actually exposes. An RG405M running Android 14
+  measurably lost the enabled service after Korri was force-stopped on
+  2026-08-05, so neither acceptance gate may force-stop, kill, install,
+  uninstall, clear, or restart Korri after the grant is required.
+- The gate locks and backs up mutable config, RetroArch save/state, and Artemis
+  preferences before mutation. The preferences copy is read-only diagnostic
+  evidence, never a restoration mechanism. Every reversible gameplay control
+  is restored through its product action and its semantic original/final value
+  is compared. Cleanup closes only exact session/Game/overlay/emulator paths,
+  returns to Shell, and asserts the accessibility service remains enabled. A
+  semantic mismatch retains the backup, evidence, lock, and explicit recovery
+  instructions.
 
 The gate is:
 
