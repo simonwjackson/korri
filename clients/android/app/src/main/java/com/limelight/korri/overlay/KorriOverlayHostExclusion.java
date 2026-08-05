@@ -18,6 +18,10 @@ public final class KorriOverlayHostExclusion {
             this.host = host;
             this.generation = generation;
         }
+
+        long generation() {
+            return generation;
+        }
     }
 
     private Owner current;

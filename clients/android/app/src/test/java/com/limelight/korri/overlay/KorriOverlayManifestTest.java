@@ -82,7 +82,11 @@ public class KorriOverlayManifestTest {
         String text = new String(Files.readAllBytes(source), StandardCharsets.UTF_8);
         assertFalse(text.contains("BroadcastReceiver"));
         assertFalse(text.contains("registerReceiver"));
-        assertFalse(text.contains("Log."));
+        assertTrue(text.contains("Log.i(\"KorriOverlay\""));
+        assertTrue(text.contains("launchId="));
+        assertTrue(text.contains(" generation="));
+        assertTrue(text.contains(" event="));
+        assertTrue(text.contains(" reason="));
         assertFalse(text.contains("korridCapability"));
         assertFalse(text.contains("KORRI_CONTROL_TOKEN"));
     }

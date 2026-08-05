@@ -104,10 +104,11 @@ later removal change.
 
 Acceptance evidence follows these rules:
 
-- Every screenshot has a same-label sidecar containing explicit device
-  serial/model, top activity, relevant PIDs, read-only accessibility state,
-  overlay-window state, exact active controls, and available session or
-  RetroArch telemetry.
+- Every screenshot has a same-label sidecar containing only machine observations:
+  explicit device serial/model, top activity, relevant PIDs, read-only
+  accessibility state, dumpsys overlay-window state, actual RPC responses, and
+  structured `KorriOverlay` / `KorriGameLifecycle` records. Handwritten
+  telemetry and checkpoint answers are never evidence.
 - A screenshot never proves moving stream frames, input ownership, a native
   menu transition, host survival, or permission recovery by itself. Those are
   named human checkpoints.
@@ -125,18 +126,27 @@ Acceptance evidence follows these rules:
   uninstall, clear, or restart Korri after the grant is required.
 - The gate locks and backs up mutable config, RetroArch save/state, and Artemis
   preferences before mutation. The preferences copy is read-only diagnostic
-  evidence, never a restoration mechanism. Every reversible gameplay control
-  is restored through its product action and its semantic original/final value
-  is compared. Cleanup closes only exact session/Game/overlay/emulator paths,
-  returns to Shell, and asserts the accessibility service remains enabled. A
-  semantic mismatch retains the backup, evidence, lock, and explicit recovery
-  instructions.
+  evidence, never a restoration mechanism. Before beginning, every preference
+  key that a reversible control may write must already be materialized; absent
+  defaults are not safely reversible. The complete typed SharedPreferences map
+  (file/key presence plus string, string-set, boolean, int, long, and float
+  values) must be byte-identical after semantic normalization. Korri remains
+  running and the gate never overwrites preferences. Every reversible gameplay
+  control is restored through its product action. Cleanup closes only launch IDs
+  and emulator PIDs recorded by this gate; a replacement causes cleanup refusal
+  and retention of the backup and lock.
+- Connection-loss proof requires `KORRI_STREAM_CONNECTION_LOSS_PROBE` to name an
+  executable deterministic command/probe. Without it the gate exits pending
+  before device mutation. Host stop on the current Zao path must return the
+  actual `SessionStopUnsupported` RPC error while the exact stream survives;
+  the gate then performs and proves a separate exact Disconnect.
 
 The gate is:
 
 ```sh
-nix run .#overlay-accept -- <adb-serial> <exact-device-model> \
-  <direct-launch-package> <unrelated-package> [evidence-dir]
+KORRI_STREAM_CONNECTION_LOSS_PROBE=/path/to/approved-probe \
+  nix run .#overlay-accept -- <adb-serial> <exact-device-model> \
+    <direct-launch-package> <unrelated-package> [evidence-dir]
 ```
 
 A successful script run records evidence for review; it does not by itself

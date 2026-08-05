@@ -71,6 +71,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.util.Log;
 import android.util.Rational;
 import android.view.Display;
 import android.view.Gravity;
@@ -3380,6 +3381,18 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                 korriLaunchId, generation, current);
     }
 
+    private void logKorriLifecycle(String event, String reason) {
+        if (korriLaunchId == null) return;
+        String generation = korriMoonlightExecutorGeneration == null
+                ? "none"
+                : korriMoonlightExecutorGeneration;
+        Log.i("KorriGameLifecycle",
+                "launchId=" + korriLaunchId
+                        + " generation=" + generation
+                        + " event=" + event
+                        + " reason=" + reason);
+    }
+
     @Override
     public void stageStarting(final String stage) {
         if (korriSessionOverlay != null) {
@@ -3445,6 +3458,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         boolean retryable = errorCode == 0
                 && portFlags != 0
                 && (portTestResult == MoonBridge.ML_TEST_RESULT_INCONCLUSIVE || portTestResult == 0);
+        logKorriLifecycle("stage-failed", retryable ? "retryable" : "terminal");
         korriLaunchScope.stageFailed(retryable);
         if (retryable) {
             // Korri sessions have no spinner; the retry is silent under the
@@ -3518,6 +3532,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     @Override
     public void connectionTerminated(final int errorCode) {
+        logKorriLifecycle("connection-terminated", "code-" + errorCode);
         korriLaunchScope.connectionTerminated();
         // Perform a connection test if the failure could be due to a blocked port
         // This does network I/O, so don't do it on the main thread.
@@ -3670,6 +3685,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                 // Gameplay controls become truthful only after the live stream
                 // and all Game-owned action fields are ready.
                 registerMoonlightExecutor();
+                logKorriLifecycle("connection-started", "connected");
 
                 // Hide the mouse cursor now after a short delay.
                 // Doing it before dismissing the spinner seems to be undone

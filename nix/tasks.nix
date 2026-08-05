@@ -275,7 +275,9 @@ let
         pkgs.diffutils
         pkgs.gnugrep
         pkgs.gnused
+        pkgs.gnutar
         pkgs.jq
+        pkgs.python3
       ];
       script = ''
         serial="''${1:?usage: overlay-accept <adb-serial> <exact-device-model> <direct-launch-package> <unrelated-package> [evidence-dir]}"
@@ -425,11 +427,13 @@ let
         pkgs.jq
         pkgs.tesseract
       ];
-      usageSuffix = " -- <adb-serial>";
+      usageSuffix = " -- <adb-serial> <exact-device-model> <exact-hardware-serial>";
       script = ''
-        serial="''${1:?usage: ra-accept <adb-serial>}"
-        shift
-        exec ${pkgs.bash}/bin/bash "$KORRI_ROOT/plugins/retroarch/android/device-acceptance.sh" "$serial" "$@"
+        if [[ "$#" -ne 3 ]]; then
+          echo "usage: ra-accept <adb-serial> <exact-device-model> <exact-hardware-serial>" >&2
+          exit 2
+        fi
+        exec ${pkgs.bash}/bin/bash "$KORRI_ROOT/plugins/retroarch/android/device-acceptance.sh" "$@"
       '';
     };
 

@@ -24,12 +24,16 @@ public class KorriOverlayCutoverContractTest {
         String controller = read(
                 "src/main/java/com/limelight/binding/input/ControllerHandler.java");
 
-        assertEquals(1, occurrences(game, "KorriOverlayService.requestShow(korriLaunchId)"));
-        assertEquals(1, occurrences(game, "KorriOverlayService.hideBoth(korriOverlay, korriLaunchId)"));
+        assertEquals(1, occurrences(game,
+                "KorriOverlayService.requestShow(korriOverlayOwner, korriLaunchId)"));
+        assertEquals(1, occurrences(game,
+                "KorriOverlayService.hideBoth(korriOverlayOwner, korriLaunchId)"));
         assertTrue(game.contains("if (korriLaunchId == null) return;"));
         assertTrue(game.contains("RequestResult.UNAVAILABLE"));
-        assertTrue(game.contains("KorriOverlayService.registerLegacyHost(korriOverlay)"));
-        assertTrue(game.contains("KorriOverlayService.unregisterLegacyHost(korriOverlay)"));
+        assertTrue(game.contains(
+                "korriOverlayOwner = KorriOverlayService.registerLegacyHost(korriOverlay)"));
+        assertTrue(game.contains(
+                "KorriOverlayService.unregisterLegacyHost(korriOverlayOwner)"));
         assertTrue(game.contains("performanceOverlayLite.setOnClickListener(v -> showGameMenu())"));
         assertTrue(game.contains("showGameMenu();"));
         assertTrue(game.contains("public void onBackPressed()"));

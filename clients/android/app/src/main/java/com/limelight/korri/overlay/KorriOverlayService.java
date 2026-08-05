@@ -8,6 +8,7 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -145,21 +146,48 @@ public final class KorriOverlayService extends AccessibilityService {
 
     private boolean acceptsVisibilityRequest(
             KorriOverlayHostExclusion.Owner owner, String launchId) {
-        if (!PROCESS_HOSTS.isCurrent(owner)) return false;
+        if (!PROCESS_HOSTS.isCurrent(owner)) {
+            logVisibility(owner, launchId, "request-preflight", "stale-game");
+            return false;
+        }
         syncSession();
-        return state != null && state.acceptsRequest(launchId);
+        boolean accepted = state != null && state.acceptsRequest(launchId);
+        logVisibility(owner, launchId, "request-preflight",
+                accepted ? "accepted" : "session-scope-rejected");
+        return accepted;
     }
 
     private boolean requestVisibility(
             KorriOverlayHostExclusion.Owner owner, String launchId, boolean visible) {
-        if (!PROCESS_HOSTS.isCurrent(owner)) return false;
+        String event = visible ? "request-show" : "request-dismiss";
+        if (!PROCESS_HOSTS.isCurrent(owner)) {
+            logVisibility(owner, launchId, event, "stale-game");
+            return false;
+        }
         syncSession();
-        if (state == null) return false;
+        if (state == null) {
+            logVisibility(owner, launchId, event, "service-unavailable");
+            return false;
+        }
         boolean accepted = visible
                 ? state.requestShow(launchId)
                 : state.requestDismiss(launchId);
+        logVisibility(owner, launchId, event,
+                accepted ? "accepted" : "session-scope-rejected");
         if (accepted) reconcileWindow(owner);
         return accepted;
+    }
+
+    private static void logVisibility(
+            KorriOverlayHostExclusion.Owner owner,
+            String launchId,
+            String event,
+            String reason) {
+        Log.i("KorriOverlay",
+                "launchId=" + (launchId == null ? "none" : launchId)
+                        + " generation=" + (owner == null ? "none" : owner.generation())
+                        + " event=" + event
+                        + " reason=" + reason);
     }
 
     @Override

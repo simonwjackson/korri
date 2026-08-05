@@ -12,6 +12,8 @@ JOURNEY_RESUME="$CRATE/journey-resume.sh"
 OVERLAY_ACCEPTANCE="$ROOT/clients/android/overlay-acceptance.sh"
 RETROARCH_ACCEPTANCE="$ROOT/plugins/retroarch/android/device-acceptance.sh"
 KORRI_SHELL="$ROOT/clients/android/app/src/main/java/com/limelight/KorriShellActivity.java"
+ANDROID_GAME="$ROOT/clients/android/app/src/main/java/com/limelight/Game.java"
+OVERLAY_SERVICE="$ROOT/clients/android/app/src/main/java/com/limelight/korri/overlay/KorriOverlayService.java"
 
 # The review's canonical cases must stay deterministic even when a developer's
 # shell is primed for an alternate device-gate run. Individual alternate cases
@@ -73,6 +75,12 @@ grep -F 'retroarch.cfg' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'wl4.state.auto' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'wl4.srm' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'PREFS_BACKUP=' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'shared-preferences-snapshot.py' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'PREFS_SEMANTIC_BEFORE=' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'PREFS_SEMANTIC_AFTER=' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'required materialized SharedPreferences keys are absent' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'KORRI_STREAM_CONNECTION_LOSS_PROBE' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'GATE_LAUNCH_IDS' "$OVERLAY_ACCEPTANCE" >/dev/null
 if sed '/^[[:space:]]*#/d' "$OVERLAY_ACCEPTANCE" | grep -Eq 'settings[[:space:]]+(put|delete)'; then
   echo 'overlay acceptance must not rewrite Android settings during grant-sensitive acceptance' >&2
   exit 1
@@ -84,7 +92,11 @@ grep -F 'value: .interaction.payload.value' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'close_exact_acceptance_paths' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'recovery: restore every changed control through the Korri gameplay overlay' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'capture_evidence' "$OVERLAY_ACCEPTANCE" >/dev/null
-grep -F '[active controls and telemetry]' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F '[rpc responses]' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F '[structured lifecycle records]' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'SessionStopUnsupported' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F '"KorriGameLifecycle"' "$ANDROID_GAME" >/dev/null
+grep -F '"KorriOverlay"' "$OVERLAY_SERVICE" >/dev/null
 grep -F 'could not establish safe quiescence; backup and lock retained' "$OVERLAY_ACCEPTANCE" >/dev/null
 for token in \
   'LOCAL OVERLAY VERIFIED' \
@@ -93,7 +105,7 @@ for token in \
   'OLD GAME REMAINS DISARMED VERIFIED' \
   'FRESH KORRI PUBLICATION REARMS VERIFIED' \
   'STREAM OVERLAY VERIFIED' \
-  'STREAM CONNECTION LOSS NARRATED' \
+  'STREAM CONNECTION LOSS READY' \
   'STREAM GRACEFUL RETURN VERIFIED' \
   'DIRECT NEGATIVE VERIFIED' \
   'DIRECT NEGATIVE CLOSED VERIFIED' \
@@ -110,6 +122,22 @@ if grep -F "|| printf '{\"expected\"" "$OVERLAY_ACCEPTANCE" >/dev/null; then
   echo 'overlay acceptance must never synthesize expected RPC evidence after transport failure' >&2
   exit 1
 fi
+if grep -Eq 'telemetry":"|human-confirmed|asserted (idle|session|portal)' "$OVERLAY_ACCEPTANCE"; then
+  echo 'overlay acceptance sidecars must not contain handwritten telemetry claims' >&2
+  exit 1
+fi
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F 'EXPECTED_MODEL="$2"' "$RETROARCH_ACCEPTANCE" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F 'EXPECTED_HARDWARE_SERIAL="$3"' "$RETROARCH_ACCEPTANCE" >/dev/null
+grep -F 'unauthenticated UDP probe must time out with rc=124 and no response' "$RETROARCH_ACCEPTANCE" >/dev/null
+grep -F 'assert_no_artemis_game_activity' "$RETROARCH_ACCEPTANCE" >/dev/null
+grep -F 'assert_korri_process_unchanged' "$RETROARCH_ACCEPTANCE" >/dev/null
+if grep -Eq 'launch_spec=|udp_unauthenticated.*\|\| true|pull /sdcard/korri-acceptance.png|rm -f /sdcard/korri-acceptance.png' "$RETROARCH_ACCEPTANCE"; then
+  echo 'RetroArch acceptance contains speculative launch, masked UDP, or generic screenshot handling' >&2
+  exit 1
+fi
+
 for acceptance_script in "$OVERLAY_ACCEPTANCE" "$RETROARCH_ACCEPTANCE"; do
   if sed '/^[[:space:]]*#/d' "$acceptance_script" \
     | grep -Eq 'pm[[:space:]]+(install|uninstall|clear|grant)([;&|[:space:]]|$)|adb[^[:cntrl:]]+[[:space:]]install([;&|[:space:]]|$)|(^|[[:space:]"])install[[:space:]]+-'; then
@@ -250,6 +278,10 @@ fi
 TMP="$(mktemp -d)"
 cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
+CONNECTION_LOSS_PROBE="$TMP/connection-loss-probe"
+printf '#!/usr/bin/env bash\nprintf "observed connection loss\\n"\n' >"$CONNECTION_LOSS_PROBE"
+chmod +x "$CONNECTION_LOSS_PROBE"
+export KORRI_STREAM_CONNECTION_LOSS_PROBE="$CONNECTION_LOSS_PROBE"
 SEMANTIC_FUNCTION="$TMP/semantic-control-values.sh"
 sed -n '/^semantic_control_values() {/,/^}/p' "$OVERLAY_ACCEPTANCE" >"$SEMANTIC_FUNCTION"
 # shellcheck source=/dev/null

@@ -51,19 +51,25 @@ nix run .#ra-fetch
 nix run .#ra-build
 nix run .#ra-check
 nix run .#ra-deploy -- <adb-serial>
-nix run .#ra-accept -- <adb-serial>
+nix run .#ra-accept -- <adb-serial> <exact-device-model> <exact-hardware-serial>
 ```
 
 `ra-accept` is the device procedure; its repository contract is checked without
-running a device in U7. The procedure launches Wario through the Korri portal,
+running a device in U7. It refuses all mutation until both Android product model
+and hardware serial match the explicit invocation. The procedure launches Wario
+through the Korri portal,
 checks authenticated nonce-bound UDP behavior, proves the accessibility overlay
 is absent after the menu acknowledgement, and uses MAC-covered `GET_STATUS`
 telemetry to require menu alive, an exact one-row RGUI selection advance, menu
 closed after Back, and menu still closed after a configured safe native key.
 Screenshots remain supporting evidence only. It then invokes acknowledged
-graceful Quit and preserves its backup/restore obligations. The launch token is
-absent from LaunchSpec/JavaScript/logs and never crosses UDP, but Android's
-cross-process Intent API unavoidably materializes it briefly as a Java String
+graceful Quit, requires the recorded launch to become idle, and rejects its old
+controls and invocation. Cleanup acts only on the recorded launch/PID. This
+local-runtime gate also requires Artemis `Game` never to become the resumed
+Activity, so it does not exercise Artemis Game preferences. The launch token is
+absent from actual status/control evidence, JavaScript, and logs and never
+crosses UDP, but Android's cross-process Intent API unavoidably materializes it
+briefly as a Java String
 between JNI attachment and RetroArch native startup.
 
 Device proof for the hardened U7 protocol remains U8 work. The earlier pre-U7

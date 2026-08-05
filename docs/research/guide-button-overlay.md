@@ -56,7 +56,8 @@ control path. Current production architecture is:
 ## U8 proof still required
 
 The SM-F966U1/MG-X spike is provisional for the RG405M gate. Before cutover,
-`nix run .#overlay-accept -- <serial> <exact-model> <direct-package>
+`KORRI_STREAM_CONNECTION_LOSS_PROBE=/path/to/approved-probe nix run
+.#overlay-accept -- <serial> <exact-model> <direct-package>
 <unrelated-package>` must record paired evidence for a Korri local RetroArch
 session, a live Moonlight stream, direct-launch and unrelated-app negatives,
 and human-owned permission loss/recovery. Physical Guide, D-pad, A, B/Back,
