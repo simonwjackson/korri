@@ -75,6 +75,22 @@ grep -F 'retroarch.cfg' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'wl4.state.auto' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'wl4.srm' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'PREFS_BACKUP=' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'RUN_NONCE=' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F '/dev/urandom' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F '^[0-9a-f]{32}$' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'BACKUP_OWNER_REMOTE=' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'PREFS_BACKUP_OWNER=' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'BACKUP_CREATED=false' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'PREFS_BACKUP_CREATED=false' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'remove_owned_external_backup' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'remove_owned_preferences_backup' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'refusing pre-existing external backup directory' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'refusing pre-existing app-private backup directory' "$OVERLAY_ACCEPTANCE" >/dev/null
+backup_path_sources="$(grep -E '^(BACKUP_REMOTE|PREFS_BACKUP|PREFS_WORK_DIR)=' "$OVERLAY_ACCEPTANCE")"
+if grep -Eq '\$\$|\$\{?(BASHPID|PPID)\}?' <<<"$backup_path_sources"; then
+  echo 'overlay acceptance backup and work paths must never be PID-derived' >&2
+  exit 1
+fi
 grep -F 'shared-preferences-snapshot.py' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'PREFS_SEMANTIC_BEFORE=' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'PREFS_SEMANTIC_AFTER=' "$OVERLAY_ACCEPTANCE" >/dev/null
@@ -112,18 +128,39 @@ grep -F 'required_top_activity' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'required_window_records' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'required_active_controls' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'required_lifecycle_records' "$OVERLAY_ACCEPTANCE" >/dev/null
-grep -F 'expected_event=' "$OVERLAY_ACCEPTANCE" >/dev/null
-grep -F 'expected_reason=' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'evidence_predicate=' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'begin_evidence_checkpoint' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F '[rpc responses]' "$OVERLAY_ACCEPTANCE" >/dev/null
-grep -F '[structured lifecycle records]' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F '[checkpoint-bounded lifecycle records]' "$OVERLAY_ACCEPTANCE" >/dev/null
 capture_evidence_source="$(sed -n '/^capture_evidence() {/,/^}/p' "$OVERLAY_ACCEPTANCE")"
 if grep -F '|| true' <<<"$capture_evidence_source" >/dev/null; then
   echo 'overlay acceptance must not mask a required structured evidence probe' >&2
   exit 1
 fi
+if grep -Eq 'logcat[^[:cntrl:]]*(-t[ =]?1000|tail[[:space:]]+-n?[[:space:]]*1000)' "$OVERLAY_ACCEPTANCE"; then
+  echo 'overlay acceptance must not satisfy checkpoints from a stale generic last-1000 log search' >&2
+  exit 1
+fi
+for predicate in \
+  positive-overlay \
+  stale-rpc \
+  foreground-suspended \
+  direct-no-active-launch \
+  service-disabled; do
+  grep -F "'$predicate'" "$OVERLAY_ACCEPTANCE" >/dev/null || {
+    echo "overlay acceptance is missing checkpoint-specific evidence predicate: $predicate" >&2
+    exit 1
+  }
+done
+if grep -A2 -E 'capture_evidence (unrelated-active-session-negative|direct-launch-negative|permission-disabled)' "$OVERLAY_ACCEPTANCE" \
+  | grep -Eq "'request-show'[[:space:]]+'accepted'"; then
+  echo 'negative overlay checkpoints must not require a stale prior positive event' >&2
+  exit 1
+fi
 grep -F 'SessionStopUnsupported' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F '"KorriGameLifecycle"' "$ANDROID_GAME" >/dev/null
 grep -F '"KorriOverlay"' "$OVERLAY_SERVICE" >/dev/null
+grep -F 'logVisibility(null, suspendedLaunchId, "foreground-mismatch", "suspended")' "$OVERLAY_SERVICE" >/dev/null
 grep -F 'could not establish safe quiescence; backup and lock retained' "$OVERLAY_ACCEPTANCE" >/dev/null
 for token in \
   'LOCAL OVERLAY VERIFIED' \
@@ -142,8 +179,13 @@ for token in \
 done
 # shellcheck disable=SC2016 # Literal exact-current invocation source contract.
 grep -F 'invoke_control "$local_launch_id" '\''@korri:retroarch/quit'\''' "$OVERLAY_ACCEPTANCE" >/dev/null
-grep -F 'SessionControls after end must be exactly StaleSession or Unavailable' "$OVERLAY_ACCEPTANCE" >/dev/null
-grep -F 'Invocation after end must be exactly StaleSession or Unavailable' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'SessionControls after end must be exactly Unavailable' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'Invocation after end must be exactly Unavailable' "$OVERLAY_ACCEPTANCE" >/dev/null
+stale_predicate_source="$(sed -n '/stale-rpc)/,/;;/p' "$OVERLAY_ACCEPTANCE")"
+if grep -Eq 'StaleSession| or ' <<<"$stale_predicate_source"; then
+  echo 'ended-launch controls must require their exact Unavailable response' >&2
+  exit 1
+fi
 grep -F 'DECODER/HOST FAILURE: REPOSITORY-ONLY' "$OVERLAY_ACCEPTANCE" >/dev/null
 if grep -F "|| printf '{\"expected\"" "$OVERLAY_ACCEPTANCE" >/dev/null; then
   echo 'overlay acceptance must never synthesize expected RPC evidence after transport failure' >&2

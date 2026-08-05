@@ -238,6 +238,7 @@ public final class KorriOverlayService extends AccessibilityService {
         reconcileWindow();
         if (suspendedLaunchId != null) {
             KorriBrainService.suspendOverlay(suspendedLaunchId);
+            logVisibility(null, suspendedLaunchId, "foreground-mismatch", "suspended");
         }
         if (continuity != null && !ownedOverlayForeground) {
             continuity.updateForeground(packageName, className);

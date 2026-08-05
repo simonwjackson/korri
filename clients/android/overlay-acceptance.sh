@@ -59,12 +59,21 @@ CHECKPOINT_CONFIG="$ROOT/docs/research/retroarch-plugin-route/config.yaml"
 CHECKPOINT_LIBRARY="$ROOT/docs/research/retroarch-plugin-route/library-wl4.yaml"
 LOCK_REMOTE="$STORAGE_ROOT/.android-app-route-check.lock"
 LOCK_OWNER_REMOTE="$LOCK_REMOTE/owner"
-BACKUP_REMOTE="$STORAGE_ROOT/.overlay-acceptance-backup-$$"
-PREFS_BACKUP="files/.overlay-acceptance-prefs-$$"
+RUN_NONCE="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+[[ "$RUN_NONCE" =~ ^[0-9a-f]{32}$ ]] || {
+  echo 'could not create a random overlay acceptance run nonce' >&2
+  exit 1
+}
+OWNER_MARKER="korri-overlay-acceptance:$RUN_NONCE"
+BACKUP_REMOTE="$STORAGE_ROOT/.overlay-acceptance-backup-$RUN_NONCE"
+BACKUP_OWNER_REMOTE="$BACKUP_REMOTE/.korri-acceptance-owner"
+PREFS_BACKUP="files/.overlay-acceptance-prefs-$RUN_NONCE"
+PREFS_BACKUP_OWNER="$PREFS_BACKUP/.korri-acceptance-owner"
 HOST_PORT="${KORRI_OVERLAY_ACCEPTANCE_HOST_PORT:-43122}"
 DEBUG_CAPABILITY_SH="${KORRI_ANDROID_DEBUG_CAPABILITY_SH:-$ROOT/services/korrid/android-debug-capability.sh}"
 PREFS_SNAPSHOT_TOOL="$ROOT/clients/android/shared-preferences-snapshot.py"
-PREFS_WORK_DIR="${TMPDIR:-/tmp}/korri-overlay-preferences-$$"
+PREFS_WORK_DIR="${TMPDIR:-/tmp}/korri-overlay-preferences-$RUN_NONCE"
+PREFS_WORK_OWNER="$PREFS_WORK_DIR/.korri-acceptance-owner"
 PREFS_SEMANTIC_BEFORE="$PREFS_WORK_DIR/before.json"
 PREFS_SEMANTIC_AFTER="$PREFS_WORK_DIR/after.json"
 PREFS_LOCAL_BEFORE="$PREFS_WORK_DIR/before"
@@ -77,6 +86,9 @@ CONNECTION_LOSS_PROBE="${KORRI_STREAM_CONNECTION_LOSS_PROBE:-}"
 
 LOCK_ACQUIRED=false
 BACKUP_CLASSIFIED=false
+BACKUP_CREATED=false
+PREFS_BACKUP_CREATED=false
+PREFS_WORK_CREATED=false
 FORWARD_ACTIVE=false
 RPC_READY=false
 SHELL_BROUGHT_FORWARD=false
@@ -95,6 +107,7 @@ SCREENSHOTS_DIR_WAS_PRESENT=false
 PREFS_BACKUP_READY=false
 KORRI_PID=''
 CAPABILITY=''
+ACTIVE_EVIDENCE_CHECKPOINT=''
 declare -A GATE_LAUNCH_IDS=()
 declare -A GATE_RETROARCH_PIDS=()
 
@@ -139,6 +152,67 @@ remote_state() {
     present|absent) printf '%s' "$state" ;;
     *) echo "unexpected state for $path: $state" >&2; return 1 ;;
   esac
+}
+
+initialize_host_work_directory() {
+  [[ ! -e "$PREFS_WORK_DIR" ]] || {
+    echo "refusing pre-existing host work directory: $PREFS_WORK_DIR" >&2
+    return 1
+  }
+  mkdir "$PREFS_WORK_DIR"
+  PREFS_WORK_CREATED=true
+  printf '%s\n' "$OWNER_MARKER" >"$PREFS_WORK_OWNER"
+  [[ "$(<"$PREFS_WORK_OWNER")" == "$OWNER_MARKER" ]]
+}
+
+remove_owned_host_work_directory() {
+  [[ "$PREFS_WORK_CREATED" == true ]] || return 0
+  [[ "$PREFS_WORK_DIR" == "${TMPDIR:-/tmp}/korri-overlay-preferences-$RUN_NONCE" \
+    && -f "$PREFS_WORK_OWNER" \
+    && "$(<"$PREFS_WORK_OWNER")" == "$OWNER_MARKER" ]] || {
+    echo "refusing to remove unverified host work directory: $PREFS_WORK_DIR" >&2
+    return 1
+  }
+  rm -rf -- "$PREFS_WORK_DIR"
+  PREFS_WORK_CREATED=false
+}
+
+external_backup_is_owned() {
+  [[ "$BACKUP_REMOTE" == "$STORAGE_ROOT/.overlay-acceptance-backup-$RUN_NONCE" ]] || return 1
+  adb_shell "test \"\$(cat '$BACKUP_OWNER_REMOTE')\" = '$OWNER_MARKER'"
+}
+
+preferences_backup_is_owned() {
+  local observed_owner
+  [[ "$PREFS_BACKUP" == "files/.overlay-acceptance-prefs-$RUN_NONCE" ]] || return 1
+  observed_owner="$(adb_capture exec-out run-as "$KORRI_PACKAGE" cat "$PREFS_BACKUP_OWNER" | tr -d '\r\n')" || return 1
+  [[ "$observed_owner" == "$OWNER_MARKER" ]]
+}
+
+remove_owned_external_backup() {
+  [[ "$BACKUP_CREATED" == true ]] || return 0
+  external_backup_is_owned || {
+    echo "refusing to remove unverified external backup: $BACKUP_REMOTE" >&2
+    return 1
+  }
+  adb_shell "test \"\$(cat '$BACKUP_OWNER_REMOTE')\" = '$OWNER_MARKER' && rm -rf '$BACKUP_REMOTE' && test ! -e '$BACKUP_REMOTE'" >/dev/null
+  BACKUP_CREATED=false
+}
+
+remove_owned_preferences_backup() {
+  [[ "$PREFS_BACKUP_CREATED" == true ]] || return 0
+  preferences_backup_is_owned || {
+    echo "refusing to remove unverified app-private backup: $PREFS_BACKUP" >&2
+    return 1
+  }
+  adb_shell "run-as '$KORRI_PACKAGE' sh -c \"chmod -R u+w '$PREFS_BACKUP'\"" >/dev/null
+  preferences_backup_is_owned || {
+    echo "app-private backup ownership changed during cleanup: $PREFS_BACKUP" >&2
+    return 1
+  }
+  adb_shell "run-as '$KORRI_PACKAGE' sh -c \"rm -rf '$PREFS_BACKUP' && test ! -e '$PREFS_BACKUP'\"" >/dev/null
+  PREFS_BACKUP_CREATED=false
+  PREFS_BACKUP_READY=false
 }
 
 backup_file() {
@@ -241,23 +315,34 @@ restore_file() {
 }
 
 acquire_lock() {
-  adb_shell "mkdir -p '$STORAGE_ROOT' && if mkdir '$LOCK_REMOTE' 2>/dev/null; then printf '%s\n' 'pid=$$ started=$(date -u +%Y-%m-%dT%H:%M:%SZ)' > '$LOCK_OWNER_REMOTE'; else echo 'Overlay acceptance lock is held. Remove it only after proving no device gate is active.' >&2; exit 75; fi"
+  adb_shell "mkdir -p '$STORAGE_ROOT' && if mkdir '$LOCK_REMOTE' 2>/dev/null; then printf '%s\n' '$OWNER_MARKER' > '$LOCK_OWNER_REMOTE' && test \"\$(cat '$LOCK_OWNER_REMOTE')\" = '$OWNER_MARKER'; else echo 'Overlay acceptance lock is held. Remove it only after proving no device gate is active.' >&2; exit 75; fi"
   LOCK_ACQUIRED=true
 }
 
 release_lock() {
   [[ "$LOCK_ACQUIRED" == true ]] || return 0
-  adb_shell "rm -rf '$LOCK_REMOTE'" >/dev/null
+  adb_shell "test \"\$(cat '$LOCK_OWNER_REMOTE')\" = '$OWNER_MARKER' && rm -rf '$LOCK_REMOTE' && test ! -e '$LOCK_REMOTE'" >/dev/null || {
+    echo "refusing to remove unverified acceptance lock: $LOCK_REMOTE" >&2
+    return 1
+  }
   LOCK_ACQUIRED=false
 }
 
 backup_before_mutation() {
+  local app_private_backup_state
   [[ "$(remote_state "$STORAGE_ROOT")" == present ]] || {
     echo "Korri storage root must already exist before acceptance: $STORAGE_ROOT" >&2
     exit 1
   }
   acquire_lock
-  adb_shell "rm -rf '$BACKUP_REMOTE'; mkdir -p '$BACKUP_REMOTE'"
+  [[ "$(remote_state "$BACKUP_REMOTE")" == absent ]] || {
+    echo "refusing pre-existing external backup directory: $BACKUP_REMOTE" >&2
+    return 1
+  }
+  adb_shell "mkdir '$BACKUP_REMOTE'"
+  BACKUP_CREATED=true
+  adb_shell "printf '%s\n' '$OWNER_MARKER' > '$BACKUP_OWNER_REMOTE' && test \"\$(cat '$BACKUP_OWNER_REMOTE')\" = '$OWNER_MARKER'"
+  external_backup_is_owned
   backup_file "$CONFIG_REMOTE" config.yaml CONFIG_WAS_PRESENT
   backup_file "$LIBRARY_REMOTE" library.yaml LIBRARY_WAS_PRESENT
   backup_file "$RETROARCH_CONFIG_REMOTE" retroarch.cfg RETROARCH_CONFIG_WAS_PRESENT
@@ -276,7 +361,16 @@ backup_before_mutation() {
   # these files; acceptance never overwrites or removes shared_prefs. Stateful
   # controls are restored through their public overlay actions and compared
   # semantically before the gate can pass.
-  adb_shell "run-as '$KORRI_PACKAGE' sh -c \"rm -rf '$PREFS_BACKUP'; mkdir -p '$PREFS_BACKUP'; if test -d shared_prefs; then cp -R shared_prefs '$PREFS_BACKUP/'; diff -r shared_prefs '$PREFS_BACKUP/shared_prefs'; fi; chmod -R a-w '$PREFS_BACKUP'\""
+  app_private_backup_state="$(adb_shell "run-as '$KORRI_PACKAGE' sh -c \"if test -e '$PREFS_BACKUP'; then echo present; else echo absent; fi\"" | tr -d '\r\n')"
+  [[ "$app_private_backup_state" == absent ]] || {
+    echo "refusing pre-existing app-private backup directory: $PREFS_BACKUP" >&2
+    return 1
+  }
+  adb_shell "run-as '$KORRI_PACKAGE' sh -c \"mkdir '$PREFS_BACKUP'\""
+  PREFS_BACKUP_CREATED=true
+  adb_shell "run-as '$KORRI_PACKAGE' sh -c \"printf '%s\\n' '$OWNER_MARKER' > '$PREFS_BACKUP_OWNER'\""
+  preferences_backup_is_owned
+  adb_shell "run-as '$KORRI_PACKAGE' sh -c \"if test -d shared_prefs; then cp -R shared_prefs '$PREFS_BACKUP/'; diff -r shared_prefs '$PREFS_BACKUP/shared_prefs'; fi; chmod -R a-w '$PREFS_BACKUP'\""
   PREFS_BACKUP_READY=true
 
   # Every mutable path is classified and every present value has a verified
@@ -321,10 +415,9 @@ restore_exact_state() {
     return 1
   fi
   if [[ "$PREFS_BACKUP_READY" == true ]]; then
-    adb_shell "run-as '$KORRI_PACKAGE' sh -c \"chmod -R u+w '$PREFS_BACKUP'; rm -rf '$PREFS_BACKUP'\"" >/dev/null || return 1
-    PREFS_BACKUP_READY=false
+    remove_owned_preferences_backup || return 1
   fi
-  adb_shell "rm -rf '$BACKUP_REMOTE'" >/dev/null || return 1
+  remove_owned_external_backup || return 1
   BACKUP_CLASSIFIED=false
 }
 
@@ -475,15 +568,19 @@ cleanup() {
       echo "device state was restored, but the acceptance lock remains at $LOCK_REMOTE" >&2
       status=1
     fi
-  elif [[ "$LOCK_ACQUIRED" == true ]]; then
-    release_lock || status=1
+  else
+    remove_owned_preferences_backup || status=1
+    remove_owned_external_backup || status=1
+    if [[ "$LOCK_ACQUIRED" == true ]]; then
+      release_lock || status=1
+    fi
   fi
   if [[ "$FORWARD_ACTIVE" == true ]]; then
     adb_target -s "$SERIAL" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
     FORWARD_ACTIVE=false
   fi
   assert_accessibility_service_enabled || status=1
-  rm -rf "$PREFS_WORK_DIR"
+  remove_owned_host_work_directory || status=1
   exit "$status"
 }
 
@@ -588,21 +685,40 @@ revalidate_gate_state_after_mutation() {
   assert_session_idle
 }
 
+begin_evidence_checkpoint() {
+  local label="$1"
+  [[ "$RPC_READY" == true ]] || {
+    echo "cannot create log boundary before live authority discovery: $label" >&2
+    return 1
+  }
+  [[ -z "$ACTIVE_EVIDENCE_CHECKPOINT" ]] || {
+    echo "checkpoint logs were not preserved before the next boundary: $ACTIVE_EVIDENCE_CHECKPOINT" >&2
+    return 1
+  }
+  adb_shell logcat -c
+  ACTIVE_EVIDENCE_CHECKPOINT="$label"
+}
+
 capture_evidence() {
   local label="$1"
   local rpc_responses="$2"
   local expected_launch_id="$3"
-  local expected_event="$4"
-  local expected_reason="$5"
-  local expected_session="$6"
+  local evidence_predicate="$4"
+  local expected_session="$5"
   local image="$EVIDENCE_DIR/$label.png"
   local sidecar="$EVIDENCE_DIR/$label.txt"
   local required_top_activity
   local required_window_records
+  local required_accessibility_records
   local required_active_controls
   local required_lifecycle_records
-  local exact_lifecycle_record
+  local exact_checkpoint_predicate=''
+  local enabled_services=''
 
+  [[ "$ACTIVE_EVIDENCE_CHECKPOINT" == "$label" ]] || {
+    echo "evidence $label has no fresh matching machine boundary" >&2
+    exit 1
+  }
   required_top_activity="$(adb_shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'")"
   [[ -n "$required_top_activity" ]] || {
     echo "required top-activity observation is empty for $label" >&2
@@ -614,6 +730,11 @@ capture_evidence() {
     echo "required window records are empty or unstructured for $label" >&2
     exit 1
   fi
+  required_accessibility_records="$(adb_shell dumpsys accessibility)"
+  [[ -n "$required_accessibility_records" ]] || {
+    echo "required accessibility records are empty for $label" >&2
+    exit 1
+  }
   if [[ "$expected_session" == active ]]; then
     required_active_controls="$(controls_for_launch "$expected_launch_id")"
     jq -e --arg launchId "$expected_launch_id" '
@@ -632,26 +753,85 @@ capture_evidence() {
       exit 1
     }
   fi
-  required_lifecycle_records="$(adb_shell "logcat -d -t 1000 -s KorriOverlay:I KorriGameLifecycle:I KorriSessionLifecycle:I")"
-  [[ -n "$required_lifecycle_records" ]] || {
-    echo "required structured lifecycle records are empty for $label" >&2
-    exit 1
-  }
-  exact_lifecycle_record="$(grep -E \
-    "launchId=$expected_launch_id generation=[^[:space:]]+ event=$expected_event reason=$expected_reason" \
-    <<<"$required_lifecycle_records" | tail -1)" || {
-      echo "required lifecycle event=$expected_event launchId=$expected_launch_id generation/reason=$expected_reason is absent for $label" >&2
+  required_lifecycle_records="$(adb_shell "logcat -d -s KorriOverlay:I KorriGameLifecycle:I KorriSessionLifecycle:I")"
+
+  case "$evidence_predicate" in
+    positive-overlay)
+      assert_overlay_window present
+      exact_checkpoint_predicate="$(grep -E \
+        "launchId=$expected_launch_id generation=[^[:space:]]+ event=request-show reason=accepted" \
+        <<<"$required_lifecycle_records" | tail -1)"
+      ;;
+    stale-rpc)
+      assert_overlay_window absent
+      jq -e '
+        .staleControls.outcome._tag == "Err"
+        and .staleControls.outcome.payload.reason == "Unavailable"
+        and .staleInvocation.outcome._tag == "Err"
+        and .staleInvocation.outcome.payload.reason == "Unavailable"
+      ' <<<"$rpc_responses" >/dev/null
+      exact_checkpoint_predicate="exact stale controls and invocation responses for launchId=$expected_launch_id"
+      ;;
+    foreground-suspended)
+      assert_overlay_window absent
+      exact_checkpoint_predicate="$(grep -E \
+        "launchId=$expected_launch_id generation=[^[:space:]]+ event=foreground-mismatch reason=suspended" \
+        <<<"$required_lifecycle_records" | tail -1)"
+      ;;
+    suspended-no-show)
+      assert_overlay_window absent
+      ! grep -Eq "launchId=$expected_launch_id .*event=request-show reason=accepted" \
+        <<<"$required_lifecycle_records"
+      exact_checkpoint_predicate="no accepted show for suspended launchId=$expected_launch_id"
+      ;;
+    direct-no-active-launch)
+      assert_overlay_window absent
+      ! grep -Eq 'event=request-show reason=accepted' <<<"$required_lifecycle_records"
+      exact_checkpoint_predicate='no scoped active launch and no accepted direct show request'
+      ;;
+    connection-loss)
+      assert_overlay_window absent
+      exact_checkpoint_predicate="$(grep -E \
+        "launchId=$expected_launch_id generation=[^[:space:]]+ event=(connection-terminated|stage-failed) reason=(code-[0-9-]+|retryable|terminal)" \
+        <<<"$required_lifecycle_records" | tail -1)"
+      ;;
+    idle-no-window)
+      assert_overlay_window absent
+      ! grep -Eq 'event=request-show reason=accepted' <<<"$required_lifecycle_records"
+      exact_checkpoint_predicate='idle session with no accepted show in this checkpoint'
+      ;;
+    terminal-rpc)
+      assert_overlay_window absent
+      jq -e '
+        .hostStop.outcome._tag == "Err"
+        and .hostStop.outcome.payload.code == "SessionStopUnsupported"
+        and .disconnect.outcome._tag == "Ok"
+        and .disconnect.outcome.payload._tag == "Completed"
+        and .finalStatus.outcome._tag == "Ok"
+        and (.finalStatus.outcome.payload.active | not)
+      ' <<<"$rpc_responses" >/dev/null
+      exact_checkpoint_predicate="exact host-stop rejection and disconnect completion for launchId=$expected_launch_id"
+      ;;
+    service-disabled)
+      assert_overlay_window absent
+      enabled_services="$(adb_shell settings get secure enabled_accessibility_services | tr -d '\r')"
+      ! grep -Fq "$KORRI_SERVICE_COMPONENT" <<<"$enabled_services"
+      exact_checkpoint_predicate='service-disabled in secure settings, dumpsys captured, and no overlay window'
+      ;;
+    *)
+      echo "unknown evidence predicate for $label: $evidence_predicate" >&2
       exit 1
-    }
-  [[ -n "$exact_lifecycle_record" ]] || {
-    echo "required exact lifecycle record is empty for $label" >&2
+      ;;
+  esac
+  [[ -n "$exact_checkpoint_predicate" ]] || {
+    echo "required checkpoint predicate $evidence_predicate is absent for $label" >&2
     exit 1
   }
 
   adb_target -s "$SERIAL" exec-out screencap -p >"$image"
   {
-    printf 'label=%s\nserial=%s\nexpected_model=%s\ncaptured_utc=%s\n' \
-      "$label" "$SERIAL" "$EXPECTED_MODEL" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf 'label=%s\nserial=%s\nexpected_model=%s\ncaptured_utc=%s\nevidence_predicate=%s\n' \
+      "$label" "$SERIAL" "$EXPECTED_MODEL" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$evidence_predicate"
     printf '\n[top activity]\n%s\n' "$required_top_activity"
     printf '\n[pids]\n'
     for package in "$KORRI_PACKAGE" "$RETROARCH_PACKAGE" "$STOCK_RETROARCH_PACKAGE" "$DIRECT_PACKAGE" "$UNRELATED_PACKAGE"; do
@@ -659,18 +839,20 @@ capture_evidence() {
     done
     printf '\n[accessibility: read only]\n'
     accessibility_snapshot
+    printf '\n[dumpsys accessibility]\n%s\n' "$required_accessibility_records"
     printf '\n[window]\n%s\n' "$required_window_records"
     printf '\n[active controls or idle status]\n%s\n' "$required_active_controls"
     printf '\n[rpc responses]\n%s\n' "$rpc_responses"
-    printf '\n[structured lifecycle records]\n%s\n' "$required_lifecycle_records"
-    printf '\n[exact structured lifecycle record]\n%s\n' "$exact_lifecycle_record"
+    printf '\n[checkpoint-bounded lifecycle records]\n%s\n' "$required_lifecycle_records"
+    printf '\n[exact checkpoint predicate]\n%s\n' "$exact_checkpoint_predicate"
   } >"$sidecar"
   if [[ ! -s "$image" || ! -s "$sidecar" ]] \
     || ! grep -Fq "$required_top_activity" "$sidecar" \
-    || ! grep -Fq "$exact_lifecycle_record" "$sidecar"; then
+    || ! grep -Fq "$exact_checkpoint_predicate" "$sidecar"; then
     echo "incomplete screenshot/structured sidecar pair for $label" >&2
     exit 1
   fi
+  ACTIVE_EVIDENCE_CHECKPOINT=''
   echo "evidence pair: $image + $sidecar"
 }
 
@@ -698,10 +880,10 @@ wait_for_local_session_end() {
   return 1
 }
 
-assert_stale_or_unavailable() {
+assert_ended_launch_unavailable() {
   local response="$1"
   local failure="$2"
-  jq -e '.outcome._tag == "Err" and (.outcome.payload.reason == "StaleSession" or .outcome.payload.reason == "Unavailable")' \
+  jq -e '.outcome._tag == "Err" and .outcome.payload.reason == "Unavailable"' \
     <<<"$response" >/dev/null || {
       echo "$failure" >&2
       return 1
@@ -755,6 +937,7 @@ mkdir -p "$EVIDENCE_DIR"
   echo "evidence directory must be empty: $EVIDENCE_DIR" >&2
   exit 1
 }
+initialize_host_work_directory
 
 backup_before_mutation
 adb_target -s "$SERIAL" push "$CHECKPOINT_CONFIG" "$CONFIG_REMOTE" >/dev/null
@@ -767,6 +950,7 @@ adb_target -s "$SERIAL" exec-out cat "$LIBRARY_REMOTE" | cmp -s "$CHECKPOINT_LIB
 assert_accessibility_service_enabled
 revalidate_gate_state_after_mutation
 
+begin_evidence_checkpoint local-overlay-open
 checkpoint 'LOCAL OVERLAY VERIFIED' \
   'Using only the physical controller, launch Wario Land 4 from Korri.' \
   'After gameplay is visible, press physical Guide. Verify one Shift sheet opens.' \
@@ -781,8 +965,9 @@ local_controls="$(controls_for_launch "$local_launch_id")"
 jq -e '.outcome._tag == "Ok" and ([.outcome.payload.groups[].controls[]] | length >= 2) and .outcome.payload.retroarchTelemetry' <<<"$local_controls" >/dev/null
 assert_overlay_window present
 capture_evidence local-overlay-open "$local_controls" \
-  "$local_launch_id" 'request-show' 'accepted' active
+  "$local_launch_id" 'positive-overlay' active
 
+begin_evidence_checkpoint local-mid-overlay-end
 checkpoint 'RETROARCH MENU VERIFIED' \
   'Using physical D-pad/A, invoke Open RetroArch menu from the Shift sheet.' \
   'Verify Shift dismisses before RGUI appears and navigate RGUI physically.' \
@@ -795,16 +980,16 @@ jq -e --arg launchId "$local_launch_id" \
   <<<"$local_quit" >/dev/null
 wait_for_local_session_end
 stale_controls="$(controls_for_launch "$local_launch_id")"
-assert_stale_or_unavailable "$stale_controls" \
-  'SessionControls after end must be exactly StaleSession or Unavailable'
+assert_ended_launch_unavailable "$stale_controls" \
+  'SessionControls after end must be exactly Unavailable'
 stale_invocation="$(invoke_control "$local_launch_id" '@korri:retroarch/quit')"
-assert_stale_or_unavailable "$stale_invocation" \
-  'Invocation after end must be exactly StaleSession or Unavailable'
+assert_ended_launch_unavailable "$stale_invocation" \
+  'Invocation after end must be exactly Unavailable'
 wait_for_local_session_end
 stale_evidence="$(jq -cn --argjson quit "$local_quit" --argjson controls "$stale_controls" --argjson invocation "$stale_invocation" \
   '{quit:$quit,staleControls:$controls,staleInvocation:$invocation}')"
 capture_evidence local-mid-overlay-end "$stale_evidence" \
-  "$local_launch_id" 'request-show' 'accepted' idle
+  "$local_launch_id" 'stale-rpc' idle
 checkpoint 'LOCAL MID-OVERLAY END VERIFIED' \
   'The authorized exact-current Quit completed while Shift was visibly open.' \
   'The Shift window disappeared automatically, the exact RetroArch process ended, and the session became idle.' \
@@ -824,6 +1009,7 @@ record_gate_retroarch_pid "$negative_pid"
 assert_top_package "$RETROARCH_PACKAGE"
 assert_overlay_window absent
 
+begin_evidence_checkpoint unrelated-active-session-negative
 checkpoint 'UNRELATED ACTIVE-SESSION NEGATIVE VERIFIED' \
   "Foreground the already-approved unrelated app $UNRELATED_PACKAGE without ending Wario." \
   'Press physical Guide once and verify the unrelated app stays foreground.' \
@@ -835,8 +1021,9 @@ assert_overlay_window absent
   exit 1
 }
 capture_evidence unrelated-active-session-negative "$negative_controls" \
-  "$negative_launch_id" 'request-show' 'accepted' active
+  "$negative_launch_id" 'foreground-suspended' active
 
+begin_evidence_checkpoint old-game-still-disarmed
 checkpoint 'OLD GAME REMAINS DISARMED VERIFIED' \
   'Return directly to the already-running Wario Activity using Android recents; do not pass through Korri.' \
   'Press physical Guide and verify no Shift window opens.'
@@ -847,8 +1034,9 @@ assert_overlay_window absent
   exit 1
 }
 capture_evidence old-game-still-disarmed "$negative_controls" \
-  "$negative_launch_id" 'request-show' 'accepted' active
+  "$negative_launch_id" 'suspended-no-show' active
 
+begin_evidence_checkpoint fresh-publication-rearmed
 checkpoint 'FRESH KORRI PUBLICATION REARMS VERIFIED' \
   'Return to Korri and select Wario Land 4 so Korri freshly resumes and publishes the existing local session.' \
   'After gameplay returns, press physical Guide and verify exactly one Shift window opens; leave it open.'
@@ -863,11 +1051,12 @@ jq -e '.outcome._tag == "Ok" and ([.outcome.payload.groups[].controls[]] | lengt
 assert_top_package "$RETROARCH_PACKAGE"
 assert_overlay_window present
 capture_evidence fresh-publication-rearmed "$rearmed_controls" \
-  "$rearmed_launch_id" 'request-show' 'accepted' active
+  "$rearmed_launch_id" 'positive-overlay' active
 rearmed_quit="$(invoke_control "$rearmed_launch_id" '@korri:retroarch/quit')"
 jq -e '.outcome._tag == "Ok" and .outcome.payload._tag == "Completed"' <<<"$rearmed_quit" >/dev/null
 wait_for_local_session_end
 
+begin_evidence_checkpoint direct-launch-negative
 checkpoint 'DIRECT NEGATIVE VERIFIED' \
   "Launch $DIRECT_PACKAGE directly, outside Korri, using the device UI." \
   'Press physical Guide and verify Korri does not consume it and no Shift sheet appears.'
@@ -876,7 +1065,7 @@ assert_overlay_window absent
 direct_status="$(rpc '{"_tag":"app.session.status","payload":{}}')"
 jq -e '.outcome._tag == "Ok" and (.outcome.payload.active | not)' <<<"$direct_status" >/dev/null
 capture_evidence direct-launch-negative "$direct_status" \
-  "$rearmed_launch_id" 'request-show' 'accepted' idle
+  none 'direct-no-active-launch' idle
 checkpoint 'DIRECT NEGATIVE CLOSED VERIFIED' \
   'Exit the directly launched RetroArch instance through its own UI and return to Korri.'
 [[ -z "$(package_pid "$DIRECT_PACKAGE")" ]] || {
@@ -885,6 +1074,7 @@ checkpoint 'DIRECT NEGATIVE CLOSED VERIFIED' \
 }
 assert_top_component "$KORRI_ACTIVITY"
 
+begin_evidence_checkpoint stream-overlay-open
 checkpoint 'STREAM OVERLAY VERIFIED' \
   'Using Korri and the physical controller, start the configured Moonlight stream.' \
   'Wait for moving host frames, then press Guide and verify one Shift sheet overlays the live stream.' \
@@ -897,8 +1087,9 @@ stream_controls="$(controls_for_launch "$stream_launch_id")"
 jq -e '.outcome._tag == "Ok" and ([.outcome.payload.groups[].controls[]] | length == 19)' <<<"$stream_controls" >/dev/null
 assert_overlay_window present
 capture_evidence stream-overlay-open "$stream_controls" \
-  "$stream_launch_id" 'request-show' 'accepted' active
+  "$stream_launch_id" 'positive-overlay' active
 
+begin_evidence_checkpoint stream-connection-loss-narrated
 checkpoint 'STREAM CONNECTION LOSS READY' \
   'Dismiss Shift and leave the exact recorded stream active.' \
   'The gate will now run the explicitly configured deterministic connection-loss probe.'
@@ -914,12 +1105,6 @@ jq -e '.outcome._tag == "Ok" and (.outcome.payload.active | not)' \
     echo 'stream session is not idle after the deterministic connection-loss probe' >&2
     exit 1
   }
-connection_loss_logs="$(adb_shell "logcat -d -t 1000 -s KorriGameLifecycle:I KorriSessionLifecycle:I")"
-grep -F "launchId=$stream_launch_id" <<<"$connection_loss_logs" \
-  | grep -Eq 'event=(connection-terminated|stage-failed)' || {
-    echo 'structured lifecycle records do not prove the recorded stream connection loss' >&2
-    exit 1
-  }
 assert_top_package "$KORRI_PACKAGE"
 assert_overlay_window absent
 connection_loss_evidence="$(jq -cn \
@@ -927,9 +1112,9 @@ connection_loss_evidence="$(jq -cn \
   --argjson status "$connection_loss_status" \
   '{probeObservation:$probe,status:$status}')"
 capture_evidence stream-connection-loss-narrated "$connection_loss_evidence" \
-  "$stream_launch_id" '(connection-terminated|stage-failed)' \
-  '(code-[0-9-]+|retryable|terminal)' idle
+  "$stream_launch_id" 'connection-loss' idle
 
+begin_evidence_checkpoint stream-graceful-return
 checkpoint 'STREAM GRACEFUL RETURN VERIFIED' \
   'Use the visible KorriSessionOverlay return action and verify it returns gracefully to the Korri portal.'
 assert_top_component "$KORRI_ACTIVITY"
@@ -937,8 +1122,7 @@ assert_overlay_window absent
 graceful_return_status="$(rpc '{"_tag":"app.session.status","payload":{}}')"
 jq -e '.outcome._tag == "Ok" and (.outcome.payload.active | not)' <<<"$graceful_return_status" >/dev/null
 capture_evidence stream-graceful-return "$graceful_return_status" \
-  "$stream_launch_id" '(connection-terminated|stage-failed)' \
-  '(code-[0-9-]+|retryable|terminal)' idle
+  "$stream_launch_id" 'idle-no-window' idle
 
 checkpoint 'STREAM PARITY STARTED' \
   'Start the configured Moonlight stream again, wait for moving host frames, and leave the stream active.' \
@@ -973,6 +1157,7 @@ if [[ "$semantic_final" != "$semantic_original" ]]; then
 fi
 SEMANTIC_VALUES_EQUAL=true
 
+begin_evidence_checkpoint stream-host-stop-unsupported
 checkpoint 'STREAM TERMINAL PROBE READY' \
   'Leave the exact recorded stream active after restoring every reversible value.' \
   'Do not claim host Quit success: this Zao checkpoint expects SessionStopUnsupported.'
@@ -1014,9 +1199,10 @@ terminal_evidence="$(jq -cn \
   --argjson finalStatus "$disconnect_status" \
   '{hostStop:$stop,streamSurvival:$survival,controls:$controls,disconnect:$disconnect,finalStatus:$finalStatus}')"
 capture_evidence stream-host-stop-unsupported "$terminal_evidence" \
-  "$parity_launch_id" 'request-show' 'accepted' idle
+  "$parity_launch_id" 'terminal-rpc' idle
 printf '%s\n' 'DECODER/HOST FAILURE: REPOSITORY-ONLY — deterministic repository tests cover these failures; this device run does not claim them as passed.'
 
+begin_evidence_checkpoint permission-disabled
 checkpoint 'PERMISSION DISABLED BY HUMAN' \
   'Open Android Settings yourself and disable the Korri accessibility service.' \
   'Return to Korri, verify the loss is visible, launch Wario successfully, and verify Guide does not open Shift.' \
@@ -1030,24 +1216,40 @@ fi
 permission_disabled_status="$(rpc '{"_tag":"app.session.status","payload":{}}')"
 jq -e '.outcome._tag == "Ok" and (.outcome.payload.active | not)' <<<"$permission_disabled_status" >/dev/null
 capture_evidence permission-disabled "$permission_disabled_status" \
-  "$parity_launch_id" 'request-show' 'accepted' idle
+  none 'service-disabled' idle
 
+begin_evidence_checkpoint permission-recovered
 checkpoint 'PERMISSION RECOVERED BY HUMAN' \
   'Open Android Settings yourself and re-enable the Korri accessibility service.' \
   'If Android exposes restricted-settings UI, record what it actually says; do not infer success from opening Settings.' \
-  'Return to Korri, launch Wario, verify physical Guide opens Shift without reinstall/restart, then gracefully quit.'
+  'Return to Korri, launch Wario, verify physical Guide opens Shift without reinstall/restart, and leave Shift open.'
 enabled_services="$(adb_shell settings get secure enabled_accessibility_services | tr -d '\r')"
 grep -Fq 'com.limelight.korri.overlay.KorriOverlayService' <<<"$enabled_services" || {
   echo 'accessibility service is not enabled after the recovery checkpoint' >&2
   exit 1
 }
-[[ -z "$(package_pid "$RETROARCH_PACKAGE")" ]] || { echo 'RetroArch still running after permission recovery' >&2; exit 1; }
 permission_recovered_status="$(rpc '{"_tag":"app.session.status","payload":{}}')"
-jq -e '.outcome._tag == "Ok" and (.outcome.payload.active | not)' <<<"$permission_recovered_status" >/dev/null
-assert_overlay_window absent
+permission_recovered_launch_id="$(jq -er '.outcome.payload.active.launchId' <<<"$permission_recovered_status")"
+record_gate_launch "$permission_recovered_launch_id"
+permission_recovered_controls="$(controls_for_launch "$permission_recovered_launch_id")"
+jq -e '.outcome._tag == "Ok" and ([.outcome.payload.groups[].controls[]] | length >= 2)' \
+  <<<"$permission_recovered_controls" >/dev/null
+permission_recovered_pid="$(package_pid "$RETROARCH_PACKAGE")"
+record_gate_retroarch_pid "$permission_recovered_pid"
+[[ -n "$permission_recovered_pid" ]] || { echo 'permission recovery launch has no RetroArch process' >&2; exit 1; }
+assert_top_package "$RETROARCH_PACKAGE"
+assert_overlay_window present
 assert_accessibility_service_enabled
-capture_evidence permission-recovered "$permission_recovered_status" \
-  "$parity_launch_id" 'request-show' 'accepted' idle
+permission_recovered_evidence="$(jq -cn \
+  --argjson status "$permission_recovered_status" \
+  --argjson controls "$permission_recovered_controls" \
+  '{status:$status,controls:$controls}')"
+capture_evidence permission-recovered "$permission_recovered_evidence" \
+  "$permission_recovered_launch_id" 'positive-overlay' active
+permission_recovered_quit="$(invoke_control "$permission_recovered_launch_id" '@korri:retroarch/quit')"
+jq -e '.outcome._tag == "Ok" and .outcome.payload._tag == "Completed"' \
+  <<<"$permission_recovered_quit" >/dev/null
+wait_for_local_session_end
 
 printf '\nPre-cutover overlay acceptance evidence captured at %s\n' "$EVIDENCE_DIR"
 printf 'This run records evidence; it does not authorize cutover or claim parity by itself.\n'
