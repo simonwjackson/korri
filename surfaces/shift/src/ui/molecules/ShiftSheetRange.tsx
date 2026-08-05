@@ -28,11 +28,13 @@ export function ShiftSheetRange({ control, onChange }: ShiftSheetRangeProps) {
   const [value, setValue] = useState(control.interaction.value)
   const unavailable = !control.enabled
   const id = `gameplay-control-${control.id}`
-  const reasonId = control.disabledReason ? `${id}-reason` : undefined
+  const descriptionId = control.description ? `${id}-description` : undefined
+  const reasonId = unavailable && control.disabledReason ? `${id}-reason` : undefined
+  const describedBy = [descriptionId, reasonId].filter(Boolean).join(" ") || undefined
   useEffect(() => {
     valueRef.current = control.interaction.value
     setValue(control.interaction.value)
-  }, [control.interaction.value])
+  }, [control])
   const adjust = (direction: "left" | "right") => {
     if (unavailable) return
     const { min, max, step } = control.interaction
@@ -59,24 +61,53 @@ export function ShiftSheetRange({ control, onChange }: ShiftSheetRangeProps) {
     return () => input.removeEventListener(DIRECTION_EVENT, listener)
   })
 
+  const copy = (
+    <span className="shift-sheet-control-copy">
+      <span className="shift-sheet-control-label">{control.label}</span>
+      {control.description ? (
+        <span id={descriptionId} className="shift-sheet-control-description">
+          {control.description}
+        </span>
+      ) : null}
+      {reasonId ? (
+        <span id={reasonId} className="shift-sheet-control-description">
+          {control.disabledReason}
+        </span>
+      ) : null}
+    </span>
+  )
+
+  if (reasonId) {
+    return (
+      <div
+        id={id}
+        className="shift-sheet-control shift-sheet-range"
+        role="slider"
+        tabIndex={0}
+        aria-label={control.label}
+        aria-disabled="true"
+        aria-describedby={describedBy}
+        aria-valuemin={control.interaction.min}
+        aria-valuemax={control.interaction.max}
+        aria-valuenow={value}
+        data-unavailable="true"
+        data-tone={control.destructive ? "danger" : "default"}
+      >
+        {copy}
+        <span className="shift-sheet-range-value" aria-hidden="true">
+          {value}
+        </span>
+      </div>
+    )
+  }
+
   return (
     <label
       className="shift-sheet-control shift-sheet-range"
+      data-unavailable={unavailable ? "true" : undefined}
       data-tone={control.destructive ? "danger" : "default"}
     >
-      <span className="shift-sheet-control-copy">
-        <span className="shift-sheet-control-label">{control.label}</span>
-        {control.description ? (
-          <span className="shift-sheet-control-description">
-            {control.description}
-          </span>
-        ) : null}
-        {control.disabledReason ? (
-          <span id={reasonId} className="shift-sheet-control-description">
-            {control.disabledReason}
-          </span>
-        ) : null}
-      </span>
+      {copy}
       <span className="shift-sheet-range-value">{value}</span>
       <input
         id={id}
@@ -85,19 +116,13 @@ export function ShiftSheetRange({ control, onChange }: ShiftSheetRangeProps) {
         type="range"
         aria-label={control.label}
         aria-disabled={unavailable}
-        aria-describedby={reasonId}
-        disabled={unavailable && control.disabledReason === undefined}
+        aria-describedby={describedBy}
+        disabled={unavailable}
         data-korri-horizontal-control="range"
         value={value}
         min={control.interaction.min}
         max={control.interaction.max}
         step={control.interaction.step}
-        onPointerDown={event => {
-          if (unavailable) event.preventDefault()
-        }}
-        onKeyDown={event => {
-          if (unavailable) event.preventDefault()
-        }}
         onChange={event => {
           if (unavailable) return
           valueRef.current = event.currentTarget.valueAsNumber

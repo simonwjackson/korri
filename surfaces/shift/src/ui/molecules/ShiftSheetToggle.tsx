@@ -12,9 +12,11 @@ export interface ShiftSheetToggleProps {
 export function ShiftSheetToggle({ control, onChange }: ShiftSheetToggleProps) {
   const unavailable = !control.enabled
   const [value, setValue] = useState(control.interaction.value)
-  useEffect(() => setValue(control.interaction.value), [control.interaction.value])
+  useEffect(() => setValue(control.interaction.value), [control])
   const id = `gameplay-control-${control.id}`
-  const reasonId = control.disabledReason ? `${id}-reason` : undefined
+  const descriptionId = control.description ? `${id}-description` : undefined
+  const reasonId = unavailable && control.disabledReason ? `${id}-reason` : undefined
+  const describedBy = [descriptionId, reasonId].filter(Boolean).join(" ") || undefined
   return (
     <button
       id={id}
@@ -24,7 +26,7 @@ export function ShiftSheetToggle({ control, onChange }: ShiftSheetToggleProps) {
       aria-label={control.label}
       aria-checked={value}
       aria-disabled={unavailable}
-      aria-describedby={reasonId}
+      aria-describedby={describedBy}
       disabled={unavailable && control.disabledReason === undefined}
       data-tone={control.destructive ? "danger" : "default"}
       onClick={() => {
@@ -37,11 +39,11 @@ export function ShiftSheetToggle({ control, onChange }: ShiftSheetToggleProps) {
       <span className="shift-sheet-control-copy">
         <span className="shift-sheet-control-label">{control.label}</span>
         {control.description ? (
-          <span className="shift-sheet-control-description">
+          <span id={descriptionId} className="shift-sheet-control-description">
             {control.description}
           </span>
         ) : null}
-        {control.disabledReason ? (
+        {reasonId ? (
           <span id={reasonId} className="shift-sheet-control-description">
             {control.disabledReason}
           </span>

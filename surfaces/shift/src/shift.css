@@ -2842,7 +2842,7 @@ button.shift-sheet-control:is(:hover, :focus, [data-korri-active-focus]) {
 	color: var(--shift-danger);
 }
 
-.shift-sheet-control[aria-disabled="true"] {
+.shift-sheet-control:is([aria-disabled="true"], [data-unavailable="true"]) {
 	opacity: 0.5;
 }
 
@@ -2874,6 +2874,8 @@ button.shift-sheet-control:is(:hover, :focus, [data-korri-active-focus]) {
 
 .shift-sheet-choice-input,
 .shift-sheet-range-input {
+	/* The native touch target itself, not only its labelled row, owns the floor. */
+	min-block-size: max(48px, calc(var(--intrinsic-base) * 3));
 	flex: 0 0 min(44%, 11em);
 	min-width: 0;
 	font: inherit;

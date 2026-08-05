@@ -32,6 +32,7 @@ function GameplayControl({ control }: { readonly control: SurfaceGameplayControl
         <ShiftSheetAction
           label={control.label}
           controlId={control.id}
+          description={control.description}
           disabled={!control.enabled}
           disabledReason={control.disabledReason}
           tone={control.destructive ? "danger" : "default"}
@@ -89,6 +90,7 @@ export function ShiftGameplayOverlaySheet({
                 key={control.id}
                 label={control.label}
                 controlId={control.id}
+                description={control.description}
                 disabled={!control.enabled}
                 disabledReason={control.disabledReason}
                 tone={control.destructive ? "danger" : "default"}

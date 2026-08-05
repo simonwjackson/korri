@@ -235,6 +235,7 @@ describe("Shift gameplay overlay", () => {
           {
             id: "keyboard",
             label: "Keyboard",
+            description: "Show the streaming keyboard.",
             enabled: true,
             destructive: false,
             dismissOnSuccess: true,
@@ -252,6 +253,7 @@ describe("Shift gameplay overlay", () => {
           {
             id: "mouse-mode",
             label: "Mouse mode",
+            description: "Choose how pointer input behaves.",
             enabled: true,
             destructive: false,
             dismissOnSuccess: false,
@@ -267,6 +269,7 @@ describe("Shift gameplay overlay", () => {
           {
             id: "sharpness",
             label: "Sharpness",
+            description: "Tune stream sharpening.",
             enabled: true,
             destructive: false,
             dismissOnSuccess: false,
@@ -295,6 +298,7 @@ describe("Shift gameplay overlay", () => {
           {
             id: "retroarch-menu",
             label: "Open RetroArch menu",
+            description: "Open the emulator menu over the game.",
             enabled: false,
             disabledReason: "The game menu is unavailable right now.",
             destructive: false,
@@ -420,7 +424,51 @@ describe("Shift gameplay overlay", () => {
     ])
   })
 
-  test("exposes stable described reasons and inert focus behavior for unavailable controls", () => {
+  test("resets optimistic values when a new authoritative control object arrives", () => {
+    const host = createFixtureHost()
+    const rendered = render(
+      <ShiftSurface model={overlayModel()} host={host} />,
+    )
+
+    fireEvent.click(screen.getByRole("switch", { name: "Fill screen" }))
+    fireEvent.change(screen.getByRole("combobox", { name: "Mouse mode" }), {
+      target: { value: "direct" },
+    })
+    fireEvent.change(screen.getByRole("slider", { name: "Sharpness" }), {
+      target: { value: "55" },
+    })
+
+    const refreshedPresentation: SurfaceGameplayOverlayPresentation = {
+      ...presentation,
+      groups: presentation.groups.map(group => ({
+        ...group,
+        controls: group.controls.map(control => ({ ...control })),
+      })),
+    }
+    rendered.rerender(
+      <ShiftSurface
+        model={overlayModel({
+          presentation: refreshedPresentation,
+          status: {
+            _tag: "Problem",
+            kicker: "Controls unavailable",
+            reason: "Try again.",
+            canRetry: true,
+          },
+        })}
+        host={host}
+      />,
+    )
+
+    expect(screen.getByRole("switch", { name: "Fill screen" }).getAttribute("aria-checked"))
+      .toBe("true")
+    expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Mouse mode" }).value)
+      .toBe("trackpad")
+    expect(screen.getByRole<HTMLInputElement>("slider", { name: "Sharpness" }).value)
+      .toBe("50")
+  })
+
+  test("describes every form and keeps reasoned unavailable values focusable but inert", () => {
     const unavailablePresentation: SurfaceGameplayOverlayPresentation = {
       ...presentation,
       groups: presentation.groups.map(group => ({
@@ -430,35 +478,106 @@ describe("Shift gameplay overlay", () => {
             ? { ...control, enabled: false, disabledReason: undefined }
             : control.id === "mouse-mode"
               ? { ...control, enabled: false, disabledReason: "Mouse input is disconnected." }
-              : control),
+              : control.id === "sharpness"
+                ? { ...control, enabled: false, disabledReason: "Sharpness is locked." }
+                : control),
       })),
     }
     const host = createFixtureHost()
-    render(<ShiftSurface model={overlayModel({ presentation: unavailablePresentation })} host={host} />)
+    const rendered = render(
+      <ShiftSurface
+        model={overlayModel({ presentation: unavailablePresentation })}
+        host={host}
+      />,
+    )
+
+    const command = screen.getByRole("button", { name: "Keyboard" })
+    expect(command.getAttribute("aria-describedby"))
+      .toBe("gameplay-control-keyboard-description")
+    expect(screen.getByText("Show the streaming keyboard.").getAttribute("id"))
+      .toBe("gameplay-control-keyboard-description")
 
     const toggle = screen.getByRole("switch", { name: "Fill screen" })
-    expect(toggle.getAttribute("id")).toBe("gameplay-control-fill")
+    expect(toggle.getAttribute("aria-describedby"))
+      .toBe("gameplay-control-fill-description")
     expect(toggle.hasAttribute("disabled")).toBe(true)
 
     const choice = screen.getByRole("combobox", { name: "Mouse mode" })
-    expect(choice.getAttribute("id")).toBe("gameplay-control-mouse-mode")
-    expect(choice.getAttribute("aria-describedby"))
-      .toBe("gameplay-control-mouse-mode-reason")
-    expect(choice.hasAttribute("disabled")).toBe(false)
-    expect(screen.getByText("Mouse input is disconnected.").getAttribute("id"))
-      .toBe("gameplay-control-mouse-mode-reason")
-    fireEvent.change(choice, { target: { value: "direct" } })
+    expect(choice.tagName).toBe("DIV")
+    expect(choice.getAttribute("tabindex")).toBe("0")
+    expect(choice.getAttribute("aria-describedby")).toBe(
+      "gameplay-control-mouse-mode-description gameplay-control-mouse-mode-reason",
+    )
+    expect(choice.getAttribute("data-unavailable")).toBe("true")
 
-    const command = screen.getByRole("button", { name: /Open RetroArch menu/ })
-    expect(command.getAttribute("aria-describedby"))
-      .toBe("gameplay-control-retroarch-menu-reason")
-    expect(screen.getByText("The game menu is unavailable right now.")).toBeDefined()
+    const range = screen.getByRole("slider", { name: "Sharpness" })
+    expect(range.tagName).toBe("DIV")
+    expect(range.getAttribute("tabindex")).toBe("0")
+    expect(range.getAttribute("aria-valuenow")).toBe("50")
+    expect(range.getAttribute("aria-describedby")).toBe(
+      "gameplay-control-sharpness-description gameplay-control-sharpness-reason",
+    )
+    expect(range.getAttribute("data-unavailable")).toBe("true")
+
+    act(() => {
+      choice.dispatchEvent(
+        new CustomEvent("korri-semantic-direction", {
+          detail: { direction: "right", repeat: false },
+        }),
+      )
+      range.dispatchEvent(
+        new CustomEvent("korri-semantic-direction", {
+          detail: { direction: "right", repeat: false },
+        }),
+      )
+    })
+    fireEvent.click(choice)
+    fireEvent.click(range)
+
+    const unavailableCommand = screen.getByRole("button", {
+      name: "Open RetroArch menu",
+    })
+    expect(unavailableCommand.getAttribute("aria-describedby")).toBe(
+      "gameplay-control-retroarch-menu-description gameplay-control-retroarch-menu-reason",
+    )
     expect(host.calls).toEqual([])
+
+    const noReasonPresentation: SurfaceGameplayOverlayPresentation = {
+      ...presentation,
+      groups: presentation.groups.map(group => ({
+        ...group,
+        controls: group.controls.map(control =>
+          control.id === "mouse-mode" || control.id === "sharpness"
+            ? { ...control, enabled: false, disabledReason: undefined }
+            : control),
+      })),
+    }
+    rendered.rerender(
+      <ShiftSurface
+        model={overlayModel({ presentation: noReasonPresentation })}
+        host={host}
+      />,
+    )
+
+    const nativeChoice = screen.getByRole("combobox", { name: "Mouse mode" })
+    const nativeRange = screen.getByRole("slider", { name: "Sharpness" })
+    expect(nativeChoice.tagName).toBe("SELECT")
+    expect(nativeChoice.hasAttribute("disabled")).toBe(true)
+    expect(nativeRange.tagName).toBe("INPUT")
+    expect(nativeRange.hasAttribute("disabled")).toBe(true)
   })
 
-  test("keeps all sheet actions and controls at the 48px accessibility floor", () => {
+  test("keeps each native gameplay touch target at the 48px accessibility floor", () => {
     const css = readFileSync("src/shift.css", "utf8")
-    expect(css.match(/min-block-size: max\(48px/g)).toHaveLength(2)
+    expect(css).toMatch(
+      /\.shift-sheet-action \{[^}]*min-block-size: max\(48px/s,
+    )
+    expect(css).toMatch(
+      /\.shift-sheet-control \{[^}]*min-block-size: max\(48px/s,
+    )
+    expect(css).toMatch(
+      /\.shift-sheet-choice-input,\n\.shift-sheet-range-input \{[^}]*min-block-size: max\(48px/s,
+    )
   })
 
   test("Resume, Back, Guide, and scrim dismiss locally", () => {

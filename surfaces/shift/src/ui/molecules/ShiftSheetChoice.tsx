@@ -24,9 +24,14 @@ export function ShiftSheetChoice({ control, onChange }: ShiftSheetChoiceProps) {
   const selectRef = useRef<HTMLSelectElement>(null)
   const unavailable = !control.enabled
   const [value, setValue] = useState(control.interaction.value)
-  useEffect(() => setValue(control.interaction.value), [control.interaction.value])
+  useEffect(() => setValue(control.interaction.value), [control])
   const id = `gameplay-control-${control.id}`
-  const reasonId = control.disabledReason ? `${id}-reason` : undefined
+  const descriptionId = control.description ? `${id}-description` : undefined
+  const reasonId = unavailable && control.disabledReason ? `${id}-reason` : undefined
+  const describedBy = [descriptionId, reasonId].filter(Boolean).join(" ") || undefined
+  const selectedLabel = control.interaction.options.find(
+    option => option.value === value,
+  )?.label
   const chooseAdjacent = (direction: "left" | "right", repeat: boolean) => {
     if (unavailable || repeat) return
     const current = control.interaction.options.findIndex(
@@ -52,40 +57,61 @@ export function ShiftSheetChoice({ control, onChange }: ShiftSheetChoiceProps) {
     return () => select.removeEventListener(DIRECTION_EVENT, listener)
   })
 
+  const copy = (
+    <span className="shift-sheet-control-copy">
+      <span className="shift-sheet-control-label">{control.label}</span>
+      {control.description ? (
+        <span id={descriptionId} className="shift-sheet-control-description">
+          {control.description}
+        </span>
+      ) : null}
+      {reasonId ? (
+        <span id={reasonId} className="shift-sheet-control-description">
+          {control.disabledReason}
+        </span>
+      ) : null}
+    </span>
+  )
+
+  if (reasonId) {
+    return (
+      <div
+        id={id}
+        className="shift-sheet-control shift-sheet-choice"
+        role="combobox"
+        tabIndex={0}
+        aria-label={control.label}
+        aria-expanded="false"
+        aria-disabled="true"
+        aria-describedby={describedBy}
+        data-unavailable="true"
+        data-tone={control.destructive ? "danger" : "default"}
+      >
+        {copy}
+        <span className="shift-sheet-control-value" aria-hidden="true">
+          {selectedLabel}
+        </span>
+      </div>
+    )
+  }
+
   return (
     <label
       className="shift-sheet-control shift-sheet-choice"
+      data-unavailable={unavailable ? "true" : undefined}
       data-tone={control.destructive ? "danger" : "default"}
     >
-      <span className="shift-sheet-control-copy">
-        <span className="shift-sheet-control-label">{control.label}</span>
-        {control.description ? (
-          <span className="shift-sheet-control-description">
-            {control.description}
-          </span>
-        ) : null}
-        {control.disabledReason ? (
-          <span id={reasonId} className="shift-sheet-control-description">
-            {control.disabledReason}
-          </span>
-        ) : null}
-      </span>
+      {copy}
       <select
         id={id}
         ref={selectRef}
         className="shift-sheet-choice-input"
         aria-label={control.label}
         aria-disabled={unavailable}
-        aria-describedby={reasonId}
-        disabled={unavailable && control.disabledReason === undefined}
+        aria-describedby={describedBy}
+        disabled={unavailable}
         data-korri-horizontal-control="choice"
         value={value}
-        onPointerDown={event => {
-          if (unavailable) event.preventDefault()
-        }}
-        onKeyDown={event => {
-          if (unavailable) event.preventDefault()
-        }}
         onChange={event => {
           if (unavailable) return
           setValue(event.currentTarget.value)
