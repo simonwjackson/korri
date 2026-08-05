@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { act, fireEvent, render, screen, within } from "@testing-library/react"
-import type { SurfaceModel } from "@contracts/surface/korri-surface"
+import type {
+  SurfaceGameplayOverlayPresentation,
+  SurfaceModel,
+} from "@contracts/surface/korri-surface"
 import {
   createFixtureHost,
   fixtureModel,
@@ -206,6 +209,246 @@ describe("ShiftSurface", () => {
     fireEvent.click(screen.getByRole("button", { name: "Stop" }))
     expect(host.calls).toEqual(["game-action:now-playing:L1:stop"])
     expect(screen.queryByRole("dialog")).toBeNull()
+  })
+})
+
+describe("Shift gameplay overlay", () => {
+  const presentation: SurfaceGameplayOverlayPresentation = {
+    kind: "gameplay-overlay",
+    title: "Skate 3",
+    controls: [
+      {
+        id: "overlay:resume",
+        label: "Resume",
+        enabled: true,
+        destructive: false,
+        dismissOnSuccess: true,
+        interaction: { kind: "command" },
+      },
+    ],
+    groups: [
+      {
+        id: "@korri:moonlight",
+        label: "Streaming",
+        controls: [
+          {
+            id: "keyboard",
+            label: "Keyboard",
+            enabled: true,
+            destructive: false,
+            dismissOnSuccess: true,
+            interaction: { kind: "command" },
+          },
+          {
+            id: "fill",
+            label: "Fill screen",
+            description: "Crop the stream to fill the display.",
+            enabled: true,
+            destructive: false,
+            dismissOnSuccess: false,
+            interaction: { kind: "toggle", value: true },
+          },
+          {
+            id: "mouse-mode",
+            label: "Mouse mode",
+            enabled: true,
+            destructive: false,
+            dismissOnSuccess: false,
+            interaction: {
+              kind: "choice",
+              value: "trackpad",
+              options: [
+                { value: "trackpad", label: "Trackpad" },
+                { value: "direct", label: "Direct" },
+              ],
+            },
+          },
+          {
+            id: "sharpness",
+            label: "Sharpness",
+            enabled: true,
+            destructive: false,
+            dismissOnSuccess: false,
+            interaction: {
+              kind: "range",
+              value: 50,
+              min: 0,
+              max: 100,
+              step: 5,
+            },
+          },
+          {
+            id: "quit",
+            label: "Quit host game",
+            enabled: true,
+            destructive: true,
+            dismissOnSuccess: true,
+            interaction: { kind: "command" },
+          },
+        ],
+      },
+      {
+        id: "@korri:retroarch",
+        label: "RetroArch",
+        controls: [
+          {
+            id: "retroarch-menu",
+            label: "Open RetroArch menu",
+            enabled: false,
+            disabledReason: "The game menu is unavailable right now.",
+            destructive: false,
+            dismissOnSuccess: true,
+            interaction: { kind: "command" },
+          },
+        ],
+      },
+    ],
+  }
+
+  const overlayModel = (overrides: Partial<SurfaceModel> = {}): SurfaceModel =>
+    model({
+      presentation,
+      catalog: { _tag: "Empty" },
+      status: { _tag: "Browsing" },
+      actions: [],
+      settings: [],
+      ...overrides,
+    })
+
+  test("renders the exact sheet composition, ordering, groups, and initial Resume focus", () => {
+    render(<ShiftSurface model={overlayModel()} host={createFixtureHost()} />)
+
+    const dialog = screen.getByRole("dialog", { name: "Gameplay controls for Skate 3" })
+    expect(within(dialog).getByText("Skate 3")).toBeDefined()
+    expect(within(dialog).getByText("Streaming")).toBeDefined()
+    expect(within(dialog).getByText("RetroArch")).toBeDefined()
+    expect(
+      Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          ".shift-sheet-action, .shift-sheet-control",
+        ),
+      ).map(row =>
+        row.querySelector(".shift-sheet-control-label")?.textContent ??
+        row.querySelector(".shift-sheet-action-label")?.textContent,
+      ),
+    ).toEqual([
+      "Resume",
+      "Keyboard",
+      "Fill screen",
+      "Mouse mode",
+      "Sharpness",
+      "Quit host game",
+      "Open RetroArch menu",
+    ])
+    expect(document.activeElement).toBe(
+      within(dialog).getByRole("button", { name: "Resume" }),
+    )
+    expect(
+      within(dialog).getByRole("button", { name: "Quit host game" }).getAttribute("data-tone"),
+    ).toBe("danger")
+    expect(
+      within(dialog).getByRole("button", { name: /Open RetroArch menu/ }).getAttribute(
+        "aria-disabled",
+      ),
+    ).toBe("true")
+  })
+
+  test("uses dedicated controls for toggle, choice, and range with touch and ARIA values", () => {
+    const host = createFixtureHost()
+    render(<ShiftSurface model={overlayModel()} host={host} />)
+
+    fireEvent.click(screen.getByRole("button", { name: "Keyboard" }))
+    fireEvent.click(screen.getByRole("switch", { name: "Fill screen" }))
+    fireEvent.change(screen.getByRole("combobox", { name: "Mouse mode" }), {
+      target: { value: "direct" },
+    })
+    fireEvent.change(screen.getByRole("slider", { name: "Sharpness" }), {
+      target: { value: "55" },
+    })
+
+    expect(host.calls).toEqual([
+      "gameplay-control:keyboard",
+      'gameplay-control:fill:{"kind":"toggle","value":false}',
+      'gameplay-control:mouse-mode:{"kind":"choice","value":"direct"}',
+      'gameplay-control:sharpness:{"kind":"range","value":55}',
+    ])
+    expect(screen.getByRole("switch", { name: "Fill screen" }).getAttribute("aria-checked"))
+      .toBe("true")
+    expect(screen.getByRole("slider", { name: "Sharpness" }).getAttribute("min")).toBe("0")
+    expect(screen.getByRole("slider", { name: "Sharpness" }).getAttribute("max")).toBe("100")
+    expect(screen.getByRole("slider", { name: "Sharpness" }).getAttribute("step")).toBe("5")
+  })
+
+  test("horizontal repeat advances ranges only while choices ignore repeats", () => {
+    const host = createFixtureHost()
+    render(<ShiftSurface model={overlayModel()} host={host} />)
+    const choice = screen.getByRole("combobox", { name: "Mouse mode" })
+    const range = screen.getByRole("slider", { name: "Sharpness" })
+
+    choice.dispatchEvent(
+      new CustomEvent("korri-semantic-direction", {
+        detail: { direction: "right", repeat: false },
+      }),
+    )
+    choice.dispatchEvent(
+      new CustomEvent("korri-semantic-direction", {
+        detail: { direction: "right", repeat: true },
+      }),
+    )
+    range.dispatchEvent(
+      new CustomEvent("korri-semantic-direction", {
+        detail: { direction: "right", repeat: false },
+      }),
+    )
+    range.dispatchEvent(
+      new CustomEvent("korri-semantic-direction", {
+        detail: { direction: "right", repeat: true },
+      }),
+    )
+
+    expect(host.calls).toEqual([
+      'gameplay-control:mouse-mode:{"kind":"choice","value":"direct"}',
+      'gameplay-control:sharpness:{"kind":"range","value":55}',
+      'gameplay-control:sharpness:{"kind":"range","value":60}',
+    ])
+  })
+
+  test("Resume, Back, Guide, and scrim dismiss locally", () => {
+    for (const dismiss of ["resume", "back", "system", "scrim"] as const) {
+      const host = createFixtureHost()
+      const rendered = render(<ShiftSurface model={overlayModel()} host={host} />)
+      if (dismiss === "resume") {
+        fireEvent.click(screen.getByRole("button", { name: "Resume" }))
+      } else if (dismiss === "scrim") {
+        fireEvent.pointerDown(rendered.container.querySelector(".shift-sheet-scrim")!)
+      } else {
+        act(() => host.press(dismiss))
+      }
+      expect(host.calls).toEqual(["gameplay-overlay-dismiss"])
+      rendered.unmount()
+    }
+  })
+
+  test("keeps Resume available while presenting a calm gameplay-control failure", () => {
+    const host = createFixtureHost()
+    render(
+      <ShiftSurface
+        model={overlayModel({
+          status: {
+            _tag: "Problem",
+            kicker: "Controls unavailable",
+            reason: "Gameplay controls could not be refreshed. Resume is still available.",
+            canRetry: true,
+          },
+        })}
+        host={host}
+      />,
+    )
+
+    expect(screen.getByText("Gameplay controls could not be refreshed. Resume is still available."))
+      .toBeDefined()
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }))
+    expect(host.calls).toEqual(["gameplay-overlay-dismiss"])
   })
 })
 

@@ -23,6 +23,8 @@ export interface ShiftSheetActionProps {
   readonly icon?: ReactNode
   readonly tone?: ShiftSheetActionTone
   readonly disabled?: boolean
+  /** When present, an unavailable row remains focusable so its explanation is reachable. */
+  readonly disabledReason?: string
 }
 
 export function ShiftSheetAction({
@@ -31,14 +33,20 @@ export function ShiftSheetAction({
   icon,
   tone = "default",
   disabled = false,
+  disabledReason,
 }: ShiftSheetActionProps) {
+  const explainable = disabled && disabledReason !== undefined
   return (
     <button
       type="button"
       className="shift-sheet-action"
       data-tone={tone}
-      disabled={disabled}
-      onClick={onSelect}
+      disabled={disabled && !explainable}
+      aria-disabled={disabled}
+      title={disabledReason}
+      onClick={() => {
+        if (!disabled) onSelect()
+      }}
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.sheetAction, label)}
     >
       {icon ? (

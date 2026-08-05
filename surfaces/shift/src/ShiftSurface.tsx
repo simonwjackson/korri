@@ -28,6 +28,7 @@ import type { ShiftLibraryGame } from "./pages/shift-library-game"
 import type { ShiftGameDetailView } from "./pages/shift-game-detail-view"
 import { ShiftSettings } from "./pages/ShiftSettings"
 import { ShiftGameActionsSheet } from "./ui/organisms/ShiftGameActionsSheet"
+import { ShiftGameplayOverlaySheet } from "./ui/organisms/ShiftGameplayOverlaySheet"
 import { ShiftLaunchLocationSheet } from "./ui/organisms/ShiftLaunchLocationSheet"
 
 export interface ShiftSurfaceProps {
@@ -199,7 +200,8 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
     model.catalog.games.some(game => host.gameActions(game.id).length > 0)
 
   const body =
-    screen === "settings" ? (
+    model.presentation.kind === "gameplay-overlay" ? null
+    : screen === "settings" ? (
       <ShiftSettings
         groups={model.settings}
         status={model.settingsStatus}
@@ -289,6 +291,12 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
         className="shift-sheet-host intrinsic"
       >
         {body}
+        {model.presentation.kind === "gameplay-overlay" ? (
+          <ShiftGameplayOverlaySheet
+            presentation={model.presentation}
+            status={model.status}
+          />
+        ) : null}
         {sheetGame ? (
           <ShiftGameActionsSheet
             open

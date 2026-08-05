@@ -2793,6 +2793,80 @@
 	white-space: nowrap;
 }
 
+/* Gameplay value rows are peers of Action, not Action modes. Each keeps one
+ * native focus target so touch, assistive technology, and spatial input share
+ * the same ordered sheet. */
+.shift-sheet-control {
+	display: flex;
+	align-items: center;
+	gap: var(--shift-space-3);
+	width: 100%;
+	min-width: 0;
+	font: inherit;
+	font-size: var(--shift-text-body);
+	text-align: left;
+	color: var(--shift-ink);
+	background: transparent;
+	border: 0;
+	border-radius: var(--shift-radius-panel);
+	padding: var(--shift-space-3);
+	outline: none;
+}
+
+button.shift-sheet-control {
+	cursor: pointer;
+}
+
+.shift-sheet-control:focus-within,
+button.shift-sheet-control:is(:hover, :focus, [data-korri-active-focus]) {
+	background: var(--shift-pill-bg);
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+.shift-sheet-control[data-tone="danger"] {
+	color: var(--shift-danger);
+}
+
+.shift-sheet-control[aria-disabled="true"] {
+	opacity: 0.5;
+}
+
+.shift-sheet-control-copy {
+	display: flex;
+	flex: 1 1 auto;
+	min-width: 0;
+	flex-direction: column;
+	gap: var(--shift-space-1);
+}
+
+.shift-sheet-control-label {
+	font-weight: 600;
+}
+
+.shift-sheet-control-description,
+.shift-gameplay-overlay-problem {
+	margin: 0;
+	font-size: var(--shift-text-fine);
+	line-height: 1.35;
+	color: var(--shift-ink-dim);
+}
+
+.shift-sheet-control-value,
+.shift-sheet-range-value {
+	flex: 0 0 auto;
+	color: var(--shift-ink-dim);
+}
+
+.shift-sheet-choice-input,
+.shift-sheet-range-input {
+	flex: 0 0 min(44%, 11em);
+	min-width: 0;
+	font: inherit;
+	color: var(--shift-ink);
+	accent-color: var(--shift-accent);
+	background: var(--shift-surface-raised);
+}
+
 @keyframes shift-sheet-scrim-in {
 	from {
 		opacity: 0;
