@@ -36,7 +36,9 @@ grep -F 'DEBUG_PORTAL_FOCUS_GAME_SH=' "$ACCEPTANCE" >/dev/null
 grep -F 'portal_shot_focuses_wario' "$ACCEPTANCE" >/dev/null
 grep -F 'render_focused_wario_crop_evidence' "$ACCEPTANCE" >/dev/null
 grep -F 'focus-crop-4x.png' "$ACCEPTANCE" >/dev/null
-grep -F 'focusRingBoundaryMaxRatio' "$ACCEPTANCE" >/dev/null
+grep -F 'focusOutlinePaddedCropRatio' "$ACCEPTANCE" >/dev/null
+grep -F -- '-colorspace sRGB' "$ACCEPTANCE" >/dev/null
+grep -F 'ratio + 0 >= 0.01' "$ACCEPTANCE" >/dev/null
 # shellcheck disable=SC2016 # Literal source-contract pattern includes `$12`.
 if grep -Eq 'deskew|tolower\(\$12\) == "wario"|brightness.*-ge' "$ACCEPTANCE"; then
   echo 'RetroArch focus evidence must not depend on full-frame OCR title coordinates' >&2
@@ -241,8 +243,12 @@ source "$FOCUS_RENDERER"
 cat >"$TMP/focused-wario.svg" <<'SVG'
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="480">
   <rect width="640" height="480" fill="#050505"/>
+  <!-- Shift uses an external CSS outline: keep every cyan pixel outside the
+       exact getBoundingClientRect fixture below. -->
+  <rect x="544" y="226" width="90" height="128" rx="12"
+        fill="none" stroke="#32c7e6" stroke-width="4"/>
   <g transform="translate(548,230)">
-    <rect width="82" height="120" rx="8" fill="#17343d" stroke="#32c7e6" stroke-width="4"/>
+    <rect width="82" height="120" rx="8" fill="#17343d"/>
     <text x="41" y="112" text-anchor="middle" font-family="DejaVu Sans" font-size="9" fill="white">Wario Land 4</text>
   </g>
 </svg>
@@ -265,11 +271,20 @@ render_focused_wario_crop_evidence \
 jq -e '
   .crop == {x:538,y:220,width:102,height:140}
   and .focusedElement == {x:548,y:230,width:82,height:120}
-  and .focusRingBoundaryMaxRatio >= 0.08
+  and .focusOutlinePaddedCropRatio >= 0.01
   and .activeElementVerified == true
   and .ocrTitle == "Wario Land 4"
 ' "$TMP/focused-wario-observation.json" >/dev/null
 grep -Eqi 'wario[[:space:]]+land[[:space:]]+4' "$TMP/focused-wario-crop.txt"
-[[ -s "$TMP/focused-wario-crop.png" && -s "$TMP/focused-wario-crop-4x.png" ]]
+[[ -s "$TMP/focused-wario-crop.png" && -s "$TMP/focused-wario-crop-4x.png" \
+  && -s "$TMP/focused-wario-crop.png.focus-element.png" ]]
+# The fixture's focus outline is wholly external to getBoundingClientRect. The
+# exact element artifact must contain no qualifying cyan pixels, proving that
+# the passing evidence came from the bounds-derived padded crop.
+element_outline_ratio="$(magick "$TMP/focused-wario-crop.png.focus-element.png" \
+  -alpha off -colorspace sRGB \
+  -fx 'g > 0.65 && b > 0.75 && r < 0.4 ? 1 : 0' \
+  -format '%[fx:mean]' info:)"
+awk -v ratio="$element_outline_ratio" 'BEGIN { exit !(ratio + 0 < 0.001) }'
 
 printf 'RetroArch acceptance config-safety contract passed\n'

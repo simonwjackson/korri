@@ -819,8 +819,8 @@ render_focused_wario_crop_evidence() {
   local crop_x crop_y crop_width crop_height
   local element_x element_y element_width element_height
   local padding=10
-  local ring_image="${crop}.focus-element.png"
-  local ring_band ring_top ring_bottom ring_left ring_right ring_ratio
+  local element_image="${crop}.focus-element.png"
+  local outline_ratio
 
   jq -e '
     .gameId == "local-game:wl4" and .title == "Wario Land 4"
@@ -861,26 +861,18 @@ render_focused_wario_crop_evidence() {
     && "$element_width" -gt 0 && "$element_height" -gt 0 ]] || return 1
 
   magick "$image" -crop "${crop_width}x${crop_height}+${crop_x}+${crop_y}" +repage "$crop"
+  # Preserve the exact element-box artifact alongside the padded crop. Shift's
+  # focus treatment is a CSS outline outside getBoundingClientRect(), so the
+  # element box is intentionally not used to find the outline.
   magick "$image" -crop "${element_width}x${element_height}+${element_x}+${element_y}" \
-    +repage "$ring_image"
-  ring_band=$((element_width < 6 || element_height < 6 ? 1 : 6))
-  ring_top="$(magick "$ring_image" -crop "${element_width}x${ring_band}+0+0" +repage \
-    -alpha off -colorspace RGB -fx 'g > 0.55 && b > 0.65 && r < 0.5 ? 1 : 0' \
+    +repage "$element_image"
+  # The measured RG405M padded crop contains about 2.9% cyan outline pixels.
+  # A 1% floor tolerates antialiasing and scaling while rejecting the teal tile
+  # fill; evaluate in sRGB so the channel thresholds match screenshot bytes.
+  outline_ratio="$(magick "$crop" -alpha off -colorspace sRGB \
+    -fx 'g > 0.65 && b > 0.75 && r < 0.4 ? 1 : 0' \
     -format '%[fx:mean]' info:)"
-  ring_bottom="$(magick "$ring_image" \
-    -crop "${element_width}x${ring_band}+0+$((element_height - ring_band))" +repage \
-    -alpha off -colorspace RGB -fx 'g > 0.55 && b > 0.65 && r < 0.5 ? 1 : 0' \
-    -format '%[fx:mean]' info:)"
-  ring_left="$(magick "$ring_image" -crop "${ring_band}x${element_height}+0+0" +repage \
-    -alpha off -colorspace RGB -fx 'g > 0.55 && b > 0.65 && r < 0.5 ? 1 : 0' \
-    -format '%[fx:mean]' info:)"
-  ring_right="$(magick "$ring_image" \
-    -crop "${ring_band}x${element_height}+$((element_width - ring_band))+0" +repage \
-    -alpha off -colorspace RGB -fx 'g > 0.55 && b > 0.65 && r < 0.5 ? 1 : 0' \
-    -format '%[fx:mean]' info:)"
-  ring_ratio="$(printf '%s\n' "$ring_top" "$ring_bottom" "$ring_left" "$ring_right" \
-    | awk 'BEGIN { max = 0 } { if ($1 + 0 > max) max = $1 + 0 } END { print max }')"
-  awk -v ratio="$ring_ratio" 'BEGIN { exit !(ratio + 0 >= 0.08) }' || return 1
+  awk -v ratio="$outline_ratio" 'BEGIN { exit !(ratio + 0 >= 0.01) }' || return 1
   magick "$crop" -filter point -resize 400% "$scaled"
   tesseract "$scaled" stdout --psm 6 >"$text" 2>/dev/null
   tr '\n' ' ' <"$text" | grep -Eqi 'wario[[:space:]]+land[[:space:]]+4' || return 1
@@ -889,10 +881,10 @@ render_focused_wario_crop_evidence() {
     --argjson width "$crop_width" --argjson height "$crop_height" \
     --argjson elementX "$element_x" --argjson elementY "$element_y" \
     --argjson elementWidth "$element_width" --argjson elementHeight "$element_height" \
-    --argjson ringRatio "$ring_ratio" \
+    --argjson outlineRatio "$outline_ratio" \
     '{crop:{x:$x,y:$y,width:$width,height:$height},
       focusedElement:{x:$elementX,y:$elementY,width:$elementWidth,height:$elementHeight},
-      focusRingBoundaryMaxRatio:$ringRatio,activeElementVerified:true,
+      focusOutlinePaddedCropRatio:$outlineRatio,activeElementVerified:true,
       ocrTitle:"Wario Land 4"}' >"$observation"
 }
 
