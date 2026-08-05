@@ -265,6 +265,26 @@ let
       runtimeInputs = [ pkgs.gnugrep ];
     };
 
+    overlay-accept = {
+      description = "Run the human-led, state-restoring unified Android gameplay-overlay acceptance gate.";
+      usageSuffix = " -- <adb-serial> <exact-device-model> <direct-launch-package> <unrelated-package> [evidence-dir]";
+      runtimeInputs = [
+        pkgs.android-tools
+        pkgs.coreutils
+        pkgs.curl
+        pkgs.diffutils
+        pkgs.gnugrep
+        pkgs.gnused
+        pkgs.jq
+      ];
+      script = ''
+        serial="''${1:?usage: overlay-accept <adb-serial> <exact-device-model> <direct-launch-package> <unrelated-package> [evidence-dir]}"
+        expected_model="''${2:?usage: overlay-accept <adb-serial> <exact-device-model> <direct-launch-package> <unrelated-package> [evidence-dir]}"
+        ${adbPreflight}
+        exec "$KORRI_ROOT/clients/android/overlay-acceptance.sh" "$@"
+      '';
+    };
+
     storage-notice-check = deviceScript "storage-notice-check" "storage-notice-check.sh" {
       description = "Build, install, and verify on a device that denied storage access shows a reachable portal prompt.";
       needsProseql = true;

@@ -9,6 +9,7 @@ CRATE="$ROOT/services/korrid"
 ANDROID_SMOKE="$CRATE/android-smoke.sh"
 ANDROID_APP_ROUTE="$CRATE/android-app-route-check.sh"
 JOURNEY_RESUME="$CRATE/journey-resume.sh"
+OVERLAY_ACCEPTANCE="$ROOT/clients/android/overlay-acceptance.sh"
 KORRI_SHELL="$ROOT/clients/android/app/src/main/java/com/limelight/KorriShellActivity.java"
 
 # The review's canonical cases must stay deterministic even when a developer's
@@ -39,7 +40,59 @@ unset \
 # test-only value rather than recovering one from the fake logcat stream.
 export KORRI_ANDROID_DEBUG_CAPABILITY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
-bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$JOURNEY_RESUME" "$CRATE/android-debug-capability.sh"
+bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$JOURNEY_RESUME" \
+  "$OVERLAY_ACCEPTANCE" "$CRATE/android-debug-capability.sh"
+
+# Unified-overlay acceptance remains human-led and state restoring. These
+# source contracts deliberately do not substitute for the device gate.
+# shellcheck disable=SC2016 # Literal source-contract needles.
+grep -F 'EXPECTED_MODEL="$2"' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'ACTUAL_MODEL=' "$OVERLAY_ACCEPTANCE" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needles.
+grep -F 'timeout 15 "$ADB_BIN"' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'require_preinstalled' "$OVERLAY_ACCEPTANCE" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needles.
+grep -F 'LOCK_REMOTE="$STORAGE_ROOT/.android-app-route-check.lock"' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'backup_before_mutation' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'trap cleanup EXIT' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'retroarch.cfg' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'wl4.state.auto' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'wl4.srm' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'PREFS_BACKUP=' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'PRIOR_AUTO_ROTATION=' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'enabled_accessibility_services' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'capture_evidence' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F '[active controls and telemetry]' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'could not establish safe quiescence; backup and lock retained' "$OVERLAY_ACCEPTANCE" >/dev/null
+for token in \
+  'LOCAL OVERLAY VERIFIED' \
+  'STREAM OVERLAY VERIFIED' \
+  'DIRECT NEGATIVE VERIFIED' \
+  'UNRELATED NEGATIVE VERIFIED' \
+  'PERMISSION DISABLED BY HUMAN' \
+  'PERMISSION RECOVERED BY HUMAN'; do
+  grep -F "$token" "$OVERLAY_ACCEPTANCE" >/dev/null
+done
+if sed '/^[[:space:]]*#/d' "$OVERLAY_ACCEPTANCE" \
+  | grep -Eq 'pm[[:space:]]+(install|uninstall|clear|grant)([;&|[:space:]]|$)|adb[^[:cntrl:]]+[[:space:]]install([;&|[:space:]]|$)'; then
+  echo 'overlay acceptance must not install, uninstall, clear, or grant packages/permissions' >&2
+  exit 1
+fi
+if sed '/^[[:space:]]*#/d' "$OVERLAY_ACCEPTANCE" \
+  | grep -Eq 'settings[[:space:]]+(put|delete)[[:space:]]+secure[[:space:]]+(enabled_accessibility_services|accessibility_enabled)'; then
+  echo 'overlay acceptance must never write Android accessibility settings' >&2
+  exit 1
+fi
+if sed '/^[[:space:]]*#/d' "$OVERLAY_ACCEPTANCE" \
+  | grep -Eq 'shell[[:space:]]+input|input[[:space:]]+(keyevent|tap|swipe)'; then
+  echo 'overlay acceptance must use human physical-input checkpoints, not adb input' >&2
+  exit 1
+fi
+if ! sed -n '/overlay-accept = {/,/^    };/p' "$ROOT/nix/tasks.nix" \
+  | grep -F 'clients/android/overlay-acceptance.sh' >/dev/null; then
+  echo 'overlay-accept Nix task must execute the reviewed acceptance script' >&2
+  exit 1
+fi
 
 if grep -F 'debug capability=' "$KORRI_SHELL" "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$CRATE/brain-service-check.sh" >/dev/null; then
   echo 'Android runtime and device gates must never log or recover the full RPC capability from logcat' >&2
