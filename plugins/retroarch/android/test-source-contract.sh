@@ -41,25 +41,37 @@ grep -q 'case CMD_EVENT_MENU_TOGGLE:' "$SOURCE/retroarch.c"
 grep -q '#define DEFAULT_NETWORK_CMD_ENABLE true' "$CONFIG"
 grep -q 'Korri Android command channel is loopback-only' "$COMMAND"
 grep -q 'command_network_set_token' "$COMMAND_HEADER"
-grep -q 'strlen(token) == 64' "$COMMAND"
-grep -q 'string_is_equal(buf, network_command_token)' "$COMMAND"
-grep -q 'strcmp(command, "GET_STATUS")' "$COMMAND"
-grep -q 'strcmp(command, "SHOW_MENU")' "$COMMAND"
-grep -q 'strcmp(command, "QUIT")' "$COMMAND"
+grep -q 'strlen(token) != 64' "$COMMAND"
+grep -q '#define KORRI_REQUEST_SIZE (1 + KORRI_NONCE_SIZE + 1 + KORRI_MAC_SIZE)' "$COMMAND"
+grep -q 'sha256_hash(inner_hex' "$COMMAND"
+grep -q 'korri_hmac_sha256' "$COMMAND"
+grep -q 'korri_constant_time_equal' "$COMMAND"
+grep -q 'ret != KORRI_REQUEST_SIZE' "$COMMAND"
+grep -q 'case 1: command = "GET_STATUS"' "$COMMAND"
+grep -q 'case 2: command = "SHOW_MENU"' "$COMMAND"
+grep -q 'case 3: command = "QUIT"' "$COMMAND"
+auth_line="$(grep -n 'korri_constant_time_equal(expected_mac' "$COMMAND" | head -1 | cut -d: -f1)"
+allowlist_line="$(grep -n 'case 1: command = "GET_STATUS"' "$COMMAND" | head -1 | cut -d: -f1)"
+[[ "$auth_line" -lt "$allowlist_line" ]] || {
+  echo 'RetroArch command authentication must precede allowlist selection' >&2
+  exit 1
+}
+grep -q 'if (len > KORRI_MAX_RESULT_SIZE)' "$COMMAND"
 grep -q 'MENU_ST_FLAG_ALIVE' "$COMMAND"
 grep -q 'command_event(CMD_EVENT_MENU_TOGGLE, NULL)' "$COMMAND"
 grep -q 'SHOW_MENU OK' "$COMMAND"
 grep -q 'SHOW_MENU ERROR' "$COMMAND"
 grep -q 'QUIT OK' "$COMMAND"
 grep -q 'Rejected unauthenticated Korri command' "$COMMAND"
-grep -q 'Rejected command outside Korri allowlist' "$COMMAND"
-auth_line="$(grep -n 'string_is_equal(buf, network_command_token)' "$COMMAND" | head -1 | cut -d: -f1)"
-allowlist_line="$(grep -n 'strcmp(command, "SHOW_MENU")' "$COMMAND" | head -1 | cut -d: -f1)"
-[[ "$auth_line" -lt "$allowlist_line" ]] || {
-  echo 'RetroArch command authentication must precede allowlist selection' >&2
+grep -q 'korri_secure_wipe(network_command_token, sizeof(network_command_token))' "$COMMAND"
+grep -q 'korri_secure_wipe(netcmd->token, sizeof(netcmd->token))' "$COMMAND"
+if grep -q 'string_is_equal(buf, network_command_token)' "$COMMAND"; then
+  echo 'RetroArch control token must never be sent over UDP' >&2
   exit 1
-}
+fi
 grep -q 'NewStringUTF(env, "KORRI_CONTROL_TOKEN")' "$PLATFORM"
+grep -q 'GetMethodID(env, intent_class, "removeExtra"' "$PLATFORM"
+grep -q 'CallVoidMethod(env, obj, remove_extra, token_key)' "$PLATFORM"
 grep -q 'if (string_is_empty(system_id))' "$COMMAND"
 grep -q 'system_id = "unknown";' "$COMMAND"
 grep -q 'Korri synchronously persists the auto state before Android pause' "$ANDROID_INPUT"

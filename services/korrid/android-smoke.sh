@@ -30,22 +30,27 @@ require_wl4_local_launch_response() {
     and (
       (
         .outcome._tag == "Ok"
-        and (.outcome.payload | exact_keys(["component", "directories", "extras", "files", "integrity", "launcherId"]))
+        and (.outcome.payload | exact_keys(["component", "context", "directories", "disposition", "extras", "files", "integrity", "launchId", "launcherId"]))
+        and (.outcome.payload.launchId | test("^[0-9a-f]{32}$"))
         and .outcome.payload.launcherId == "retroarch"
+        and .outcome.payload.disposition == "fresh"
+        and .outcome.payload.context.gameId == "wl4"
+        and .outcome.payload.context.executor == {id: "retroarch-control", available: true}
         and (.outcome.payload.component | exact_keys(["className", "packageName"]))
         and .outcome.payload.component.packageName == "com.korri.retroarch"
         and .outcome.payload.component.className == "com.retroarch.browser.retroactivity.RetroActivityFuture"
-        and (.outcome.payload.extras | exact_keys(["CONFIGFILE", "KORRI_CONTROL_TOKEN", "LIBRETRO", "ROM"]))
+        and (.outcome.payload.extras | exact_keys(["CONFIGFILE", "LIBRETRO", "ROM"]))
         and .outcome.payload.extras.ROM == ($storage_root + "/roms/wl4.gba")
         and .outcome.payload.extras.LIBRETRO == "/data/data/com.korri.retroarch/cores/mgba_libretro_android.so"
         and .outcome.payload.extras.CONFIGFILE == ($storage_root + "/retroarch.cfg")
-        and (.outcome.payload.extras.KORRI_CONTROL_TOKEN | test("^[0-9a-f]{64}$"))
         and .outcome.payload.directories == (["system", "saves", "states", "screenshots"] | map($storage_root + "/" + .))
         and (.outcome.payload.files | type == "array" and length == 1)
         and (.outcome.payload.files[0] | exact_keys(["content", "path"]))
         and .outcome.payload.files[0].path == ($storage_root + "/retroarch.cfg")
         and (.outcome.payload.files[0].content | contains("video_driver = \"gl\""))
         and (.outcome.payload.files[0].content | contains("kiosk_mode_enable = \"true\""))
+        and (.outcome.payload.files[0].content | contains("network_cmd_enable = \"true\""))
+        and (.outcome.payload.files[0].content | contains("network_cmd_port = \""))
         and (.outcome.payload.integrity | test("^[0-9a-f]{64}$"))
       )
       or (

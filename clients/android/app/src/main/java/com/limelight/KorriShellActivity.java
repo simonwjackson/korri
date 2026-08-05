@@ -461,10 +461,6 @@ public class KorriShellActivity extends AppCompatActivity {
         /** JSON-encoded LaunchLocalResult. */
         @JavascriptInterface
         public String launchLocal(String specJson) {
-            if (!KorridServer.verifyLaunchSpec(specJson)) {
-                return launchFailed("InvalidSpec",
-                        "local launch instruction failed integrity verification");
-            }
             final KorriLocalLaunchSpec.Parsed spec;
             try {
                 spec = KorriLocalLaunchSpec.parse(specJson, new File(localStorageRoot()));
@@ -490,11 +486,6 @@ public class KorriShellActivity extends AppCompatActivity {
                 }
             }
             KorriLocalLaunchSpec.applyTaskPolicy(spec, intent);
-            if (!spec.isAndroidApp
-                    && !KorridServer.attachRetroarchControlAuthority(specJson, intent)) {
-                return launchFailed(
-                        "InvalidSpec", "RetroArch control authority could not be attached");
-            }
 
             boolean hasProvisioning = !spec.directories.isEmpty() || !spec.files.isEmpty();
             if (hasProvisioning
@@ -534,6 +525,11 @@ public class KorriShellActivity extends AppCompatActivity {
                                 : "local file provisioning failed");
             }
 
+            int authorization = KorridServer.authorizeLaunchSpec(specJson, intent);
+            if (authorization == KorridServer.LOCAL_LAUNCH_REJECTED) {
+                return launchFailed("InvalidSpec",
+                        "local launch instruction failed authorization");
+            }
             try {
                 startActivityOnUiThread(intent, "local launcher start timed out");
             } catch (InterruptedException error) {
@@ -543,11 +539,13 @@ public class KorriShellActivity extends AppCompatActivity {
                 return launchFailed("StartFailed",
                         error.getMessage() != null ? error.getMessage() : "start failed");
             }
-            try {
-                // Record only after Android accepted the exact signed launch.
-                KorriBrainService.publishLocalActiveLaunch(spec, specJson);
-            } catch (Exception publishError) {
-                return launchFailed("StartFailed", "local launch context could not be recorded");
+            if (authorization == KorridServer.LOCAL_LAUNCH_PUBLISH) {
+                try {
+                    // Record only after Android accepted a fresh exact signed launch.
+                    KorriBrainService.publishLocalActiveLaunch(spec, specJson);
+                } catch (Exception publishError) {
+                    return launchFailed("StartFailed", "local launch context could not be recorded");
+                }
             }
             return "{\"_tag\":\"Launched\"}";
         }

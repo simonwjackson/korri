@@ -98,6 +98,11 @@ export interface LaunchContext {
 	foreground: LaunchForegroundRule;
 }
 
+export enum LaunchDisposition {
+	Fresh = "fresh",
+	Resume = "resume",
+}
+
 export interface ProvisionedFile {
 	path: string;
 	content: string;
@@ -107,6 +112,7 @@ export interface LaunchSpec {
 	/** Identity created by korrid while preparing this exact launch. */
 	launchId: string;
 	launcherId: string;
+	disposition: LaunchDisposition;
 	context: LaunchContext;
 	component: AndroidComponent;
 	extras: Record<string, string>;

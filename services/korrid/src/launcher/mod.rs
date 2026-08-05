@@ -13,9 +13,11 @@ use crate::{
 };
 use std::path::Path;
 
+pub(crate) use types::derive_retroarch_control_port;
+
 pub use types::{
     AndroidActiveLaunch, AndroidComponent, AndroidMoonlightEffect, FileProvisionMode,
-    LaunchContext, LaunchContributorKind, LaunchExecutor, LaunchForegroundKind,
+    LaunchContext, LaunchContributorKind, LaunchDisposition, LaunchExecutor, LaunchForegroundKind,
     LaunchForegroundRule, LaunchPublicationReservationFailure, LaunchPublicationReservations,
     LaunchRouteContributor, LaunchSpec, LocalGame, MoonlightLaunchAuthority, MoonlightLaunchSpec,
     MoonlightLaunchVerificationFailure, PlatformEffect, PlatformInstruction,
@@ -101,6 +103,7 @@ pub fn launch_game(
     provision_mode: FileProvisionMode,
     config_state: &ConfigSnapshotState,
     registry: &PluginRegistry,
+    retroarch_control_port: u16,
 ) -> Result<LaunchSpec, LaunchError> {
     if config_state.authorization != SnapshotAuthorization::Authorized {
         if config_state.generation == 0 || config_state.snapshot.library.contains_key(game_id) {
@@ -130,7 +133,9 @@ pub fn launch_game(
     match route.launcher_kind.as_str() {
         "@korri:android-app" => android_app::launch_route(&route)
             .map_err(|error| LaunchError::RouteUnavailable(error.to_string())),
-        "@korri:retroarch" => retroarch::launch_route(root, &route, provision_mode),
+        "@korri:retroarch" => {
+            retroarch::launch_route(root, &route, provision_mode, retroarch_control_port)
+        }
         other => Err(LaunchError::RouteUnavailable(format!(
             "unsupported launcher kind {other}"
         ))),
@@ -323,6 +328,7 @@ mod tests {
             FileProvisionMode::Deferred,
             &state,
             &registry(),
+            50000,
         )
         .expect("android route should launch");
 
@@ -430,6 +436,7 @@ mod tests {
             FileProvisionMode::Deferred,
             &state,
             &registry(),
+            50000,
         )
         .expect_err("retained config knows this dynamic route but cannot authorize it");
 
@@ -449,6 +456,7 @@ mod tests {
             FileProvisionMode::Deferred,
             &state,
             &registry(),
+            50000,
         )
         .expect_err("retained config proves this id is absent");
 
@@ -468,6 +476,7 @@ mod tests {
             FileProvisionMode::Deferred,
             &state,
             &registry(),
+            50000,
         )
         .expect_err("initial unauthorized config has no absence knowledge");
 
@@ -483,6 +492,7 @@ mod tests {
             FileProvisionMode::Deferred,
             &state,
             &registry(),
+            50000,
         )
         .expect_err("plugin routes require an authorized configuration snapshot");
         assert!(
@@ -521,6 +531,7 @@ mod tests {
             FileProvisionMode::Deferred,
             &state,
             &registry,
+            50000,
         )
         .expect_err("disabled plugin route must not fall through");
         let LaunchError::RouteUnavailable(message) = error else {
@@ -579,6 +590,7 @@ launchers:
             FileProvisionMode::Deferred,
             &state,
             &registry,
+            50000,
         )
         .expect_err("copied first-party records must not bypass disabled policy");
         let LaunchError::RouteUnavailable(message) = error else {
@@ -598,6 +610,7 @@ launchers:
             FileProvisionMode::Deferred,
             &state,
             &registry(),
+            50000,
         )
         .expect_err("rom is absent");
         assert!(

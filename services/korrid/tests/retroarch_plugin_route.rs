@@ -120,6 +120,7 @@ fn materializes_the_existing_launch_treaty_from_composed_plugin_records() {
         FileProvisionMode::Deferred,
         &state,
         &registry(true, true),
+        50000,
     )
     .expect("plugin-backed launch spec");
 
@@ -158,6 +159,7 @@ fn launch_spec_and_config_follow_values_from_both_plugins() {
         FileProvisionMode::Deferred,
         &state,
         &registry_from_sources(&retroarch_source, &mgba_source),
+        50000,
     )
     .expect("sentinel plugin-backed launch spec");
 

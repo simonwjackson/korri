@@ -1,16 +1,28 @@
-use super::{LaunchContributorKind, LaunchSpec};
+use super::{AndroidActiveLaunch, LaunchContributorKind, LaunchSpec};
+use hmac::{Hmac, Mac};
+use rand::RngCore;
+use sha2::Sha256;
 use std::{
     fmt, io,
     net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket},
+    path::Path,
     time::Duration,
 };
+use zeroize::Zeroizing;
 
-const CONTROL_ENDPOINT: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST, 55355);
+type HmacSha256 = Hmac<Sha256>;
+
 const CONTROL_TIMEOUT: Duration = Duration::from_millis(250);
 const KORRI_PACKAGE: &str = "com.korri.retroarch";
 const KORRI_ACTIVITY: &str = "com.retroarch.browser.retroactivity.RetroActivityFuture";
 const KORRI_LAUNCHER: &str = "@korri:retroarch/retroarch";
 const KORRI_EXECUTOR: &str = "retroarch-control";
+const PROTOCOL_VERSION: u8 = 1;
+const NONCE_LENGTH: usize = 32;
+const MAC_LENGTH: usize = 32;
+const REQUEST_LENGTH: usize = 1 + NONCE_LENGTH + 1 + MAC_LENGTH;
+const RESPONSE_PREFIX_LENGTH: usize = 1 + NONCE_LENGTH + 1 + 2;
+const MAX_RESULT_LENGTH: usize = 4096;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RetroarchControlCommand {
@@ -20,18 +32,26 @@ pub(crate) enum RetroarchControlCommand {
 }
 
 impl RetroarchControlCommand {
-    fn verb(self) -> &'static str {
+    fn tag(self) -> u8 {
         match self {
-            Self::GetStatus => "GET_STATUS",
-            Self::ShowMenu => "SHOW_MENU",
-            Self::Quit => "QUIT",
+            Self::GetStatus => 1,
+            Self::ShowMenu => 2,
+            Self::Quit => 3,
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct RetroarchStatus {
+    pub(crate) paused: bool,
+    pub(crate) system: String,
+    pub(crate) content: String,
+    pub(crate) crc32: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum RetroarchControlResponse {
-    Playing,
+    Status(RetroarchStatus),
     NotPlaying,
     Acknowledged,
 }
@@ -52,13 +72,17 @@ pub(crate) enum RetroarchControlError {
 
 pub(crate) struct RetroarchControlAuthority {
     launch_id: String,
-    token: Box<[u8; 64]>,
+    endpoint: SocketAddr,
+    token: Zeroizing<[u8; 64]>,
+    game_id: String,
+    expected_content: String,
 }
 
 impl RetroarchControlAuthority {
     pub(crate) fn retain_from_verified_launch(
         spec: &LaunchSpec,
         token: &str,
+        port: u16,
     ) -> Result<Self, RetroarchControlError> {
         let trusted_shape = spec.launcher_id == "retroarch"
             && spec.component.package_name == KORRI_PACKAGE
@@ -72,21 +96,51 @@ impl RetroarchControlAuthority {
                 .executor
                 .as_ref()
                 .is_some_and(|executor| executor.id == KORRI_EXECUTOR && executor.available);
-        if !trusted_shape {
+        let game_id = spec
+            .context
+            .game_id
+            .as_deref()
+            .filter(|value| !value.is_empty());
+        let expected_content = spec
+            .extras
+            .get("ROM")
+            .and_then(|rom| Path::new(rom).file_name())
+            .and_then(|name| name.to_str())
+            .filter(|name| !name.is_empty() && !name.chars().any(char::is_control));
+        if !trusted_shape
+            || !(49152..=65535).contains(&port)
+            || game_id.is_none()
+            || expected_content.is_none()
+        {
             return Err(RetroarchControlError::InvalidAuthority);
         }
-        Self::new(spec.launch_id.clone(), token)
+        Self::new(
+            spec.launch_id.clone(),
+            token,
+            port,
+            game_id.expect("checked").to_owned(),
+            expected_content.expect("checked").to_owned(),
+        )
     }
 
-    fn new(launch_id: impl Into<String>, token: &str) -> Result<Self, RetroarchControlError> {
-        if !valid_token(token) {
+    fn new(
+        launch_id: impl Into<String>,
+        token: &str,
+        port: u16,
+        game_id: impl Into<String>,
+        expected_content: impl Into<String>,
+    ) -> Result<Self, RetroarchControlError> {
+        if !valid_token(token) || !(49152..=65535).contains(&port) {
             return Err(RetroarchControlError::InvalidAuthority);
         }
-        let mut retained = Box::new([0_u8; 64]);
+        let mut retained = [0_u8; 64];
         retained.copy_from_slice(token.as_bytes());
         Ok(Self {
             launch_id: launch_id.into(),
-            token: retained,
+            endpoint: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)),
+            token: Zeroizing::new(retained),
+            game_id: game_id.into(),
+            expected_content: expected_content.into(),
         })
     }
 
@@ -94,8 +148,37 @@ impl RetroarchControlAuthority {
         self.launch_id == launch_id
     }
 
-    pub(crate) fn status(&self) -> Result<RetroarchControlResponse, RetroarchControlError> {
-        self.request(RetroarchControlCommand::GetStatus)
+    pub(crate) fn port(&self) -> u16 {
+        self.endpoint.port()
+    }
+
+    #[cfg(target_os = "android")]
+    pub(crate) fn token_bytes(&self) -> &[u8] {
+        self.token.as_slice()
+    }
+
+    pub(crate) fn matches_launch(&self, active: &AndroidActiveLaunch, spec: &LaunchSpec) -> bool {
+        self.is_for(&active.launch_id)
+            && active.game_id.as_deref() == Some(self.game_id.as_str())
+            && active.game_id == spec.context.game_id
+            && active.title == spec.context.title
+            && active.contributors == spec.context.contributors
+            && active.executor == spec.context.executor
+            && active.foreground == spec.context.foreground
+            && spec
+                .extras
+                .get("ROM")
+                .and_then(|rom| Path::new(rom).file_name())
+                .and_then(|name| name.to_str())
+                == Some(self.expected_content.as_str())
+    }
+
+    pub(crate) fn confirms_expected_content(&self) -> Result<bool, RetroarchControlError> {
+        Ok(matches!(
+            self.request(RetroarchControlCommand::GetStatus)?,
+            RetroarchControlResponse::Status(RetroarchStatus { content, .. })
+                if content == self.expected_content
+        ))
     }
 
     pub(crate) fn invoke(
@@ -107,7 +190,7 @@ impl RetroarchControlAuthority {
         }
         match self.request(command)? {
             RetroarchControlResponse::Acknowledged => Ok(()),
-            RetroarchControlResponse::Playing | RetroarchControlResponse::NotPlaying => {
+            RetroarchControlResponse::Status(_) | RetroarchControlResponse::NotPlaying => {
                 Err(RetroarchControlError::WrongResponse)
             }
         }
@@ -122,9 +205,7 @@ impl RetroarchControlAuthority {
         socket
             .set_read_timeout(Some(CONTROL_TIMEOUT))
             .map_err(|_| RetroarchControlError::Unavailable)?;
-        let token = std::str::from_utf8(self.token.as_slice())
-            .map_err(|_| RetroarchControlError::InvalidAuthority)?;
-        request_with_socket(&socket, SocketAddr::V4(CONTROL_ENDPOINT), token, command)
+        request_with_socket(&socket, self.endpoint, &self.token, command)
     }
 }
 
@@ -133,14 +214,10 @@ impl fmt::Debug for RetroarchControlAuthority {
         formatter
             .debug_struct("RetroarchControlAuthority")
             .field("launch_id", &self.launch_id)
+            .field("endpoint", &self.endpoint)
             .field("token", &"[REDACTED]")
+            .field("expected_content", &self.expected_content)
             .finish()
-    }
-}
-
-impl Drop for RetroarchControlAuthority {
-    fn drop(&mut self) {
-        self.token.fill(0);
     }
 }
 
@@ -152,26 +229,33 @@ fn valid_token(token: &str) -> bool {
 }
 
 fn request_payload(
-    token: &str,
+    token: &[u8; 64],
+    nonce: [u8; NONCE_LENGTH],
     command: RetroarchControlCommand,
-) -> Result<String, RetroarchControlError> {
-    if !valid_token(token) {
-        return Err(RetroarchControlError::InvalidAuthority);
-    }
-    Ok(format!("{token} {}", command.verb()))
+) -> [u8; REQUEST_LENGTH] {
+    let mut payload = [0_u8; REQUEST_LENGTH];
+    payload[0] = PROTOCOL_VERSION;
+    payload[1..1 + NONCE_LENGTH].copy_from_slice(&nonce);
+    payload[1 + NONCE_LENGTH] = command.tag();
+    let mut mac = HmacSha256::new_from_slice(token).expect("HMAC accepts a 64-byte key");
+    mac.update(&payload[..1 + NONCE_LENGTH + 1]);
+    payload[1 + NONCE_LENGTH + 1..].copy_from_slice(&mac.finalize().into_bytes());
+    payload
 }
 
 fn request_with_socket(
     socket: &UdpSocket,
     endpoint: SocketAddr,
-    token: &str,
+    token: &[u8; 64],
     command: RetroarchControlCommand,
 ) -> Result<RetroarchControlResponse, RetroarchControlError> {
-    let payload = request_payload(token, command)?;
+    let mut nonce = [0_u8; NONCE_LENGTH];
+    rand::rng().fill_bytes(&mut nonce);
+    let payload = request_payload(token, nonce, command);
     socket
-        .send_to(payload.as_bytes(), endpoint)
+        .send_to(&payload, endpoint)
         .map_err(|_| RetroarchControlError::Unavailable)?;
-    let mut reply = [0_u8; 512];
+    let mut reply = [0_u8; RESPONSE_PREFIX_LENGTH + MAX_RESULT_LENGTH + MAC_LENGTH];
     let (length, source) = socket
         .recv_from(&mut reply)
         .map_err(|error| match error.kind() {
@@ -181,10 +265,58 @@ fn request_with_socket(
     if source != endpoint {
         return Err(RetroarchControlError::WrongSource);
     }
-    parse_response(command, &reply[..length])
+    parse_authenticated_response(token, nonce, command, &reply[..length])
 }
 
-fn parse_response(
+#[cfg(test)]
+pub(crate) fn authenticated_response(
+    token: &[u8; 64],
+    nonce: [u8; NONCE_LENGTH],
+    command: RetroarchControlCommand,
+    result: &[u8],
+) -> Vec<u8> {
+    assert!(result.len() <= MAX_RESULT_LENGTH);
+    let mut response = Vec::with_capacity(RESPONSE_PREFIX_LENGTH + result.len() + MAC_LENGTH);
+    response.push(PROTOCOL_VERSION);
+    response.extend_from_slice(&nonce);
+    response.push(command.tag());
+    response.extend_from_slice(&(result.len() as u16).to_be_bytes());
+    response.extend_from_slice(result);
+    let mut mac = HmacSha256::new_from_slice(token).expect("HMAC accepts a 64-byte key");
+    mac.update(&response);
+    response.extend_from_slice(&mac.finalize().into_bytes());
+    response
+}
+
+fn parse_authenticated_response(
+    token: &[u8; 64],
+    nonce: [u8; NONCE_LENGTH],
+    command: RetroarchControlCommand,
+    response: &[u8],
+) -> Result<RetroarchControlResponse, RetroarchControlError> {
+    if response.len() < RESPONSE_PREFIX_LENGTH + MAC_LENGTH
+        || response[0] != PROTOCOL_VERSION
+        || response[1..1 + NONCE_LENGTH] != nonce
+        || response[1 + NONCE_LENGTH] != command.tag()
+    {
+        return Err(RetroarchControlError::WrongResponse);
+    }
+    let result_length = u16::from_be_bytes([
+        response[1 + NONCE_LENGTH + 1],
+        response[1 + NONCE_LENGTH + 2],
+    ]) as usize;
+    let framed_length = RESPONSE_PREFIX_LENGTH + result_length;
+    if result_length > MAX_RESULT_LENGTH || response.len() != framed_length + MAC_LENGTH {
+        return Err(RetroarchControlError::WrongResponse);
+    }
+    let mut mac = HmacSha256::new_from_slice(token).expect("HMAC accepts a 64-byte key");
+    mac.update(&response[..framed_length]);
+    mac.verify_slice(&response[framed_length..])
+        .map_err(|_| RetroarchControlError::WrongResponse)?;
+    parse_result(command, &response[RESPONSE_PREFIX_LENGTH..framed_length])
+}
+
+fn parse_result(
     command: RetroarchControlCommand,
     response: &[u8],
 ) -> Result<RetroarchControlResponse, RetroarchControlError> {
@@ -204,21 +336,37 @@ fn parse_response(
                 .ok_or(RetroarchControlError::WrongResponse)?;
             let text =
                 std::str::from_utf8(response).map_err(|_| RetroarchControlError::WrongResponse)?;
-            let details = text
-                .strip_prefix("GET_STATUS PLAYING ")
-                .or_else(|| text.strip_prefix("GET_STATUS PAUSED "))
-                .ok_or(RetroarchControlError::WrongResponse)?;
-            let (content, crc) = details
+            let (paused, details) = if let Some(details) = text.strip_prefix("GET_STATUS PLAYING ")
+            {
+                (false, details)
+            } else if let Some(details) = text.strip_prefix("GET_STATUS PAUSED ") {
+                (true, details)
+            } else {
+                return Err(RetroarchControlError::WrongResponse);
+            };
+            let (identity, crc32) = details
                 .rsplit_once(",crc32=")
                 .ok_or(RetroarchControlError::WrongResponse)?;
-            if content.is_empty()
-                || content.chars().any(char::is_control)
-                || crc.is_empty()
-                || !crc.bytes().all(|byte| byte.is_ascii_hexdigit())
+            let (system, content) = identity
+                .split_once(',')
+                .ok_or(RetroarchControlError::WrongResponse)?;
+            if [system, content, crc32]
+                .iter()
+                .any(|value| value.is_empty() || value.chars().any(char::is_control))
+                || !crc32.bytes().all(|byte| byte.is_ascii_hexdigit())
+                || Path::new(content)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    != Some(content)
             {
                 return Err(RetroarchControlError::WrongResponse);
             }
-            Ok(RetroarchControlResponse::Playing)
+            Ok(RetroarchControlResponse::Status(RetroarchStatus {
+                paused,
+                system: system.to_owned(),
+                content: content.to_owned(),
+                crc32: crc32.to_owned(),
+            }))
         }
         RetroarchControlCommand::ShowMenu | RetroarchControlCommand::Quit => {
             Err(RetroarchControlError::WrongResponse)
@@ -231,95 +379,96 @@ mod tests {
     use super::*;
     use std::{net::UdpSocket, thread, time::Duration};
 
-    const TOKEN: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const TOKEN_TEXT: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const TOKEN: &[u8; 64] = b"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     #[test]
-    fn request_payloads_are_closed_and_token_shape_is_strict() {
-        assert_eq!(
-            request_payload(TOKEN, RetroarchControlCommand::GetStatus).unwrap(),
-            format!("{TOKEN} GET_STATUS")
-        );
-        assert_eq!(
-            request_payload(TOKEN, RetroarchControlCommand::ShowMenu).unwrap(),
-            format!("{TOKEN} SHOW_MENU")
-        );
-        assert_eq!(
-            request_payload(TOKEN, RetroarchControlCommand::Quit).unwrap(),
-            format!("{TOKEN} QUIT")
-        );
-        for malformed in [
-            "",
-            "a",
-            &"A".repeat(64),
-            &"g".repeat(64),
-            &"0".repeat(63),
-            &"0".repeat(65),
-        ] {
-            assert_eq!(
-                request_payload(malformed, RetroarchControlCommand::GetStatus),
-                Err(RetroarchControlError::InvalidAuthority)
-            );
-        }
+    fn request_is_fixed_size_nonce_bound_and_authenticated() {
+        let nonce = [7_u8; NONCE_LENGTH];
+        let request = request_payload(TOKEN, nonce, RetroarchControlCommand::ShowMenu);
+        assert_eq!(request.len(), REQUEST_LENGTH);
+        assert_eq!(request[0], PROTOCOL_VERSION);
+        assert_eq!(&request[1..33], &nonce);
+        assert_eq!(request[33], RetroarchControlCommand::ShowMenu.tag());
+
+        let mut tampered = request;
+        tampered[33] = RetroarchControlCommand::Quit.tag();
+        let mut mac = HmacSha256::new_from_slice(TOKEN).unwrap();
+        mac.update(&tampered[..34]);
+        assert!(mac.verify_slice(&tampered[34..]).is_err());
+        assert!(!request.windows(TOKEN.len()).any(|window| window == TOKEN));
     }
 
     #[test]
-    fn responses_are_exact_and_command_specific() {
-        assert_eq!(
-            parse_response(
-                RetroarchControlCommand::GetStatus,
-                b"GET_STATUS PLAYING mGBA,wl4,crc32=d6141609\n"
-            ),
-            Ok(RetroarchControlResponse::Playing)
+    fn responses_require_exact_nonce_command_length_and_mac() {
+        let nonce = [9_u8; NONCE_LENGTH];
+        let valid = authenticated_response(
+            TOKEN,
+            nonce,
+            RetroarchControlCommand::ShowMenu,
+            b"SHOW_MENU OK",
         );
         assert_eq!(
-            parse_response(
-                RetroarchControlCommand::GetStatus,
-                b"GET_STATUS PAUSED mGBA,wl4,crc32=0\n"
-            ),
-            Ok(RetroarchControlResponse::Playing)
-        );
-        assert_eq!(
-            parse_response(
-                RetroarchControlCommand::GetStatus,
-                b"GET_STATUS CONTENTLESS"
-            ),
-            Ok(RetroarchControlResponse::NotPlaying)
-        );
-        assert_eq!(
-            parse_response(RetroarchControlCommand::ShowMenu, b"SHOW_MENU OK"),
+            parse_authenticated_response(TOKEN, nonce, RetroarchControlCommand::ShowMenu, &valid),
             Ok(RetroarchControlResponse::Acknowledged)
         );
+        for mutation in 0..4 {
+            let mut invalid = valid.clone();
+            match mutation {
+                0 => invalid[1] ^= 1,
+                1 => invalid[33] = RetroarchControlCommand::Quit.tag(),
+                2 => invalid[35] = invalid[35].wrapping_add(1),
+                _ => *invalid.last_mut().unwrap() ^= 1,
+            }
+            assert_eq!(
+                parse_authenticated_response(
+                    TOKEN,
+                    nonce,
+                    RetroarchControlCommand::ShowMenu,
+                    &invalid
+                ),
+                Err(RetroarchControlError::WrongResponse)
+            );
+        }
+        let mut trailing = valid;
+        trailing.push(0);
         assert_eq!(
-            parse_response(RetroarchControlCommand::Quit, b"QUIT OK"),
-            Ok(RetroarchControlResponse::Acknowledged)
+            parse_authenticated_response(
+                TOKEN,
+                nonce,
+                RetroarchControlCommand::ShowMenu,
+                &trailing
+            ),
+            Err(RetroarchControlError::WrongResponse)
         );
+    }
 
-        for (command, reply) in [
-            (
+    #[test]
+    fn status_parser_preserves_content_identity() {
+        assert_eq!(
+            parse_result(
                 RetroarchControlCommand::GetStatus,
-                b"GET_STATUS PLAYING".as_slice(),
+                b"GET_STATUS PLAYING mGBA,wl4.gba,crc32=d6141609\n"
             ),
-            (
-                RetroarchControlCommand::GetStatus,
-                b"GET_STATUS PLAYING mGBA,wl4,crc32=nope\n".as_slice(),
-            ),
-            (
-                RetroarchControlCommand::GetStatus,
-                b"SHOW_MENU OK".as_slice(),
-            ),
-            (
-                RetroarchControlCommand::ShowMenu,
-                b"SHOW_MENU ERROR".as_slice(),
-            ),
-            (
-                RetroarchControlCommand::ShowMenu,
-                b"SHOW_MENU OK\n".as_slice(),
-            ),
-            (RetroarchControlCommand::Quit, b"QUIT ERROR".as_slice()),
-            (RetroarchControlCommand::Quit, b"SHOW_MENU OK".as_slice()),
+            Ok(RetroarchControlResponse::Status(RetroarchStatus {
+                paused: false,
+                system: "mGBA".into(),
+                content: "wl4.gba".into(),
+                crc32: "d6141609".into(),
+            }))
+        );
+        assert!(parse_result(
+            RetroarchControlCommand::GetStatus,
+            b"GET_STATUS PLAYING mGBA,other.gba,crc32=d6141609\n"
+        )
+        .is_ok());
+        for invalid in [
+            b"GET_STATUS PLAYING mGBA,../wl4.gba,crc32=d6141609\n".as_slice(),
+            b"GET_STATUS PLAYING mGBA,wl4.gba,crc32=nope\n".as_slice(),
+            b"SHOW_MENU OK".as_slice(),
         ] {
             assert_eq!(
-                parse_response(command, reply),
+                parse_result(RetroarchControlCommand::GetStatus, invalid),
                 Err(RetroarchControlError::WrongResponse)
             );
         }
@@ -329,6 +478,7 @@ mod tests {
         LaunchSpec {
             launch_id: "launch-1".into(),
             launcher_id: "retroarch".into(),
+            disposition: super::super::LaunchDisposition::Fresh,
             context: super::super::LaunchContext {
                 game_id: Some("wl4".into()),
                 title: Some("Wario Land 4".into()),
@@ -350,7 +500,10 @@ mod tests {
                 package_name: KORRI_PACKAGE.into(),
                 class_name: KORRI_ACTIVITY.into(),
             },
-            extras: std::collections::HashMap::new(),
+            extras: std::collections::HashMap::from([(
+                "ROM".into(),
+                "/storage/emulated/0/korri/roms/wl4.gba".into(),
+            )]),
             directories: vec![],
             files: vec![],
             integrity: "verified outside this module".into(),
@@ -358,34 +511,44 @@ mod tests {
     }
 
     #[test]
-    fn authority_accepts_only_the_exact_korri_retroarch_launch_shape() {
-        assert!(
-            RetroarchControlAuthority::retain_from_verified_launch(&launch_spec(), TOKEN).is_ok()
-        );
-        let mut stock = launch_spec();
-        stock.component.package_name = "com.retroarch.aarch64".into();
-        assert!(RetroarchControlAuthority::retain_from_verified_launch(&stock, TOKEN).is_err());
-        let mut generic = launch_spec();
-        generic.context.contributors[0].id = "@korri:android-app/android-app".into();
-        assert!(RetroarchControlAuthority::retain_from_verified_launch(&generic, TOKEN).is_err());
-        let mut unavailable = launch_spec();
-        unavailable.context.executor.as_mut().unwrap().available = false;
-        assert!(
-            RetroarchControlAuthority::retain_from_verified_launch(&unavailable, TOKEN).is_err()
-        );
+    fn authority_accepts_only_exact_launch_endpoint_and_expected_content() {
+        let authority = RetroarchControlAuthority::retain_from_verified_launch(
+            &launch_spec(),
+            TOKEN_TEXT,
+            50000,
+        )
+        .unwrap();
+        assert_eq!(authority.port(), 50000);
+        let spec = launch_spec();
+        let active =
+            AndroidActiveLaunch::from_context(spec.launch_id.clone(), spec.context.clone());
+        assert!(authority.matches_launch(&active, &spec));
+        let mut different = spec;
+        different
+            .extras
+            .insert("ROM".into(), "/roms/other.gba".into());
+        assert!(!authority.matches_launch(&active, &different));
+        assert!(RetroarchControlAuthority::retain_from_verified_launch(
+            &launch_spec(),
+            TOKEN_TEXT,
+            40000
+        )
+        .is_err());
     }
 
     #[test]
     fn authority_debug_output_redacts_the_token() {
-        let authority = RetroarchControlAuthority::new("launch-1", TOKEN).unwrap();
+        let authority =
+            RetroarchControlAuthority::new("launch-1", TOKEN_TEXT, 50000, "wl4", "wl4.gba")
+                .unwrap();
         let debug = format!("{authority:?}");
         assert!(debug.contains("launch-1"));
-        assert!(!debug.contains(TOKEN));
+        assert!(!debug.contains(TOKEN_TEXT));
         assert!(debug.contains("[REDACTED]"));
     }
 
     #[test]
-    fn udp_request_rejects_a_reply_from_the_wrong_source() {
+    fn udp_request_rejects_wrong_source_and_wrong_authenticated_reply() {
         let expected = UdpSocket::bind("127.0.0.1:0").unwrap();
         let endpoint = expected.local_addr().unwrap();
         let sender = UdpSocket::bind("127.0.0.1:0").unwrap();
@@ -395,41 +558,33 @@ mod tests {
             .unwrap();
         let client_address = client.local_addr().unwrap();
         thread::spawn(move || {
-            let mut request = [0_u8; 256];
+            let mut request = [0_u8; REQUEST_LENGTH];
             expected.recv_from(&mut request).unwrap();
-            sender.send_to(b"SHOW_MENU OK", client_address).unwrap();
+            let mut nonce = [0_u8; NONCE_LENGTH];
+            nonce.copy_from_slice(&request[1..33]);
+            let reply = authenticated_response(
+                TOKEN,
+                nonce,
+                RetroarchControlCommand::ShowMenu,
+                b"SHOW_MENU OK",
+            );
+            sender.send_to(&reply, client_address).unwrap();
         });
-
         assert_eq!(
             request_with_socket(&client, endpoint, TOKEN, RetroarchControlCommand::ShowMenu),
             Err(RetroarchControlError::WrongSource)
-        );
-    }
-
-    #[test]
-    fn udp_request_times_out_and_rejects_wrong_replies() {
-        let silent = UdpSocket::bind("127.0.0.1:0").unwrap();
-        let silent_endpoint = silent.local_addr().unwrap();
-        let client = UdpSocket::bind("127.0.0.1:0").unwrap();
-        client
-            .set_read_timeout(Some(Duration::from_millis(20)))
-            .unwrap();
-        assert_eq!(
-            request_with_socket(
-                &client,
-                silent_endpoint,
-                TOKEN,
-                RetroarchControlCommand::GetStatus
-            ),
-            Err(RetroarchControlError::Timeout)
         );
 
         let server = UdpSocket::bind("127.0.0.1:0").unwrap();
         let endpoint = server.local_addr().unwrap();
         thread::spawn(move || {
-            let mut request = [0_u8; 256];
+            let mut request = [0_u8; REQUEST_LENGTH];
             let (_, source) = server.recv_from(&mut request).unwrap();
-            server.send_to(b"QUIT OK", source).unwrap();
+            let mut nonce = [0_u8; NONCE_LENGTH];
+            nonce.copy_from_slice(&request[1..33]);
+            let reply =
+                authenticated_response(TOKEN, nonce, RetroarchControlCommand::Quit, b"QUIT OK");
+            server.send_to(&reply, source).unwrap();
         });
         let client = UdpSocket::bind("127.0.0.1:0").unwrap();
         client
@@ -438,6 +593,50 @@ mod tests {
         assert_eq!(
             request_with_socket(&client, endpoint, TOKEN, RetroarchControlCommand::ShowMenu),
             Err(RetroarchControlError::WrongResponse)
+        );
+    }
+
+    #[test]
+    fn authority_rejects_live_status_for_different_content() {
+        let server = (49152..=65535)
+            .find_map(|port| UdpSocket::bind(("127.0.0.1", port)).ok())
+            .unwrap();
+        let port = server.local_addr().unwrap().port();
+        let authority =
+            RetroarchControlAuthority::new("launch-1", TOKEN_TEXT, port, "wl4", "wl4.gba").unwrap();
+        let responder = thread::spawn(move || {
+            let mut request = [0_u8; REQUEST_LENGTH];
+            let (_, source) = server.recv_from(&mut request).unwrap();
+            let mut nonce = [0_u8; NONCE_LENGTH];
+            nonce.copy_from_slice(&request[1..33]);
+            let reply = authenticated_response(
+                TOKEN,
+                nonce,
+                RetroarchControlCommand::GetStatus,
+                b"GET_STATUS PLAYING mGBA,stale.gba,crc32=d6141609\n",
+            );
+            server.send_to(&reply, source).unwrap();
+        });
+
+        assert_eq!(authority.confirms_expected_content(), Ok(false));
+        responder.join().unwrap();
+    }
+
+    #[test]
+    fn udp_request_times_out_within_the_configured_bound() {
+        let silent = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let client = UdpSocket::bind("127.0.0.1:0").unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_millis(20)))
+            .unwrap();
+        assert_eq!(
+            request_with_socket(
+                &client,
+                silent.local_addr().unwrap(),
+                TOKEN,
+                RetroarchControlCommand::GetStatus,
+            ),
+            Err(RetroarchControlError::Timeout)
         );
     }
 }

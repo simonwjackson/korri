@@ -34,8 +34,8 @@ per `NNNN-description.patch` and record its upstream-facing rationale here.
   built separately from mGBA 0.10.5 and remains at the stable path
   `/data/data/com.korri.retroarch/cores/mgba_libretro_android.so`.
 - `0004-korri-control-channel.patch` — compiles RetroArch's existing command
-  server into Android, enables its established UDP protocol on port 55355, and
-  narrows the bind from all interfaces to `127.0.0.1`, and rejects every
+  server into Android, enables its established UDP protocol, narrows the bind
+  from all interfaces to `127.0.0.1`, and rejects every
   command outside an Android allowlist containing only upstream `GET_STATUS`
   and graceful `QUIT`.
 - `0005-savestate-on-android-pause.patch` — synchronously writes and waits for
@@ -48,10 +48,24 @@ per `NNNN-description.patch` and record its upstream-facing rationale here.
   token attached natively to the gameplay intent and authenticates before the
   Android UDP allowlist or dispatch; missing, malformed, or stale tokens fail
   closed. The token is retained privately by korrid and is absent from the
-  serialized LaunchSpec, Java/JavaScript serialization, and logs; JNI attaches
-  it directly to the trusted gameplay intent.
+  serialized LaunchSpec, JavaScript, and logs. JNI necessarily creates a
+  transient Java String while attaching it to the trusted cross-process
+  gameplay Intent; RetroArch copies it into native memory during startup.
 - `0008-korri-session-control-acknowledgements.patch` — adds only `SHOW_MENU`
   to the authenticated Android allowlist, ensures the menu is alive instead of
   blindly toggling it closed, and returns exact `SHOW_MENU OK`/`SHOW_MENU ERROR`
   and `QUIT OK` acknowledgements. `GET_STATUS` remains upstream's established
   reply. Authentication still precedes allowlist selection and dispatch.
+- `0009-hmac-korri-control-protocol.patch` — replaces the bearer UDP payload
+  with a fixed 66-byte version/nonce/command/MAC request and strictly framed
+  nonce/command/result/MAC replies. It implements HMAC-SHA256 from the pinned
+  source's `sha256_hash`, compares MACs in constant time, wipes all 65 bytes of
+  transient native token storage, and retains loopback binding. Each LaunchSpec
+  config selects a launch-derived high port; prebinding that endpoint can deny
+  service but cannot capture authority or forge an acknowledged command.
+- `0010-clear-control-intent-bootstrap.patch` — removes the unavoidable
+  cross-process token extra from RetroArch's Activity Intent immediately after
+  native code copies it, limiting the Java String to bootstrap lifetime.
+- `0011-fail-closed-control-dispatch.patch` — authenticates a command tag before
+  selecting from the allowlist and drops oversized authenticated results rather
+  than ever falling through to RetroArch's plaintext reply path.

@@ -7,7 +7,19 @@ use typeshare::typeshare;
 use crate::{GameIdentity, SessionControlValue};
 
 type HmacSha256 = Hmac<Sha256>;
-const RETROARCH_CONTROL_CONTEXT: &[u8] = b"korri-retroarch-control-v2";
+const RETROARCH_CONTROL_CONTEXT: &[u8] = b"korri-retroarch-control-v3";
+const RETROARCH_CONTROL_PORT_CONTEXT: &[u8] = b"korri-retroarch-control-port-v1";
+const RETROARCH_CONTROL_PORT_BASE: u16 = 49152;
+const RETROARCH_CONTROL_PORT_COUNT: u16 = 16384;
+
+pub(crate) fn derive_retroarch_control_port(key: &[u8], launch_id: &str) -> u16 {
+    let mut control_mac = HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
+    control_mac.update(RETROARCH_CONTROL_PORT_CONTEXT);
+    control_mac.update(launch_id.as_bytes());
+    let bytes = control_mac.finalize().into_bytes();
+    let offset = u16::from_be_bytes([bytes[0], bytes[1]]) % RETROARCH_CONTROL_PORT_COUNT;
+    RETROARCH_CONTROL_PORT_BASE + offset
+}
 
 fn deserialize_optional_non_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
@@ -148,12 +160,21 @@ impl LaunchContext {
 }
 
 #[typeshare]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LaunchDisposition {
+    Fresh,
+    Resume,
+}
+
+#[typeshare]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LaunchSpec {
     /** Identity created by korrid while preparing this exact launch. */
     pub launch_id: String,
     pub launcher_id: String,
+    pub disposition: LaunchDisposition,
     pub context: LaunchContext,
     pub component: AndroidComponent,
     pub extras: HashMap<String, String>,
@@ -173,6 +194,13 @@ impl LaunchSpec {
         let mut bytes = Vec::new();
         push(&self.launch_id, &mut bytes);
         push(&self.launcher_id, &mut bytes);
+        push(
+            match self.disposition {
+                LaunchDisposition::Fresh => "fresh",
+                LaunchDisposition::Resume => "resume",
+            },
+            &mut bytes,
+        );
         push(
             &serde_json::to_string(&self.context).expect("launch context serializes"),
             &mut bytes,
@@ -208,6 +236,11 @@ impl LaunchSpec {
         self
     }
 
+    pub(crate) fn with_disposition(mut self, disposition: LaunchDisposition) -> Self {
+        self.disposition = disposition;
+        self
+    }
+
     pub(crate) fn retroarch_control_token(&self, key: &[u8]) -> Option<String> {
         if self.launcher_id != "retroarch" || self.launch_id.is_empty() {
             return None;
@@ -216,6 +249,13 @@ impl LaunchSpec {
         control_mac.update(RETROARCH_CONTROL_CONTEXT);
         control_mac.update(self.launch_id.as_bytes());
         Some(hex::encode(control_mac.finalize().into_bytes()))
+    }
+
+    pub(crate) fn retroarch_control_port(&self, key: &[u8]) -> Option<u16> {
+        if self.launcher_id != "retroarch" || self.launch_id.is_empty() {
+            return None;
+        }
+        Some(derive_retroarch_control_port(key, &self.launch_id))
     }
 
     pub(crate) fn sign(mut self, key: &[u8]) -> Self {
@@ -677,6 +717,7 @@ mod tests {
         LaunchSpec {
             launch_id: "launch-1".into(),
             launcher_id: "retroarch".into(),
+            disposition: LaunchDisposition::Fresh,
             context: LaunchContext::unresolved(),
             component: AndroidComponent {
                 package_name: "package".into(),
@@ -1024,6 +1065,10 @@ mod tests {
             control_token,
             replacement.retroarch_control_token(key).unwrap()
         );
+
+        let mut tampered_disposition = signed.clone();
+        tampered_disposition.disposition = LaunchDisposition::Resume;
+        assert!(!tampered_disposition.verify(key));
 
         let mut tampered_content = signed.clone();
         tampered_content.files[0].content = "kiosk_mode_enable = false".into();

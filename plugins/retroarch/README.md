@@ -17,6 +17,13 @@ can install into RetroArch's private executable core directory. On Linux, Nix
 supplies the independently packaged mGBA core. Neither packaging bridge makes
 mGBA part of the RetroArch plugin.
 
+Android session control uses a launch-derived high loopback UDP port and
+nonce-bound HMAC-SHA256 frames. The launch token never crosses UDP,
+JavaScript, or logs. Android's cross-process Intent handoff does unavoidably
+materialize it as a transient Java String until RetroArch copies and wipes its
+native bootstrap storage. Repository checks prove the patch/config/build
+contract; installed-device behavior remains a separate acceptance gate.
+
 ## Distribution builds
 
 `.github/workflows/retroarch-distribution.yml` builds and stages the custom

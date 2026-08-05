@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import {
   LaunchContributorKind,
+  LaunchDisposition,
   LaunchForegroundKind,
   MoonlightImplementation,
   SessionControlFailureReason,
@@ -352,6 +353,7 @@ describe("local games", () => {
     const spec = {
       launchId: "fixture-launch",
       launcherId: "fixture-launcher",
+      disposition: LaunchDisposition.Fresh,
       context: {
         gameId: "fixture",
         title: "Fixture",

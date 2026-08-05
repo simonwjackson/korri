@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import type { KorriNativeBridgeSurface } from "@contracts/bridge/korri-native-bridge"
 import {
   LaunchContributorKind,
+  LaunchDisposition,
   LaunchForegroundKind,
   MoonlightImplementation,
 } from "@contracts/generated/korrid"
@@ -44,6 +45,7 @@ describe("createInMemoryLauncherBridge", () => {
     const spec = {
       launchId: "launch-1",
       launcherId: "retroarch",
+      disposition: LaunchDisposition.Fresh,
       context: localContext,
       component: { packageName: "pkg", className: "Activity" },
       extras: {},
@@ -60,6 +62,7 @@ describe("createInMemoryLauncherBridge", () => {
     const result = await bridge.launchLocal({
       launchId: "launch-2",
       launcherId: "retroarch",
+      disposition: LaunchDisposition.Fresh,
       context: localContext,
       component: { packageName: "pkg", className: "Activity" },
       extras: {},
@@ -311,6 +314,7 @@ describe("createKorriNativeLauncherBridge", () => {
     const spec = {
       launchId: "launch-3",
       launcherId: "retroarch",
+      disposition: LaunchDisposition.Fresh,
       context: localContext,
       component: { packageName: "pkg", className: "Activity" },
       extras: { ROM: "/rom" },
@@ -471,7 +475,8 @@ describe("createKorriNativeLauncherBridge", () => {
       await bridge.launchLocal({
         launchId: "launch-4",
         launcherId: "retroarch",
-      context: localContext,
+        disposition: LaunchDisposition.Fresh,
+        context: localContext,
         component: { packageName: "pkg", className: "Activity" },
         extras: {},
         directories: [],

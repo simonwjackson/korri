@@ -899,7 +899,23 @@ SIGNED_WL4_RESPONSE="$(jq -n --arg root '/storage/emulated/0/korri' '{
   outcome: {
     _tag: "Ok",
     payload: {
+      launchId: "0123456789abcdef0123456789abcdef",
       launcherId: "retroarch",
+      disposition: "fresh",
+      context: {
+        gameId: "wl4",
+        title: "Wario Land 4",
+        contributors: [
+          {kind: "launcher", id: "@korri:retroarch/retroarch"},
+          {kind: "runtime", id: "@korri:mgba/mgba"}
+        ],
+        executor: {id: "retroarch-control", available: true},
+        foreground: {
+          kind: "component",
+          packageName: "com.korri.retroarch",
+          className: "com.retroarch.browser.retroactivity.RetroActivityFuture"
+        }
+      },
       component: {
         packageName: "com.korri.retroarch",
         className: "com.retroarch.browser.retroactivity.RetroActivityFuture"
@@ -907,13 +923,12 @@ SIGNED_WL4_RESPONSE="$(jq -n --arg root '/storage/emulated/0/korri' '{
       extras: {
         ROM: ($root + "/roms/wl4.gba"),
         LIBRETRO: "/data/data/com.korri.retroarch/cores/mgba_libretro_android.so",
-        CONFIGFILE: ($root + "/retroarch.cfg"),
-        KORRI_CONTROL_TOKEN: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        CONFIGFILE: ($root + "/retroarch.cfg")
       },
       directories: (["system", "saves", "states", "screenshots"] | map($root + "/" + .)),
       files: [{
         path: ($root + "/retroarch.cfg"),
-        content: "video_driver = \"gl\"\nkiosk_mode_enable = \"true\""
+        content: "video_driver = \"gl\"\nkiosk_mode_enable = \"true\"\nnetwork_cmd_enable = \"true\"\nnetwork_cmd_port = \"50000\""
       }],
       integrity: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     }
