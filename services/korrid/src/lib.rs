@@ -296,6 +296,96 @@ pub enum SessionControlInvokeOutcome {
     Err(SessionControlFailure),
 }
 
+/** Strict process-local publication from the live Artemis Game edge. */
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MoonlightExecutorState {
+    pub launch_id: String,
+    pub effects: Vec<MoonlightExecutorEffectState>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MoonlightExecutorEffectState {
+    pub effect: launcher::AndroidMoonlightEffect,
+    pub fulfillable: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<SessionControlValue>,
+}
+
+impl MoonlightExecutorState {
+    fn effect(
+        &self,
+        effect: launcher::AndroidMoonlightEffect,
+    ) -> Option<&MoonlightExecutorEffectState> {
+        self.effects.iter().find(|entry| entry.effect == effect)
+    }
+
+    fn is_strict(&self) -> bool {
+        use launcher::AndroidMoonlightEffect as Effect;
+        let expected = [
+            Effect::Disconnect,
+            Effect::QuitHost,
+            Effect::ToggleKeyboard,
+            Effect::ToggleFullKeyboard,
+            Effect::SetFillMode,
+            Effect::SetZoomMode,
+            Effect::RotateScreen,
+            Effect::ToggleHud,
+            Effect::ToggleFloatingMenu,
+            Effect::ToggleKeyboardController,
+            Effect::SwitchTouchSensitivity,
+            Effect::SetMouseMode,
+            Effect::SetLocalCursor,
+            Effect::SetSgsrEdgeThreshold,
+            Effect::SetSgsrSharpness,
+            Effect::SetFaceButtonFlip,
+            Effect::SetRumble,
+            Effect::SetPictureInPicture,
+        ];
+        if self.effects.len() != expected.len() {
+            return false;
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        self.effects.iter().all(|entry| {
+            seen.insert(entry.effect)
+                && match (entry.effect, &entry.value) {
+                    (
+                        Effect::SetFillMode
+                        | Effect::SetZoomMode
+                        | Effect::SetFaceButtonFlip
+                        | Effect::SetRumble
+                        | Effect::SetPictureInPicture,
+                        Some(SessionControlValue::Toggle(_)),
+                    ) => true,
+                    (Effect::SetMouseMode, Some(SessionControlValue::Choice(value))) => {
+                        matches!(value.as_str(), "0" | "1" | "2" | "3" | "4" | "5")
+                    }
+                    (Effect::SetSgsrSharpness, Some(SessionControlValue::Range(value))) => {
+                        valid_range_value(*value, 0.0, 50.0, 1.0)
+                    }
+                    (Effect::SetSgsrEdgeThreshold, Some(SessionControlValue::Range(value))) => {
+                        valid_range_value(*value, 1.0, 32.0, 1.0)
+                    }
+                    (
+                        Effect::Disconnect
+                        | Effect::QuitHost
+                        | Effect::ToggleKeyboard
+                        | Effect::ToggleFullKeyboard
+                        | Effect::RotateScreen
+                        | Effect::ToggleHud
+                        | Effect::ToggleFloatingMenu
+                        | Effect::ToggleKeyboardController
+                        | Effect::SwitchTouchSensitivity
+                        | Effect::SetLocalCursor,
+                        None,
+                    ) => true,
+                    _ => false,
+                }
+        }) && expected.iter().all(|effect| seen.contains(effect))
+    }
+}
+
 fn ulp_at(value: f64) -> f64 {
     let magnitude = value.abs();
     if magnitude < f64::MIN_POSITIVE {
@@ -677,6 +767,7 @@ struct BrainRuntime {
     local_launch_reservations: Arc<Mutex<launcher::LaunchPublicationReservations>>,
     moonlight_launch_authority: Arc<Mutex<launcher::MoonlightLaunchAuthority>>,
     active_android_launch: Arc<Mutex<Option<launcher::AndroidActiveLaunch>>>,
+    moonlight_executor_state: Arc<Mutex<Option<MoonlightExecutorState>>>,
     native_platform: NativePlatform,
     config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
     /** Serialises revision-check + replace; external file-manager edits are
@@ -901,6 +992,149 @@ fn session_route_context_unavailable() -> SessionControlFailure {
     }
 }
 
+fn materialize_session_controls(
+    brain: &BrainRuntime,
+    launch_id: &str,
+) -> Result<
+    (
+        launcher::AndroidActiveLaunch,
+        Vec<(plugin::SessionControlRecord, SessionControl)>,
+        Vec<SessionControlGroup>,
+    ),
+    SessionControlFailure,
+> {
+    let active = brain
+        .active_android_launch
+        .lock()
+        .expect("active Android launch mutex poisoned")
+        .clone()
+        .ok_or_else(session_route_context_unavailable)?;
+    if active.launch_id != launch_id {
+        return Err(SessionControlFailure {
+            reason: SessionControlFailureReason::StaleSession,
+            message: "The gameplay session changed. Reopen the overlay and try again.".into(),
+        });
+    }
+    let executor_state = brain
+        .moonlight_executor_state
+        .lock()
+        .expect("Moonlight executor state mutex poisoned")
+        .clone()
+        .filter(|executor| executor.launch_id == active.launch_id)
+        .ok_or_else(session_route_context_unavailable)?;
+    let executor_live = active
+        .executor
+        .as_ref()
+        .is_some_and(|executor| executor.id == "android-moonlight" && executor_state.is_strict());
+    if !executor_live {
+        return Err(session_route_context_unavailable());
+    }
+    let snapshot = brain.config_snapshot.reload();
+    if snapshot.authorization == config::snapshot::SnapshotAuthorization::Unauthorized {
+        return Err(session_route_context_unavailable());
+    }
+    let registry = plugin_policy::registry_for_snapshot(&snapshot.snapshot)
+        .map_err(|_| session_route_context_unavailable())?;
+    let contributors = active
+        .contributors
+        .iter()
+        .map(|contributor| config::resolver::RouteContribution {
+            kind: match contributor.kind {
+                launcher::LaunchContributorKind::Launcher => {
+                    plugin::SessionControlOwnerKind::Launcher
+                }
+                launcher::LaunchContributorKind::Transport => {
+                    plugin::SessionControlOwnerKind::Transport
+                }
+                launcher::LaunchContributorKind::Runtime => {
+                    plugin::SessionControlOwnerKind::Runtime
+                }
+            },
+            id: contributor.id.clone(),
+        })
+        .collect();
+    let context = config::resolver::ActiveRouteContext {
+        platform: config::resolver::RoutePlatform::Android,
+        contributors,
+        executor_availability: config::resolver::SessionExecutorAvailability::from_available([
+            plugin::SessionControlExecutor::AndroidMoonlight,
+        ]),
+    };
+    let mut materialized = Vec::new();
+    for record in config::resolver::resolve_session_controls(&registry, &context) {
+        let Some(effect) = record.effect.android_moonlight_effect() else {
+            continue;
+        };
+        let Some(live) = executor_state
+            .effect(effect)
+            .filter(|entry| entry.fulfillable)
+        else {
+            continue;
+        };
+        let interaction = match (&record.interaction, &live.value) {
+            (plugin::SessionControlDeclarationInteraction::Command, None) => {
+                SessionControlInteraction::Command
+            }
+            (
+                plugin::SessionControlDeclarationInteraction::Toggle,
+                Some(SessionControlValue::Toggle(value)),
+            ) => SessionControlInteraction::Toggle { value: *value },
+            (
+                plugin::SessionControlDeclarationInteraction::Choice { options },
+                Some(SessionControlValue::Choice(value)),
+            ) if options.iter().any(|option| option.value == *value) => {
+                SessionControlInteraction::Choice {
+                    value: value.clone(),
+                    options: options
+                        .iter()
+                        .map(|option| SessionControlChoice {
+                            value: option.value.clone(),
+                            label: option.label.clone(),
+                        })
+                        .collect(),
+                }
+            }
+            (
+                plugin::SessionControlDeclarationInteraction::Range { min, max, step },
+                Some(SessionControlValue::Range(value)),
+            ) if valid_range_value(*value, *min, *max, *step) => SessionControlInteraction::Range {
+                value: *value,
+                min: *min,
+                max: *max,
+                step: *step,
+            },
+            _ => continue,
+        };
+        let control = SessionControl {
+            id: record.id.clone(),
+            label: record.label.clone(),
+            description: record.description.clone(),
+            enabled: true,
+            disabled_reason: None,
+            destructive: record.destructive,
+            dismiss_on_success: record.dismiss_on_success,
+            interaction,
+        };
+        materialized.push((record, control));
+    }
+    let mut groups: Vec<SessionControlGroup> = Vec::new();
+    for (record, control) in &materialized {
+        if let Some(group) = groups.iter_mut().find(|group| group.id == record.plugin_id) {
+            group.controls.push(control.clone());
+        } else {
+            groups.push(SessionControlGroup {
+                id: record.plugin_id.clone(),
+                label: registry
+                    .plugin_title(&record.plugin_id)
+                    .unwrap_or(&record.plugin_id)
+                    .to_owned(),
+                controls: vec![control.clone()],
+            });
+        }
+    }
+    Ok((active, materialized, groups))
+}
+
 async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
     match request {
         RpcRequest::CatalogSnapshot(_) => {
@@ -1044,56 +1278,88 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
             })),
         },
         RpcRequest::SessionControls(request) => {
-            let active = match &state.mode {
-                ServerMode::Brain(brain) => brain
-                    .active_android_launch
-                    .lock()
-                    .expect("active Android launch mutex poisoned")
-                    .clone(),
-                ServerMode::Host(_) => None,
-            };
-            let outcome = match active {
-                Some(active) if active.launch_id == request.launch_id => {
-                    // U4 publishes the signed route context, but its executors
-                    // remain unavailable until U6/U7. Resume is overlay-owned
-                    // and U5 composes it locally, so no optimistic plugin rows.
-                    SessionControlsOutcome::Ok(SessionControls {
+            let outcome = match &state.mode {
+                ServerMode::Brain(brain) => materialize_session_controls(brain, &request.launch_id)
+                    .map(|(active, _, groups)| SessionControls {
                         launch_id: active.launch_id,
                         title: active.title,
-                        groups: Vec::new(),
+                        groups,
                     })
+                    .map(SessionControlsOutcome::Ok)
+                    .unwrap_or_else(SessionControlsOutcome::Err),
+                ServerMode::Host(_) => {
+                    SessionControlsOutcome::Err(session_route_context_unavailable())
                 }
-                Some(_) => SessionControlsOutcome::Err(SessionControlFailure {
-                    reason: SessionControlFailureReason::StaleSession,
-                    message: "The gameplay session changed. Reopen the overlay and try again."
-                        .into(),
-                }),
-                None => SessionControlsOutcome::Err(session_route_context_unavailable()),
             };
             RpcResponse::SessionControls(outcome)
         }
         RpcRequest::SessionControlInvoke(request) => {
-            let active = match &state.mode {
-                ServerMode::Brain(brain) => brain
-                    .active_android_launch
-                    .lock()
-                    .expect("active Android launch mutex poisoned")
-                    .clone(),
-                ServerMode::Host(_) => None,
-            };
-            let outcome = match active {
-                Some(active) if active.launch_id != request.launch_id => {
-                    SessionControlInvokeOutcome::Err(SessionControlFailure {
-                        reason: SessionControlFailureReason::StaleSession,
-                        message: "The gameplay session changed. Reopen the overlay and try again."
-                            .into(),
-                    })
+            let outcome = match &state.mode {
+                ServerMode::Brain(brain) => {
+                    let resolve = || materialize_session_controls(brain, &request.launch_id);
+                    match resolve() {
+                        Err(failure) => SessionControlInvokeOutcome::Err(failure),
+                        Ok((active, materialized, _)) => {
+                            let selected = materialized
+                                .iter()
+                                .find(|(_, control)| control.id == request.control_id);
+                            match selected {
+                                None => SessionControlInvokeOutcome::Err(SessionControlFailure {
+                                    reason: SessionControlFailureReason::UnknownControl,
+                                    message: "That gameplay control is no longer available.".into(),
+                                }),
+                                Some((_, control)) => {
+                                    match validate_session_control_invocation(
+                                        &active.launch_id,
+                                        &request,
+                                        control,
+                                    ) {
+                                        Err(failure) => SessionControlInvokeOutcome::Err(failure),
+                                        Ok(()) => {
+                                            match resolve() {
+                                                Err(failure) => {
+                                                    SessionControlInvokeOutcome::Err(failure)
+                                                }
+                                                Ok((current, latest, _)) => {
+                                                    let selected =
+                                                        latest.iter().find(|(_, control)| {
+                                                            control.id == request.control_id
+                                                        });
+                                                    match selected {
+                                                None => SessionControlInvokeOutcome::Err(
+                                                    session_route_context_unavailable()),
+                                                Some((record, control)) => match
+                                                    validate_session_control_invocation(
+                                                        &current.launch_id, &request, control)
+                                                {
+                                                    Err(failure) => SessionControlInvokeOutcome::Err(failure),
+                                                    Ok(()) => {
+                                                        let effect = record.effect.android_moonlight_effect()
+                                                            .expect("Moonlight route effect");
+                                                        let instruction = launcher::PlatformInstruction::protect(
+                                                            current.launch_id,
+                                                            control.id.clone(),
+                                                            request.value.clone(),
+                                                            launcher::PlatformEffect::AndroidMoonlight(effect),
+                                                            &brain.local_launch_signing_key,
+                                                        );
+                                                        SessionControlInvokeOutcome::Ok(
+                                                            SessionControlInvokeResult::PlatformInstruction(instruction))
+                                                    }
+                                                },
+                                            }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-                Some(_) => SessionControlInvokeOutcome::Err(SessionControlFailure {
-                    reason: SessionControlFailureReason::UnknownControl,
-                    message: "That gameplay control is not available yet.".into(),
-                }),
-                None => SessionControlInvokeOutcome::Err(session_route_context_unavailable()),
+                ServerMode::Host(_) => {
+                    SessionControlInvokeOutcome::Err(session_route_context_unavailable())
+                }
             };
             RpcResponse::SessionControlInvoke(outcome)
         }
@@ -1325,6 +1591,7 @@ pub fn router_with_capability_and_local_root(
         local_launch_reservations,
         moonlight_launch_authority,
         Arc::new(Mutex::new(None)),
+        Arc::new(Mutex::new(None)),
         NativePlatform::Standalone,
         config_snapshot,
     )
@@ -1355,6 +1622,7 @@ fn android_router_with_capability_and_local_root(
         local_launch_reservations,
         moonlight_launch_authority,
         Arc::new(Mutex::new(None)),
+        Arc::new(Mutex::new(None)),
         NativePlatform::EmbeddedAndroid,
         config_snapshot,
     )
@@ -1369,6 +1637,7 @@ fn router_with_capability_local_root_and_provision(
     local_launch_reservations: Arc<Mutex<launcher::LaunchPublicationReservations>>,
     moonlight_launch_authority: Arc<Mutex<launcher::MoonlightLaunchAuthority>>,
     active_android_launch: Arc<Mutex<Option<launcher::AndroidActiveLaunch>>>,
+    moonlight_executor_state: Arc<Mutex<Option<MoonlightExecutorState>>>,
     native_platform: NativePlatform,
     config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
 ) -> Router {
@@ -1384,6 +1653,7 @@ fn router_with_capability_local_root_and_provision(
             local_launch_reservations,
             moonlight_launch_authority,
             active_android_launch,
+            moonlight_executor_state,
             native_platform,
             config_snapshot,
             settings_write_lock: Arc::new(Mutex::new(())),
@@ -1466,6 +1736,7 @@ struct ServerHandle {
     launch_signing_key: Vec<u8>,
     local_launch_reservations: Arc<Mutex<launcher::LaunchPublicationReservations>>,
     active_android_launch: Arc<Mutex<Option<launcher::AndroidActiveLaunch>>>,
+    moonlight_executor_state: Arc<Mutex<Option<MoonlightExecutorState>>>,
     platform_instruction_verifier: Option<launcher::PlatformInstructionVerifier>,
     moonlight_launch_authority: Arc<Mutex<launcher::MoonlightLaunchAuthority>>,
     moonlight_config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
@@ -1551,6 +1822,8 @@ fn start_local_server_for_platform(
     let server_moonlight_launch_authority = Arc::clone(&moonlight_launch_authority);
     let active_android_launch = Arc::new(Mutex::new(None));
     let router_active_android_launch = Arc::clone(&active_android_launch);
+    let moonlight_executor_state = Arc::new(Mutex::new(None));
+    let router_moonlight_executor_state = Arc::clone(&moonlight_executor_state);
     let allowed_origin = allowed_origin.to_owned();
     let local_storage_root = local_storage_root.to_owned();
     let moonlight_config_snapshot =
@@ -1575,6 +1848,7 @@ fn start_local_server_for_platform(
                         server_local_launch_reservations,
                         server_moonlight_launch_authority,
                         router_active_android_launch,
+                        router_moonlight_executor_state,
                         native_platform,
                         server_config_snapshot,
                     ),
@@ -1596,6 +1870,7 @@ fn start_local_server_for_platform(
         launch_signing_key,
         local_launch_reservations,
         active_android_launch,
+        moonlight_executor_state,
         platform_instruction_verifier: None,
         moonlight_launch_authority,
         moonlight_config_snapshot,
@@ -1781,22 +2056,89 @@ pub fn clear_active_android_launch(launch_id: &str) -> bool {
     }
     *active = None;
     drop(active);
+    *server
+        .moonlight_executor_state
+        .lock()
+        .expect("Moonlight executor state mutex poisoned") = None;
     server.platform_instruction_verifier = None;
     true
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub fn publish_moonlight_executor_state(state_json: &str) -> bool {
+    let Ok(state) = serde_json::from_str::<MoonlightExecutorState>(state_json) else {
+        return false;
+    };
+    if !state.is_strict() {
+        return false;
+    }
+    let mut slot = server_slot().lock().expect("server mutex poisoned");
+    let Some(server) = slot.as_mut() else {
+        return false;
+    };
+    let active = server
+        .active_android_launch
+        .lock()
+        .expect("active Android launch mutex poisoned");
+    let current = active.as_ref().is_some_and(|launch| {
+        launch.launch_id == state.launch_id
+            && launch
+                .executor
+                .as_ref()
+                .is_some_and(|executor| executor.id == "android-moonlight")
+    });
+    drop(active);
+    if !current {
+        return false;
+    }
+    *server
+        .moonlight_executor_state
+        .lock()
+        .expect("Moonlight executor state mutex poisoned") = Some(state);
+    true
+}
+
+pub fn clear_moonlight_executor_state(launch_id: &str) -> bool {
+    let mut slot = server_slot().lock().expect("server mutex poisoned");
+    let Some(server) = slot.as_mut() else {
+        return false;
+    };
+    let mut state = server
+        .moonlight_executor_state
+        .lock()
+        .expect("Moonlight executor state mutex poisoned");
+    if state
+        .as_ref()
+        .is_none_or(|current| current.launch_id != launch_id)
+    {
+        return false;
+    }
+    *state = None;
+    true
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthorizedPlatformInstruction {
+    pub launch_id: String,
+    pub effect: launcher::AndroidMoonlightEffect,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<SessionControlValue>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
 pub enum PlatformInstructionAuthorization {
-    Authorized,
+    Authorized(AuthorizedPlatformInstruction),
     InvalidSpec,
     Integrity,
     Stale,
     Replay,
     NoActiveLaunch,
+    ExecutorUnavailable,
     ServerUnavailable,
 }
 
-/** Verification/one-use seam only. U6 installs the allowlisted action executor. */
+/** Verify, consume once, and return only the closed authorized effect/value. */
 pub fn authorize_platform_instruction(instruction_json: &str) -> PlatformInstructionAuthorization {
     let Ok(instruction) = serde_json::from_str::<launcher::PlatformInstruction>(instruction_json)
     else {
@@ -1809,18 +2151,39 @@ pub fn authorize_platform_instruction(instruction_json: &str) -> PlatformInstruc
     let Some(verifier) = server.platform_instruction_verifier.as_mut() else {
         return PlatformInstructionAuthorization::NoActiveLaunch;
     };
-    match verifier.authorize(&instruction, &server.launch_signing_key) {
-        Ok(()) => PlatformInstructionAuthorization::Authorized,
-        Err(launcher::PlatformInstructionVerificationFailure::Integrity) => {
-            PlatformInstructionAuthorization::Integrity
-        }
-        Err(launcher::PlatformInstructionVerificationFailure::StaleSession) => {
-            PlatformInstructionAuthorization::Stale
-        }
-        Err(launcher::PlatformInstructionVerificationFailure::Replay) => {
-            PlatformInstructionAuthorization::Replay
-        }
+    if let Err(failure) = verifier.authorize(&instruction, &server.launch_signing_key) {
+        return match failure {
+            launcher::PlatformInstructionVerificationFailure::Integrity => {
+                PlatformInstructionAuthorization::Integrity
+            }
+            launcher::PlatformInstructionVerificationFailure::StaleSession => {
+                PlatformInstructionAuthorization::Stale
+            }
+            launcher::PlatformInstructionVerificationFailure::Replay => {
+                PlatformInstructionAuthorization::Replay
+            }
+        };
     }
+    let effect = match instruction.effect {
+        launcher::PlatformEffect::AndroidMoonlight(effect) => effect,
+    };
+    let live = server
+        .moonlight_executor_state
+        .lock()
+        .expect("Moonlight executor state mutex poisoned");
+    if live
+        .as_ref()
+        .filter(|state| state.launch_id == instruction.launch_id)
+        .and_then(|state| state.effect(effect))
+        .is_none_or(|entry| !entry.fulfillable)
+    {
+        return PlatformInstructionAuthorization::ExecutorUnavailable;
+    }
+    PlatformInstructionAuthorization::Authorized(AuthorizedPlatformInstruction {
+        launch_id: instruction.launch_id,
+        effect,
+        value: instruction.value,
+    })
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1942,6 +2305,52 @@ mod tests {
             launch_id: "current".into(),
             control_id: "control".into(),
             value,
+        }
+    }
+
+    fn moonlight_executor_state(launch_id: &str) -> MoonlightExecutorState {
+        use launcher::AndroidMoonlightEffect as Effect;
+        let value = |effect| match effect {
+            Effect::SetFillMode
+            | Effect::SetZoomMode
+            | Effect::SetFaceButtonFlip
+            | Effect::SetPictureInPicture => Some(SessionControlValue::Toggle(false)),
+            Effect::SetRumble => Some(SessionControlValue::Toggle(true)),
+            Effect::SetMouseMode => Some(SessionControlValue::Choice("0".into())),
+            Effect::SetSgsrSharpness => Some(SessionControlValue::Range(20.0)),
+            Effect::SetSgsrEdgeThreshold => Some(SessionControlValue::Range(8.0)),
+            _ => None,
+        };
+        let effects = [
+            Effect::Disconnect,
+            Effect::QuitHost,
+            Effect::ToggleKeyboard,
+            Effect::ToggleFullKeyboard,
+            Effect::SetFillMode,
+            Effect::SetZoomMode,
+            Effect::RotateScreen,
+            Effect::ToggleHud,
+            Effect::ToggleFloatingMenu,
+            Effect::ToggleKeyboardController,
+            Effect::SwitchTouchSensitivity,
+            Effect::SetMouseMode,
+            Effect::SetLocalCursor,
+            Effect::SetSgsrEdgeThreshold,
+            Effect::SetSgsrSharpness,
+            Effect::SetFaceButtonFlip,
+            Effect::SetRumble,
+            Effect::SetPictureInPicture,
+        ]
+        .into_iter()
+        .map(|effect| MoonlightExecutorEffectState {
+            effect,
+            fulfillable: true,
+            value: value(effect),
+        })
+        .collect();
+        MoonlightExecutorState {
+            launch_id: launch_id.into(),
+            effects,
         }
     }
 
@@ -2704,6 +3113,7 @@ command = ["sh", "-c", "sleep 1"]
                 b"test signing key".to_vec(),
             ))),
             Arc::new(Mutex::new(None)),
+            Arc::new(Mutex::new(None)),
             NativePlatform::EmbeddedAndroid,
             config::snapshot::ConfigSnapshotCoordinator::new(root.path()),
         );
@@ -2844,11 +3254,8 @@ command = ["sh", "-c", "sleep 1"]
             .json::<serde_json::Value>()
             .await
             .unwrap();
-        assert_eq!(controls["outcome"]["_tag"], "Ok");
-        assert_eq!(
-            controls["outcome"]["payload"]["groups"],
-            serde_json::json!([])
-        );
+        assert_eq!(controls["outcome"]["_tag"], "Err");
+        assert_eq!(controls["outcome"]["payload"]["reason"], "Unavailable");
         assert!(clear_active_android_launch(&local.launch_id));
         assert!(active_android_launch().is_none());
         assert_eq!(
@@ -2906,6 +3313,112 @@ command = ["sh", "-c", "sleep 1"]
             stream.foreground.class_name.as_deref(),
             Some("com.limelight.Game")
         );
+        assert!(publish_moonlight_executor_state(
+            &serde_json::to_string(&moonlight_executor_state(&stream.launch_id)).unwrap()
+        ));
+        let controls = client
+            .post(&url)
+            .bearer_auth(&capability)
+            .json(&serde_json::json!({
+                "_tag": "app.session.controls",
+                "payload": { "launchId": stream.launch_id.clone() }
+            }))
+            .send()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        assert_eq!(controls["outcome"]["_tag"], "Ok");
+        assert_eq!(
+            controls["outcome"]["payload"]["groups"][0]["id"],
+            "@korri:moonlight"
+        );
+        assert_eq!(
+            controls["outcome"]["payload"]["groups"][0]["label"],
+            "Moonlight"
+        );
+        assert_eq!(
+            controls["outcome"]["payload"]["groups"][0]["controls"]
+                .as_array()
+                .unwrap()
+                .len(),
+            18
+        );
+        let fill = controls["outcome"]["payload"]["groups"][0]["controls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|control| control["id"] == "@korri:moonlight/fill")
+            .unwrap();
+        assert_eq!(
+            fill["interaction"],
+            serde_json::json!({
+                "kind": "toggle", "payload": { "value": false }
+            })
+        );
+        let invoke = client
+            .post(&url)
+            .bearer_auth(&capability)
+            .json(&serde_json::json!({
+                "_tag": "app.session.control.invoke",
+                "payload": {
+                    "launchId": stream.launch_id.clone(),
+                    "controlId": "@korri:moonlight/fill",
+                    "value": { "kind": "toggle", "value": true }
+                }
+            }))
+            .send()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        assert_eq!(invoke["outcome"]["_tag"], "Ok");
+        let protected_fill = &invoke["outcome"]["payload"]["payload"];
+        assert_eq!(
+            protected_fill["effect"],
+            serde_json::json!({
+                "kind": "android-moonlight", "payload": "set-fill-mode"
+            })
+        );
+        assert_eq!(
+            authorize_platform_instruction(&serde_json::to_string(protected_fill).unwrap()),
+            PlatformInstructionAuthorization::Authorized(AuthorizedPlatformInstruction {
+                launch_id: stream.launch_id.clone(),
+                effect: launcher::AndroidMoonlightEffect::SetFillMode,
+                value: Some(SessionControlValue::Toggle(true)),
+            })
+        );
+        let mut refreshed = moonlight_executor_state(&stream.launch_id);
+        refreshed
+            .effects
+            .iter_mut()
+            .find(|entry| entry.effect == launcher::AndroidMoonlightEffect::SetFillMode)
+            .unwrap()
+            .value = Some(SessionControlValue::Toggle(true));
+        assert!(publish_moonlight_executor_state(
+            &serde_json::to_string(&refreshed).unwrap()
+        ));
+        let refreshed_controls = client
+            .post(&url)
+            .bearer_auth(&capability)
+            .json(&serde_json::json!({
+                "_tag": "app.session.controls", "payload": { "launchId": stream.launch_id.clone() }
+            }))
+            .send()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        let refreshed_fill = refreshed_controls["outcome"]["payload"]["groups"][0]["controls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|control| control["id"] == "@korri:moonlight/fill")
+            .unwrap();
+        assert_eq!(refreshed_fill["interaction"]["payload"]["value"], true);
         let signing_key = server_slot()
             .lock()
             .unwrap()
@@ -2925,7 +3438,11 @@ command = ["sh", "-c", "sleep 1"]
         let instruction_json = serde_json::to_string(&instruction).unwrap();
         assert_eq!(
             authorize_platform_instruction(&instruction_json),
-            PlatformInstructionAuthorization::Authorized
+            PlatformInstructionAuthorization::Authorized(AuthorizedPlatformInstruction {
+                launch_id: stream.launch_id.clone(),
+                effect: launcher::AndroidMoonlightEffect::Disconnect,
+                value: None,
+            })
         );
         assert_eq!(
             publish_moonlight_active_launch(

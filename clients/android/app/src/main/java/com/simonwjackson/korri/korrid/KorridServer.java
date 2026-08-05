@@ -31,6 +31,10 @@ public final class KorridServer {
     public static native boolean clearActiveLaunch(String launchId);
     /** Read the current Rust snapshot; returns JSON null when idle. */
     public static native String activeLaunch();
+    /** Publish strict live Moonlight values/fulfillability for the exact active launch. */
+    public static native boolean publishMoonlightExecutorState(String stateJson);
+    /** Compare-and-clear strict live Moonlight state for the exact launch. */
+    public static native boolean clearMoonlightExecutorState(String launchId);
     /** Verify and consume one protected instruction for the current launch. */
     public static native String authorizePlatformInstruction(String instructionJson);
     public static native void stop();

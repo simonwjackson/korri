@@ -29,6 +29,8 @@ import com.limelight.nvstream.http.NvHTTP;
 import com.limelight.nvstream.input.KeyboardPacket;
 import com.limelight.nvstream.input.MouseButtonPacket;
 import com.limelight.nvstream.jni.MoonBridge;
+import com.limelight.korri.moonlight.KorriMoonlightActionCoordinator;
+import com.limelight.korri.moonlight.KorriMoonlightActionExecutor;
 import com.limelight.preferences.GlPreferences;
 import com.limelight.preferences.PreferenceConfiguration;
 import com.limelight.ui.GameGestures;
@@ -115,7 +117,8 @@ import android.view.ViewGroup;
 public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         OnGenericMotionListener, OnTouchListener, NvConnectionListener,
         OnSystemUiVisibilityChangeListener, GameGestures, StreamContainer.InputCallbacks,
-        PerfOverlayListener, UsbDriverService.UsbDriverStateListener, View.OnKeyListener {
+        PerfOverlayListener, UsbDriverService.UsbDriverStateListener, View.OnKeyListener,
+        KorriMoonlightActionExecutor.Actions {
     public static Game instance;
 
     private int lastButtonState = 0;
@@ -281,6 +284,8 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     // overlay replacing the native spinner. Null for stock entry points.
     private KorriSessionOverlay korriSessionOverlay;
     private String korriLaunchId;
+    private KorriMoonlightActionExecutor korriMoonlightExecutor;
+    private int activeMouseMode;
     private final KorriGameLaunchScope korriLaunchScope =
             new KorriGameLaunchScope(this::endKorriLaunch);
 
@@ -1751,6 +1756,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     @Override
     protected void onDestroy() {
+        unregisterMoonlightExecutor();
         if (korriLaunchId != null && isFinishing()) {
             // Object identity prevents an old Activity's late teardown from
             // clearing a same-launch replacement that already claimed it.
@@ -3322,9 +3328,37 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     }
 
     private void endKorriLaunch() {
+        unregisterMoonlightExecutor();
         if (korriLaunchId != null) {
             KorriBrainService.clearActiveLaunchOnEnd(korriLaunchId);
         }
+    }
+
+    private void registerMoonlightExecutor() {
+        if (korriLaunchId == null || korriMoonlightExecutor != null) return;
+        KorriMoonlightActionExecutor next = new KorriMoonlightActionExecutor(
+                this,
+                new KorriMoonlightActionExecutor.UiDispatcher() {
+                    @Override
+                    public boolean isUiThread() {
+                        return Looper.myLooper() == Looper.getMainLooper();
+                    }
+
+                    @Override
+                    public void dispatch(Runnable action) {
+                        runOnUiThread(action);
+                    }
+                });
+        if (KorriMoonlightActionCoordinator.process().register(korriLaunchId, next)) {
+            korriMoonlightExecutor = next;
+        }
+    }
+
+    private void unregisterMoonlightExecutor() {
+        if (korriLaunchId == null || korriMoonlightExecutor == null) return;
+        KorriMoonlightActionExecutor current = korriMoonlightExecutor;
+        korriMoonlightExecutor = null;
+        KorriMoonlightActionCoordinator.process().unregister(korriLaunchId, current);
     }
 
     @Override
@@ -3614,6 +3648,9 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                 connected = true;
                 connecting = false;
                 updatePipAutoEnter();
+                // Gameplay controls become truthful only after the live stream
+                // and all Game-owned action fields are ready.
+                registerMoonlightExecutor();
 
                 // Hide the mouse cursor now after a short delay.
                 // Doing it before dismissing the spinner seems to be undone
@@ -3893,6 +3930,16 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         return prefConfig.videoScaleMode == PreferenceConfiguration.ScaleMode.FILL;
     }
 
+    @Override
+    public boolean fillMode() {
+        return isFillModeEnabled();
+    }
+
+    @Override
+    public void setFillMode(boolean value) {
+        if (isFillModeEnabled() != value) toggleFillMode();
+    }
+
     /**
      * Live toggle between Fit (letterbox) and Fill (crop to fill) from the
      * in-game menu. Applies immediately via StreamContainer layout; not
@@ -3916,6 +3963,17 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     public boolean isZoomModeEnabled() {
         return isPanZoomMode;
     }
+
+    @Override
+    public boolean zoomMode() {
+        return isZoomModeEnabled();
+    }
+
+    @Override
+    public void setZoomMode(boolean value) {
+        if (isZoomModeEnabled() != value) toggleZoomMode();
+    }
+
     public void toggleZoomMode() {
         this.isPanZoomMode = !this.isPanZoomMode;
         if (this.isPanZoomMode) {
@@ -3987,7 +4045,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                     dialog.dismiss();
                     MouseModeOption selected = optionArray[which];
                     if (selected.index == -1) {
-                        toggleMouseLocalCursor();
+                        toggleLocalCursor();
                     } else {
                         applyMouseMode(selected.index);
                         if (prefConfig.rememberMouseMode) {
@@ -4003,7 +4061,8 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     }
 
     //本地鼠标光标切换
-    private void toggleMouseLocalCursor(){
+    @Override
+    public void toggleLocalCursor(){
         if (!grabbedInput) {
             inputCaptureProvider.enableCapture();
             grabbedInput = true;
@@ -4017,6 +4076,8 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     }
 
     private void applyMouseMode(int mode) {
+        if (mode < 0 || mode > 5) return;
+        activeMouseMode = mode;
         switch (mode) {
             case 0: // Multi-touch
                 prefConfig.enableMultiTouchScreen = true;
@@ -4111,6 +4172,98 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         }
     }
 
+    @Override
+    public String mouseMode() {
+        return String.valueOf(activeMouseMode);
+    }
+
+    @Override
+    public void setMouseMode(String value) {
+        applyMouseModeFromOverlay(Integer.parseInt(value));
+    }
+
+    @Override
+    public boolean localCursor() {
+        return cursorVisible;
+    }
+
+    @Override
+    public int sgsrSharpness() {
+        return PreferenceManager.getDefaultSharedPreferences(this)
+                .getInt("seekbar_sgsr_sharpness", 20);
+    }
+
+    @Override
+    public void setSgsrSharpness(int value) {
+        KorriSettingsBridge.applySetting(
+                this, "seekbar_sgsr_sharpness", String.valueOf(value));
+        applyLivePrefs();
+    }
+
+    @Override
+    public int sgsrEdgeThreshold() {
+        return PreferenceManager.getDefaultSharedPreferences(this)
+                .getInt("seekbar_sgsr_edge_threshold", 8);
+    }
+
+    @Override
+    public void setSgsrEdgeThreshold(int value) {
+        KorriSettingsBridge.applySetting(
+                this, "seekbar_sgsr_edge_threshold", String.valueOf(value));
+        applyLivePrefs();
+    }
+
+    @Override
+    public boolean faceButtonFlip() {
+        return prefConfig.flipFaceButtons;
+    }
+
+    @Override
+    public void setFaceButtonFlip(boolean value) {
+        KorriSettingsBridge.applySetting(
+                this, "checkbox_flip_face_buttons", String.valueOf(value));
+        applyLivePrefs();
+    }
+
+    @Override
+    public boolean rumble() {
+        return prefConfig.enableRumble;
+    }
+
+    @Override
+    public void setRumble(boolean value) {
+        KorriSettingsBridge.applySetting(
+                this, "checkbox_enable_rumble", String.valueOf(value));
+        applyLivePrefs();
+    }
+
+    @Override
+    public boolean pictureInPicture() {
+        return prefConfig.enablePip;
+    }
+
+    @Override
+    public void setPictureInPicture(boolean value) {
+        KorriSettingsBridge.applySetting(
+                this, "checkbox_enable_pip", String.valueOf(value));
+        applyLivePrefs();
+    }
+
+    @Override
+    public void quitHost() {
+        quit();
+    }
+
+    @Override
+    public void toggleHud() {
+        toggleHUD();
+    }
+
+    @Override
+    public void toggleFloatingMenu() {
+        toggleFloatingButtonVisibility();
+    }
+
     /** Mouse-mode labels for the web overlay (index-aligned with applyMouseMode). */
     public String[] getMouseModeLabels() {
         return getResources().getStringArray(R.array.mouse_mode_names);
@@ -4119,7 +4272,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     /** Apply a mouse mode from the web overlay; -1 toggles the local cursor. */
     public void applyMouseModeFromOverlay(int index) {
         if (index == -1) {
-            toggleMouseLocalCursor();
+            toggleLocalCursor();
             return;
         }
         applyMouseMode(index);

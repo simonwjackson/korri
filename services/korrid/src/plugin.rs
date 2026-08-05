@@ -245,6 +245,31 @@ impl SessionControlEffect {
         }
     }
 
+    pub fn android_moonlight_effect(self) -> Option<crate::launcher::AndroidMoonlightEffect> {
+        use crate::launcher::AndroidMoonlightEffect as Effect;
+        Some(match self {
+            Self::RetroarchOpenMenu => return None,
+            Self::MoonlightDisconnect => Effect::Disconnect,
+            Self::MoonlightQuitHost => Effect::QuitHost,
+            Self::MoonlightToggleKeyboard => Effect::ToggleKeyboard,
+            Self::MoonlightToggleFullKeyboard => Effect::ToggleFullKeyboard,
+            Self::MoonlightSetFillMode => Effect::SetFillMode,
+            Self::MoonlightSetZoomMode => Effect::SetZoomMode,
+            Self::MoonlightRotateScreen => Effect::RotateScreen,
+            Self::MoonlightToggleHud => Effect::ToggleHud,
+            Self::MoonlightToggleFloatingMenu => Effect::ToggleFloatingMenu,
+            Self::MoonlightToggleKeyboardController => Effect::ToggleKeyboardController,
+            Self::MoonlightSwitchTouchSensitivity => Effect::SwitchTouchSensitivity,
+            Self::MoonlightSetMouseMode => Effect::SetMouseMode,
+            Self::MoonlightSetLocalCursor => Effect::SetLocalCursor,
+            Self::MoonlightSetSgsrEdgeThreshold => Effect::SetSgsrEdgeThreshold,
+            Self::MoonlightSetSgsrSharpness => Effect::SetSgsrSharpness,
+            Self::MoonlightSetFaceButtonFlip => Effect::SetFaceButtonFlip,
+            Self::MoonlightSetRumble => Effect::SetRumble,
+            Self::MoonlightSetPictureInPicture => Effect::SetPictureInPicture,
+        })
+    }
+
     pub fn platform(self) -> SessionControlPlatform {
         match self.integration() {
             SessionControlIntegration::Moonlight | SessionControlIntegration::Retroarch => {
@@ -434,6 +459,10 @@ impl PluginRegistry {
 
     pub fn registered_plugin_ids(&self) -> Vec<&str> {
         self.plugins.keys().map(String::as_str).collect()
+    }
+
+    pub fn plugin_title(&self, plugin_id: &str) -> Option<&str> {
+        self.plugins.get(plugin_id).map(Plugin::title)
     }
 
     pub fn enabled_plugin_ids(&self) -> Vec<&str> {

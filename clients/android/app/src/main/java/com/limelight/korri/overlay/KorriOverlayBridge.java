@@ -7,6 +7,9 @@ import androidx.webkit.WebMessageCompat;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 
+import com.limelight.korri.moonlight.KorriMoonlightActionCoordinator;
+import com.limelight.korri.moonlight.KorriMoonlightActionExecutor;
+
 import org.json.JSONObject;
 
 import java.util.Collections;
@@ -174,22 +177,78 @@ public final class KorriOverlayBridge {
     }
 
     private void execute(String requestId, JSONObject instruction) throws Exception {
-        String authorization = commands.authorizeInstruction(instruction.toString());
+        KorriMoonlightActionExecutor.Request request = authorizedRequest(
+                commands.authorizeInstruction(instruction.toString()));
         JSONObject outcome = new JSONObject();
-        if ("Authorized".equals(authorization)) {
-            // U6/U7 install effect executors. U5 verifies and consumes now, then
-            // reports honest unavailability rather than performing an effect.
-            outcome.put("_tag", "Unavailable")
-                    .put("message", "This gameplay effect is not available yet.");
-        } else {
+        if (request == null) {
             outcome.put("_tag", "Rejected")
                     .put("message", "That gameplay action is no longer authorized.");
+        } else {
+            KorriMoonlightActionExecutor.Outcome result =
+                    KorriMoonlightActionCoordinator.process().execute(request);
+            switch (result) {
+                case EXECUTED:
+                    outcome.put("_tag", "Executed");
+                    break;
+                case UNAVAILABLE:
+                case FAILED:
+                    outcome.put("_tag", "Unavailable")
+                            .put("message", "The current stream cannot apply that action.");
+                    break;
+                case STALE:
+                case INVALID_VALUE:
+                default:
+                    outcome.put("_tag", "Rejected")
+                            .put("message", "That gameplay action is no longer authorized.");
+                    break;
+            }
         }
         sender.send(new JSONObject()
                 .put("type", "instruction-result")
                 .put("requestId", requestId)
                 .put("outcome", outcome)
                 .toString());
+    }
+
+    static KorriMoonlightActionExecutor.Request authorizedRequest(String authorizationJson) {
+        try {
+            JSONObject authorization = new JSONObject(authorizationJson);
+            if (authorization.length() != 2 || !"Authorized".equals(
+                    authorization.getString("_tag"))) return null;
+            JSONObject payload = authorization.getJSONObject("payload");
+            if (payload.length() < 2 || payload.length() > 3) return null;
+            String launchId = payload.getString("launchId");
+            KorriMoonlightActionExecutor.Effect effect =
+                    KorriMoonlightActionExecutor.Effect.fromWire(payload.getString("effect"));
+            if (launchId.isEmpty() || effect == null) return null;
+            if (!payload.has("value")) {
+                return KorriMoonlightActionExecutor.Request.command(launchId, effect);
+            }
+            JSONObject value = payload.getJSONObject("value");
+            if (value.length() != 2) return null;
+            Object rawValue = value.get("value");
+            switch (value.getString("kind")) {
+                case "toggle":
+                    if (!(rawValue instanceof Boolean)) return null;
+                    return KorriMoonlightActionExecutor.Request.toggle(
+                            launchId, effect, (Boolean) rawValue);
+                case "choice":
+                    if (!(rawValue instanceof String)) return null;
+                    return KorriMoonlightActionExecutor.Request.choice(
+                            launchId, effect, (String) rawValue);
+                case "range":
+                    if (!(rawValue instanceof Number)) return null;
+                    double range = ((Number) rawValue).doubleValue();
+                    if (!Double.isFinite(range) || range != Math.rint(range)
+                            || range < Integer.MIN_VALUE || range > Integer.MAX_VALUE) return null;
+                    return KorriMoonlightActionExecutor.Request.range(
+                            launchId, effect, (int) range);
+                default:
+                    return null;
+            }
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     public static boolean allowRequest(

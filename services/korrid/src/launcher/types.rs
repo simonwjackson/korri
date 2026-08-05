@@ -474,7 +474,7 @@ impl MoonlightLaunchAuthority {
 }
 
 #[typeshare]
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum AndroidMoonlightEffect {
     Disconnect,

@@ -3,10 +3,10 @@
 
 use crate::{
     active_android_launch, authorize_moonlight_launch_spec, authorize_platform_instruction,
-    clear_active_android_launch, korrid_version, local_server_capability,
-    publish_local_active_launch, publish_moonlight_active_launch, start_embedded_android_server,
-    stop_local_server, verify_local_launch_spec, MoonlightLaunchAuthorization,
-    PlatformInstructionAuthorization,
+    clear_active_android_launch, clear_moonlight_executor_state, korrid_version,
+    local_server_capability, publish_local_active_launch, publish_moonlight_active_launch,
+    publish_moonlight_executor_state, start_embedded_android_server, stop_local_server,
+    verify_local_launch_spec, MoonlightLaunchAuthorization,
 };
 use jni::{
     objects::{JClass, JString},
@@ -235,6 +235,38 @@ pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_activeLa
 }
 
 #[no_mangle]
+pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_publishMoonlightExecutorState(
+    mut env: JNIEnv,
+    _class: JClass,
+    state_json: JString,
+) -> jboolean {
+    let state_json: String = match env.get_string(&state_json) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error.to_string());
+            return 0;
+        }
+    };
+    publish_moonlight_executor_state(&state_json).into()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_clearMoonlightExecutorState(
+    mut env: JNIEnv,
+    _class: JClass,
+    launch_id: JString,
+) -> jboolean {
+    let launch_id: String = match env.get_string(&launch_id) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error.to_string());
+            return 0;
+        }
+    };
+    clear_moonlight_executor_state(&launch_id).into()
+}
+
+#[no_mangle]
 pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_authorizePlatformInstruction(
     mut env: JNIEnv,
     _class: JClass,
@@ -247,15 +279,8 @@ pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_authoriz
             return ptr::null_mut();
         }
     };
-    let outcome = match authorize_platform_instruction(&instruction_json) {
-        PlatformInstructionAuthorization::Authorized => "Authorized",
-        PlatformInstructionAuthorization::InvalidSpec => "InvalidSpec",
-        PlatformInstructionAuthorization::Integrity => "Integrity",
-        PlatformInstructionAuthorization::Stale => "Stale",
-        PlatformInstructionAuthorization::Replay => "Replay",
-        PlatformInstructionAuthorization::NoActiveLaunch => "NoActiveLaunch",
-        PlatformInstructionAuthorization::ServerUnavailable => "ServerUnavailable",
-    };
+    let outcome = serde_json::to_string(&authorize_platform_instruction(&instruction_json))
+        .unwrap_or_else(|_| "{\"_tag\":\"ServerUnavailable\"}".into());
     match env.new_string(outcome) {
         Ok(value) => value.into_raw(),
         Err(error) => {

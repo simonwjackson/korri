@@ -214,6 +214,53 @@ fn canonical_moonlight_resolves_typed_artemis_availability_only_when_enabled() {
         },
     );
     assert_eq!(controls.len(), 18);
+    let by_id = |id: &str| controls.iter().find(|control| control.id == id).unwrap();
+    assert_eq!(by_id("@korri:moonlight/fill").label, "Screen fit");
+    assert_eq!(
+        by_id("@korri:moonlight/disconnect").description.as_deref(),
+        Some("Leave the host game running")
+    );
+    assert!(by_id("@korri:moonlight/quit-host").destructive);
+    assert!(by_id("@korri:moonlight/keyboard").dismiss_on_success);
+    match &by_id("@korri:moonlight/mouse-mode").interaction {
+        korrid::plugin::SessionControlDeclarationInteraction::Choice { options } => {
+            assert_eq!(
+                options
+                    .iter()
+                    .map(|option| (option.value.as_str(), option.label.as_str()))
+                    .collect::<Vec<_>>(),
+                [
+                    ("0", "Multi touch"),
+                    ("1", "Absolute touch"),
+                    ("2", "Track pad(Natural/Double tap to drag)"),
+                    ("3", "Track pad(Gaming/Long press to drag)"),
+                    ("4", "Disabled"),
+                    ("5", "Absolute touch (left/right click swapped)"),
+                ]
+            );
+        }
+        other => panic!("expected mouse choice, got {other:?}"),
+    }
+    assert_eq!(
+        by_id("@korri:moonlight/local-cursor").label,
+        "Toggle local mouse cursor(physical mouse needed)"
+    );
+    assert_eq!(
+        by_id("@korri:moonlight/sgsr-sharpness").interaction,
+        korrid::plugin::SessionControlDeclarationInteraction::Range {
+            min: 0.0,
+            max: 50.0,
+            step: 1.0,
+        }
+    );
+    assert_eq!(
+        by_id("@korri:moonlight/sgsr-edge-threshold").interaction,
+        korrid::plugin::SessionControlDeclarationInteraction::Range {
+            min: 1.0,
+            max: 32.0,
+            step: 1.0,
+        }
+    );
 
     let disabled = PluginRegistry::new(vec![plugin], Vec::new())
         .expect("disabled Moonlight should remain registered");

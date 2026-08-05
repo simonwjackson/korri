@@ -163,6 +163,21 @@ public class KorriOverlayBridgeTest {
     }
 
     @Test
+    public void authorizationResultIsStrictTypedEffectAndValue() {
+        String authorized = "{\"_tag\":\"Authorized\",\"payload\":{"
+                + "\"launchId\":\"" + LAUNCH + "\","
+                + "\"effect\":\"set-fill-mode\","
+                + "\"value\":{\"kind\":\"toggle\",\"value\":true}}}";
+        assertTrue(KorriOverlayBridge.authorizedRequest(authorized) != null);
+        assertTrue(KorriOverlayBridge.authorizedRequest(
+                authorized.replace("set-fill-mode", "java-method")) == null);
+        assertTrue(KorriOverlayBridge.authorizedRequest(
+                authorized.replace("}}}", "},\"extra\":true}}")) == null);
+        assertTrue(KorriOverlayBridge.authorizedRequest(
+                "{\"_tag\":\"Stale\"}") == null);
+    }
+
+    @Test
     public void rejectsWrongOriginSubframesUnknownAndMalformedMessages() {
         RecordingSender sender = new RecordingSender();
         RecordingCommands commands = new RecordingCommands();
@@ -259,7 +274,19 @@ public class KorriOverlayBridgeTest {
         @Override
         public String authorizeInstruction(String instructionJson) {
             instructions.add(instructionJson);
-            return "Authorized";
+            try {
+                JSONObject instruction = new JSONObject(instructionJson);
+                return new JSONObject()
+                        .put("_tag", "Authorized")
+                        .put("payload", new JSONObject()
+                                .put("launchId", instruction.getString("launchId"))
+                                .put("effect", instruction.getJSONObject("effect")
+                                        .getString("payload"))
+                                .put("value", instruction.opt("value")))
+                        .toString();
+            } catch (Exception error) {
+                return "{\"_tag\":\"InvalidSpec\"}";
+            }
         }
     }
 }
