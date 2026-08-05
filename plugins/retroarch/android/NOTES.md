@@ -57,18 +57,20 @@ nix run .#ra-accept -- <adb-serial>
 `ra-accept` is the device procedure; its repository contract is checked without
 running a device in U7. The procedure launches Wario through the Korri portal,
 checks authenticated nonce-bound UDP behavior, proves the accessibility overlay
-is absent after the menu acknowledgement, moves RGUI selection before Back,
-checks a safe non-Guide key does not enable a native menu shortcut, invokes
-acknowledged graceful Quit, and preserves its backup/restore obligations. The
-launch token is absent from LaunchSpec/JavaScript/logs and never crosses UDP,
-but Android's cross-process Intent API unavoidably materializes it briefly as a
-Java String between JNI attachment and RetroArch native startup.
+is absent after the menu acknowledgement, and uses MAC-covered `GET_STATUS`
+telemetry to require menu alive, an exact one-row RGUI selection advance, menu
+closed after Back, and menu still closed after a configured safe native key.
+Screenshots remain supporting evidence only. It then invokes acknowledged
+graceful Quit and preserves its backup/restore obligations. The launch token is
+absent from LaunchSpec/JavaScript/logs and never crosses UDP, but Android's
+cross-process Intent API unavoidably materializes it briefly as a Java String
+between JNI attachment and RetroArch native startup.
 
 Device proof for the hardened U7 protocol remains U8 work. The earlier pre-U7
 gate on device `100.65.66.40:39991` used the superseded bearer protocol and
 wiped fork-private state,
 re-extracted the bundled core, reported
-`GET_STATUS PLAYING mGBA,wl4,crc32=d6141609`, wrote a non-empty pause state,
+`GET_STATUS PLAYING mGBA,wl4,crc32=d6141609` under the superseded status shape, wrote a non-empty pause state,
 logged a successful auto-state load on relaunch, refreshed the state again on
 graceful `QUIT`, returned to Korri on display 0, and preserved
 `com.retroarch.aarch64`.

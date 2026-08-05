@@ -47,6 +47,8 @@ pub(crate) struct RetroarchStatus {
     pub(crate) system: String,
     pub(crate) content: String,
     pub(crate) crc32: String,
+    pub(crate) menu_alive: bool,
+    pub(crate) menu_selection: usize,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -76,6 +78,7 @@ pub(crate) struct RetroarchControlAuthority {
     token: Zeroizing<[u8; 64]>,
     game_id: String,
     expected_content: String,
+    expected_crc32: String,
 }
 
 impl RetroarchControlAuthority {
@@ -107,10 +110,16 @@ impl RetroarchControlAuthority {
             .and_then(|rom| Path::new(rom).file_name())
             .and_then(|name| name.to_str())
             .filter(|name| !name.is_empty() && !name.chars().any(char::is_control));
+        let expected_crc32 = spec
+            .context
+            .content_crc32
+            .as_deref()
+            .filter(|value| valid_crc32(value));
         if !trusted_shape
             || !(49152..=65535).contains(&port)
             || game_id.is_none()
             || expected_content.is_none()
+            || expected_crc32.is_none()
         {
             return Err(RetroarchControlError::InvalidAuthority);
         }
@@ -120,6 +129,7 @@ impl RetroarchControlAuthority {
             port,
             game_id.expect("checked").to_owned(),
             expected_content.expect("checked").to_owned(),
+            expected_crc32.expect("checked").to_owned(),
         )
     }
 
@@ -129,8 +139,11 @@ impl RetroarchControlAuthority {
         port: u16,
         game_id: impl Into<String>,
         expected_content: impl Into<String>,
+        expected_crc32: impl Into<String>,
     ) -> Result<Self, RetroarchControlError> {
-        if !valid_token(token) || !(49152..=65535).contains(&port) {
+        let expected_crc32 = expected_crc32.into();
+        if !valid_token(token) || !(49152..=65535).contains(&port) || !valid_crc32(&expected_crc32)
+        {
             return Err(RetroarchControlError::InvalidAuthority);
         }
         let mut retained = [0_u8; 64];
@@ -141,6 +154,7 @@ impl RetroarchControlAuthority {
             token: Zeroizing::new(retained),
             game_id: game_id.into(),
             expected_content: expected_content.into(),
+            expected_crc32: expected_crc32.into(),
         })
     }
 
@@ -162,6 +176,8 @@ impl RetroarchControlAuthority {
             && active.game_id.as_deref() == Some(self.game_id.as_str())
             && active.game_id == spec.context.game_id
             && active.title == spec.context.title
+            && active.content_crc32.as_deref() == Some(self.expected_crc32.as_str())
+            && active.content_crc32 == spec.context.content_crc32
             && active.contributors == spec.context.contributors
             && active.executor == spec.context.executor
             && active.foreground == spec.context.foreground
@@ -173,12 +189,22 @@ impl RetroarchControlAuthority {
                 == Some(self.expected_content.as_str())
     }
 
+    pub(crate) fn expected_status(&self) -> Result<Option<RetroarchStatus>, RetroarchControlError> {
+        match self.request(RetroarchControlCommand::GetStatus)? {
+            RetroarchControlResponse::Status(status)
+                if status.content == self.expected_content
+                    && status.crc32 == self.expected_crc32 =>
+            {
+                Ok(Some(status))
+            }
+            RetroarchControlResponse::Status(_)
+            | RetroarchControlResponse::NotPlaying
+            | RetroarchControlResponse::Acknowledged => Ok(None),
+        }
+    }
+
     pub(crate) fn confirms_expected_content(&self) -> Result<bool, RetroarchControlError> {
-        Ok(matches!(
-            self.request(RetroarchControlCommand::GetStatus)?,
-            RetroarchControlResponse::Status(RetroarchStatus { content, .. })
-                if content == self.expected_content
-        ))
+        self.expected_status().map(|status| status.is_some())
     }
 
     pub(crate) fn invoke(
@@ -217,6 +243,7 @@ impl fmt::Debug for RetroarchControlAuthority {
             .field("endpoint", &self.endpoint)
             .field("token", &"[REDACTED]")
             .field("expected_content", &self.expected_content)
+            .field("expected_crc32", &self.expected_crc32)
             .finish()
     }
 }
@@ -224,6 +251,13 @@ impl fmt::Debug for RetroarchControlAuthority {
 fn valid_token(token: &str) -> bool {
     token.len() == 64
         && token
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn valid_crc32(value: &str) -> bool {
+    value.len() == 8
+        && value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
@@ -316,6 +350,27 @@ fn parse_authenticated_response(
     parse_result(command, &response[RESPONSE_PREFIX_LENGTH..framed_length])
 }
 
+fn parse_menu_telemetry(value: &str) -> Result<(bool, usize), RetroarchControlError> {
+    let (menu, selection) = value
+        .split_once(",selection=")
+        .ok_or(RetroarchControlError::WrongResponse)?;
+    let menu_alive = match menu {
+        "0" => false,
+        "1" => true,
+        _ => return Err(RetroarchControlError::WrongResponse),
+    };
+    if selection.is_empty()
+        || (selection.len() > 1 && selection.starts_with('0'))
+        || !selection.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return Err(RetroarchControlError::WrongResponse);
+    }
+    let selection = selection
+        .parse::<usize>()
+        .map_err(|_| RetroarchControlError::WrongResponse)?;
+    Ok((menu_alive, selection))
+}
+
 fn parse_result(
     command: RetroarchControlCommand,
     response: &[u8],
@@ -327,15 +382,16 @@ fn parse_result(
         RetroarchControlCommand::Quit if response == b"QUIT OK" => {
             Ok(RetroarchControlResponse::Acknowledged)
         }
-        RetroarchControlCommand::GetStatus if response == b"GET_STATUS CONTENTLESS" => {
-            Ok(RetroarchControlResponse::NotPlaying)
-        }
         RetroarchControlCommand::GetStatus => {
             let response = response
                 .strip_suffix(b"\n")
                 .ok_or(RetroarchControlError::WrongResponse)?;
             let text =
                 std::str::from_utf8(response).map_err(|_| RetroarchControlError::WrongResponse)?;
+            if let Some(telemetry) = text.strip_prefix("GET_STATUS CONTENTLESS ") {
+                parse_menu_telemetry(telemetry)?;
+                return Ok(RetroarchControlResponse::NotPlaying);
+            }
             let (paused, details) = if let Some(details) = text.strip_prefix("GET_STATUS PLAYING ")
             {
                 (false, details)
@@ -344,7 +400,11 @@ fn parse_result(
             } else {
                 return Err(RetroarchControlError::WrongResponse);
             };
-            let (identity, crc32) = details
+            let (identity, telemetry) = details
+                .rsplit_once(",menu=")
+                .ok_or(RetroarchControlError::WrongResponse)?;
+            let (menu_alive, menu_selection) = parse_menu_telemetry(telemetry)?;
+            let (identity, crc32) = identity
                 .rsplit_once(",crc32=")
                 .ok_or(RetroarchControlError::WrongResponse)?;
             let (system, content) = identity
@@ -353,7 +413,7 @@ fn parse_result(
             if [system, content, crc32]
                 .iter()
                 .any(|value| value.is_empty() || value.chars().any(char::is_control))
-                || !crc32.bytes().all(|byte| byte.is_ascii_hexdigit())
+                || !valid_crc32(crc32)
                 || Path::new(content)
                     .file_name()
                     .and_then(|name| name.to_str())
@@ -366,6 +426,8 @@ fn parse_result(
                 system: system.to_owned(),
                 content: content.to_owned(),
                 crc32: crc32.to_owned(),
+                menu_alive,
+                menu_selection,
             }))
         }
         RetroarchControlCommand::ShowMenu | RetroarchControlCommand::Quit => {
@@ -448,23 +510,29 @@ mod tests {
         assert_eq!(
             parse_result(
                 RetroarchControlCommand::GetStatus,
-                b"GET_STATUS PLAYING mGBA,wl4.gba,crc32=d6141609\n"
+                b"GET_STATUS PLAYING mGBA,wl4.gba,crc32=d6141609,menu=1,selection=3\n"
             ),
             Ok(RetroarchControlResponse::Status(RetroarchStatus {
                 paused: false,
                 system: "mGBA".into(),
                 content: "wl4.gba".into(),
                 crc32: "d6141609".into(),
+                menu_alive: true,
+                menu_selection: 3,
             }))
         );
         assert!(parse_result(
             RetroarchControlCommand::GetStatus,
-            b"GET_STATUS PLAYING mGBA,other.gba,crc32=d6141609\n"
+            b"GET_STATUS PLAYING mGBA,other.gba,crc32=d6141609,menu=0,selection=0\n"
         )
         .is_ok());
         for invalid in [
-            b"GET_STATUS PLAYING mGBA,../wl4.gba,crc32=d6141609\n".as_slice(),
-            b"GET_STATUS PLAYING mGBA,wl4.gba,crc32=nope\n".as_slice(),
+            b"GET_STATUS PLAYING mGBA,../wl4.gba,crc32=d6141609,menu=0,selection=0\n".as_slice(),
+            b"GET_STATUS PLAYING mGBA,wl4.gba,crc32=nope,menu=0,selection=0\n".as_slice(),
+            b"GET_STATUS PLAYING mGBA,wl4.gba,crc32=1234567,menu=0,selection=0\n".as_slice(),
+            b"GET_STATUS PLAYING mGBA,wl4.gba,crc32=D6141609,menu=0,selection=0\n".as_slice(),
+            b"GET_STATUS PLAYING mGBA,wl4.gba,crc32=d6141609,menu=2,selection=0\n".as_slice(),
+            b"GET_STATUS PLAYING mGBA,wl4.gba,crc32=d6141609,menu=1,selection=03\n".as_slice(),
             b"SHOW_MENU OK".as_slice(),
         ] {
             assert_eq!(
@@ -482,6 +550,7 @@ mod tests {
             context: super::super::LaunchContext {
                 game_id: Some("wl4".into()),
                 title: Some("Wario Land 4".into()),
+                content_crc32: Some("d6141609".into()),
                 contributors: vec![super::super::LaunchRouteContributor {
                     kind: LaunchContributorKind::Launcher,
                     id: KORRI_LAUNCHER.into(),
@@ -538,9 +607,10 @@ mod tests {
 
     #[test]
     fn authority_debug_output_redacts_the_token() {
-        let authority =
-            RetroarchControlAuthority::new("launch-1", TOKEN_TEXT, 50000, "wl4", "wl4.gba")
-                .unwrap();
+        let authority = RetroarchControlAuthority::new(
+            "launch-1", TOKEN_TEXT, 50000, "wl4", "wl4.gba", "d6141609",
+        )
+        .unwrap();
         let debug = format!("{authority:?}");
         assert!(debug.contains("launch-1"));
         assert!(!debug.contains(TOKEN_TEXT));
@@ -602,8 +672,10 @@ mod tests {
             .find_map(|port| UdpSocket::bind(("127.0.0.1", port)).ok())
             .unwrap();
         let port = server.local_addr().unwrap().port();
-        let authority =
-            RetroarchControlAuthority::new("launch-1", TOKEN_TEXT, port, "wl4", "wl4.gba").unwrap();
+        let authority = RetroarchControlAuthority::new(
+            "launch-1", TOKEN_TEXT, port, "wl4", "wl4.gba", "d6141609",
+        )
+        .unwrap();
         let responder = thread::spawn(move || {
             let mut request = [0_u8; REQUEST_LENGTH];
             let (_, source) = server.recv_from(&mut request).unwrap();
@@ -613,7 +685,35 @@ mod tests {
                 TOKEN,
                 nonce,
                 RetroarchControlCommand::GetStatus,
-                b"GET_STATUS PLAYING mGBA,stale.gba,crc32=d6141609\n",
+                b"GET_STATUS PLAYING mGBA,stale.gba,crc32=d6141609,menu=0,selection=0\n",
+            );
+            server.send_to(&reply, source).unwrap();
+        });
+
+        assert_eq!(authority.confirms_expected_content(), Ok(false));
+        responder.join().unwrap();
+    }
+
+    #[test]
+    fn authority_rejects_live_status_for_replaced_same_basename() {
+        let server = (49152..=65535)
+            .find_map(|port| UdpSocket::bind(("127.0.0.1", port)).ok())
+            .unwrap();
+        let port = server.local_addr().unwrap().port();
+        let authority = RetroarchControlAuthority::new(
+            "launch-1", TOKEN_TEXT, port, "wl4", "wl4.gba", "d6141609",
+        )
+        .unwrap();
+        let responder = thread::spawn(move || {
+            let mut request = [0_u8; REQUEST_LENGTH];
+            let (_, source) = server.recv_from(&mut request).unwrap();
+            let mut nonce = [0_u8; NONCE_LENGTH];
+            nonce.copy_from_slice(&request[1..33]);
+            let reply = authenticated_response(
+                TOKEN,
+                nonce,
+                RetroarchControlCommand::GetStatus,
+                b"GET_STATUS PLAYING mGBA,wl4.gba,crc32=deadbeef,menu=0,selection=0\n",
             );
             server.send_to(&reply, source).unwrap();
         });

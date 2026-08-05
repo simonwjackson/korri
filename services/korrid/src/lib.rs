@@ -219,6 +219,18 @@ pub struct SessionControls {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     pub groups: Vec<SessionControlGroup>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retroarch_telemetry: Option<RetroarchSessionTelemetry>,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RetroarchSessionTelemetry {
+    pub content_basename: String,
+    pub crc32: String,
+    pub menu_alive: bool,
+    pub menu_selection: u32,
 }
 
 #[typeshare]
@@ -801,6 +813,21 @@ struct AppState {
     rpc_capability: Option<String>,
 }
 
+fn active_session_conflict() -> RpcFailure {
+    RpcFailure {
+        code: "ActiveSessionConflict".into(),
+        message: "An active RetroArch session must end before another local route can start."
+            .into(),
+    }
+}
+
+fn uses_retroarch_control(active: &launcher::AndroidActiveLaunch) -> bool {
+    active
+        .executor
+        .as_ref()
+        .is_some_and(|executor| executor.id == "retroarch-control")
+}
+
 fn local_launch_failure(error: launcher::LaunchError) -> RpcFailure {
     let code = match &error {
         launcher::LaunchError::UnknownGame(_) => "LocalGameNotFound",
@@ -1236,6 +1263,7 @@ async fn materialize_session_controls(
         MaterializedSessionExecutor,
         Vec<(plugin::SessionControlRecord, SessionControl)>,
         Vec<SessionControlGroup>,
+        Option<RetroarchSessionTelemetry>,
     ),
     SessionControlFailure,
 > {
@@ -1247,17 +1275,16 @@ async fn materialize_session_controls(
         launch_id,
     )?;
     let MaterializedSessionExecutor::Retroarch(authority) = &candidate.1 else {
-        return Ok(candidate);
+        return Ok((candidate.0, candidate.1, candidate.2, candidate.3, None));
     };
     let authority = Arc::clone(authority);
     let probe = Arc::clone(&authority);
-    let live = tokio::task::spawn_blocking(move || probe.confirms_expected_content())
+    let status = tokio::task::spawn_blocking(move || probe.expected_status())
         .await
         .map_err(|_| session_route_context_unavailable())?
-        .unwrap_or(false);
-    if !live {
-        return Err(session_route_context_unavailable());
-    }
+        .ok()
+        .flatten()
+        .ok_or_else(session_route_context_unavailable)?;
     let current = active_android_launch
         .lock()
         .expect("active Android launch mutex poisoned")
@@ -1273,14 +1300,27 @@ async fn materialize_session_controls(
     {
         return Err(session_route_context_unavailable());
     }
-    Ok(candidate)
+    let telemetry = RetroarchSessionTelemetry {
+        content_basename: status.content,
+        crc32: status.crc32,
+        menu_alive: status.menu_alive,
+        menu_selection: u32::try_from(status.menu_selection)
+            .map_err(|_| session_route_context_unavailable())?,
+    };
+    Ok((
+        candidate.0,
+        candidate.1,
+        candidate.2,
+        candidate.3,
+        Some(telemetry),
+    ))
 }
 
 async fn invoke_current_session_control(
     brain: &BrainRuntime,
     request: SessionControlInvokeRequest,
 ) -> SessionControlInvokeOutcome {
-    let (active, _, materialized, _) = match materialize_session_controls(
+    let (active, _, materialized, _, _) = match materialize_session_controls(
         &brain.active_android_launch,
         &brain.retroarch_control_authority,
         &brain.moonlight_executor_state,
@@ -1308,7 +1348,7 @@ async fn invoke_current_session_control(
 
     // Reconstruct policy, route, live executor state, and the selected control
     // immediately before performing either native or process-local effects.
-    let (current, executor, latest, _) = match materialize_session_controls(
+    let (current, executor, latest, _, _) = match materialize_session_controls(
         &brain.active_android_launch,
         &brain.retroarch_control_authority,
         &brain.moonlight_executor_state,
@@ -1543,11 +1583,14 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                     &request.launch_id,
                 )
                 .await
-                .map(|(active, _, _, groups)| SessionControls {
-                    launch_id: active.launch_id,
-                    title: active.title,
-                    groups,
-                })
+                .map(
+                    |(active, _, _, groups, retroarch_telemetry)| SessionControls {
+                        launch_id: active.launch_id,
+                        title: active.title,
+                        groups,
+                        retroarch_telemetry,
+                    },
+                )
                 .map(SessionControlsOutcome::Ok)
                 .unwrap_or_else(SessionControlsOutcome::Err),
                 ServerMode::Host(_) => {
@@ -1611,111 +1654,132 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                         ));
                     }
                 };
-                let fresh_launch_id = generate_launch_id();
-                let fresh_control_port = launcher::derive_retroarch_control_port(
-                    &brain.local_launch_signing_key,
-                    &fresh_launch_id,
-                );
+                enum ActiveLaunchDecision {
+                    Resume(launcher::LaunchSpec),
+                    Conflict,
+                    Fresh,
+                }
+
                 let active = brain
                     .active_android_launch
                     .lock()
                     .expect("active Android launch mutex poisoned")
                     .clone();
-                let authority = brain
-                    .retroarch_control_authority
-                    .lock()
-                    .expect("RetroArch control authority mutex poisoned")
-                    .clone();
-                let resume_candidate =
-                    active
+                let active_retroarch = active
+                    .as_ref()
+                    .filter(|active| uses_retroarch_control(active));
+                let decision = if let Some(expected_active) = active_retroarch {
+                    let authority = brain
+                        .retroarch_control_authority
+                        .lock()
+                        .expect("RetroArch control authority mutex poisoned")
+                        .clone();
+                    let Some(expected_authority) = authority
                         .as_ref()
-                        .zip(authority.as_ref())
-                        .filter(|(active, authority)| {
-                            active.game_id.as_deref() == Some(request.game_id.as_str())
-                                && authority.is_for(&active.launch_id)
-                        });
-                let first_port = resume_candidate
-                    .map(|(_, authority)| authority.port())
-                    .unwrap_or(fresh_control_port);
-                let first = launcher::launch_game(
-                    &brain.local_storage_root,
-                    &request.game_id,
-                    brain.local_file_provision,
-                    &config_state,
-                    &registry,
-                    first_port,
-                );
-                let outcome = match first {
-                    Ok(spec) => {
-                        let resumable = resume_candidate
-                            .filter(|(active, authority)| authority.matches_launch(active, &spec));
-                        let live = if let Some((_, authority)) = resumable {
-                            let authority = Arc::clone(authority);
-                            tokio::task::spawn_blocking(move || {
-                                authority.confirms_expected_content()
-                            })
-                            .await
-                            .is_ok_and(|result| result == Ok(true))
-                        } else {
-                            false
-                        };
-                        let still_exact =
-                            resumable.is_some_and(|(expected_active, expected_authority)| {
-                                brain
+                        .filter(|authority| authority.is_for(&expected_active.launch_id))
+                    else {
+                        return RpcResponse::LocalGameLaunch(LocalGameLaunchOutcome::Err(
+                            active_session_conflict(),
+                        ));
+                    };
+                    if expected_active.game_id.as_deref() != Some(request.game_id.as_str()) {
+                        ActiveLaunchDecision::Conflict
+                    } else {
+                        match launcher::launch_game(
+                            &brain.local_storage_root,
+                            &request.game_id,
+                            brain.local_file_provision,
+                            &config_state,
+                            &registry,
+                            expected_authority.port(),
+                        ) {
+                            Ok(spec)
+                                if expected_authority.matches_launch(expected_active, &spec) =>
+                            {
+                                let request_authority = Arc::clone(expected_authority);
+                                let live = tokio::task::spawn_blocking(move || {
+                                    request_authority.confirms_expected_content()
+                                })
+                                .await
+                                .is_ok_and(|result| result == Ok(true));
+                                let current_active = brain
                                     .active_android_launch
                                     .lock()
                                     .expect("active Android launch mutex poisoned")
-                                    .as_ref()
-                                    == Some(expected_active)
-                                    && brain
-                                        .retroarch_control_authority
-                                        .lock()
-                                        .expect("RetroArch control authority mutex poisoned")
-                                        .as_ref()
-                                        .is_some_and(|current| {
-                                            Arc::ptr_eq(current, expected_authority)
-                                        })
-                            });
-                        if live && still_exact {
-                            let active = active.expect("resume candidate has active launch");
-                            LocalGameLaunchOutcome::Ok(
-                                spec.with_launch_id(active.launch_id)
-                                    .with_disposition(launcher::LaunchDisposition::Resume)
-                                    .sign(&brain.local_launch_signing_key),
-                            )
-                        } else {
-                            let fresh = if first_port == fresh_control_port {
-                                Ok(spec)
-                            } else {
-                                launcher::launch_game(
-                                    &brain.local_storage_root,
-                                    &request.game_id,
-                                    brain.local_file_provision,
-                                    &config_state,
-                                    &registry,
-                                    fresh_control_port,
-                                )
-                            };
-                            fresh
-                                .map(|spec| {
-                                    let signed = spec
-                                        .with_launch_id(fresh_launch_id)
-                                        .with_disposition(launcher::LaunchDisposition::Fresh)
-                                        .sign(&brain.local_launch_signing_key);
-                                    brain
-                                        .local_launch_reservations
-                                        .lock()
-                                        .expect("local launch reservations poisoned")
-                                        .reserve(signed.launch_id.clone());
-                                    signed
-                                })
-                                .map(LocalGameLaunchOutcome::Ok)
-                                .unwrap_or_else(|error| {
-                                    LocalGameLaunchOutcome::Err(local_launch_failure(error))
-                                })
+                                    .clone();
+                                let current_authority = brain
+                                    .retroarch_control_authority
+                                    .lock()
+                                    .expect("RetroArch control authority mutex poisoned")
+                                    .clone();
+                                let still_exact = current_active.as_ref() == Some(expected_active)
+                                    && current_authority.as_ref().is_some_and(|current| {
+                                        Arc::ptr_eq(current, expected_authority)
+                                    });
+                                if live && still_exact {
+                                    ActiveLaunchDecision::Resume(
+                                        spec.with_launch_id(expected_active.launch_id.clone())
+                                            .with_disposition(launcher::LaunchDisposition::Resume)
+                                            .sign(&brain.local_launch_signing_key),
+                                    )
+                                } else if still_exact
+                                    || current_active.as_ref().is_some_and(uses_retroarch_control)
+                                {
+                                    ActiveLaunchDecision::Conflict
+                                } else {
+                                    ActiveLaunchDecision::Fresh
+                                }
+                            }
+                            Ok(_) | Err(_) => ActiveLaunchDecision::Conflict,
                         }
                     }
-                    Err(error) => LocalGameLaunchOutcome::Err(local_launch_failure(error)),
+                } else {
+                    ActiveLaunchDecision::Fresh
+                };
+
+                let outcome = match decision {
+                    ActiveLaunchDecision::Resume(spec) => LocalGameLaunchOutcome::Ok(spec),
+                    ActiveLaunchDecision::Conflict => {
+                        LocalGameLaunchOutcome::Err(active_session_conflict())
+                    }
+                    ActiveLaunchDecision::Fresh => {
+                        let fresh_launch_id = generate_launch_id();
+                        let fresh_control_port = launcher::derive_retroarch_control_port(
+                            &brain.local_launch_signing_key,
+                            &fresh_launch_id,
+                        );
+                        launcher::launch_game(
+                            &brain.local_storage_root,
+                            &request.game_id,
+                            brain.local_file_provision,
+                            &config_state,
+                            &registry,
+                            fresh_control_port,
+                        )
+                        .map_err(local_launch_failure)
+                        .and_then(|spec| {
+                            let active = brain
+                                .active_android_launch
+                                .lock()
+                                .expect("active Android launch mutex poisoned")
+                                .clone();
+                            if active.as_ref().is_some_and(uses_retroarch_control) {
+                                return Err(active_session_conflict());
+                            }
+                            let signed = spec
+                                .with_launch_id(fresh_launch_id)
+                                .with_disposition(launcher::LaunchDisposition::Fresh)
+                                .sign(&brain.local_launch_signing_key);
+                            brain
+                                .local_launch_reservations
+                                .lock()
+                                .expect("local launch reservations poisoned")
+                                .reserve(signed.launch_id.clone());
+                            Ok(signed)
+                        })
+                        .map(LocalGameLaunchOutcome::Ok)
+                        .unwrap_or_else(LocalGameLaunchOutcome::Err)
+                    }
                 };
                 RpcResponse::LocalGameLaunch(outcome)
             }
@@ -2720,6 +2784,7 @@ mod tests {
             launch_id: "generic-launch".into(),
             game_id: Some("tmnt".into()),
             title: Some("TMNT".into()),
+            content_crc32: None,
             contributors: vec![launcher::LaunchRouteContributor {
                 kind: launcher::LaunchContributorKind::Launcher,
                 id: "@korri:android-app/android-app".into(),
@@ -2736,7 +2801,7 @@ mod tests {
         let moonlight_slot = Arc::new(Mutex::new(None));
         let config = config::snapshot::ConfigSnapshotCoordinator::new(root.path());
 
-        let (_, executor, materialized, groups) = materialize_session_controls(
+        let (_, executor, materialized, groups, telemetry) = materialize_session_controls(
             &active_slot,
             &authority_slot,
             &moonlight_slot,
@@ -2749,6 +2814,7 @@ mod tests {
         assert!(matches!(executor, MaterializedSessionExecutor::OverlayOnly));
         assert!(materialized.is_empty());
         assert!(groups.is_empty());
+        assert!(telemetry.is_none());
     }
 
     fn control(interaction: SessionControlInteraction) -> SessionControl {
@@ -3626,7 +3692,7 @@ command = ["sh", "-c", "sleep 1"]
         let root = tempfile::tempdir().unwrap();
         write_wl4_plugin_config(root.path());
         std::fs::create_dir_all(root.path().join("roms")).unwrap();
-        std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
+        std::fs::write(root.path().join("roms/wl4.gba"), b"123456789").unwrap();
         let port = start_local_server(
             "https://portal.example",
             root.path().to_str().expect("UTF-8 temp path"),
@@ -3746,6 +3812,8 @@ command = ["sh", "-c", "sleep 1"]
         let control_token: [u8; 64] = control_token.as_bytes().try_into().unwrap();
         let delay_next_status = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let responder_delay = Arc::clone(&delay_next_status);
+        let status_mode = Arc::new(std::sync::atomic::AtomicU8::new(0));
+        let responder_status_mode = Arc::clone(&status_mode);
         let responder = std::thread::spawn(move || loop {
             let mut request = [0_u8; 66];
             let Ok((length, source)) = control_server.recv_from(&mut request) else {
@@ -3760,10 +3828,18 @@ command = ["sh", "-c", "sleep 1"]
                     if responder_delay.swap(false, std::sync::atomic::Ordering::SeqCst) {
                         std::thread::sleep(std::time::Duration::from_millis(200));
                     }
-                    (
-                        launcher::retroarch_control::RetroarchControlCommand::GetStatus,
-                        b"GET_STATUS PLAYING mGBA,wl4.gba,crc32=d6141609\n".as_slice(),
-                    )
+                    match responder_status_mode.swap(0, std::sync::atomic::Ordering::SeqCst) {
+                        1 => (
+                            launcher::retroarch_control::RetroarchControlCommand::GetStatus,
+                            b"GET_STATUS CONTENTLESS menu=0,selection=0\n".as_slice(),
+                        ),
+                        2 => continue,
+                        _ => (
+                            launcher::retroarch_control::RetroarchControlCommand::GetStatus,
+                            b"GET_STATUS PLAYING mGBA,wl4.gba,crc32=cbf43926,menu=0,selection=0\n"
+                                .as_slice(),
+                        ),
+                    }
                 }
                 2 => (
                     launcher::retroarch_control::RetroarchControlCommand::ShowMenu,
@@ -3833,6 +3909,15 @@ command = ["sh", "-c", "sleep 1"]
             .unwrap();
         assert_eq!(controls["outcome"]["_tag"], "Ok");
         assert_eq!(
+            controls["outcome"]["payload"]["retroarchTelemetry"],
+            serde_json::json!({
+                "contentBasename": "wl4.gba",
+                "crc32": "cbf43926",
+                "menuAlive": false,
+                "menuSelection": 0
+            })
+        );
+        assert_eq!(
             controls["outcome"]["payload"]["groups"][0]["id"],
             "@korri:retroarch"
         );
@@ -3877,6 +3962,98 @@ command = ["sh", "-c", "sleep 1"]
         let authorized = authorize_local_launch_spec(&repeated_json).unwrap();
         assert!(!authorized.publication_required);
         assert!(authorized.retroarch_authority.is_some());
+        assert_eq!(active_android_launch().unwrap().launch_id, local.launch_id);
+
+        for mode in [1, 2] {
+            status_mode.store(mode, std::sync::atomic::Ordering::SeqCst);
+            let conflict = client
+                .post(&url)
+                .bearer_auth(&capability)
+                .json(&serde_json::json!({
+                    "_tag": "app.local-games.launch",
+                    "payload": { "gameId": "wl4" }
+                }))
+                .send()
+                .await
+                .unwrap()
+                .json::<serde_json::Value>()
+                .await
+                .unwrap();
+            assert_eq!(conflict["outcome"]["_tag"], "Err");
+            assert_eq!(
+                conflict["outcome"]["payload"]["code"],
+                "ActiveSessionConflict"
+            );
+            assert_eq!(active_android_launch().unwrap().launch_id, local.launch_id);
+        }
+
+        std::fs::write(root.path().join("roms/wl4.gba"), b"replaced bytes").unwrap();
+        let replaced_content = client
+            .post(&url)
+            .bearer_auth(&capability)
+            .json(&serde_json::json!({
+                "_tag": "app.local-games.launch",
+                "payload": { "gameId": "wl4" }
+            }))
+            .send()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        assert_eq!(replaced_content["outcome"]["_tag"], "Err");
+        assert_eq!(
+            replaced_content["outcome"]["payload"]["code"],
+            "ActiveSessionConflict"
+        );
+        assert_eq!(active_android_launch().unwrap().launch_id, local.launch_id);
+        std::fs::write(root.path().join("roms/wl4.gba"), b"123456789").unwrap();
+
+        std::fs::write(root.path().join("roms/other.gba"), b"123456789").unwrap();
+        std::fs::write(
+            root.path().join("library.yaml"),
+            WL4_PLUGIN_LIBRARY.replace("wl4.gba", "other.gba"),
+        )
+        .unwrap();
+        let different_route = client
+            .post(&url)
+            .bearer_auth(&capability)
+            .json(&serde_json::json!({
+                "_tag": "app.local-games.launch",
+                "payload": { "gameId": "wl4" }
+            }))
+            .send()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        assert_eq!(different_route["outcome"]["_tag"], "Err");
+        assert_eq!(
+            different_route["outcome"]["payload"]["code"],
+            "ActiveSessionConflict"
+        );
+        assert_eq!(active_android_launch().unwrap().launch_id, local.launch_id);
+        write_wl4_plugin_config(root.path());
+
+        let different_game = client
+            .post(&url)
+            .bearer_auth(&capability)
+            .json(&serde_json::json!({
+                "_tag": "app.local-games.launch",
+                "payload": { "gameId": "another-game" }
+            }))
+            .send()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        assert_eq!(different_game["outcome"]["_tag"], "Err");
+        assert_eq!(
+            different_game["outcome"]["payload"]["code"],
+            "ActiveSessionConflict"
+        );
         assert_eq!(active_android_launch().unwrap().launch_id, local.launch_id);
 
         for control_id in ["@korri:retroarch/open-menu", "@korri:retroarch/quit"] {

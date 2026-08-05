@@ -43,6 +43,7 @@ export interface AndroidActiveLaunch {
 	launchId: string;
 	gameId?: string;
 	title?: string;
+	contentCrc32?: string;
 	contributors: LaunchRouteContributor[];
 	executor?: LaunchExecutor;
 	foreground: LaunchForegroundRule;
@@ -93,6 +94,8 @@ export interface HealthRequest {
 export interface LaunchContext {
 	gameId?: string;
 	title?: string;
+	/** CRC32 of the exact prepared content bytes; SHA identity remains separate. */
+	contentCrc32?: string;
 	contributors: LaunchRouteContributor[];
 	executor?: LaunchExecutor;
 	foreground: LaunchForegroundRule;
@@ -217,6 +220,13 @@ export interface ResolvedMoonlight {
 	sunshineApp: string;
 }
 
+export interface RetroarchSessionTelemetry {
+	contentBasename: string;
+	crc32: string;
+	menuAlive: boolean;
+	menuSelection: number;
+}
+
 export type SessionControlInteraction =
 	| { kind: "command", payload?: undefined }
 	| { kind: "toggle", payload: {
@@ -284,6 +294,7 @@ export interface SessionControls {
 	launchId: string;
 	title?: string;
 	groups: SessionControlGroup[];
+	retroarchTelemetry?: RetroarchSessionTelemetry;
 }
 
 export interface SessionControlsRequest {

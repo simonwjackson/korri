@@ -1,9 +1,11 @@
-use super::{AndroidComponent, FileProvisionMode, LaunchError, LaunchSpec, ProvisionedFile};
+use super::{
+    AndroidComponent, FileProvisionMode, LaunchContext, LaunchError, LaunchSpec, ProvisionedFile,
+};
 use crate::config::resolver::ResolvedRoute;
 use std::{
     collections::HashMap,
-    fs::{self, OpenOptions},
-    io::Write,
+    fs::{self, File, OpenOptions},
+    io::{Read, Write},
     path::{Component, Path},
 };
 
@@ -150,6 +152,7 @@ pub fn validate_route(route: &ResolvedRoute) -> Result<(), LaunchError> {
 pub fn launch_route(
     root: &Path,
     route: &ResolvedRoute,
+    mut context: LaunchContext,
     provision_mode: FileProvisionMode,
     control_port: u16,
 ) -> Result<LaunchSpec, LaunchError> {
@@ -170,6 +173,20 @@ pub fn launch_route(
         }
         Err(error) => return Err(LaunchError::StorageAccess(error.to_string())),
     }
+    let mut file =
+        File::open(&rom).map_err(|error| LaunchError::StorageAccess(error.to_string()))?;
+    let mut hasher = crc32fast::Hasher::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let length = file
+            .read(&mut buffer)
+            .map_err(|error| LaunchError::StorageAccess(error.to_string()))?;
+        if length == 0 {
+            break;
+        }
+        hasher.update(&buffer[..length]);
+    }
+    context.content_crc32 = Some(format!("{:08x}", hasher.finalize()));
 
     let libretro_directory = Path::new(&runtime.path).parent().ok_or_else(|| {
         LaunchError::RouteUnavailable(format!(
@@ -212,7 +229,7 @@ pub fn launch_route(
         launch_id: String::new(),
         launcher_id: route.integration_token.clone(),
         disposition: super::types::LaunchDisposition::Fresh,
-        context: super::types::LaunchContext::unresolved(),
+        context,
         component: AndroidComponent {
             package_name: component.package_name.clone(),
             class_name: component.class_name.clone(),
@@ -235,7 +252,7 @@ mod tests {
     fn root_with_rom() -> tempfile::TempDir {
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(root.path().join("roms")).unwrap();
-        std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
+        std::fs::write(root.path().join("roms/wl4.gba"), b"123456789").unwrap();
         root
     }
 
@@ -275,8 +292,14 @@ mod tests {
     fn launches_wario_land_with_paths_rooted_in_korri_storage() {
         let root = root_with_rom();
 
-        let spec = launch_route(root.path(), &route(), FileProvisionMode::Direct, 50000)
-            .expect("launch spec");
+        let spec = launch_route(
+            root.path(),
+            &route(),
+            LaunchContext::unresolved(),
+            FileProvisionMode::Direct,
+            50000,
+        )
+        .expect("launch spec");
 
         assert_eq!(spec.launcher_id, "retroarch");
         assert_eq!(spec.component.package_name, "com.korri.retroarch");
@@ -297,6 +320,7 @@ mod tests {
             Some(root.path().join("retroarch.cfg").to_str().unwrap())
         );
         assert!(!spec.extras.contains_key("QUITFOCUS"));
+        assert_eq!(spec.context.content_crc32.as_deref(), Some("cbf43926"));
         assert!(spec.files.is_empty());
         let config = std::fs::read_to_string(root.path().join("retroarch.cfg")).unwrap();
         assert!(config.contains("video_driver = \"gl\""));
@@ -310,8 +334,14 @@ mod tests {
         let config = root.path().join("retroarch.cfg");
         std::fs::write(&config, b"existing config").unwrap();
 
-        let spec = launch_route(root.path(), &route(), FileProvisionMode::Deferred, 50000)
-            .expect("deferred spec");
+        let spec = launch_route(
+            root.path(),
+            &route(),
+            LaunchContext::unresolved(),
+            FileProvisionMode::Deferred,
+            50000,
+        )
+        .expect("deferred spec");
 
         assert_eq!(std::fs::read(&config).unwrap(), b"existing config");
         assert_eq!(
@@ -344,7 +374,14 @@ mod tests {
         std::fs::write(&outside, b"do not replace").unwrap();
         symlink(&outside, root.path().join("retroarch.cfg")).unwrap();
 
-        launch_route(root.path(), &route(), FileProvisionMode::Direct, 50000).expect("launch spec");
+        launch_route(
+            root.path(),
+            &route(),
+            LaunchContext::unresolved(),
+            FileProvisionMode::Direct,
+            50000,
+        )
+        .expect("launch spec");
 
         assert_eq!(std::fs::read(&outside).unwrap(), b"do not replace");
         assert!(!root.path().join("retroarch.cfg").is_symlink());
@@ -358,7 +395,14 @@ mod tests {
         let root = root_with_rom();
         std::fs::write(root.path().join("retroarch.cfg"), b"user setting").unwrap();
 
-        launch_route(root.path(), &route(), FileProvisionMode::Direct, 50000).expect("launch spec");
+        launch_route(
+            root.path(),
+            &route(),
+            LaunchContext::unresolved(),
+            FileProvisionMode::Direct,
+            50000,
+        )
+        .expect("launch spec");
 
         let config = std::fs::read_to_string(root.path().join("retroarch.cfg")).unwrap();
         assert!(config.contains("video_driver = \"gl\""));
@@ -383,14 +427,26 @@ mod tests {
     fn rejects_missing_rom_and_unsafe_file_targets() {
         let root = tempfile::tempdir().unwrap();
         assert!(matches!(
-            launch_route(root.path(), &route(), FileProvisionMode::Direct, 50000),
+            launch_route(
+                root.path(),
+                &route(),
+                LaunchContext::unresolved(),
+                FileProvisionMode::Direct,
+                50000,
+            ),
             Err(LaunchError::RomMissing(_))
         ));
 
         let mut unsafe_route = route();
         unsafe_route.file_target.as_mut().unwrap().path = "../outside.gba".into();
         assert!(matches!(
-            launch_route(root.path(), &unsafe_route, FileProvisionMode::Direct, 50000),
+            launch_route(
+                root.path(),
+                &unsafe_route,
+                LaunchContext::unresolved(),
+                FileProvisionMode::Direct,
+                50000,
+            ),
             Err(LaunchError::RouteUnavailable(_))
         ));
     }
@@ -402,7 +458,13 @@ mod tests {
 
         let root = root_with_rom();
         std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o000)).unwrap();
-        let result = launch_route(root.path(), &route(), FileProvisionMode::Direct, 50000);
+        let result = launch_route(
+            root.path(),
+            &route(),
+            LaunchContext::unresolved(),
+            FileProvisionMode::Direct,
+            50000,
+        );
         std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
 
         assert!(matches!(result, Err(LaunchError::StorageAccess(_))));

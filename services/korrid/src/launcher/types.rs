@@ -109,6 +109,9 @@ pub struct LaunchContext {
     pub game_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /** CRC32 of the exact prepared content bytes; SHA identity remains separate. */
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_crc32: Option<String>,
     pub contributors: Vec<LaunchRouteContributor>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub executor: Option<LaunchExecutor>,
@@ -124,6 +127,8 @@ pub struct AndroidActiveLaunch {
     pub game_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_crc32: Option<String>,
     pub contributors: Vec<LaunchRouteContributor>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub executor: Option<LaunchExecutor>,
@@ -136,6 +141,7 @@ impl AndroidActiveLaunch {
             launch_id,
             game_id: context.game_id,
             title: context.title,
+            content_crc32: context.content_crc32,
             contributors: context.contributors,
             executor: context.executor,
             foreground: context.foreground,
@@ -148,6 +154,7 @@ impl LaunchContext {
         Self {
             game_id: None,
             title: None,
+            content_crc32: None,
             contributors: Vec::new(),
             executor: None,
             foreground: LaunchForegroundRule {
@@ -456,6 +463,7 @@ impl MoonlightLaunchAuthority {
             context: LaunchContext {
                 game_id,
                 title,
+                content_crc32: None,
                 contributors: vec![LaunchRouteContributor {
                     kind: LaunchContributorKind::Transport,
                     id: transport_id.clone(),
@@ -946,6 +954,7 @@ mod tests {
             .with_context(LaunchContext {
                 game_id: Some("game".into()),
                 title: Some("Game".into()),
+                content_crc32: Some("d6141609".into()),
                 contributors: vec![LaunchRouteContributor {
                     kind: LaunchContributorKind::Launcher,
                     id: "@korri:retroarch/retroarch".into(),
@@ -1073,6 +1082,10 @@ mod tests {
         let mut tampered_content = signed.clone();
         tampered_content.files[0].content = "kiosk_mode_enable = false".into();
         assert!(!tampered_content.verify(key));
+
+        let mut tampered_crc32 = signed.clone();
+        tampered_crc32.context.content_crc32 = Some("deadbeef".into());
+        assert!(!tampered_crc32.verify(key));
 
         let mut tampered_extra = signed.clone();
         tampered_extra

@@ -30,10 +30,11 @@ grep -F 'KEYCODE_BUTTON_MODE' "$ACCEPTANCE" >/dev/null
 grep -F 'invoke_overlay_row 1' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_overlay_window_absent' "$ACCEPTANCE" >/dev/null
 grep -F 'Korri gameplay overlay' "$ACCEPTANCE" >/dev/null
-grep -F 'assert_rgui_menu_visible' "$ACCEPTANCE" >/dev/null
-grep -F 'assert_rgui_selection_moves' "$ACCEPTANCE" >/dev/null
+grep -F 'authenticated_retroarch_status' "$ACCEPTANCE" >/dev/null
+grep -F 'assert_menu_status 1' "$ACCEPTANCE" >/dev/null
+grep -F 'assert_selection_advanced' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_DPAD_DOWN' "$ACCEPTANCE" >/dev/null
-grep -F 'assert_native_shortcut_disabled' "$ACCEPTANCE" >/dev/null
+grep -F 'assert_menu_status 0' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_BUTTON_SELECT' "$ACCEPTANCE" >/dev/null
 grep -F 'network_cmd_port' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_BACK' "$ACCEPTANCE" >/dev/null
@@ -41,6 +42,10 @@ grep -F 'invoke_overlay_row 2' "$ACCEPTANCE" >/dev/null
 grep -F 'enabled_accessibility_services' "$ACCEPTANCE" >/dev/null
 grep -F 'use: "@korri:retroarch/retroarch"' "$WL4_LIBRARY" >/dev/null
 grep -F 'runtime: "@korri:mgba/mgba"' "$WL4_LIBRARY" >/dev/null
+if grep -Eq 'assert_rgui_menu_visible|assert_rgui_selection_moves|compare -metric' "$ACCEPTANCE"; then
+  echo 'RetroArch native menu acceptance must use authenticated status telemetry' >&2
+  exit 1
+fi
 if grep -Eq 'input (tap|swipe)' "$ACCEPTANCE"; then
   echo 'RetroArch acceptance must select the one-item fixture semantically, not by coordinates' >&2
   exit 1

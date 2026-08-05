@@ -132,15 +132,19 @@ pub fn launch_game(
     let context = local_launch_context(&route);
     match route.launcher_kind.as_str() {
         "@korri:android-app" => android_app::launch_route(&route)
-            .map_err(|error| LaunchError::RouteUnavailable(error.to_string())),
-        "@korri:retroarch" => {
-            retroarch::launch_route(root, &route, provision_mode, retroarch_control_port)
-        }
+            .map_err(|error| LaunchError::RouteUnavailable(error.to_string()))
+            .map(|spec| spec.with_context(context)),
+        "@korri:retroarch" => retroarch::launch_route(
+            root,
+            &route,
+            context,
+            provision_mode,
+            retroarch_control_port,
+        ),
         other => Err(LaunchError::RouteUnavailable(format!(
             "unsupported launcher kind {other}"
         ))),
     }
-    .map(|spec| spec.with_context(context))
 }
 
 fn local_launch_context(route: &ResolvedRoute) -> LaunchContext {
@@ -175,6 +179,7 @@ fn local_launch_context(route: &ResolvedRoute) -> LaunchContext {
     LaunchContext {
         game_id: Some(route.playable_id.clone()),
         title: route.title.clone(),
+        content_crc32: None,
         contributors,
         executor: (route.launcher_kind == "@korri:retroarch").then(|| LaunchExecutor {
             id: "retroarch-control".into(),

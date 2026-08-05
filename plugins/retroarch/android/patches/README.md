@@ -69,3 +69,9 @@ per `NNNN-description.patch` and record its upstream-facing rationale here.
 - `0011-fail-closed-control-dispatch.patch` — authenticates a command tag before
   selecting from the allowlist and drops oversized authenticated results rather
   than ever falling through to RetroArch's plaintext reply path.
+- `0012-reject-replayed-controls-and-report-menu-state.patch` — rejects duplicate
+  authenticated nonces through a fixed 32-entry ring that resets with launch
+  authority, then extends MAC-covered `GET_STATUS` with an exact 8-hex content
+  CRC32 plus menu-alive and selection-index telemetry. Replay insertion occurs
+  after MAC validation and before allowlist dispatch, so duplicate status,
+  menu, and quit datagrams receive neither an effect nor a usable response.

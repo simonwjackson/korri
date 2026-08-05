@@ -46,18 +46,30 @@ grep -q '#define KORRI_REQUEST_SIZE (1 + KORRI_NONCE_SIZE + 1 + KORRI_MAC_SIZE)'
 grep -q 'sha256_hash(inner_hex' "$COMMAND"
 grep -q 'korri_hmac_sha256' "$COMMAND"
 grep -q 'korri_constant_time_equal' "$COMMAND"
+grep -q '#define KORRI_NONCE_WINDOW_SIZE 32' "$COMMAND"
+grep -q 'request_nonces\[KORRI_NONCE_WINDOW_SIZE\]\[KORRI_NONCE_SIZE\]' "$COMMAND"
+grep -q 'korri_nonce_seen' "$COMMAND"
+grep -q 'korri_remember_nonce' "$COMMAND"
+grep -q 'korri_reset_nonce_window();' "$COMMAND"
+grep -q 'request_nonce_cursor = (request_nonce_cursor + 1) % KORRI_NONCE_WINDOW_SIZE' "$COMMAND"
+grep -q 'Rejected replayed Korri command' "$COMMAND"
 grep -q 'ret != KORRI_REQUEST_SIZE' "$COMMAND"
 grep -q 'case 1: command = "GET_STATUS"' "$COMMAND"
 grep -q 'case 2: command = "SHOW_MENU"' "$COMMAND"
 grep -q 'case 3: command = "QUIT"' "$COMMAND"
 auth_line="$(grep -n 'korri_constant_time_equal(expected_mac' "$COMMAND" | head -1 | cut -d: -f1)"
+replay_line="$(grep -n 'korri_nonce_seen(buf + 1)' "$COMMAND" | head -1 | cut -d: -f1)"
+insert_line="$(grep -n 'korri_remember_nonce(buf + 1)' "$COMMAND" | head -1 | cut -d: -f1)"
 allowlist_line="$(grep -n 'case 1: command = "GET_STATUS"' "$COMMAND" | head -1 | cut -d: -f1)"
-[[ "$auth_line" -lt "$allowlist_line" ]] || {
-  echo 'RetroArch command authentication must precede allowlist selection' >&2
+[[ "$auth_line" -lt "$replay_line" && "$replay_line" -lt "$insert_line" && "$insert_line" -lt "$allowlist_line" ]] || {
+  echo 'RetroArch command authentication and replay rejection must precede allowlist selection' >&2
   exit 1
 }
 grep -q 'if (len > KORRI_MAX_RESULT_SIZE)' "$COMMAND"
 grep -q 'MENU_ST_FLAG_ALIVE' "$COMMAND"
+grep -q 'menu_st->selection_ptr' "$COMMAND"
+grep -q 'crc32=%08lx,menu=%u,selection=%lu' "$COMMAND"
+grep -q 'GET_STATUS CONTENTLESS menu=%u,selection=%lu' "$COMMAND"
 grep -q 'command_event(CMD_EVENT_MENU_TOGGLE, NULL)' "$COMMAND"
 grep -q 'SHOW_MENU OK' "$COMMAND"
 grep -q 'SHOW_MENU ERROR' "$COMMAND"

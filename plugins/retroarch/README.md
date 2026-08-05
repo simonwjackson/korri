@@ -18,11 +18,22 @@ supplies the independently packaged mGBA core. Neither packaging bridge makes
 mGBA part of the RetroArch plugin.
 
 Android session control uses a launch-derived high loopback UDP port and
-nonce-bound HMAC-SHA256 frames. The launch token never crosses UDP,
-JavaScript, or logs. Android's cross-process Intent handoff does unavoidably
-materialize it as a transient Java String until RetroArch copies and wipes its
-native bootstrap storage. Repository checks prove the patch/config/build
-contract; installed-device behavior remains a separate acceptance gate.
+nonce-bound HMAC-SHA256 frames. RetroArch rejects duplicate request nonces with
+a fixed 32-entry ring reset for each launch authority. Korrid computes the
+ROM's full-byte CRC32 while preparing the signed launch and requires both that
+checksum and the normalized content basename in authenticated `GET_STATUS`
+before resume or control materialization. While that active Android record
+remains, status failures, different content, and different routes return an
+`ActiveSessionConflict`; only positive process-end evidence clears authority
+and permits a fresh start. SHA-based library identity remains a separate catalog
+fact. MAC-covered status also reports native menu liveness and selection for
+acceptance without making screenshots a pass criterion.
+
+The launch token never crosses UDP, JavaScript, or logs. Android's
+cross-process Intent handoff does unavoidably materialize it as a transient
+Java String until RetroArch copies and wipes its native bootstrap storage.
+Repository checks prove the patch/config/build contract; installed-device
+behavior remains a separate acceptance gate.
 
 ## Distribution builds
 

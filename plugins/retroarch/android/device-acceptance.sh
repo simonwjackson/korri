@@ -390,47 +390,61 @@ invoke_overlay_row() {
   "${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_CENTER
   sleep 1
 }
-assert_rgui_menu_visible() {
-  local image="$PORTAL_EVIDENCE_DIR/retroarch-rgui-menu.png"
-  local text="$PORTAL_EVIDENCE_DIR/retroarch-rgui-menu.ocr.txt"
-  "${ADB[@]}" shell screencap -p /sdcard/korri-acceptance.png >/dev/null
-  "${ADB[@]}" pull /sdcard/korri-acceptance.png "$image" >/dev/null
-  tesseract "$image" stdout --psm 6 >"$text" 2>/dev/null
-  grep -qi 'quick menu' "$text" || {
-    echo "command-opened RGUI menu was not observable; evidence is in $PORTAL_EVIDENCE_DIR" >&2
+authenticated_retroarch_status() {
+  local resumed
+  local launch_id
+  local expected_crc32
+  local controls
+  resumed="$(rpc '{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}')"
+  jq -e '.outcome._tag == "Ok" and .outcome.payload.disposition == "resume"' \
+    <<<"$resumed" >/dev/null || {
+    echo "RetroArch status authority did not resume the active launch: $resumed" >&2
     return 1
   }
+  launch_id="$(jq -r '.outcome.payload.launchId' <<<"$resumed")"
+  expected_crc32="$(jq -r '.outcome.payload.context.contentCrc32' <<<"$resumed")"
+  controls="$(rpc "{\"_tag\":\"app.session.controls\",\"payload\":{\"launchId\":\"$launch_id\"}}")"
+  jq -ce --arg launch_id "$launch_id" --arg crc32 "$expected_crc32" '
+    .outcome._tag == "Ok"
+    and .outcome.payload.launchId == $launch_id
+    and .outcome.payload.retroarchTelemetry.contentBasename == "wl4.gba"
+    and .outcome.payload.retroarchTelemetry.crc32 == $crc32
+    | if . then input_filename else error("invalid authenticated RetroArch telemetry") end
+  ' <<<"$controls" >/dev/null || {
+    echo "RetroArch authenticated status telemetry was invalid: $controls" >&2
+    return 1
+  }
+  jq -c '.outcome.payload.retroarchTelemetry' <<<"$controls"
+}
+assert_menu_status() {
+  local expected="$1"
+  local status
+  status="$(authenticated_retroarch_status)"
+  jq -e --argjson expected "$expected" '.menuAlive == $expected' <<<"$status" >/dev/null || {
+    echo "RetroArch menu telemetry did not report menu=$expected: $status" >&2
+    return 1
+  }
+}
+assert_selection_advanced() {
+  local before="$1"
+  local status
+  local after
+  status="$(authenticated_retroarch_status)"
+  after="$(jq -r '.menuSelection' <<<"$status")"
+  [[ "$before" =~ ^[0-9]+$ && "$after" -eq $((before + 1)) ]] || {
+    echo "RetroArch menu selection did not advance exactly once: before=$before after=$after" >&2
+    return 1
+  }
+}
+capture_rgui_evidence() {
+  local label="$1"
+  local image="$PORTAL_EVIDENCE_DIR/$label.png"
+  "${ADB[@]}" shell screencap -p /sdcard/korri-acceptance.png >/dev/null
+  "${ADB[@]}" pull /sdcard/korri-acceptance.png "$image" >/dev/null
 }
 assert_overlay_window_absent() {
   if "${ADB[@]}" shell dumpsys window windows | grep -Fq 'Korri gameplay overlay'; then
     echo 'Korri accessibility overlay remained present after RetroArch acknowledgement' >&2
-    return 1
-  fi
-}
-assert_rgui_selection_moves() {
-  local before="$PORTAL_EVIDENCE_DIR/retroarch-rgui-before-move.png"
-  local after="$PORTAL_EVIDENCE_DIR/retroarch-rgui-after-move.png"
-  "${ADB[@]}" shell screencap -p /sdcard/korri-acceptance.png >/dev/null
-  "${ADB[@]}" pull /sdcard/korri-acceptance.png "$before" >/dev/null
-  "${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_DOWN
-  sleep 0.5
-  "${ADB[@]}" shell screencap -p /sdcard/korri-acceptance.png >/dev/null
-  "${ADB[@]}" pull /sdcard/korri-acceptance.png "$after" >/dev/null
-  if compare -metric AE "$before" "$after" null: 2>&1 | grep -qx '0'; then
-    echo 'RGUI selection produced no observable visual change' >&2
-    return 1
-  fi
-}
-assert_native_shortcut_disabled() {
-  local image="$PORTAL_EVIDENCE_DIR/retroarch-safe-key.png"
-  local text="$PORTAL_EVIDENCE_DIR/retroarch-safe-key.ocr.txt"
-  "${ADB[@]}" shell input -d 0 keyevent KEYCODE_BUTTON_SELECT
-  sleep 0.5
-  "${ADB[@]}" shell screencap -p /sdcard/korri-acceptance.png >/dev/null
-  "${ADB[@]}" pull /sdcard/korri-acceptance.png "$image" >/dev/null
-  tesseract "$image" stdout --psm 6 >"$text" 2>/dev/null
-  if grep -qi 'quick menu' "$text"; then
-    echo 'safe non-Guide controller key unexpectedly opened RetroArch menu' >&2
     return 1
   fi
 }
@@ -531,16 +545,28 @@ if ! current_pid="$(package_pid "$FORK_PACKAGE")"; then
 fi
 [[ "$current_pid" == "$pid_first" ]]
 
-# Non-destructive native-menu journey. A safe non-Guide key first proves the
-# configured native shortcuts remain disabled. SHOW_MENU must acknowledge
-# before the portal removes the accessibility window; only then is RGUI driven.
-assert_native_shortcut_disabled
+# Non-destructive native-menu journey. Authenticated, MAC-covered GET_STATUS
+# telemetry is the pass criterion; screenshots are retained only as supporting
+# evidence. SHOW_MENU must acknowledge before the portal removes its window.
+assert_menu_status 0
 invoke_overlay_row 1
 assert_overlay_window_absent
-assert_rgui_menu_visible
-assert_rgui_selection_moves
+assert_menu_status 1
+menu_selection_before="$(authenticated_retroarch_status | jq -r '.menuSelection')"
+capture_rgui_evidence retroarch-rgui-before-move
+"${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_DOWN
+sleep 0.5
+assert_selection_advanced "$menu_selection_before"
+capture_rgui_evidence retroarch-rgui-after-move
 "${ADB[@]}" shell input -d 0 keyevent KEYCODE_BACK
 sleep 1
+assert_menu_status 0
+# This configured native shortcut key is sent after the Korri overlay has
+# dismissed; it must not independently reopen RetroArch's menu.
+"${ADB[@]}" shell input -d 0 keyevent KEYCODE_BUTTON_SELECT
+sleep 0.5
+assert_menu_status 0
+capture_rgui_evidence retroarch-safe-key
 if ! current_pid="$(package_pid "$FORK_PACKAGE")"; then
   exit 1
 fi
