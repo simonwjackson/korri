@@ -16,16 +16,31 @@ DIRECT_PACKAGE="$3"
 UNRELATED_PACKAGE="$4"
 EVIDENCE_DIR="${5:-$PWD/overlay-acceptance-evidence-$(date -u +%Y%m%dT%H%M%SZ)}"
 [[ -n "$SERIAL" && -n "$EXPECTED_MODEL" && -n "$DIRECT_PACKAGE" && -n "$UNRELATED_PACKAGE" ]] || usage
-[[ "$DIRECT_PACKAGE" != "$UNRELATED_PACKAGE" ]] || {
-  echo 'direct-launch and unrelated negative packages must be distinct' >&2
-  exit 2
-}
 
 ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
 ADB_BIN="${KORRI_ADB_BIN:-$(command -v adb)}"
 KORRI_PACKAGE="${KORRI_PACKAGE:-com.simonwjackson.korri.debug}"
 KORRI_ACTIVITY="$KORRI_PACKAGE/com.limelight.KorriShellActivity"
 RETROARCH_PACKAGE="${KORRI_RETROARCH_PACKAGE:-com.korri.retroarch}"
+ANDROID_PACKAGE_PATTERN='^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$'
+[[ "$SERIAL" =~ ^[A-Za-z0-9._:-]+$ ]] || {
+  echo "invalid adb serial: $SERIAL" >&2
+  exit 2
+}
+for package in "$KORRI_PACKAGE" "$RETROARCH_PACKAGE" "$DIRECT_PACKAGE" "$UNRELATED_PACKAGE"; do
+  [[ "$package" =~ $ANDROID_PACKAGE_PATTERN ]] || {
+    echo "invalid Android package: $package" >&2
+    exit 2
+  }
+done
+[[ "$DIRECT_PACKAGE" == com.korri.retroarch ]] || {
+  echo 'DIRECT_PACKAGE must be exactly com.korri.retroarch' >&2
+  exit 2
+}
+[[ "$DIRECT_PACKAGE" != "$UNRELATED_PACKAGE" ]] || {
+  echo 'direct-launch and unrelated negative packages must be distinct' >&2
+  exit 2
+}
 STORAGE_ROOT="/storage/emulated/0/korri"
 CONFIG_REMOTE="$STORAGE_ROOT/config.yaml"
 LIBRARY_REMOTE="$STORAGE_ROOT/library.yaml"
@@ -43,7 +58,6 @@ LOCK_REMOTE="$STORAGE_ROOT/.android-app-route-check.lock"
 LOCK_OWNER_REMOTE="$LOCK_REMOTE/owner"
 BACKUP_REMOTE="$STORAGE_ROOT/.overlay-acceptance-backup-$$"
 PREFS_BACKUP="files/.overlay-acceptance-prefs-$$"
-SCREENSHOT_REMOTE="/sdcard/korri-overlay-acceptance.png"
 HOST_PORT="${KORRI_OVERLAY_ACCEPTANCE_HOST_PORT:-43122}"
 DEBUG_CAPABILITY_SH="${KORRI_ANDROID_DEBUG_CAPABILITY_SH:-$ROOT/services/korrid/android-debug-capability.sh}"
 
@@ -242,7 +256,6 @@ cleanup() {
   local safe=true
   local pid=''
   trap - EXIT
-  adb_target -s "$SERIAL" shell "rm -f '$SCREENSHOT_REMOTE'" >/dev/null 2>&1 || true
 
   if [[ "$BACKUP_CLASSIFIED" == true ]]; then
     pid="$(package_pid "$RETROARCH_PACKAGE" 2>/dev/null || printf probe-failed)"
@@ -273,7 +286,6 @@ cleanup() {
   fi
   exit "$status"
 }
-trap cleanup EXIT
 
 checkpoint() {
   local token="$1"
@@ -311,6 +323,12 @@ assert_top_package() {
     | grep -F "$package/" >/dev/null
 }
 
+assert_top_component() {
+  local component="$1"
+  adb_shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" \
+    | grep -F "$component" >/dev/null
+}
+
 capture_evidence() {
   local label="$1"
   local controls_json="$2"
@@ -346,6 +364,35 @@ controls_for_launch() {
   rpc "{\"_tag\":\"app.session.controls\",\"payload\":{\"launchId\":\"$launch_id\"}}"
 }
 
+invoke_control() {
+  local launch_id="$1"
+  local control_id="$2"
+  rpc "{\"_tag\":\"app.session.control.invoke\",\"payload\":{\"launchId\":\"$launch_id\",\"controlId\":\"$control_id\"}}"
+}
+
+wait_for_local_session_end() {
+  for _ in $(seq 1 30); do
+    if [[ -z "$(package_pid "$RETROARCH_PACKAGE")" ]] \
+      && session_is_idle \
+      && assert_overlay_window absent; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo 'local session, process, or overlay did not end after exact Quit' >&2
+  return 1
+}
+
+assert_stale_or_unavailable() {
+  local response="$1"
+  local failure="$2"
+  jq -e '.outcome._tag == "Err" and (.outcome.payload.reason == "StaleSession" or .outcome.payload.reason == "Unavailable")' \
+    <<<"$response" >/dev/null || {
+      echo "$failure" >&2
+      return 1
+    }
+}
+
 if [[ "$SERIAL" == *:* ]]; then
   timeout 15 "$ADB_BIN" connect "$SERIAL" >/dev/null || true
 fi
@@ -354,11 +401,19 @@ adb_target -s "$SERIAL" wait-for-device
   echo "Android target is not ready: $SERIAL" >&2
   exit 1
 }
+TARGET_SERIAL="$(adb_capture get-serialno | tr -d '\r\n')"
+[[ "$TARGET_SERIAL" == "$SERIAL" ]] || {
+  echo "device serial mismatch: expected '$SERIAL', got '$TARGET_SERIAL'" >&2
+  exit 1
+}
 ACTUAL_MODEL="$(adb_shell getprop ro.product.model | tr -d '\r\n')"
 [[ "$ACTUAL_MODEL" == "$EXPECTED_MODEL" ]] || {
   echo "device model mismatch: expected '$EXPECTED_MODEL', got '$ACTUAL_MODEL'" >&2
   exit 1
 }
+# Cleanup is armed only after the exact target identity has been proven. A
+# typo or wrong device can therefore never trigger even a cleanup mutation.
+trap cleanup EXIT
 for package in "$KORRI_PACKAGE" "$RETROARCH_PACKAGE" "$DIRECT_PACKAGE" "$UNRELATED_PACKAGE"; do
   require_preinstalled "$package"
 done
@@ -420,15 +475,96 @@ capture_evidence local-overlay-open "$local_controls"
 
 checkpoint 'RETROARCH MENU VERIFIED' \
   'Using physical D-pad/A, invoke Open RetroArch menu from the Shift sheet.' \
-  'Verify Shift dismisses before RGUI appears, navigate RGUI physically, then Back to gameplay.' \
-  'Open Shift again with Guide, dismiss with B/Back, and gracefully quit Wario.'
+  'Verify Shift dismisses before RGUI appears and navigate RGUI physically.' \
+  'Return to gameplay, open Shift again with physical Guide, and leave Shift visibly open.'
+assert_top_package "$RETROARCH_PACKAGE"
+assert_overlay_window present
+local_quit="$(invoke_control "$local_launch_id" '@korri:retroarch/quit')"
+jq -e --arg launchId "$local_launch_id" \
+  '.outcome._tag == "Ok" and .outcome.payload._tag == "Completed" and .outcome.payload.payload.launchId == $launchId' \
+  <<<"$local_quit" >/dev/null
+wait_for_local_session_end
+stale_controls="$(controls_for_launch "$local_launch_id")"
+assert_stale_or_unavailable "$stale_controls" \
+  'SessionControls after end must be exactly StaleSession or Unavailable'
+stale_invocation="$(invoke_control "$local_launch_id" '@korri:retroarch/quit')"
+assert_stale_or_unavailable "$stale_invocation" \
+  'Invocation after end must be exactly StaleSession or Unavailable'
+wait_for_local_session_end
+stale_evidence="$(jq -cn --argjson quit "$local_quit" --argjson controls "$stale_controls" --argjson invocation "$stale_invocation" \
+  '{quit:$quit,staleControls:$controls,staleInvocation:$invocation}')"
+capture_evidence local-mid-overlay-end "$stale_evidence"
+checkpoint 'LOCAL MID-OVERLAY END VERIFIED' \
+  'The authorized exact-current Quit completed while Shift was visibly open.' \
+  'The Shift window disappeared automatically, the exact RetroArch process ended, and the session became idle.' \
+  'Old-launch controls and invocation were rejected without relaunching or changing foreground state.'
+
+checkpoint 'ACTIVE KORRI LOCAL SESSION VERIFIED' \
+  'From Korri, launch Wario Land 4 again and wait for active gameplay.' \
+  'Press physical Guide, verify Shift opens and owns input, then dismiss it with B/Back.'
+negative_launch="$(rpc '{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}')"
+negative_launch_id="$(jq -er '.outcome.payload | select(.disposition == "resume") | .launchId' <<<"$negative_launch")"
+negative_controls="$(controls_for_launch "$negative_launch_id")"
+jq -e '.outcome._tag == "Ok" and ([.outcome.payload.groups[].controls[]] | length >= 2)' <<<"$negative_controls" >/dev/null
+negative_pid="$(package_pid "$RETROARCH_PACKAGE")"
+[[ -n "$negative_pid" ]] || { echo 'active Korri local session has no RetroArch process' >&2; exit 1; }
+assert_top_package "$RETROARCH_PACKAGE"
 assert_overlay_window absent
-[[ -z "$(package_pid "$RETROARCH_PACKAGE")" ]] || {
-  echo 'RetroArch is still running after the local checkpoint' >&2
+
+checkpoint 'UNRELATED ACTIVE-SESSION NEGATIVE VERIFIED' \
+  "Foreground the already-approved unrelated app $UNRELATED_PACKAGE without ending Wario." \
+  'Press physical Guide once and verify the unrelated app stays foreground.' \
+  'Verify no Shift window opens and Guide is not consumed by Korri.'
+assert_top_package "$UNRELATED_PACKAGE"
+assert_overlay_window absent
+[[ "$(package_pid "$RETROARCH_PACKAGE")" == "$negative_pid" ]] || {
+  echo 'the exact old local game process did not survive the unrelated foreground check' >&2
   exit 1
 }
-local_after="$(controls_for_launch "$local_launch_id" || printf '{"expected":"ended; stale controls rejected"}')"
-capture_evidence local-after-quit "$local_after"
+capture_evidence unrelated-active-session-negative "$negative_controls"
+
+checkpoint 'OLD GAME REMAINS DISARMED VERIFIED' \
+  'Return directly to the already-running Wario Activity using Android recents; do not pass through Korri.' \
+  'Press physical Guide and verify no Shift window opens.'
+assert_top_package "$RETROARCH_PACKAGE"
+assert_overlay_window absent
+[[ "$(package_pid "$RETROARCH_PACKAGE")" == "$negative_pid" ]] || {
+  echo 'foreground did not return to the exact old local game process' >&2
+  exit 1
+}
+capture_evidence old-game-still-disarmed "$negative_controls"
+
+checkpoint 'FRESH KORRI PUBLICATION REARMS VERIFIED' \
+  'Return to Korri and select Wario Land 4 so Korri freshly resumes and publishes the existing local session.' \
+  'After gameplay returns, press physical Guide and verify exactly one Shift window opens; leave it open.'
+rearmed_launch="$(rpc '{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}')"
+rearmed_launch_id="$(jq -er '.outcome.payload | select(.disposition == "resume") | .launchId' <<<"$rearmed_launch")"
+[[ "$rearmed_launch_id" == "$negative_launch_id" ]] || {
+  echo 'fresh publication did not resume the exact old launch' >&2
+  exit 1
+}
+rearmed_controls="$(controls_for_launch "$rearmed_launch_id")"
+jq -e '.outcome._tag == "Ok" and ([.outcome.payload.groups[].controls[]] | length >= 2)' <<<"$rearmed_controls" >/dev/null
+assert_top_package "$RETROARCH_PACKAGE"
+assert_overlay_window present
+capture_evidence fresh-publication-rearmed "$rearmed_controls"
+rearmed_quit="$(invoke_control "$rearmed_launch_id" '@korri:retroarch/quit')"
+jq -e '.outcome._tag == "Ok" and .outcome.payload._tag == "Completed"' <<<"$rearmed_quit" >/dev/null
+wait_for_local_session_end
+
+checkpoint 'DIRECT NEGATIVE VERIFIED' \
+  "Launch $DIRECT_PACKAGE directly, outside Korri, using the device UI." \
+  'Press physical Guide and verify Korri does not consume it and no Shift sheet appears.'
+assert_top_package "$DIRECT_PACKAGE"
+assert_overlay_window absent
+capture_evidence direct-launch-negative '{"activeControls":[],"telemetry":"no Korri launch permitted"}'
+checkpoint 'DIRECT NEGATIVE CLOSED VERIFIED' \
+  'Exit the directly launched RetroArch instance through its own UI and return to Korri.'
+[[ -z "$(package_pid "$DIRECT_PACKAGE")" ]] || {
+  echo 'directly launched RetroArch is still running before stream acceptance' >&2
+  exit 1
+}
+assert_top_component "$KORRI_ACTIVITY"
 
 checkpoint 'STREAM OVERLAY VERIFIED' \
   'Using Korri and the physical controller, start the configured Moonlight stream.' \
@@ -442,27 +578,30 @@ jq -e '.outcome._tag == "Ok" and ([.outcome.payload.groups[].controls[]] | lengt
 assert_overlay_window present
 capture_evidence stream-overlay-open "$stream_controls"
 
+checkpoint 'STREAM CONNECTION LOSS NARRATED' \
+  'Dismiss Shift, then cause a real connection loss using an approved host or network action; do not kill the Android process.' \
+  'Verify KorriSessionOverlay reattaches over the stream Activity and narrates the observed connection termination/failure.' \
+  'Leave that lifecycle surface visible for evidence; do not claim decoder or host-start failure here.'
+assert_top_package "$KORRI_PACKAGE"
+assert_overlay_window absent
+session_is_idle || { echo 'stream session is not idle after narrated connection loss' >&2; exit 1; }
+capture_evidence stream-connection-loss-narrated '{"activeControls":[],"telemetry":"asserted idle after human-confirmed lifecycle narration"}'
+
+checkpoint 'STREAM GRACEFUL RETURN VERIFIED' \
+  'Use the visible KorriSessionOverlay return action and verify it returns gracefully to the Korri portal.'
+assert_top_component "$KORRI_ACTIVITY"
+assert_overlay_window absent
+session_is_idle || { echo 'session became active during graceful lifecycle return' >&2; exit 1; }
+capture_evidence stream-graceful-return '{"activeControls":[],"telemetry":"asserted portal foreground and idle session"}'
+
 checkpoint 'STREAM PARITY VERIFIED' \
-  'Exercise every control in docs/research/unified-android-game-overlay.md, observing values after nondismissing controls.' \
-  'Confirm Disconnect returns to Korri while the host game keeps running.' \
-  'Reconnect and confirm host frames resume, then use Quit game on host and confirm termination.' \
-  'Confirm the pre-stream progress/failure surface remained intact throughout.'
+  'Start the configured Moonlight stream again and exercise every control in docs/research/unified-android-game-overlay.md.' \
+  'Observe values after nondismissing controls; confirm Disconnect returns to Korri while the host game keeps running.' \
+  'Reconnect and confirm moving host frames resume, then use Quit game on host and confirm termination.'
 session_is_idle || { echo 'stream/host session is still active after parity checkpoint' >&2; exit 1; }
-capture_evidence stream-after-host-quit '{"activeControls":[],"telemetry":"session status is idle"}'
-
-checkpoint 'DIRECT NEGATIVE VERIFIED' \
-  "Launch $DIRECT_PACKAGE directly, outside Korri, using the device UI." \
-  'Press physical Guide and verify Korri does not consume it and no Shift sheet appears.'
-assert_top_package "$DIRECT_PACKAGE"
 assert_overlay_window absent
-capture_evidence direct-launch-negative '{"activeControls":[],"telemetry":"no Korri launch permitted"}'
-
-checkpoint 'UNRELATED NEGATIVE VERIFIED' \
-  "Foreground $UNRELATED_PACKAGE using the device UI while Korri remains backgrounded." \
-  'Press physical Guide and verify it passes through and no Korri overlay appears.'
-assert_top_package "$UNRELATED_PACKAGE"
-assert_overlay_window absent
-capture_evidence unrelated-app-negative '{"activeControls":[],"telemetry":"foreground mismatch"}'
+capture_evidence stream-after-host-quit '{"activeControls":[],"telemetry":"asserted session status is idle after host quit"}'
+printf '%s\n' 'DECODER/HOST FAILURE: REPOSITORY-ONLY — deterministic repository tests cover these failures; this device run does not claim them as passed.'
 
 checkpoint 'PERMISSION DISABLED BY HUMAN' \
   'Open Android Settings yourself and disable the Korri accessibility service.' \

@@ -48,6 +48,19 @@ bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$JOURNEY_RESUME" \
 # shellcheck disable=SC2016 # Literal source-contract needles.
 grep -F 'EXPECTED_MODEL="$2"' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'ACTUAL_MODEL=' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'ANDROID_PACKAGE_PATTERN=' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'DIRECT_PACKAGE must be exactly com.korri.retroarch' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'TARGET_SERIAL=' "$OVERLAY_ACCEPTANCE" >/dev/null
+model_check_line="$(grep -nF 'device model mismatch:' "$OVERLAY_ACCEPTANCE" | cut -d: -f1)"
+trap_line="$(grep -nF 'trap cleanup EXIT' "$OVERLAY_ACCEPTANCE" | cut -d: -f1)"
+[[ -n "$model_check_line" && -n "$trap_line" && "$trap_line" -gt "$model_check_line" ]] || {
+  echo 'overlay acceptance must verify exact serial/model before installing its EXIT trap' >&2
+  exit 1
+}
+if grep -F '/sdcard/korri-overlay-acceptance.png' "$OVERLAY_ACCEPTANCE" >/dev/null; then
+  echo 'overlay acceptance must not delete or reuse a generic remote screenshot path' >&2
+  exit 1
+fi
 # shellcheck disable=SC2016 # Literal source-contract needles.
 grep -F 'timeout 15 "$ADB_BIN"' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'require_preinstalled' "$OVERLAY_ACCEPTANCE" >/dev/null
@@ -66,13 +79,28 @@ grep -F '[active controls and telemetry]' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'could not establish safe quiescence; backup and lock retained' "$OVERLAY_ACCEPTANCE" >/dev/null
 for token in \
   'LOCAL OVERLAY VERIFIED' \
+  'LOCAL MID-OVERLAY END VERIFIED' \
+  'UNRELATED ACTIVE-SESSION NEGATIVE VERIFIED' \
+  'OLD GAME REMAINS DISARMED VERIFIED' \
+  'FRESH KORRI PUBLICATION REARMS VERIFIED' \
   'STREAM OVERLAY VERIFIED' \
+  'STREAM CONNECTION LOSS NARRATED' \
+  'STREAM GRACEFUL RETURN VERIFIED' \
   'DIRECT NEGATIVE VERIFIED' \
-  'UNRELATED NEGATIVE VERIFIED' \
+  'DIRECT NEGATIVE CLOSED VERIFIED' \
   'PERMISSION DISABLED BY HUMAN' \
   'PERMISSION RECOVERED BY HUMAN'; do
   grep -F "$token" "$OVERLAY_ACCEPTANCE" >/dev/null
 done
+# shellcheck disable=SC2016 # Literal exact-current invocation source contract.
+grep -F 'invoke_control "$local_launch_id" '\''@korri:retroarch/quit'\''' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'SessionControls after end must be exactly StaleSession or Unavailable' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'Invocation after end must be exactly StaleSession or Unavailable' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'DECODER/HOST FAILURE: REPOSITORY-ONLY' "$OVERLAY_ACCEPTANCE" >/dev/null
+if grep -F "|| printf '{\"expected\"" "$OVERLAY_ACCEPTANCE" >/dev/null; then
+  echo 'overlay acceptance must never synthesize expected RPC evidence after transport failure' >&2
+  exit 1
+fi
 if sed '/^[[:space:]]*#/d' "$OVERLAY_ACCEPTANCE" \
   | grep -Eq 'pm[[:space:]]+(install|uninstall|clear|grant)([;&|[:space:]]|$)|adb[^[:cntrl:]]+[[:space:]]install([;&|[:space:]]|$)'; then
   echo 'overlay acceptance must not install, uninstall, clear, or grant packages/permissions' >&2
@@ -199,6 +227,109 @@ trap cleanup EXIT
 ADB_LOG="$TMP/adb.log"
 CHILD_LOG="$TMP/children.log"
 FAKE_ADB="$TMP/adb"
+
+OVERLAY_PREFLIGHT_LOG="$TMP/overlay-preflight-adb.log"
+OVERLAY_PREFLIGHT_ADB="$TMP/overlay-preflight-adb"
+cat >"$OVERLAY_PREFLIGHT_ADB" <<'OVERLAY_ADB'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%q ' "$@" >>"$KORRI_DEVICE_SCRIPT_REVIEW_OVERLAY_ADB_LOG"
+printf '\n' >>"$KORRI_DEVICE_SCRIPT_REVIEW_OVERLAY_ADB_LOG"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -s)
+      shift 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+case "${1:-}" in
+  wait-for-device)
+    ;;
+  get-state)
+    printf 'device\n'
+    ;;
+  get-serialno)
+    printf '%s\n' "${KORRI_DEVICE_SCRIPT_REVIEW_TARGET_SERIAL:-device-1}"
+    ;;
+  shell)
+    shift
+    if [[ "$*" == 'getprop ro.product.model' ]]; then
+      printf '%s\n' "${KORRI_DEVICE_SCRIPT_REVIEW_TARGET_MODEL:-Wrong Model}"
+    else
+      echo "unexpected preflight shell command: $*" >&2
+      exit 70
+    fi
+    ;;
+  *)
+    echo "unexpected preflight adb command: $*" >&2
+    exit 71
+    ;;
+esac
+OVERLAY_ADB
+chmod +x "$OVERLAY_PREFLIGHT_ADB"
+export KORRI_DEVICE_SCRIPT_REVIEW_OVERLAY_ADB_LOG="$OVERLAY_PREFLIGHT_LOG"
+
+for invalid_case in \
+  'KORRI_PACKAGE=bad-package' \
+  'KORRI_RETROARCH_PACKAGE=bad-package'; do
+  : >"$OVERLAY_PREFLIGHT_LOG"
+  if env "$invalid_case" KORRI_ADB_BIN="$OVERLAY_PREFLIGHT_ADB" \
+    bash "$OVERLAY_ACCEPTANCE" device-1 'Expected Model' \
+      com.korri.retroarch com.example.unrelated "$TMP/evidence" >/dev/null 2>&1; then
+    echo "overlay acceptance accepted invalid package override: $invalid_case" >&2
+    exit 1
+  fi
+  [[ ! -s "$OVERLAY_PREFLIGHT_LOG" ]] || {
+    echo "overlay acceptance contacted adb before rejecting $invalid_case" >&2
+    exit 1
+  }
+done
+for invalid_package_args in \
+  'bad-package com.example.unrelated' \
+  'com.korri.retroarch bad-package' \
+  'com.example.other com.example.unrelated'; do
+  read -r direct_package unrelated_package <<<"$invalid_package_args"
+  : >"$OVERLAY_PREFLIGHT_LOG"
+  if KORRI_ADB_BIN="$OVERLAY_PREFLIGHT_ADB" \
+    bash "$OVERLAY_ACCEPTANCE" device-1 'Expected Model' \
+      "$direct_package" "$unrelated_package" "$TMP/evidence" >/dev/null 2>&1; then
+    echo "overlay acceptance accepted unsafe package arguments: $invalid_package_args" >&2
+    exit 1
+  fi
+  [[ ! -s "$OVERLAY_PREFLIGHT_LOG" ]] || {
+    echo "overlay acceptance contacted adb before rejecting: $invalid_package_args" >&2
+    exit 1
+  }
+done
+
+: >"$OVERLAY_PREFLIGHT_LOG"
+KORRI_DEVICE_SCRIPT_REVIEW_TARGET_SERIAL=other-device \
+  KORRI_ADB_BIN="$OVERLAY_PREFLIGHT_ADB" \
+  bash "$OVERLAY_ACCEPTANCE" device-1 'Expected Model' \
+    com.korri.retroarch com.example.unrelated "$TMP/evidence" >/dev/null 2>&1 && {
+      echo 'overlay acceptance accepted an adb serial mismatch' >&2
+      exit 1
+    }
+if grep -F 'shell ' "$OVERLAY_PREFLIGHT_LOG" >/dev/null; then
+  echo 'overlay acceptance used adb shell before exact serial verification' >&2
+  exit 1
+fi
+
+: >"$OVERLAY_PREFLIGHT_LOG"
+KORRI_DEVICE_SCRIPT_REVIEW_TARGET_MODEL='Wrong Model' \
+  KORRI_ADB_BIN="$OVERLAY_PREFLIGHT_ADB" \
+  bash "$OVERLAY_ACCEPTANCE" device-1 'Expected Model' \
+    com.korri.retroarch com.example.unrelated "$TMP/evidence" >/dev/null 2>&1 && {
+      echo 'overlay acceptance accepted a device model mismatch' >&2
+      exit 1
+    }
+if grep -E '(^|[[:space:]])(push|rm|mkdir|settings|am)([[:space:]]|$)' "$OVERLAY_PREFLIGHT_LOG" >/dev/null; then
+  echo 'overlay acceptance mutated a wrong-model device' >&2
+  exit 1
+fi
 
 PID_OF_FUNCTION="$TMP/journey-pid-of.sh"
 grep -E '^pid_of\(\) \{' "$JOURNEY_RESUME" >"$PID_OF_FUNCTION"
