@@ -81,9 +81,9 @@ describe("shiftSurface mount contract", () => {
     const container = document.createElement("div")
     document.body.append(container)
 
-    let instance: ReturnType<typeof shiftSurface.mount>
+    let instance: ReturnType<typeof shiftSurface.mount> | undefined
     await act(async () => {
-      instance = shiftSurface.mount(
+      const mountedInstance = shiftSurface.mount(
         container,
         model({
           status: {
@@ -95,10 +95,16 @@ describe("shiftSurface mount contract", () => {
         }),
         host,
       )
+      instance = mountedInstance
+      mounted.push(mountedInstance)
     })
+    if (instance === undefined) throw new Error("surface did not mount")
+    const mountedInstance = instance
 
     expect(container.textContent).toContain("offline")
-    await act(async () => instance.unmount())
+    await act(async () => mountedInstance.unmount())
+    const index = mounted.indexOf(mountedInstance)
+    if (index !== -1) mounted.splice(index, 1)
     expect(container.textContent).toBe("")
 
     act(() => host.press("back"))

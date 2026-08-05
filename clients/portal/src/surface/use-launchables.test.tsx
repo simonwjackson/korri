@@ -219,6 +219,7 @@ async function renderUseLaunchables(
   const root: Root = createRoot(container)
   let latest: Launchables | undefined
   let disposed = false
+  let view: HookView | undefined
 
   function Consumer() {
     const value = useLaunchables(bridge, korrid)
@@ -228,28 +229,37 @@ async function renderUseLaunchables(
     return null
   }
 
-  await act(async () => {
-    root.render(<Consumer />)
-  })
-
-  const view: HookView = {
-    current() {
-      if (latest === undefined) throw new Error("hook has not rendered")
-      return latest
-    },
-    async cleanup() {
-      if (disposed) return
-      disposed = true
+  const cleanup = async () => {
+    if (disposed) return
+    disposed = true
+    if (view !== undefined) {
       const index = mountedViews.indexOf(view)
       if (index !== -1) mountedViews.splice(index, 1)
-      await act(async () => {
-        root.unmount()
-      })
-      container.remove()
-    },
+    }
+    await act(async () => {
+      root.unmount()
+    })
+    container.remove()
   }
-  mountedViews.push(view)
-  return view
+
+  try {
+    await act(async () => {
+      root.render(<Consumer />)
+    })
+
+    view = {
+      current() {
+        if (latest === undefined) throw new Error("hook has not rendered")
+        return latest
+      },
+      cleanup,
+    }
+    mountedViews.push(view)
+    return view
+  } catch (error) {
+    await cleanup()
+    throw error
+  }
 }
 
 describe("useLaunchables load and core effects", () => {
