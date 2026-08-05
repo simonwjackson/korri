@@ -36,6 +36,28 @@ describe("createKeyboardAdapter", () => {
     stop()
   })
 
+  it("marks held arrow input as semantic repeat", () => {
+    const target = new EventTarget()
+    const emitted: InputAction[] = []
+    const stop = createKeyboardAdapter({ target }).start(action =>
+      emitted.push(action),
+    )
+
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowRight", repeat: true }),
+    )
+
+    expect(emitted).toEqual([
+      {
+        type: "direction",
+        direction: "right",
+        repeat: true,
+        source: "keyboard",
+      },
+    ])
+    stop()
+  })
+
   it("maps Enter and Space to confirm", () => {
     const target = new EventTarget()
     const emitted: InputAction[] = []

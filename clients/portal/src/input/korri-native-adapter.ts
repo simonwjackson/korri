@@ -30,9 +30,11 @@ export function parseBridgeInputEvent(json: string): InputAction | null {
   if (event.type === "direction") {
     if (typeof event.direction !== "string") return null
     if (!directions.has(event.direction)) return null
+    if (event.repeat !== undefined && typeof event.repeat !== "boolean") return null
     return {
       type: "direction",
       direction: event.direction,
+      ...(event.repeat === true ? { repeat: true } : {}),
       source: "gamepad",
     }
   }

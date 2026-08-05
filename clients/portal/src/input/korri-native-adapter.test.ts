@@ -9,9 +9,19 @@ describe("parseBridgeInputEvent", () => {
   it("parses direction events", () => {
     expect(
       parseBridgeInputEvent(
-        JSON.stringify({ type: "direction", direction: "up", source: "gamepad" }),
+        JSON.stringify({
+          type: "direction",
+          direction: "up",
+          repeat: true,
+          source: "gamepad",
+        }),
       ),
-    ).toEqual({ type: "direction", direction: "up", source: "gamepad" })
+    ).toEqual({
+      type: "direction",
+      direction: "up",
+      repeat: true,
+      source: "gamepad",
+    })
   })
 
   it("parses simple semantic events", () => {
@@ -35,6 +45,11 @@ describe("parseBridgeInputEvent", () => {
     expect(parseBridgeInputEvent(JSON.stringify({ type: "warp" }))).toBeNull()
     expect(
       parseBridgeInputEvent(JSON.stringify({ type: "direction", direction: "in" })),
+    ).toBeNull()
+    expect(
+      parseBridgeInputEvent(
+        JSON.stringify({ type: "direction", direction: "left", repeat: "yes" }),
+      ),
     ).toBeNull()
   })
 })

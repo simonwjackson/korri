@@ -20,6 +20,25 @@ const FOCUSABLE_SELECTOR =
 /** Off-axis distance is penalised so movement stays in the pressed direction. */
 const OFF_AXIS_PENALTY = 3
 
+/** Semantic DOM event understood by focused choice/range controls. */
+const SEMANTIC_DIRECTION_EVENT = "korri-semantic-direction"
+
+function delegateHorizontalDirection(
+  direction: Direction,
+  repeat: boolean,
+): boolean {
+  if (direction !== "left" && direction !== "right") return false
+  const active = document.activeElement
+  if (!(active instanceof HTMLElement)) return false
+  if (!active.hasAttribute("data-korri-horizontal-control")) return false
+  active.dispatchEvent(
+    new CustomEvent(SEMANTIC_DIRECTION_EVENT, {
+      detail: { direction, repeat },
+    }),
+  )
+  return true
+}
+
 function isVisible(element: HTMLElement): boolean {
   const rect = element.getBoundingClientRect()
   return rect.width > 0 && rect.height > 0
@@ -99,6 +118,7 @@ export function focusInDirection(direction: Direction): boolean {
  */
 export function createSpatialFocusController(bus: InputBus): () => void {
   const offDirection = bus.onAction("direction", action => {
+    if (delegateHorizontalDirection(action.direction, action.repeat ?? false)) return
     focusInDirection(action.direction)
   })
   const offConfirm = bus.onAction("confirm", () => {

@@ -112,6 +112,8 @@ export type BridgeInputEvent =
   | {
       readonly type: "direction"
       readonly direction: BridgeDirection
+      /** True after the hardware edge's initial directional press. */
+      readonly repeat?: boolean
       readonly source: "gamepad"
     }
   | { readonly type: "confirm"; readonly source: "gamepad" }

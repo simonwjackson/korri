@@ -26,6 +26,8 @@ export type InputAction =
   | {
       readonly type: "direction"
       readonly direction: Direction
+      /** Semantic held-direction repeat; no hardware timing or key data leaks. */
+      readonly repeat?: boolean
       readonly source?: InputSource
     }
   | { readonly type: "confirm"; readonly source?: InputSource }

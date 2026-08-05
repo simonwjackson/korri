@@ -150,4 +150,38 @@ describe("createSpatialFocusController", () => {
     expect(document.activeElement).toBe(second)
     dispose()
   })
+
+  test("delegates horizontal directions and repeat to the focused horizontal control", () => {
+    const bus = createInputBus()
+    const dispose = createSpatialFocusController(bus)
+    const control = button("control", { x: 0, y: 0 })
+    control.setAttribute("data-korri-horizontal-control", "range")
+    const next = button("next", { x: 200, y: 0 })
+    const received: unknown[] = []
+    control.addEventListener("korri-semantic-direction", event => {
+      received.push((event as CustomEvent).detail)
+    })
+    control.focus()
+
+    bus.emit({ type: "direction", direction: "right", repeat: true })
+
+    expect(received).toEqual([{ direction: "right", repeat: true }])
+    expect(document.activeElement).toBe(control)
+    expect(document.activeElement).not.toBe(next)
+    dispose()
+  })
+
+  test("keeps vertical movement geometric from a horizontal control", () => {
+    const bus = createInputBus()
+    const dispose = createSpatialFocusController(bus)
+    const control = button("control", { x: 0, y: 0 })
+    control.setAttribute("data-korri-horizontal-control", "choice")
+    const below = button("below", { x: 0, y: 200 })
+    control.focus()
+
+    bus.emit({ type: "direction", direction: "down", repeat: true })
+
+    expect(document.activeElement).toBe(below)
+    dispose()
+  })
 })

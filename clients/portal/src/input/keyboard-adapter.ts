@@ -59,7 +59,11 @@ export function createKeyboardAdapter(
         const action = matchAction(ev.key, keymap)
         if (!action) return
 
-        emit(action)
+        emit(
+          action.type === "direction" && ev.repeat
+            ? { ...action, repeat: true }
+            : action,
+        )
         ev.preventDefault()
       }
 
