@@ -156,6 +156,10 @@ public final class KorriActiveLaunch {
         return executorAvailable;
     }
 
+    public boolean requiresExecutorPublication() {
+        return "android-moonlight".equals(executorId);
+    }
+
     public List<String> contributorKeys() {
         List<String> keys = new ArrayList<>();
         for (Contributor contributor : contributors) {

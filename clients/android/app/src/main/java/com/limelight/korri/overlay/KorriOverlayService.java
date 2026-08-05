@@ -244,7 +244,10 @@ public final class KorriOverlayService extends AccessibilityService {
 
                         @Override
                         public boolean prepareAuthority(String launchId) {
-                            return KorriMoonlightActionCoordinator.process().republish(launchId);
+                            return KorriOverlayAuthorityBootstrap.prepare(
+                                    launchId,
+                                    KorriBrainService.activeLaunch(),
+                                    id -> KorriMoonlightActionCoordinator.process().republish(id));
                         }
 
                         @Override
