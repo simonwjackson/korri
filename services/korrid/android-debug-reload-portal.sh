@@ -167,15 +167,13 @@ for _ in $(seq 1 80); do
   if targets="$(json_targets 2>/dev/null)" \
     && socket="$(select_trusted_portal_socket "$targets" 2>/dev/null)" \
     && candidate="$(evaluate "$socket" "$probe_expression" 2>/dev/null)"; then
-    if [[ "$mode" == --expect-game ]]; then
-      predicate='.exactPortal == true and .href == $url and .readyState == "complete"
-        and .timeOrigin > $before and .navigationType == "reload"
-        and .mounted == true and .loadError == false and .gameMatches == 1'
-    else
-      predicate='.exactPortal == true and .href == $url and .readyState == "complete"
-        and .timeOrigin > $before and .navigationType == "reload"
-        and .mounted == true and .loadError == false'
-    fi
+    # Home is curated: a valid catalog game may intentionally be absent from
+    # the mounted Home DOM. The acceptance caller proves the exact game through
+    # app.local-games.list after this verified reload; this helper proves only
+    # that the trusted portal performed a fresh, error-free mount.
+    predicate='.exactPortal == true and .href == $url and .readyState == "complete"
+      and .timeOrigin > $before and .navigationType == "reload"
+      and .mounted == true and .loadError == false'
     if "$JQ_BIN" -e --arg url "$TRUSTED_PORTAL_URL" --argjson before "$before_time_origin" \
       "$predicate" <<<"$candidate" >/dev/null; then
       verified="$candidate"
