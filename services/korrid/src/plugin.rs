@@ -177,6 +177,8 @@ pub enum SessionControlDeclarationInteraction {
 pub enum SessionControlEffect {
     #[serde(rename = "@korri:retroarch/open-menu")]
     RetroarchOpenMenu,
+    #[serde(rename = "@korri:retroarch/quit")]
+    RetroarchQuit,
     #[serde(rename = "@korri:moonlight/disconnect")]
     MoonlightDisconnect,
     #[serde(rename = "@korri:moonlight/quit-host")]
@@ -235,7 +237,9 @@ enum SessionControlIntegration {
 impl SessionControlEffect {
     fn integration(self) -> SessionControlIntegration {
         match self {
-            Self::RetroarchOpenMenu => SessionControlIntegration::Retroarch,
+            Self::RetroarchOpenMenu | Self::RetroarchQuit => {
+                SessionControlIntegration::Retroarch
+            }
             Self::MoonlightDisconnect
             | Self::MoonlightQuitHost
             | Self::MoonlightToggleKeyboard
@@ -267,7 +271,7 @@ impl SessionControlEffect {
     pub fn android_moonlight_effect(self) -> Option<crate::launcher::AndroidMoonlightEffect> {
         use crate::launcher::AndroidMoonlightEffect as Effect;
         Some(match self {
-            Self::RetroarchOpenMenu => return None,
+            Self::RetroarchOpenMenu | Self::RetroarchQuit => return None,
             Self::MoonlightDisconnect => Effect::Disconnect,
             Self::MoonlightQuitHost => Effect::QuitHost,
             Self::MoonlightToggleKeyboard => Effect::ToggleKeyboard,
@@ -891,6 +895,7 @@ impl SessionControlEffect {
                 SessionControlKind::Range
             }
             Self::RetroarchOpenMenu
+            | Self::RetroarchQuit
             | Self::MoonlightDisconnect
             | Self::MoonlightQuitHost
             | Self::MoonlightToggleKeyboard

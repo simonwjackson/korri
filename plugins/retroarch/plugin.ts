@@ -27,6 +27,27 @@ const declaration = {
         },
       },
     },
+    sessionControls: {
+      openMenu: {
+        order: 0,
+        id: "@korri:retroarch/open-menu",
+        owner: { kind: "launcher", id: "@korri:retroarch/retroarch" },
+        label: "Open RetroArch menu",
+        interaction: { kind: "command" },
+        effect: "@korri:retroarch/open-menu",
+        dismissOnSuccess: true,
+      },
+      quit: {
+        order: 1,
+        id: "@korri:retroarch/quit",
+        owner: { kind: "launcher", id: "@korri:retroarch/retroarch" },
+        label: "Quit game",
+        interaction: { kind: "command" },
+        effect: "@korri:retroarch/quit",
+        destructive: true,
+        dismissOnSuccess: true,
+      },
+    },
   },
 } as const
 

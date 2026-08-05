@@ -22,7 +22,9 @@ savefile_directory = "{saves}"
 savestate_directory = "{states}"
 screenshot_directory = "{screenshots}"
 
-# invisible RetroArch: no menu reachable, no overlay
+# Korri-owned access: RGUI is built in and needs no external asset pack.
+# Kiosk remains enabled and every hardware menu shortcut remains disabled.
+menu_driver = "rgui"
 kiosk_mode_enable = "true"
 input_menu_toggle_gamepad_combo = "0"
 input_menu_toggle = "nul"
@@ -346,7 +348,10 @@ mod tests {
 
         let config = std::fs::read_to_string(root.path().join("retroarch.cfg")).unwrap();
         assert!(config.contains("video_driver = \"gl\""));
+        assert!(config.contains("menu_driver = \"rgui\""));
         assert!(config.contains("kiosk_mode_enable = \"true\""));
+        assert!(config.contains("input_menu_toggle_gamepad_combo = \"0\""));
+        assert!(config.contains("input_menu_toggle = \"nul\""));
         assert!(config.contains("autosave_interval = \"10\""));
         assert!(config.contains("log_verbosity = \"true\""));
         assert!(config.contains("quit_press_twice = \"false\""));
