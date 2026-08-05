@@ -1,5 +1,5 @@
 #!/usr/bin/env nix-shell
-#! nix-shell -i bash -p bash coreutils curl diffutils gnugrep gnused imagemagick jq tesseract android-tools
+#! nix-shell -i bash -p bash coreutils curl diffutils gnugrep gnused imagemagick jq tesseract android-tools websocat
 # shellcheck shell=bash
 set -euo pipefail
 
@@ -28,6 +28,7 @@ SCREENSHOTS_DIR="/storage/emulated/0/korri/screenshots"
 HOST_PORT="${KORRI_ACCEPTANCE_HOST_PORT:-43119}"
 ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
 DEBUG_CAPABILITY_SH="${KORRI_ANDROID_DEBUG_CAPABILITY_SH:-$ROOT/services/korrid/android-debug-capability.sh}"
+DEBUG_PORTAL_RELOAD_SH="${KORRI_ANDROID_DEBUG_PORTAL_RELOAD_SH:-$ROOT/services/korrid/android-debug-reload-portal.sh}"
 ANDROID_STORAGE_ROOT="/sdcard/korri"
 CONFIG_REMOTE="$ANDROID_STORAGE_ROOT/config.yaml"
 LIBRARY_REMOTE="$ANDROID_STORAGE_ROOT/library.yaml"
@@ -341,8 +342,13 @@ restore_checkpoint_files() {
       "${ADB[@]}" shell "rmdir '$directory' 2>/dev/null || test ! -e '$directory'" >/dev/null 2>&1 || restore_failed=true
     fi
   done
+  if [[ "$restore_failed" == false ]]; then
+    assert_korri_process_unchanged || restore_failed=true
+    "$DEBUG_PORTAL_RELOAD_SH" "$SERIAL" "$KORRI_PACKAGE" --expect-portal >/dev/null \
+      || restore_failed=true
+  fi
   if [[ "$restore_failed" == true ]]; then
-    echo "RetroArch acceptance failed to restore device data; backup retained at $CHECKPOINT_BACKUP_DIR" >&2
+    echo "RetroArch acceptance failed to restore device data and reload the trusted portal; backup retained at $CHECKPOINT_BACKUP_DIR" >&2
     return 1
   fi
   if ! remove_owned_backup; then
@@ -603,6 +609,8 @@ discover_live_korri_authority || {
 assert_pristine_gate_state
 assert_session_idle
 provision_checkpoint_files
+"$DEBUG_PORTAL_RELOAD_SH" "$SERIAL" "$KORRI_PACKAGE" \
+  --expect-game wl4 'Wario Land 4' >/dev/null
 revalidate_gate_state_after_mutation
 
 local_games="$(rpc '{"_tag":"app.local-games.list","payload":{}}')"

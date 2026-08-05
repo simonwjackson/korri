@@ -1,5 +1,5 @@
 #!/usr/bin/env nix-shell
-#! nix-shell -i bash -p bash android-tools coreutils curl diffutils gnugrep gnused gnutar jq python3
+#! nix-shell -i bash -p bash android-tools coreutils curl diffutils gnugrep gnused gnutar jq python3 websocat
 # shellcheck shell=bash
 # Human-led installed-device gate for the unified TYPE_ACCESSIBILITY_OVERLAY host.
 set -euo pipefail
@@ -71,6 +71,7 @@ PREFS_BACKUP="files/.overlay-acceptance-prefs-$RUN_NONCE"
 PREFS_BACKUP_OWNER="$PREFS_BACKUP/.korri-acceptance-owner"
 HOST_PORT="${KORRI_OVERLAY_ACCEPTANCE_HOST_PORT:-43122}"
 DEBUG_CAPABILITY_SH="${KORRI_ANDROID_DEBUG_CAPABILITY_SH:-$ROOT/services/korrid/android-debug-capability.sh}"
+DEBUG_PORTAL_RELOAD_SH="${KORRI_ANDROID_DEBUG_PORTAL_RELOAD_SH:-$ROOT/services/korrid/android-debug-reload-portal.sh}"
 PREFS_SNAPSHOT_TOOL="$ROOT/clients/android/shared-preferences-snapshot.py"
 PREFS_WORK_DIR="${TMPDIR:-/tmp}/korri-overlay-preferences-$RUN_NONCE"
 PREFS_WORK_OWNER="$PREFS_WORK_DIR/.korri-acceptance-owner"
@@ -414,6 +415,14 @@ restore_exact_state() {
     echo "external backup and lock retained at $BACKUP_REMOTE and $LOCK_REMOTE; Korri preferences were not overwritten" >&2
     return 1
   fi
+  [[ "$(package_pid "$KORRI_PACKAGE")" == "$KORRI_PID" ]] || {
+    echo 'Korri process changed before restored portal verification; backups retained' >&2
+    return 1
+  }
+  "$DEBUG_PORTAL_RELOAD_SH" "$SERIAL" "$KORRI_PACKAGE" --expect-portal >/dev/null || {
+    echo 'restored files did not produce a usable trusted main portal; backups retained' >&2
+    return 1
+  }
   if [[ "$PREFS_BACKUP_READY" == true ]]; then
     remove_owned_preferences_backup || return 1
   fi
@@ -944,6 +953,8 @@ adb_target -s "$SERIAL" push "$CHECKPOINT_CONFIG" "$CONFIG_REMOTE" >/dev/null
 adb_target -s "$SERIAL" push "$CHECKPOINT_LIBRARY" "$LIBRARY_REMOTE" >/dev/null
 adb_target -s "$SERIAL" exec-out cat "$CONFIG_REMOTE" | cmp -s "$CHECKPOINT_CONFIG" -
 adb_target -s "$SERIAL" exec-out cat "$LIBRARY_REMOTE" | cmp -s "$CHECKPOINT_LIBRARY" -
+"$DEBUG_PORTAL_RELOAD_SH" "$SERIAL" "$KORRI_PACKAGE" \
+  --expect-game wl4 'Wario Land 4' >/dev/null
 
 # Accessibility is Android-owned. This gate only reads it; permission changes
 # below are performed by the device owner in Settings.

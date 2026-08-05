@@ -40,6 +40,9 @@ grep -F 'assert_overlay_window_absent' "$ACCEPTANCE" >/dev/null
 grep -F 'Korri gameplay overlay' "$ACCEPTANCE" >/dev/null
 grep -F 'authenticated_retroarch_status' "$ACCEPTANCE" >/dev/null
 grep -F 'discover_live_korri_authority' "$ACCEPTANCE" >/dev/null
+grep -F 'DEBUG_PORTAL_RELOAD_SH=' "$ACCEPTANCE" >/dev/null
+grep -F -- "--expect-game wl4 'Wario Land 4'" "$ACCEPTANCE" >/dev/null
+grep -F -- '--expect-portal' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_pristine_gate_state' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_session_idle' "$ACCEPTANCE" >/dev/null
 grep -F 'revalidate_gate_state_after_mutation' "$ACCEPTANCE" >/dev/null

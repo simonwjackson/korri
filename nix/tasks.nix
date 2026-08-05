@@ -278,6 +278,7 @@ let
         pkgs.gnutar
         pkgs.jq
         pkgs.python3
+        pkgs.websocat
       ];
       script = ''
         serial="''${1:?usage: overlay-accept <adb-serial> <exact-device-model> <direct-launch-package> <unrelated-package> [evidence-dir]}"
@@ -426,6 +427,7 @@ let
         pkgs.imagemagick
         pkgs.jq
         pkgs.tesseract
+        pkgs.websocat
       ];
       usageSuffix = " -- <adb-serial> <exact-device-model> <exact-hardware-serial>";
       script = ''
