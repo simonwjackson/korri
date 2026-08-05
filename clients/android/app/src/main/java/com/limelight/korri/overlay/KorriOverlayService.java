@@ -45,6 +45,7 @@ import java.util.Set;
 
 /** Production session scope, input edge, and global gameplay-overlay window. */
 public final class KorriOverlayService extends AccessibilityService {
+    private static final ProcessRequests PROCESS_REQUESTS = new ProcessRequests();
     private static final long LIVENESS_CHECK_DELAY_MS = 500;
     private static final int MAX_LIVENESS_CHECKS = 8;
     private static final long OVERLAY_READY_TIMEOUT_MS = 10_000;
@@ -53,6 +54,7 @@ public final class KorriOverlayService extends AccessibilityService {
     private KorriLaunchContinuity continuity;
     private KorriActiveSessionMonitor sessionMonitor;
     private WindowController windowController;
+    private RequestHost processRequestHost;
     private final OverlayInput overlayInput = new OverlayInput();
 
     @Override
@@ -79,6 +81,48 @@ public final class KorriOverlayService extends AccessibilityService {
                 },
                 MAX_LIVENESS_CHECKS);
         syncSession();
+        processRequestHost = new RequestHost() {
+            @Override
+            public boolean requestShow(String launchId) {
+                return requestVisibility(launchId, true);
+            }
+
+            @Override
+            public boolean requestDismiss(String launchId) {
+                return requestVisibility(launchId, false);
+            }
+        };
+        PROCESS_REQUESTS.connect(processRequestHost, new MainDispatcher() {
+            @Override
+            public boolean isMainThread() {
+                return Looper.myLooper() == Looper.getMainLooper();
+            }
+
+            @Override
+            public void post(Runnable request) {
+                handler.post(request);
+            }
+        });
+    }
+
+    /** Process-local request path for Korri-owned gameplay triggers. */
+    public static RequestResult requestShow(String launchId) {
+        return PROCESS_REQUESTS.requestShow(launchId);
+    }
+
+    /** Process-local request path for Korri-owned gameplay dismissal. */
+    public static RequestResult requestDismiss(String launchId) {
+        return PROCESS_REQUESTS.requestDismiss(launchId);
+    }
+
+    private boolean requestVisibility(String launchId, boolean visible) {
+        syncSession();
+        if (state == null) return false;
+        boolean accepted = visible
+                ? state.requestShow(launchId)
+                : state.requestDismiss(launchId);
+        if (accepted) reconcileWindow();
+        return accepted;
     }
 
     @Override
@@ -148,6 +192,8 @@ public final class KorriOverlayService extends AccessibilityService {
 
     @Override
     public void onDestroy() {
+        if (processRequestHost != null) PROCESS_REQUESTS.disconnect(processRequestHost);
+        processRequestHost = null;
         if (sessionMonitor != null) sessionMonitor.destroy();
         if (state != null) state.destroy();
         if (continuity != null) continuity.destroy();
@@ -869,6 +915,69 @@ public final class KorriOverlayService extends AccessibilityService {
         }
     }
 
+    public enum RequestResult {
+        DELIVERED,
+        REJECTED,
+        UNAVAILABLE
+    }
+
+    interface RequestHost {
+        boolean requestShow(String launchId);
+        boolean requestDismiss(String launchId);
+    }
+
+    interface MainDispatcher {
+        boolean isMainThread();
+        void post(Runnable request);
+    }
+
+    /** Owns the one current process-local service target; no Android IPC is exposed. */
+    static final class ProcessRequests {
+        private RequestHost current;
+        private MainDispatcher dispatcher;
+
+        public synchronized void connect(RequestHost host, MainDispatcher mainDispatcher) {
+            current = Objects.requireNonNull(host);
+            dispatcher = Objects.requireNonNull(mainDispatcher);
+        }
+
+        public synchronized void disconnect(RequestHost host) {
+            if (current != host) return;
+            current = null;
+            dispatcher = null;
+        }
+
+        public RequestResult requestShow(String launchId) {
+            return request(launchId, true);
+        }
+
+        public RequestResult requestDismiss(String launchId) {
+            return request(launchId, false);
+        }
+
+        private RequestResult request(String launchId, boolean visible) {
+            final RequestHost target;
+            final MainDispatcher main;
+            synchronized (this) {
+                target = current;
+                main = dispatcher;
+            }
+            if (target == null || main == null) return RequestResult.UNAVAILABLE;
+            if (main.isMainThread()) return deliver(target, launchId, visible);
+            main.post(() -> deliver(target, launchId, visible));
+            return RequestResult.DELIVERED;
+        }
+
+        private synchronized RequestResult deliver(
+                RequestHost target, String launchId, boolean visible) {
+            if (current != target) return RequestResult.REJECTED;
+            boolean accepted = visible
+                    ? target.requestShow(launchId)
+                    : target.requestDismiss(launchId);
+            return accepted ? RequestResult.DELIVERED : RequestResult.REJECTED;
+        }
+    }
+
     /** Pure public session/Guide state machine; Android callbacks are adapters. */
     public static final class StateMachine {
         private final String servicePackage;
@@ -904,6 +1013,18 @@ public final class KorriOverlayService extends AccessibilityService {
 
         public void updateOverlayVisibility(boolean visible) {
             if (!visible || !destroyed) showing = visible;
+        }
+
+        public boolean requestShow(String launchId) {
+            if (!isExactRequestScope(launchId)) return false;
+            updateOverlayVisibility(true);
+            return true;
+        }
+
+        public boolean requestDismiss(String launchId) {
+            if (!isExactRequestScope(launchId)) return false;
+            updateOverlayVisibility(false);
+            return true;
         }
 
         public boolean ownsVisibleOverlayForeground(String packageName, String className) {
@@ -997,6 +1118,18 @@ public final class KorriOverlayService extends AccessibilityService {
             matchedLaunchId = null;
             suspendedLaunchId = null;
             interrupt();
+        }
+
+        private boolean isExactRequestScope(String launchId) {
+            return !destroyed
+                    && launchId != null
+                    && launch != null
+                    && launchId.equals(launch.launchId())
+                    && ownerArmed
+                    && launchId.equals(matchedLaunchId)
+                    && !launchId.equals(suspendedLaunchId)
+                    && (isForegroundMatch()
+                        || ownsVisibleOverlayForeground(foregroundPackage, foregroundClass));
         }
 
         private boolean isArmed() {

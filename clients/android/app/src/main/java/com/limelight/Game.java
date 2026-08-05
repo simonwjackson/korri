@@ -31,6 +31,7 @@ import com.limelight.nvstream.input.MouseButtonPacket;
 import com.limelight.nvstream.jni.MoonBridge;
 import com.limelight.korri.moonlight.KorriMoonlightActionCoordinator;
 import com.limelight.korri.moonlight.KorriMoonlightActionExecutor;
+import com.limelight.korri.overlay.KorriOverlayService;
 import com.limelight.preferences.GlPreferences;
 import com.limelight.preferences.PreferenceConfiguration;
 import com.limelight.ui.GameGestures;
@@ -4171,13 +4172,24 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     @Override
     public void showGameMenu() {
-        if (korriOverlay != null) {
+        if (korriLaunchId == null) return;
+        KorriOverlayService.RequestResult result =
+                KorriOverlayService.requestShow(korriLaunchId);
+        // Temporary pre-cutover fallback. Remove with KorriGameOverlay after
+        // installed-device acceptance proves the accessibility host.
+        if (result == KorriOverlayService.RequestResult.UNAVAILABLE
+                && korriOverlay != null) {
             korriOverlay.show();
         }
     }
 
     public void hideGameMenu() {
-        if (korriOverlay != null) {
+        if (korriLaunchId == null) return;
+        KorriOverlayService.RequestResult result =
+                KorriOverlayService.requestDismiss(korriLaunchId);
+        // Temporary pre-cutover fallback; a rejected scoped request fails closed.
+        if (result == KorriOverlayService.RequestResult.UNAVAILABLE
+                && korriOverlay != null) {
             korriOverlay.hide();
         }
     }
