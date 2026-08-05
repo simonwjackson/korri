@@ -91,6 +91,7 @@ export function useLaunchables(
   })
   const settingsBusyRef = useRef(false)
   const folderReceiptSubmissions = useRef(new Set<string>())
+  const completedFolderReceiptGenerations = useRef(new Set<string>())
   const uncertainFolderReceipts = useRef(new Set<string>())
   const discoveryWasActive = useRef(false)
   const discoveryPoller = useRef(
@@ -144,12 +145,17 @@ export function useLaunchables(
           settingsProblem("game-folder-add", snapshot.state.message)
           return
         case "Selected": {
+          if (completedFolderReceiptGenerations.current.has(snapshot.generation)) {
+            acknowledgeFolderPicker(snapshot.generation)
+            return
+          }
           if (folderReceiptSubmissions.current.has(snapshot.generation)) return
           folderReceiptSubmissions.current.add(snapshot.generation)
           setSettingsStatus({ _tag: "Saving", settingId: "game-folder-add" })
           void korrid.registerDiscoveryReceipt(snapshot.state.receipt).then(result => {
             if (!mountedRef.current) return
             if (result._tag === "Ok") {
+              completedFolderReceiptGenerations.current.add(snapshot.generation)
               acknowledgeFolderPicker(snapshot.generation)
               uncertainFolderReceipts.current.delete(snapshot.generation)
               setSettingsStatus({ _tag: "Idle" })
@@ -166,12 +172,14 @@ export function useLaunchables(
               result.payload.code === "FolderSelectionReceiptUnknown" &&
               uncertainFolderReceipts.current.has(snapshot.generation)
             ) {
+              completedFolderReceiptGenerations.current.add(snapshot.generation)
               acknowledgeFolderPicker(snapshot.generation)
               uncertainFolderReceipts.current.delete(snapshot.generation)
               setSettingsStatus({ _tag: "Idle" })
               void discoveryPoller.current.pollNow()
               return
             }
+            completedFolderReceiptGenerations.current.add(snapshot.generation)
             acknowledgeFolderPicker(snapshot.generation)
             settingsProblem("game-folder-add", result.payload.message)
           })
