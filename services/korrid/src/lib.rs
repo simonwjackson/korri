@@ -971,10 +971,19 @@ mod tests {
 
     const WL4_PLUGIN_LIBRARY: &str =
         include_str!("../../../docs/research/retroarch-plugin-route/library-wl4.yaml");
+    const CHECKPOINT_ANDROID_CONFIG: &str =
+        include_str!("../../../docs/research/android-app-plugin-schema-checkpoint/config.yaml");
+    const CHECKPOINT_ANDROID_LIBRARY: &str =
+        include_str!("../../../docs/research/android-app-plugin-schema-checkpoint/library.yaml");
 
     fn write_wl4_plugin_config(root: &Path) {
         std::fs::write(root.join("config.yaml"), "{}\n").unwrap();
         std::fs::write(root.join("library.yaml"), WL4_PLUGIN_LIBRARY).unwrap();
+    }
+
+    fn write_checkpoint_android_config(root: &Path) {
+        std::fs::write(root.join("config.yaml"), CHECKPOINT_ANDROID_CONFIG).unwrap();
+        std::fs::write(root.join("library.yaml"), CHECKPOINT_ANDROID_LIBRARY).unwrap();
     }
 
     #[test]
@@ -1363,7 +1372,7 @@ command = ["sh", "-c", "sleep 1"]
     }
 
     #[tokio::test]
-    async fn running_server_verifies_only_its_untampered_launch_spec() {
+    async fn running_server_verifies_only_its_current_launch_specs_and_capability() {
         struct StopServer;
         impl Drop for StopServer {
             fn drop(&mut self) {
@@ -1371,47 +1380,216 @@ command = ["sh", "-c", "sleep 1"]
             }
         }
 
+        async fn launch_wl4(
+            client: &reqwest::Client,
+            url: &str,
+            capability: &str,
+        ) -> serde_json::Value {
+            for _ in 0..20 {
+                match client
+                    .post(url)
+                    .bearer_auth(capability)
+                    .json(&serde_json::json!({
+                        "_tag": "app.local-games.launch",
+                        "payload": { "gameId": "wl4" }
+                    }))
+                    .send()
+                    .await
+                {
+                    Ok(value) => return value.json::<serde_json::Value>().await.unwrap(),
+                    Err(_) => std::thread::sleep(std::time::Duration::from_millis(10)),
+                }
+            }
+            panic!("embedded server response");
+        }
+
         let root = tempfile::tempdir().unwrap();
         write_wl4_plugin_config(root.path());
         std::fs::create_dir_all(root.path().join("roms")).unwrap();
         std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
-        let port = start_local_server(
+        let first_port = start_local_server(
             "https://portal.example",
             root.path().to_str().expect("UTF-8 temp path"),
         )
         .unwrap();
         let _stop = StopServer;
-        let capability = local_server_capability().unwrap();
+        let first_capability = local_server_capability().unwrap();
         let client = reqwest::Client::new();
-        let url = format!("http://127.0.0.1:{port}/rpc");
-        let mut response = None;
-        for _ in 0..20 {
-            match client
-                .post(&url)
-                .bearer_auth(&capability)
-                .json(&serde_json::json!({
-                    "_tag": "app.local-games.launch",
-                    "payload": { "gameId": "wl4" }
-                }))
-                .send()
-                .await
-            {
-                Ok(value) => {
-                    response = Some(value.json::<serde_json::Value>().await.unwrap());
-                    break;
-                }
-                Err(_) => std::thread::sleep(std::time::Duration::from_millis(10)),
-            }
-        }
-        let response = response.expect("embedded server response");
+        let first_url = format!("http://127.0.0.1:{first_port}/rpc");
+        let response = launch_wl4(&client, &first_url, &first_capability).await;
         let mut spec = response["outcome"]["payload"].clone();
-        let spec_json = serde_json::to_string(&spec).unwrap();
-        assert!(verify_local_launch_spec(&spec_json));
+        let first_spec_json = serde_json::to_string(&spec).unwrap();
+        assert!(verify_local_launch_spec(&first_spec_json));
 
         spec["files"][0]["content"] = serde_json::Value::String("tampered".into());
         assert!(!verify_local_launch_spec(
             &serde_json::to_string(&spec).unwrap()
         ));
+
+        stop_local_server().unwrap();
+        assert!(local_server_port().is_none());
+        assert!(local_server_capability().is_none());
+        assert!(!verify_local_launch_spec(&first_spec_json));
+
+        let second_port = start_local_server(
+            "https://portal.example",
+            root.path().to_str().expect("UTF-8 temp path"),
+        )
+        .unwrap();
+        let second_capability = local_server_capability().unwrap();
+        assert_ne!(first_capability, second_capability);
+        let second_url = format!("http://127.0.0.1:{second_port}/rpc");
+        let second_response = launch_wl4(&client, &second_url, &second_capability).await;
+        let second_spec_json =
+            serde_json::to_string(&second_response["outcome"]["payload"]).unwrap();
+        assert!(verify_local_launch_spec(&second_spec_json));
+        assert!(!verify_local_launch_spec(&first_spec_json));
+
+        let old_capability_response = client
+            .post(&second_url)
+            .bearer_auth(&first_capability)
+            .json(&serde_json::json!({
+                "_tag": "system.health",
+                "payload": {}
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(old_capability_response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn settings_update_changes_public_android_route_availability() {
+        fn listed_game_ids(body: &serde_json::Value) -> Vec<String> {
+            body["outcome"]["payload"]["games"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|game| game["id"].as_str().unwrap().to_owned())
+                .collect()
+        }
+
+        fn plugin_enabled(body: &serde_json::Value, plugin_id: &str) -> bool {
+            body["outcome"]["payload"]["plugins"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|plugin| plugin["id"] == plugin_id)
+                .and_then(|plugin| plugin["enabled"].as_bool())
+                .unwrap()
+        }
+
+        let root = tempfile::tempdir().unwrap();
+        write_checkpoint_android_config(root.path());
+        let app = router_with_capability_and_local_root(
+            "right-token",
+            "https://portal.example",
+            root.path(),
+        );
+
+        let listed = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"app.local-games.list","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(listed["outcome"]["_tag"], "Ok");
+        assert_eq!(listed_game_ids(&listed), ["tmnt-shredders-revenge"]);
+
+        let launched = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"app.local-games.launch","payload":{"gameId":"tmnt-shredders-revenge"}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(launched["outcome"]["_tag"], "Ok");
+        assert_eq!(launched["outcome"]["payload"]["launcherId"], "android-app");
+
+        let before = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"system.settings.snapshot","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert!(plugin_enabled(
+            &before,
+            plugin_policy::ANDROID_APP_PLUGIN_ID
+        ));
+        let revision = before["outcome"]["payload"]["revision"].as_str().unwrap();
+        let disable_request = serde_json::json!({
+            "_tag": "system.settings.update",
+            "payload": {
+                "expectedRevision": revision,
+                "settingId": plugin_policy::ANDROID_APP_PLUGIN_ID,
+                "value": "false"
+            }
+        })
+        .to_string();
+        let disabled =
+            rpc_body_authorized(app.clone(), &disable_request, Some("right-token")).await;
+        assert_eq!(disabled["outcome"]["_tag"], "Ok");
+        assert!(!plugin_enabled(
+            &disabled,
+            plugin_policy::ANDROID_APP_PLUGIN_ID
+        ));
+        let disabled_revision = disabled["outcome"]["payload"]["revision"].as_str().unwrap();
+
+        let disabled_list = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"app.local-games.list","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(disabled_list["outcome"]["_tag"], "Ok");
+        assert!(listed_game_ids(&disabled_list).is_empty());
+
+        let disabled_launch = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"app.local-games.launch","payload":{"gameId":"tmnt-shredders-revenge"}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(disabled_launch["outcome"]["_tag"], "Err");
+        assert_eq!(
+            disabled_launch["outcome"]["payload"]["code"],
+            "LocalRouteUnavailable"
+        );
+
+        let enable_request = serde_json::json!({
+            "_tag": "system.settings.update",
+            "payload": {
+                "expectedRevision": disabled_revision,
+                "settingId": plugin_policy::ANDROID_APP_PLUGIN_ID,
+                "value": "true"
+            }
+        })
+        .to_string();
+        let enabled = rpc_body_authorized(app.clone(), &enable_request, Some("right-token")).await;
+        assert_eq!(enabled["outcome"]["_tag"], "Ok");
+        assert!(plugin_enabled(
+            &enabled,
+            plugin_policy::ANDROID_APP_PLUGIN_ID
+        ));
+
+        let relisted = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"app.local-games.list","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(listed_game_ids(&relisted), ["tmnt-shredders-revenge"]);
+
+        let relaunched = rpc_body_authorized(
+            app,
+            r#"{"_tag":"app.local-games.launch","payload":{"gameId":"tmnt-shredders-revenge"}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(relaunched["outcome"]["_tag"], "Ok");
+        assert_eq!(
+            relaunched["outcome"]["payload"]["launcherId"],
+            "android-app"
+        );
     }
 
     #[cfg(unix)]
