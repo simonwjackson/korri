@@ -1012,23 +1012,33 @@ public final class KorriOverlayService extends AccessibilityService {
 
     /** Owns the one current process-local service target; no Android IPC is exposed. */
     static final class ProcessRequests {
+        /** Immutable identity for one connected accessibility-service lifetime. */
+        private static final class ServiceGeneration {
+            private final RequestHost host;
+            private final MainDispatcher main;
+
+            ServiceGeneration(RequestHost host, MainDispatcher main) {
+                this.host = host;
+                this.main = main;
+            }
+        }
+
         private final KorriOverlayHostExclusion owners;
-        private RequestHost current;
-        private MainDispatcher dispatcher;
+        private ServiceGeneration current;
 
         ProcessRequests(KorriOverlayHostExclusion owners) {
             this.owners = Objects.requireNonNull(owners);
         }
 
         public synchronized void connect(RequestHost host, MainDispatcher mainDispatcher) {
-            current = Objects.requireNonNull(host);
-            dispatcher = Objects.requireNonNull(mainDispatcher);
+            current = new ServiceGeneration(
+                    Objects.requireNonNull(host),
+                    Objects.requireNonNull(mainDispatcher));
         }
 
         public synchronized void disconnect(RequestHost host) {
-            if (current != host) return;
+            if (current == null || current.host != host) return;
             current = null;
-            dispatcher = null;
         }
 
         public RequestResult requestShow(
@@ -1043,38 +1053,44 @@ public final class KorriOverlayService extends AccessibilityService {
 
         private RequestResult request(
                 KorriOverlayHostExclusion.Owner owner, String launchId, boolean visible) {
-            final RequestHost target;
-            final MainDispatcher main;
+            final ServiceGeneration generation;
             synchronized (this) {
-                target = current;
-                main = dispatcher;
+                generation = current;
             }
-            if (target == null || main == null) return RequestResult.UNAVAILABLE;
-            // Reject before queueing if any part of the exact current Game,
-            // launch, foreground, or service scope has already changed.
-            if (!owners.isCurrent(owner) || !target.accepts(owner, launchId)) {
-                return RequestResult.REJECTED;
+            if (generation == null) {
+                // Game consumes this synchronous main-thread result to decide
+                // whether the temporary legacy host may be used. Ownership is
+                // therefore checked before reporting service unavailability.
+                return owners.isCurrent(owner)
+                        ? RequestResult.UNAVAILABLE
+                        : RequestResult.REJECTED;
             }
-            if (main.isMainThread()) return deliver(target, owner, launchId, visible);
-            main.post(() -> deliver(target, owner, launchId, visible));
+            if (generation.main.isMainThread()) {
+                return deliver(generation, owner, launchId, visible);
+            }
+            // Worker callers may capture only the immutable service lifetime.
+            // Game ownership, session state, and all window/WebView work stay
+            // untouched until this callback reaches Android's main looper.
+            generation.main.post(() -> deliver(generation, owner, launchId, visible));
             return RequestResult.DELIVERED;
         }
 
-        private synchronized RequestResult deliver(
-                RequestHost target,
+        private RequestResult deliver(
+                ServiceGeneration generation,
                 KorriOverlayHostExclusion.Owner owner,
                 String launchId,
                 boolean visible) {
-            // Revalidate all generations and session scope after main-thread
-            // marshalling. A queued predecessor can never reach a replacement.
-            if (current != target
-                    || !owners.isCurrent(owner)
-                    || !target.accepts(owner, launchId)) {
+            synchronized (this) {
+                // A queued predecessor can never reach a replacement service.
+                if (current != generation) return RequestResult.REJECTED;
+            }
+            if (!owners.isCurrent(owner)
+                    || !generation.host.accepts(owner, launchId)) {
                 return RequestResult.REJECTED;
             }
             boolean accepted = visible
-                    ? target.requestShow(owner, launchId)
-                    : target.requestDismiss(owner, launchId);
+                    ? generation.host.requestShow(owner, launchId)
+                    : generation.host.requestDismiss(owner, launchId);
             return accepted ? RequestResult.DELIVERED : RequestResult.REJECTED;
         }
     }

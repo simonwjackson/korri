@@ -594,6 +594,22 @@ public class KorriOverlayServiceTest {
     }
 
     @Test
+    public void unavailableFallbackStillRejectsAStaleGameOwner() {
+        KorriOverlayHostExclusion owners = new KorriOverlayHostExclusion();
+        KorriOverlayHostExclusion.Owner staleOwner =
+                owners.register(new InvisibleLegacyHost());
+        KorriOverlayHostExclusion.Owner currentOwner =
+                owners.register(new InvisibleLegacyHost());
+        KorriOverlayService.ProcessRequests requests =
+                new KorriOverlayService.ProcessRequests(owners);
+
+        assertEquals(KorriOverlayService.RequestResult.REJECTED,
+                requests.requestShow(staleOwner, LAUNCH));
+        assertEquals(KorriOverlayService.RequestResult.UNAVAILABLE,
+                requests.requestShow(currentOwner, LAUNCH));
+    }
+
+    @Test
     public void absentServiceIsUnavailableAndQueuedRequestCannotReachReplacement() {
         KorriOverlayHostExclusion owners = new KorriOverlayHostExclusion();
         KorriOverlayHostExclusion.Owner owner = owners.register(new InvisibleLegacyHost());
@@ -612,17 +628,20 @@ public class KorriOverlayServiceTest {
         requests.connect(stale, dispatcher);
         assertEquals(KorriOverlayService.RequestResult.DELIVERED,
                 requests.requestShow(owner, LAUNCH));
+        assertEquals(0, stale.acceptRequests);
         assertEquals(0, stale.showRequests);
 
         requests.disconnect(stale);
         requests.connect(replacement, new ImmediateDispatcher());
         dispatcher.runQueued();
+        assertEquals(0, stale.acceptRequests);
         assertEquals(0, stale.showRequests);
+        assertEquals(0, replacement.acceptRequests);
         assertEquals(0, replacement.showRequests);
     }
 
     @Test
-    public void staleSameLaunchGameGenerationIsRejectedBeforeQueueForShowAndDismiss() {
+    public void workerThreadStaleGenerationIsRejectedOnlyAfterMainThreadDelivery() {
         KorriOverlayHostExclusion owners = new KorriOverlayHostExclusion();
         KorriOverlayHostExclusion.Owner staleOwner =
                 owners.register(new InvisibleLegacyHost());
@@ -635,12 +654,20 @@ public class KorriOverlayServiceTest {
                 new KorriOverlayService.ProcessRequests(owners);
         requests.connect(host, dispatcher);
 
-        assertEquals(KorriOverlayService.RequestResult.REJECTED,
+        assertEquals(KorriOverlayService.RequestResult.DELIVERED,
                 requests.requestShow(staleOwner, LAUNCH));
-        assertEquals(KorriOverlayService.RequestResult.REJECTED,
-                requests.requestDismiss(staleOwner, LAUNCH));
-        assertFalse(dispatcher.hasQueued());
+        assertTrue(dispatcher.hasQueued());
+        assertEquals(0, host.acceptRequests);
+        dispatcher.runQueued();
+        assertEquals(0, host.acceptRequests);
         assertEquals(0, host.showRequests);
+
+        assertEquals(KorriOverlayService.RequestResult.DELIVERED,
+                requests.requestDismiss(staleOwner, LAUNCH));
+        assertTrue(dispatcher.hasQueued());
+        assertEquals(0, host.acceptRequests);
+        dispatcher.runQueued();
+        assertEquals(0, host.acceptRequests);
         assertEquals(0, host.dismissRequests);
     }
 
@@ -658,9 +685,11 @@ public class KorriOverlayServiceTest {
 
         assertEquals(KorriOverlayService.RequestResult.DELIVERED,
                 requests.requestShow(owner, LAUNCH));
+        assertEquals(0, host.acceptRequests);
         owners.register(new InvisibleLegacyHost());
         dispatcher.runQueued();
 
+        assertEquals(0, host.acceptRequests);
         assertEquals(0, host.showRequests);
     }
 
@@ -826,6 +855,7 @@ public class KorriOverlayServiceTest {
             implements KorriOverlayService.RequestHost {
         private final KorriOverlayService.StateMachine state;
         private final KorriOverlayService.WindowController windows;
+        int acceptRequests;
         int showRequests;
         int dismissRequests;
 
@@ -839,6 +869,7 @@ public class KorriOverlayServiceTest {
         @Override
         public boolean accepts(
                 KorriOverlayHostExclusion.Owner owner, String launchId) {
+            acceptRequests++;
             return state.acceptsRequest(launchId);
         }
 
