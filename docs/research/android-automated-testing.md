@@ -7,8 +7,8 @@ existing surface, portal, and JVM tests enough?
 
 Yes, but only as a narrow real-WebView wiring/drift smoke. The emulator tier is
 worth keeping because it proves the hand-mirrored Android shell bridge is injected into
-the shipped WebView and still agrees with the canonical treaty, while warm local
-runtime is about 72-77s and the cheaper levels remain independently runnable.
+the shipped WebView and still agrees with the canonical treaty, while validated
+warm local runs took 72-102s and the cheaper levels remain independently runnable.
 It is not a general UI test tier, full bridge conformance, portal-code-path
 coverage, lifecycle coverage, or physical-device confidence.
 
@@ -61,7 +61,8 @@ Measured local runtimes after implementation:
 |---|---:|
 | First successful run after SDK realization | 162s |
 | Warm rerun | 77s |
-| Final post-cleanup run | 72s |
+| Final pre-simplification cleanup run | 72s |
+| Final post-simplification run | 102s |
 
 On the NixOS validation host, `/dev/kvm` was present and world-readable
 (`crw-rw-rw-`, mode 666), so hardware acceleration was available to the
@@ -125,5 +126,5 @@ KVM for Android testing after enabling KVM group permissions, so a future public
 Ubuntu runner job is viable in principle.
 
 No GitHub Actions run was performed for this spike, and workflow wiring remains
-deferred. The opt-in emulator SDK's first-realization cost and 72-77s warm local
-runtime are the numbers to use when deciding whether to add that CI gate.
+deferred. The opt-in emulator SDK's first-realization cost and 72-102s observed
+warm local runtime are the numbers to use when deciding whether to add that CI gate.

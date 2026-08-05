@@ -1,7 +1,7 @@
 # Handoff: automated testing for the Android client (emulator + Nix)
 
-**Status:** not started. Investigation + thin first slice.
-**Owner:** unassigned — pick this up cold.
+**Status:** completed 2026-08-05. See `docs/research/android-automated-testing.md` for the verified outcome.
+**Owner:** retained as the source handoff for the completed investigation.
 **Time box:** one day. Kill criteria below.
 
 ---
