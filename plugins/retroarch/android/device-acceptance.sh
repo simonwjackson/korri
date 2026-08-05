@@ -131,10 +131,10 @@ assert_shell_foreground() {
 }
 
 assert_no_artemis_game_activity() {
-  local resumed
-  resumed="$("${ADB[@]}" shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" | tr -d '\r')"
-  if grep -Fq "$KORRI_GAME_COMPONENT" <<<"$resumed"; then
-    echo 'RetroArch acceptance must not exercise Artemis Game or its SharedPreferences' >&2
+  local activities
+  activities="$("${ADB[@]}" shell dumpsys activity activities | tr -d '\r')" || return 1
+  if grep -Fq "$KORRI_GAME_COMPONENT" <<<"$activities"; then
+    echo 'RetroArch acceptance requires no Artemis Game Activity in any active task, so it cannot exercise Artemis Game SharedPreferences' >&2
     return 1
   fi
 }

@@ -65,8 +65,8 @@ closed after Back, and menu still closed after a configured safe native key.
 Screenshots remain supporting evidence only. It then invokes acknowledged
 graceful Quit, requires the recorded launch to become idle, and rejects its old
 controls and invocation. Cleanup acts only on the recorded launch/PID. This
-local-runtime gate also requires Artemis `Game` never to become the resumed
-Activity, so it does not exercise Artemis Game preferences. The launch token is
+local-runtime gate also requires Artemis `Game` to be absent from every active
+task throughout the run, so it does not exercise Artemis Game preferences. The launch token is
 absent from actual status/control evidence, JavaScript, and logs and never
 crosses UDP, but Android's cross-process Intent API unavoidably materializes it
 briefly as a Java String
