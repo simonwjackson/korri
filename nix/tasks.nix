@@ -180,7 +180,7 @@ let
       runtimeInputs = [ pkgs.nix ];
       env.KORRI_PORTAL_BUNDLE = "${packages.portal-bundle}/bin/portal-bundle";
       script = ''
-        exec "$KORRI_ROOT/services/korrid/check.sh" "$@"
+        exec bash "$KORRI_ROOT/services/korrid/check.sh" "$@"
       '';
     };
 

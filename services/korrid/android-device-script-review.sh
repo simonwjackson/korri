@@ -1127,7 +1127,7 @@ KORRI_ANDROID_APP_ROUTE_JOURNEY_SH="$JOURNEY" \
 KORRI_DEVICE_SCRIPT_REVIEW_ADB_LOG="$ADB_LOG" \
 KORRI_DEVICE_SCRIPT_REVIEW_CHILD_LOG="$CHILD_LOG" \
 KORRI_ROOT="$ROOT" \
-  "$ANDROID_APP_ROUTE" device-1 >"$TMP/route.out" 2>"$TMP/route.err"
+  bash "$ANDROID_APP_ROUTE" device-1 >"$TMP/route.out" 2>"$TMP/route.err"
 status=$?
 set -e
 if [[ "$status" -ne 42 ]]; then
@@ -1187,7 +1187,7 @@ KORRI_DEVICE_SCRIPT_REVIEW_ADB_LOG="$ADB_LOG" \
 KORRI_DEVICE_SCRIPT_REVIEW_CHILD_LOG="$CHILD_LOG" \
 KORRI_DEVICE_SCRIPT_REVIEW_ROUTE_LOCK_HELD=true \
 KORRI_ROOT="$ROOT" \
-  "$ANDROID_APP_ROUTE" device-1 >"$TMP/route-held-lock.out" 2>"$TMP/route-held-lock.err"
+  bash "$ANDROID_APP_ROUTE" device-1 >"$TMP/route-held-lock.out" 2>"$TMP/route-held-lock.err"
 held_lock_status=$?
 set -e
 if [[ "$held_lock_status" -eq 0 ]]; then
@@ -1214,7 +1214,7 @@ KORRI_DEVICE_SCRIPT_REVIEW_ADB_LOG="$ADB_LOG" \
 KORRI_DEVICE_SCRIPT_REVIEW_CHILD_LOG="$CHILD_LOG" \
 KORRI_DEVICE_SCRIPT_REVIEW_CLEANUP_FAIL=restore \
 KORRI_ROOT="$ROOT" \
-  "$ANDROID_APP_ROUTE" device-1 >"$TMP/route-original-failure-cleanup.out" 2>"$TMP/route-original-failure-cleanup.err"
+  bash "$ANDROID_APP_ROUTE" device-1 >"$TMP/route-original-failure-cleanup.out" 2>"$TMP/route-original-failure-cleanup.err"
 original_cleanup_status=$?
 set -e
 if [[ "$original_cleanup_status" -ne 42 ]]; then
@@ -1311,7 +1311,7 @@ KORRI_ANDROID_APP_ROUTE_JOURNEY_SH="$JOURNEY" \
 KORRI_DEVICE_SCRIPT_REVIEW_ADB_LOG="$ADB_LOG" \
 KORRI_DEVICE_SCRIPT_REVIEW_CHILD_LOG="$CHILD_LOG" \
 KORRI_ROOT="$ROOT" \
-  "$ANDROID_APP_ROUTE" device-1 >"$TMP/route-alternate.out" 2>"$TMP/route-alternate.err"
+  bash "$ANDROID_APP_ROUTE" device-1 >"$TMP/route-alternate.out" 2>"$TMP/route-alternate.err"
 alternate_status=$?
 set -e
 if [[ "$alternate_status" -ne 42 ]]; then
