@@ -125,8 +125,9 @@ public final class KorriOverlayService extends AccessibilityService {
     }
 
     /** Closes both temporary hosts, even when the global service is absent. */
-    public static void hideBoth(String launchId) {
-        PROCESS_HOSTS.hideBoth(() -> {
+    public static void hideBoth(
+            KorriOverlayHostExclusion.LegacyHost caller, String launchId) {
+        PROCESS_HOSTS.hideBoth(caller, () -> {
             if (launchId != null) PROCESS_REQUESTS.requestDismiss(launchId);
         });
     }

@@ -4196,7 +4196,9 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     }
 
     public void hideGameMenu() {
-        KorriOverlayService.hideBoth(korriLaunchId);
+        if (korriOverlay != null) {
+            KorriOverlayService.hideBoth(korriOverlay, korriLaunchId);
+        }
     }
 
     @Override

@@ -38,7 +38,7 @@ public class KorriOverlayHostExclusionTest {
         exclusion.register(legacy);
         final int[] globalDismissals = { 0 };
 
-        exclusion.hideBoth(() -> globalDismissals[0]++);
+        exclusion.hideBoth(legacy, () -> globalDismissals[0]++);
 
         assertEquals(1, legacy.closeAndDestroyCount);
         assertEquals(1, globalDismissals[0]);
@@ -57,6 +57,22 @@ public class KorriOverlayHostExclusionTest {
 
         assertEquals(0, oldGame.closeAndDestroyCount);
         assertEquals(1, replacementGame.closeAndDestroyCount);
+    }
+
+    @Test
+    public void replacedGameCannotHideEitherCurrentHost() {
+        KorriOverlayHostExclusion exclusion = new KorriOverlayHostExclusion();
+        RecordingLegacyHost oldGame = new RecordingLegacyHost(true);
+        RecordingLegacyHost replacementGame = new RecordingLegacyHost(true);
+        exclusion.register(oldGame);
+        exclusion.register(replacementGame);
+        final int[] globalDismissals = { 0 };
+
+        exclusion.hideBoth(oldGame, () -> globalDismissals[0]++);
+
+        assertEquals(0, oldGame.closeAndDestroyCount);
+        assertEquals(0, replacementGame.closeAndDestroyCount);
+        assertEquals(0, globalDismissals[0]);
     }
 
     private static final class RecordingLegacyHost

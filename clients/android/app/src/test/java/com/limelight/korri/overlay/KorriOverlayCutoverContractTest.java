@@ -25,7 +25,7 @@ public class KorriOverlayCutoverContractTest {
                 "src/main/java/com/limelight/binding/input/ControllerHandler.java");
 
         assertEquals(1, occurrences(game, "KorriOverlayService.requestShow(korriLaunchId)"));
-        assertEquals(1, occurrences(game, "KorriOverlayService.hideBoth(korriLaunchId)"));
+        assertEquals(1, occurrences(game, "KorriOverlayService.hideBoth(korriOverlay, korriLaunchId)"));
         assertTrue(game.contains("if (korriLaunchId == null) return;"));
         assertTrue(game.contains("RequestResult.UNAVAILABLE"));
         assertTrue(game.contains("KorriOverlayService.registerLegacyHost(korriOverlay)"));

@@ -28,7 +28,8 @@ public final class KorriOverlayHostExclusion {
         open.run();
     }
 
-    public void hideBoth(Runnable dismissGlobal) {
+    public void hideBoth(LegacyHost caller, Runnable dismissGlobal) {
+        if (currentLegacyHost != caller) return;
         closeVisibleLegacyHost();
         dismissGlobal.run();
     }
