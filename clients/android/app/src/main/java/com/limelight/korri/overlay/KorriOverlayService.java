@@ -295,6 +295,7 @@ public final class KorriOverlayService extends AccessibilityService {
                     WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                     android.graphics.PixelFormat.TRANSLUCENT);
+            params.setTitle("Korri gameplay overlay");
             windows.addView(root, params);
             resources.add(() -> {
                 try {

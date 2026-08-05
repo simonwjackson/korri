@@ -358,9 +358,9 @@ if grep -q '"active":{' <<<"$session"; then
   exit 1
 fi
 
-udp() {
-  local payload="$1"
-  "${ADB[@]}" shell "printf '%s\\n' '$payload' | toybox timeout 2 nc -4 -u -q 1 127.0.0.1 55355" 2>/dev/null | tr -d '\r'
+udp_unauthenticated() {
+  local port="$1"
+  "${ADB[@]}" shell "toybox dd if=/dev/zero bs=66 count=1 2>/dev/null | toybox timeout 2 nc -4 -u -q 1 127.0.0.1 '$port'" 2>/dev/null | tr -d '\r'
 }
 wait_playing() {
   local pid=''
@@ -400,6 +400,39 @@ assert_rgui_menu_visible() {
     echo "command-opened RGUI menu was not observable; evidence is in $PORTAL_EVIDENCE_DIR" >&2
     return 1
   }
+}
+assert_overlay_window_absent() {
+  if "${ADB[@]}" shell dumpsys window windows | grep -Fq 'Korri gameplay overlay'; then
+    echo 'Korri accessibility overlay remained present after RetroArch acknowledgement' >&2
+    return 1
+  fi
+}
+assert_rgui_selection_moves() {
+  local before="$PORTAL_EVIDENCE_DIR/retroarch-rgui-before-move.png"
+  local after="$PORTAL_EVIDENCE_DIR/retroarch-rgui-after-move.png"
+  "${ADB[@]}" shell screencap -p /sdcard/korri-acceptance.png >/dev/null
+  "${ADB[@]}" pull /sdcard/korri-acceptance.png "$before" >/dev/null
+  "${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_DOWN
+  sleep 0.5
+  "${ADB[@]}" shell screencap -p /sdcard/korri-acceptance.png >/dev/null
+  "${ADB[@]}" pull /sdcard/korri-acceptance.png "$after" >/dev/null
+  if compare -metric AE "$before" "$after" null: 2>&1 | grep -qx '0'; then
+    echo 'RGUI selection produced no observable visual change' >&2
+    return 1
+  fi
+}
+assert_native_shortcut_disabled() {
+  local image="$PORTAL_EVIDENCE_DIR/retroarch-safe-key.png"
+  local text="$PORTAL_EVIDENCE_DIR/retroarch-safe-key.ocr.txt"
+  "${ADB[@]}" shell input -d 0 keyevent KEYCODE_BUTTON_SELECT
+  sleep 0.5
+  "${ADB[@]}" shell screencap -p /sdcard/korri-acceptance.png >/dev/null
+  "${ADB[@]}" pull /sdcard/korri-acceptance.png "$image" >/dev/null
+  tesseract "$image" stdout --psm 6 >"$text" 2>/dev/null
+  if grep -qi 'quick menu' "$text"; then
+    echo 'safe non-Guide controller key unexpectedly opened RetroArch menu' >&2
+    return 1
+  fi
 }
 wait_stopped() {
   local pid=""
@@ -487,23 +520,25 @@ if ! pid_first="$(package_pid "$FORK_PACKAGE")"; then
 fi
 [[ -n "$pid_first" ]] || { echo 'fork process is missing after launch' >&2; exit 1; }
 
-# Loopback is transport, not authority: missing, malformed, stale-looking,
-# and arbitrary unauthenticated payloads receive no usable response.
-malformed_token="$(printf '0%.0s' $(seq 1 63))"
-stale_token="$(printf '0%.0s' $(seq 1 64))"
-[[ -z "$(udp 'GET_STATUS' || true)" ]]
-[[ -z "$(udp "$malformed_token GET_STATUS" || true)" ]]
-[[ -z "$(udp "$stale_token GET_STATUS" || true)" ]]
-[[ -z "$(udp "$stale_token VERSION" || true)" ]]
+# Loopback is transport, not authority. The launch-derived endpoint is visible
+# in Korri's generated config, but an exact-size unauthenticated frame receives
+# no response and cannot forge a command.
+control_port="$("${ADB[@]}" shell "grep '^network_cmd_port = ' '$RETROARCH_CONFIG_REMOTE'" | tr -cd '0-9')"
+[[ "$control_port" =~ ^[0-9]+$ && "$control_port" -ge 49152 && "$control_port" -le 65535 ]]
+[[ -z "$(udp_unauthenticated "$control_port" || true)" ]]
 if ! current_pid="$(package_pid "$FORK_PACKAGE")"; then
   exit 1
 fi
 [[ "$current_pid" == "$pid_first" ]]
 
-# Non-destructive native-menu journey. The accessibility grant is user-owned;
-# this gate only drives Guide and never writes Android accessibility settings.
+# Non-destructive native-menu journey. A safe non-Guide key first proves the
+# configured native shortcuts remain disabled. SHOW_MENU must acknowledge
+# before the portal removes the accessibility window; only then is RGUI driven.
+assert_native_shortcut_disabled
 invoke_overlay_row 1
+assert_overlay_window_absent
 assert_rgui_menu_visible
+assert_rgui_selection_moves
 "${ADB[@]}" shell input -d 0 keyevent KEYCODE_BACK
 sleep 1
 if ! current_pid="$(package_pid "$FORK_PACKAGE")"; then

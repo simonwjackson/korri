@@ -28,7 +28,14 @@ grep -F 'brightness" -ge 60' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_DPAD_CENTER' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_BUTTON_MODE' "$ACCEPTANCE" >/dev/null
 grep -F 'invoke_overlay_row 1' "$ACCEPTANCE" >/dev/null
+grep -F 'assert_overlay_window_absent' "$ACCEPTANCE" >/dev/null
+grep -F 'Korri gameplay overlay' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_rgui_menu_visible' "$ACCEPTANCE" >/dev/null
+grep -F 'assert_rgui_selection_moves' "$ACCEPTANCE" >/dev/null
+grep -F 'KEYCODE_DPAD_DOWN' "$ACCEPTANCE" >/dev/null
+grep -F 'assert_native_shortcut_disabled' "$ACCEPTANCE" >/dev/null
+grep -F 'KEYCODE_BUTTON_SELECT' "$ACCEPTANCE" >/dev/null
+grep -F 'network_cmd_port' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_BACK' "$ACCEPTANCE" >/dev/null
 grep -F 'invoke_overlay_row 2' "$ACCEPTANCE" >/dev/null
 grep -F 'enabled_accessibility_services' "$ACCEPTANCE" >/dev/null
