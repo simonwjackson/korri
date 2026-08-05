@@ -11,9 +11,7 @@ cat >"$TMP/adb" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$FAKE_ADB_LOG"
-if [[ "$*" == *' shell pidof com.simonwjackson.korri.debug' ]]; then
-  printf '4242\n'
-fi
+if [[ "$*" == *' shell pidof com.simonwjackson.korri.debug' ]]; then printf '4242\n'; fi
 SH
 cat >"$TMP/curl" <<'SH'
 #!/usr/bin/env bash
@@ -32,11 +30,22 @@ set -euo pipefail
 request="$(cat)"
 printf '%s\n' "$request" >>"$FAKE_EVAL_LOG"
 id="$(jq -r '.id' <<<"$request")"
-case "${FAKE_FOCUS_RESULT:-ok}" in
-  ok) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","library":true,"gameId":"wl4","title":"Wario Land 4","renderedIdMatches":1,"exactMatches":1,"activeExact":true}' ;;
-  ambiguous) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","library":true,"gameId":"wl4","title":"Wario Land 4","renderedIdMatches":2,"exactMatches":2,"activeExact":false}' ;;
-  *) exit 2 ;;
-esac
+expression="$(jq -r '.params.expression' <<<"$request")"
+if grep -Fq 'shift.cine-library-tile' <<<"$expression"; then
+  case "${FAKE_LIBRARY_RESULT:-ok}" in
+    ok) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"home","part":"shift.cine-library-tile","title":"Library","visibleFocusableMatches":1,"activeExact":true}' ;;
+    ambiguous) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"home","part":"shift.cine-library-tile","title":"Library","visibleFocusableMatches":2,"activeExact":false}' ;;
+    *) exit 2 ;;
+  esac
+elif grep -Fq 'visibleLibraryRoots' <<<"$expression"; then
+  value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"library","visibleLibraryRoots":1}'
+else
+  case "${FAKE_GAME_RESULT:-ok}" in
+    ok) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"library","gameId":"local-game:wl4","title":"Wario Land 4","renderedIdMatches":1,"exactMatches":1,"activeExact":true}' ;;
+    ambiguous) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"library","gameId":"local-game:wl4","title":"Wario Land 4","renderedIdMatches":2,"exactMatches":2,"activeExact":false}' ;;
+    *) exit 2 ;;
+  esac
+fi
 jq -cn --argjson id "$id" --argjson value "$value" '{id:$id,result:{result:{value:$value}}}'
 SH
 chmod +x "$TMP/adb" "$TMP/curl" "$TMP/timeout" "$TMP/websocat"
@@ -52,58 +61,75 @@ KORRI_JQ_BIN="$(command -v jq)"
 export KORRI_JQ_BIN
 
 trusted='https://appassets.androidplatform.net/assets/portal/index.html'
-jq -cn --arg url "$trusted" \
-  '[{type:"page",url:$url,webSocketDebuggerUrl:"ws://127.0.0.1:43123/devtools/page/main"},
-    {type:"page",url:($url + "?surface=overlay"),webSocketDebuggerUrl:"ws://127.0.0.1:43123/devtools/page/overlay"},
-    {type:"page",url:"https://example.invalid/",webSocketDebuggerUrl:"ws://127.0.0.1:43123/devtools/page/external"}]' \
-  >"$FAKE_TARGETS"
+trusted_targets() {
+  jq -cn --arg url "$trusted" \
+    '[{type:"page",url:$url,webSocketDebuggerUrl:"ws://127.0.0.1:43123/devtools/page/main"},
+      {type:"page",url:($url + "?surface=overlay"),webSocketDebuggerUrl:"ws://127.0.0.1:43123/devtools/page/overlay"},
+      {type:"page",url:"https://example.invalid/",webSocketDebuggerUrl:"ws://127.0.0.1:43123/devtools/page/external"}]' \
+    >"$FAKE_TARGETS"
+}
+trusted_targets
 
-output="$($HELPER fake-device com.simonwjackson.korri.debug wl4 'Wario Land 4')"
+library="$($HELPER fake-device com.simonwjackson.korri.debug --library)"
 jq -e --arg url "$trusted" '
-  .url == $url and .view == "library" and .gameId == "wl4"
+  .url == $url and .view == "home" and .part == "shift.cine-library-tile"
+  and .title == "Library" and .focused == true
+' <<<"$library" >/dev/null
+view="$($HELPER fake-device com.simonwjackson.korri.debug --verify-library)"
+jq -e --arg url "$trusted" '.url == $url and .view == "library" and .verified == true' <<<"$view" >/dev/null
+game="$($HELPER fake-device com.simonwjackson.korri.debug --game local-game:wl4 'Wario Land 4')"
+jq -e --arg url "$trusted" '
+  .url == $url and .view == "library" and .gameId == "local-game:wl4"
   and .title == "Wario Land 4" and .focused == true
-' <<<"$output" >/dev/null
+' <<<"$game" >/dev/null
+
 grep -F 'forward tcp:43123 localabstract:webview_devtools_remote_4242' "$FAKE_ADB_LOG" >/dev/null
 grep -F 'forward --remove tcp:43123' "$FAKE_ADB_LOG" >/dev/null
+grep -F 'button[data-korri-part=\"shift.cine-library-tile\"][aria-label=\"Library\"]' "$FAKE_EVAL_LOG" >/dev/null
 grep -F "document.querySelectorAll('[data-shift-library]').length !== 1" "$FAKE_EVAL_LOG" >/dev/null
 grep -F 'target.focus()' "$FAKE_EVAL_LOG" >/dev/null
-for forbidden in '.click(' KorriNative korridCapability 'fetch(' XMLHttpRequest surface=overlay example.invalid; do
+for forbidden in '.click(' 'dispatchEvent(' KorriNative korridCapability 'fetch(' XMLHttpRequest surface=overlay example.invalid; do
   if grep -F "$forbidden" "$FAKE_EVAL_LOG" >/dev/null; then
     echo "debug focus evaluated forbidden content: $forbidden" >&2
     exit 1
   fi
 done
 
-export FAKE_FOCUS_RESULT=ambiguous
-if "$HELPER" fake-device com.simonwjackson.korri.debug wl4 'Wario Land 4' \
+export FAKE_LIBRARY_RESULT=ambiguous
+if "$HELPER" fake-device com.simonwjackson.korri.debug --library >"$TMP/library.out" 2>"$TMP/library.err"; then
+  echo 'debug focus helper accepted ambiguous Library tiles' >&2
+  exit 1
+fi
+grep -F 'exactly one visible focusable Library tile' "$TMP/library.err" >/dev/null
+unset FAKE_LIBRARY_RESULT
+
+export FAKE_GAME_RESULT=ambiguous
+if "$HELPER" fake-device com.simonwjackson.korri.debug --game local-game:wl4 'Wario Land 4' \
   >"$TMP/ambiguous.out" 2>"$TMP/ambiguous.err"; then
   echo 'debug focus helper accepted an ambiguous rendered identity' >&2
   exit 1
 fi
 grep -F 'did not expose exactly one focusable game' "$TMP/ambiguous.err" >/dev/null
-unset FAKE_FOCUS_RESULT
+unset FAKE_GAME_RESULT
 
 jq -cn --arg url "$trusted" \
   '[{type:"page",url:($url + "?surface=overlay"),webSocketDebuggerUrl:"ws://127.0.0.1:43123/devtools/page/overlay"}]' \
   >"$FAKE_TARGETS"
-if "$HELPER" fake-device com.simonwjackson.korri.debug wl4 'Wario Land 4' \
-  >"$TMP/overlay.out" 2>"$TMP/overlay.err"; then
+if "$HELPER" fake-device com.simonwjackson.korri.debug --library >"$TMP/overlay.out" 2>"$TMP/overlay.err"; then
   echo 'debug focus helper accepted an overlay-only target set' >&2
   exit 1
 fi
-
-grep -F 'did not expose exactly one focusable game' "$TMP/overlay.err" >/dev/null
+grep -F 'did not expose exactly one visible focusable Library tile' "$TMP/overlay.err" >/dev/null
 
 jq -cn --arg url "$trusted" \
   '[{type:"page",url:$url,webSocketDebuggerUrl:"ws://127.0.0.1:43123/devtools/page/a"},
     {type:"page",url:$url,webSocketDebuggerUrl:"ws://127.0.0.1:43123/devtools/page/b"}]' \
   >"$FAKE_TARGETS"
-if "$HELPER" fake-device com.simonwjackson.korri.debug wl4 'Wario Land 4' \
+if "$HELPER" fake-device com.simonwjackson.korri.debug --game local-game:wl4 'Wario Land 4' \
   >"$TMP/duplicate.out" 2>"$TMP/duplicate.err"; then
   echo 'debug focus helper accepted duplicate trusted portal targets' >&2
   exit 1
 fi
-
 grep -F 'did not expose exactly one focusable game' "$TMP/duplicate.err" >/dev/null
 
-printf 'Android debug portal game focus contract passed\n'
+printf 'Android debug portal focus contract passed\n'

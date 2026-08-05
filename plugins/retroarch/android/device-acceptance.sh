@@ -745,10 +745,10 @@ wait_stopped() {
 }
 traverse_library_to_final_viewport() {
   local step
-  local max_steps=12
-  # Shift's complete Library is virtualized. Traverse through its real focus
-  # model until Down sticks at the final row, making the trailing Wario tile
-  # rendered before the strict debug helper attempts to focus it.
+  local max_steps=64
+  # The complete federated Library is virtualized and may contain many rows.
+  # A bounded real-controller traversal makes the trailing Wario tile render;
+  # Down simply sticks after the final row.
   for ((step = 1; step <= max_steps; step++)); do
     "${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_DOWN
     sleep 0.15
@@ -756,18 +756,28 @@ traverse_library_to_final_viewport() {
 }
 focus_wario_in_installed_library() {
   local label="$1"
+  local navigation_observation
+  local library_observation
   local focus_observation
-  # This exact controller sequence is the installed Shift treaty previously
-  # proven on this device: Home navigation moves RIGHT to Library, then A opens
-  # it. DevTools may focus the exact rendered tile but may never activate it.
-  "${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_RIGHT
+  # A reload may restore focus anywhere on curated Home. DevTools may focus
+  # only the exact visible Library tile; controller A performs the activation.
+  navigation_observation="$("$DEBUG_PORTAL_FOCUS_GAME_SH" \
+    "$SERIAL" "$KORRI_PACKAGE" --library)"
+  jq -e '
+    .view == "home" and .part == "shift.cine-library-tile"
+    and .title == "Library" and .focused == true
+  ' <<<"$navigation_observation" >/dev/null
+  printf '%s\n' "$navigation_observation" >"$PORTAL_EVIDENCE_DIR/$label.library-navigation.json"
   "${ADB[@]}" shell input -d 0 keyevent KEYCODE_BUTTON_A
-  sleep 0.5
+  library_observation="$("$DEBUG_PORTAL_FOCUS_GAME_SH" \
+    "$SERIAL" "$KORRI_PACKAGE" --verify-library)"
+  jq -e '.view == "library" and .verified == true' <<<"$library_observation" >/dev/null
+  printf '%s\n' "$library_observation" >"$PORTAL_EVIDENCE_DIR/$label.library-view.json"
   traverse_library_to_final_viewport
   # Korrid's local RPC id is `wl4`; the folded surface identity is namespaced
   # so it cannot collide with peer or provider entries.
   focus_observation="$("$DEBUG_PORTAL_FOCUS_GAME_SH" \
-    "$SERIAL" "$KORRI_PACKAGE" 'local-game:wl4' 'Wario Land 4')"
+    "$SERIAL" "$KORRI_PACKAGE" --game 'local-game:wl4' 'Wario Land 4')"
   jq -e '
     .view == "library" and .gameId == "local-game:wl4"
     and .title == "Wario Land 4" and .focused == true

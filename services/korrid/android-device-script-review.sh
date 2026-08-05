@@ -100,8 +100,10 @@ grep -F "https://appassets.androidplatform.net/assets/portal/index.html" "$DEBUG
 grep -F "expected exactly one bundled main Korri portal page" "$DEBUG_PORTAL_FOCUS_GAME" >/dev/null
 grep -F "document.querySelectorAll('[data-shift-library]').length !== 1" "$DEBUG_PORTAL_FOCUS_GAME" >/dev/null
 grep -F 'target.focus()' "$DEBUG_PORTAL_FOCUS_GAME" >/dev/null
-if grep -Eq 'KorriNative|korridCapability|surface=overlay|\.click\(|fetch\(|XMLHttpRequest' "$DEBUG_PORTAL_FOCUS_GAME"; then
-  echo 'debug portal focus must not activate games, inspect capabilities, use network, or select overlay pages' >&2
+grep -F 'shift.cine-library-tile' "$DEBUG_PORTAL_FOCUS_GAME" >/dev/null
+grep -F -- '--verify-library' "$DEBUG_PORTAL_FOCUS_GAME" >/dev/null
+if grep -Eq 'KorriNative|korridCapability|surface=overlay|\.click\(|dispatchEvent\(|fetch\(|XMLHttpRequest' "$DEBUG_PORTAL_FOCUS_GAME"; then
+  echo 'debug portal focus must not activate controls, dispatch input, inspect capabilities, use network, or select overlay pages' >&2
   exit 1
 fi
 if grep -Eq 'force-stop|am[[:space:]]+kill|pm[[:space:]]+(clear|install|uninstall)|adb[[:space:]]+(install|uninstall)' "$DEBUG_PORTAL_FOCUS_GAME"; then
@@ -114,8 +116,17 @@ for acceptance in "$OVERLAY_ACCEPTANCE" "$RETROARCH_ACCEPTANCE"; do
   grep -F -- '--expect-portal' "$acceptance" >/dev/null
 done
 grep -F 'DEBUG_PORTAL_FOCUS_GAME_SH=' "$RETROARCH_ACCEPTANCE" >/dev/null
-grep -F 'KEYCODE_DPAD_RIGHT' "$RETROARCH_ACCEPTANCE" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F -- '"$SERIAL" "$KORRI_PACKAGE" --library' "$RETROARCH_ACCEPTANCE" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F -- '"$SERIAL" "$KORRI_PACKAGE" --verify-library' "$RETROARCH_ACCEPTANCE" >/dev/null
+grep -F -- "--game 'local-game:wl4' 'Wario Land 4'" "$RETROARCH_ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_BUTTON_A' "$RETROARCH_ACCEPTANCE" >/dev/null
+library_focus_source="$(sed -n '/^focus_wario_in_installed_library() {/,/^}/p' "$RETROARCH_ACCEPTANCE")"
+if grep -F 'KEYCODE_DPAD_RIGHT' <<<"$library_focus_source" >/dev/null; then
+  echo 'RetroArch acceptance must not assume retained Home focus before opening Library' >&2
+  exit 1
+fi
 
 # Unified-overlay acceptance remains human-led and state restoring. These
 # source contracts deliberately do not substitute for the device gate.

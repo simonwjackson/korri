@@ -35,7 +35,11 @@ grep -F 'traverse_library_to_final_viewport' "$ACCEPTANCE" >/dev/null
 grep -F 'DEBUG_PORTAL_FOCUS_GAME_SH=' "$ACCEPTANCE" >/dev/null
 grep -F 'portal_shot_focuses_wario' "$ACCEPTANCE" >/dev/null
 grep -F 'brightness" -ge 60' "$ACCEPTANCE" >/dev/null
-grep -F 'KEYCODE_DPAD_RIGHT' "$ACCEPTANCE" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F -- '"$SERIAL" "$KORRI_PACKAGE" --library' "$ACCEPTANCE" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F -- '"$SERIAL" "$KORRI_PACKAGE" --verify-library' "$ACCEPTANCE" >/dev/null
+grep -F -- "--game 'local-game:wl4' 'Wario Land 4'" "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_BUTTON_A' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_DPAD_CENTER' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_BUTTON_MODE' "$ACCEPTANCE" >/dev/null
@@ -81,19 +85,30 @@ grep -F 'enabled_accessibility_services' "$ACCEPTANCE" >/dev/null
 grep -F 'use: "@korri:retroarch/retroarch"' "$WL4_LIBRARY" >/dev/null
 grep -F 'runtime: "@korri:mgba/mgba"' "$WL4_LIBRARY" >/dev/null
 library_focus_source="$(sed -n '/^focus_wario_in_installed_library() {/,/^}/p' "$ACCEPTANCE")"
+# shellcheck disable=SC2016 # Literal source-contract needles.
+nav_focus_line="$(grep -nF -- '"$SERIAL" "$KORRI_PACKAGE" --library' <<<"$library_focus_source" | head -1 | cut -d: -f1)"
 open_library_line="$(grep -nF 'KEYCODE_BUTTON_A' <<<"$library_focus_source" | head -1 | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+verify_library_line="$(grep -nF -- '"$SERIAL" "$KORRI_PACKAGE" --verify-library' <<<"$library_focus_source" | head -1 | cut -d: -f1)"
 traversal_line="$(grep -nF 'traverse_library_to_final_viewport' <<<"$library_focus_source" | head -1 | cut -d: -f1)"
-strict_focus_line="$(grep -nF 'DEBUG_PORTAL_FOCUS_GAME_SH' <<<"$library_focus_source" | head -1 | cut -d: -f1)"
-[[ -n "$open_library_line" && -n "$traversal_line" && -n "$strict_focus_line" \
-  && "$open_library_line" -lt "$traversal_line" \
+strict_focus_line="$(grep -nF -- "--game 'local-game:wl4'" <<<"$library_focus_source" | head -1 | cut -d: -f1)"
+[[ -n "$nav_focus_line" && -n "$open_library_line" && -n "$verify_library_line" \
+  && -n "$traversal_line" && -n "$strict_focus_line" \
+  && "$nav_focus_line" -lt "$open_library_line" \
+  && "$open_library_line" -lt "$verify_library_line" \
+  && "$verify_library_line" -lt "$traversal_line" \
   && "$traversal_line" -lt "$strict_focus_line" ]] || {
-  echo 'RetroArch acceptance must traverse the real Library focus model before strict Wario focus' >&2
+  echo 'RetroArch acceptance must focus Library, activate it, verify its view, traverse, then focus Wario' >&2
   exit 1
 }
+if grep -F 'KEYCODE_DPAD_RIGHT' <<<"$library_focus_source" >/dev/null; then
+  echo 'RetroArch acceptance must not assume retained Home focus before opening Library' >&2
+  exit 1
+fi
 traversal_source="$(sed -n '/^traverse_library_to_final_viewport() {/,/^}/p' "$ACCEPTANCE")"
 traversal_max="$(sed -n 's/^[[:space:]]*local max_steps=\([0-9][0-9]*\)$/\1/p' <<<"$traversal_source")"
-[[ "$traversal_max" =~ ^[0-9]+$ && "$traversal_max" -ge 1 && "$traversal_max" -le 20 ]] || {
-  echo 'RetroArch Library traversal must have a small explicit bound' >&2
+[[ "$traversal_max" =~ ^[0-9]+$ && "$traversal_max" -ge 1 && "$traversal_max" -le 64 ]] || {
+  echo 'RetroArch Library traversal must have an explicit bound no larger than 64' >&2
   exit 1
 }
 grep -F 'KEYCODE_DPAD_DOWN' <<<"$traversal_source" >/dev/null
