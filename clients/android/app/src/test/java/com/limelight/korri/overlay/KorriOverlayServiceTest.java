@@ -370,7 +370,7 @@ public class KorriOverlayServiceTest {
     }
 
     @Test
-    public void readyCancelsBootstrapTimeoutWithoutHiding() {
+    public void readyThenRendererLossTearsDownOnce() {
         final int[] cancelCount = { 0 };
         final int[] fatalCount = { 0 };
         KorriOverlayService.BootstrapGuard bootstrap =
@@ -380,10 +380,32 @@ public class KorriOverlayServiceTest {
         bootstrap.start();
 
         bootstrap.ready();
-        bootstrap.fail();
+        bootstrap.rendererLost();
+        bootstrap.rendererLost();
+        bootstrap.mainFrameFailed();
+        bootstrap.destroy();
 
         assertEquals(1, cancelCount[0]);
-        assertEquals(0, fatalCount[0]);
+        assertEquals(1, fatalCount[0]);
+    }
+
+    @Test
+    public void readyThenMainFrameFailureTearsDownOnce() {
+        final int[] cancelCount = { 0 };
+        final int[] fatalCount = { 0 };
+        KorriOverlayService.BootstrapGuard bootstrap =
+                new KorriOverlayService.BootstrapGuard(
+                        callback -> () -> cancelCount[0]++,
+                        () -> fatalCount[0]++);
+        bootstrap.start();
+
+        bootstrap.ready();
+        bootstrap.mainFrameFailed();
+        bootstrap.mainFrameFailed();
+        bootstrap.rendererLost();
+
+        assertEquals(1, cancelCount[0]);
+        assertEquals(1, fatalCount[0]);
     }
 
     @Test
@@ -393,9 +415,10 @@ public class KorriOverlayServiceTest {
                         "src/main/java/com/limelight/korri/overlay/KorriOverlayService.java")),
                 java.nio.charset.StandardCharsets.UTF_8);
 
-        assertTrue(source.contains("if (request.isForMainFrame()) fatal.run()"));
+        assertTrue(source.contains(
+                "if (request.isForMainFrame()) lifecycle.mainFrameFailed()"));
         assertTrue(source.contains("onRenderProcessGone"));
-        assertTrue(source.contains("fatal.run();\n            return true;"));
+        assertTrue(source.contains("lifecycle.rendererLost();\n            return true;"));
         assertTrue(source.contains("if (fatalDuringCreate[0])"));
     }
 

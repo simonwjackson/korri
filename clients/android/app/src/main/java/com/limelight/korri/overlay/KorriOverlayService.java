@@ -238,7 +238,7 @@ public final class KorriOverlayService extends AccessibilityService {
             if (!bridge.attachTo(web)) {
                 throw new IllegalStateException("WebMessageListener is unavailable");
             }
-            web.setWebViewClient(new LockedWebViewClient(assets, bootstrap::fail));
+            web.setWebViewClient(new LockedWebViewClient(assets, bootstrap));
             root.addView(web, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
@@ -314,11 +314,11 @@ public final class KorriOverlayService extends AccessibilityService {
 
     private final class LockedWebViewClient extends WebViewClient {
         private final WebViewAssetLoader assets;
-        private final Runnable fatal;
+        private final BootstrapGuard lifecycle;
 
-        LockedWebViewClient(WebViewAssetLoader assets, Runnable fatal) {
+        LockedWebViewClient(WebViewAssetLoader assets, BootstrapGuard lifecycle) {
             this.assets = assets;
-            this.fatal = fatal;
+            this.lifecycle = lifecycle;
         }
 
         @Override
@@ -339,18 +339,18 @@ public final class KorriOverlayService extends AccessibilityService {
         @Override
         public void onReceivedError(
                 WebView view, WebResourceRequest request, WebResourceError error) {
-            if (request.isForMainFrame()) fatal.run();
+            if (request.isForMainFrame()) lifecycle.mainFrameFailed();
         }
 
         @Override
         public void onReceivedHttpError(
                 WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
-            if (request.isForMainFrame()) fatal.run();
+            if (request.isForMainFrame()) lifecycle.mainFrameFailed();
         }
 
         @Override
         public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
-            fatal.run();
+            lifecycle.rendererLost();
             return true;
         }
 
@@ -399,12 +399,14 @@ public final class KorriOverlayService extends AccessibilityService {
         KorriLaunchContinuity.Cancellable schedule(Runnable callback);
     }
 
-    /** One-shot bootstrap/fatal guard shared by timeout and WebView failures. */
+    /** Bootstrap timeout plus one-shot fatal ownership for the WebView lifetime. */
     static final class BootstrapGuard {
         private final TimeoutScheduler scheduler;
         private final Runnable fatal;
         private KorriLaunchContinuity.Cancellable timeout;
-        private boolean finished;
+        private boolean ready;
+        private boolean fatalReported;
+        private boolean destroyed;
 
         BootstrapGuard(TimeoutScheduler scheduler, Runnable fatal) {
             this.scheduler = scheduler;
@@ -412,27 +414,41 @@ public final class KorriOverlayService extends AccessibilityService {
         }
 
         void start() {
-            if (!finished && timeout == null) timeout = scheduler.schedule(this::fail);
+            if (!ready && !fatalReported && !destroyed && timeout == null) {
+                timeout = scheduler.schedule(this::fail);
+            }
         }
 
         void ready() {
-            finish(false);
+            if (destroyed || fatalReported) return;
+            ready = true;
+            cancelTimeout();
+        }
+
+        void mainFrameFailed() {
+            fail();
+        }
+
+        void rendererLost() {
+            fail();
         }
 
         void fail() {
-            finish(true);
+            if (destroyed || fatalReported) return;
+            fatalReported = true;
+            cancelTimeout();
+            fatal.run();
         }
 
         void destroy() {
-            finish(false);
+            if (destroyed) return;
+            destroyed = true;
+            cancelTimeout();
         }
 
-        private void finish(boolean notifyFatal) {
-            if (finished) return;
-            finished = true;
+        private void cancelTimeout() {
             if (timeout != null) timeout.cancel();
             timeout = null;
-            if (notifyFatal) fatal.run();
         }
     }
 
