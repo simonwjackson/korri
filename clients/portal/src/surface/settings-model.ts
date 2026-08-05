@@ -10,7 +10,7 @@ import type {
   StreamHost,
   SystemInfoResult,
 } from "@contracts/bridge/korri-native-bridge"
-import type { SettingsSnapshot } from "@contracts/generated/korrid"
+import { SecretSettingStatus, type SettingsSnapshot } from "@contracts/generated/korrid"
 
 export interface DeviceFacts {
   readonly version?: string
@@ -65,6 +65,9 @@ const onOff = [
   { value: "false", label: "Off" },
 ] as const
 
+const secretStatusLabel = (status: SecretSettingStatus): string =>
+  status === SecretSettingStatus.Configured ? "Configured" : "Not configured"
+
 export function settingsFrom(facts: DeviceFacts): readonly SurfaceSettingGroup[] {
   const paired = facts.hosts?.filter(host => host.paired) ?? []
   const android =
@@ -84,6 +87,22 @@ export function settingsFrom(facts: DeviceFacts): readonly SurfaceSettingGroup[]
               kind: "text" as const,
               placeholder: "This device",
               maxLength: 64,
+            },
+          },
+    ]),
+    group("Metadata", [
+      facts.settings === undefined
+        ? undefined
+        : {
+            id: "steamgriddb-credential",
+            label: "SteamGridDB API key",
+            value: secretStatusLabel(facts.settings.steamGridDbCredential),
+            description: "Used only by korrid for metadata and cover art lookup",
+            interaction: {
+              kind: "sensitiveText" as const,
+              placeholder: "Paste API key",
+              maxLength: 256,
+              clearLabel: "Clear saved key",
             },
           },
     ]),

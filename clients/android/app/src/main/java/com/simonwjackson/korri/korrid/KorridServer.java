@@ -17,7 +17,8 @@ public final class KorridServer {
     private KorridServer() {}
 
     private static native String version();
-    private static native int start(String allowedOrigin, String localStorageRoot);
+    private static native int start(
+            String allowedOrigin, String localStorageRoot, String privateStateRoot);
     public static native String capability();
     /** Tagged authorization result; a valid Moonlight launch is consumed once. */
     public static native String authorizeMoonlightLaunchSpec(String specJson);
@@ -44,8 +45,9 @@ public final class KorridServer {
     public static native String authorizePlatformInstruction(String instructionJson);
     public static native void stop();
 
-    public static int startAndLog(String allowedOrigin, String localStorageRoot) {
-        int port = start(allowedOrigin, localStorageRoot);
+    public static int startAndLog(
+            String allowedOrigin, String localStorageRoot, String privateStateRoot) {
+        int port = start(allowedOrigin, localStorageRoot, privateStateRoot);
         Log.i("KorridServer", version() + " listening on 127.0.0.1:" + port);
         return port;
     }

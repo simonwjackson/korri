@@ -302,6 +302,15 @@ export interface SessionControlsRequest {
 	launchId: string;
 }
 
+export enum SecretSettingStatus {
+	Configured = "Configured",
+	NotConfigured = "NotConfigured",
+}
+
+export interface SensitiveSettingResult {
+	status: SecretSettingStatus;
+}
+
 export interface SessionPrepareRequest {
 	gameId: string;
 	host?: string;
@@ -337,6 +346,7 @@ export interface SettingsSnapshot {
 	revision: string;
 	deviceName?: string;
 	plugins: PluginSetting[];
+	steamGridDbCredential: SecretSettingStatus;
 }
 
 export interface SettingsSnapshotRequest {
@@ -369,6 +379,14 @@ export enum AndroidMoonlightEffect {
 	SetFaceButtonFlip = "set-face-button-flip",
 	SetRumble = "set-rumble",
 	SetPictureInPicture = "set-picture-in-picture",
+
+}
+
+export interface SteamGridDbCredentialClearRequest {
+}
+
+export interface SteamGridDbCredentialSetRequest {
+	token: string;
 }
 
 export type CatalogSnapshotOutcome =
@@ -413,7 +431,9 @@ export type RpcRequest =
 	| { _tag: "app.local-games.launch", payload: LocalGameLaunchRequest }
 	| { _tag: "system.health", payload: HealthRequest }
 	| { _tag: "system.settings.snapshot", payload: SettingsSnapshotRequest }
-	| { _tag: "system.settings.update", payload: SettingsUpdateRequest };
+	| { _tag: "system.settings.update", payload: SettingsUpdateRequest }
+	| { _tag: "system.settings.steamgriddbCredential.set", payload: SteamGridDbCredentialSetRequest }
+	| { _tag: "system.settings.steamgriddbCredential.clear", payload: SteamGridDbCredentialClearRequest };
 
 export type RpcResponse =
 	| { _tag: "app.catalog.snapshot", outcome: CatalogSnapshotOutcome }
@@ -429,7 +449,13 @@ export type RpcResponse =
 	| { _tag: "app.local-games.launch", outcome: LocalGameLaunchOutcome }
 	| { _tag: "system.health", outcome: HealthOutcome }
 	| { _tag: "system.settings.snapshot", outcome: SettingsSnapshotOutcome }
-	| { _tag: "system.settings.update", outcome: SettingsUpdateOutcome };
+	| { _tag: "system.settings.update", outcome: SettingsUpdateOutcome }
+	| { _tag: "system.settings.steamgriddbCredential.set", outcome: SensitiveSettingOutcome }
+	| { _tag: "system.settings.steamgriddbCredential.clear", outcome: SensitiveSettingOutcome };
+
+export type SensitiveSettingOutcome =
+	| { _tag: "Ok", payload: SensitiveSettingResult }
+	| { _tag: "Err", payload: RpcFailure };
 
 export type SessionControlInvokeOutcome =
 	| { _tag: "Ok", payload: SessionControlInvokeResult }

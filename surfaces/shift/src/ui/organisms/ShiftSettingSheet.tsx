@@ -25,11 +25,12 @@ export function ShiftSettingSheet({
   readonly onDismissProblem: () => void
   readonly onClose: () => void
 }) {
-  const [text, setText] = useState(item?.value ?? "")
+  const isSensitive = item?.interaction?.kind === "sensitiveText"
+  const [text, setText] = useState(isSensitive ? "" : (item?.value ?? ""))
   const savingSettingId = useRef<string | null>(null)
   // A background refresh rebuilds item objects. Keep an in-progress edit unless
   // the user actually moved to a different setting.
-  useEffect(() => setText(item?.value ?? ""), [item?.id])
+  useEffect(() => setText(isSensitive ? "" : (item?.value ?? "")), [item?.id, isSensitive])
   useEffect(() => {
     if (status._tag === "Saving" && status.settingId === item?.id) {
       savingSettingId.current = item.id
@@ -68,9 +69,10 @@ export function ShiftSettingSheet({
               ))}
             </ShiftSheetGroup>
           ) : (
-            <ShiftSheetGroup title="Name">
+            <ShiftSheetGroup title={isSensitive ? "Secret" : "Name"}>
               <input
                 className="shift-setting-input"
+                type={isSensitive ? "password" : "text"}
                 value={text}
                 placeholder={item.interaction.placeholder}
                 maxLength={item.interaction.maxLength}
@@ -83,6 +85,13 @@ export function ShiftSettingSheet({
                 disabled={saving || text.trim().length === 0}
                 onSelect={() => onChange(text)}
               />
+              {isSensitive && item.value === "Configured" ? (
+                <ShiftSheetAction
+                  label={item.interaction.clearLabel ?? "Clear"}
+                  disabled={saving}
+                  onSelect={() => onChange("")}
+                />
+              ) : null}
             </ShiftSheetGroup>
           )}
         </ShiftSheetBody>

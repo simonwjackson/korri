@@ -68,12 +68,42 @@ fn host_storage_root() -> PathBuf {
     )
 }
 
+fn resolve_private_state_root(
+    explicit: Option<OsString>,
+    state_home: Option<OsString>,
+    home: Option<OsString>,
+) -> PathBuf {
+    explicit
+        .map(PathBuf::from)
+        .or_else(|| state_home.map(PathBuf::from).map(|root| root.join("korri")))
+        .or_else(|| {
+            home.map(PathBuf::from)
+                .map(|root| root.join(".local/state/korri"))
+        })
+        .unwrap_or_else(|| PathBuf::from("korri-state"))
+}
+
+fn private_state_root() -> PathBuf {
+    resolve_private_state_root(
+        std::env::var_os("KORRI_PRIVATE_STATE_ROOT"),
+        std::env::var_os("XDG_STATE_HOME"),
+        std::env::var_os("HOME"),
+    )
+}
+
 fn brain_router() -> Router {
     let capability = std::env::var("KORRID_RPC_CAPABILITY")
         .expect("KORRID_RPC_CAPABILITY must be set for the brain server");
     let allowed_origin = std::env::var("KORRID_PORTAL_ORIGIN")
         .unwrap_or_else(|_| "https://appassets.androidplatform.net".into());
-    korrid::router_with_capability(&capability, &allowed_origin)
+    korrid::router_with_capability_and_roots(
+        &capability,
+        &allowed_origin,
+        std::env::var_os("KORRI_LOCAL_STORAGE_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| std::env::temp_dir().join("korri")),
+        private_state_root(),
+    )
 }
 
 #[tokio::main]
@@ -137,6 +167,26 @@ mod tests {
         assert_eq!(
             resolve_host_storage_root(None, Some("/home/test".into())),
             PathBuf::from("/home/test/.local/share/korri"),
+        );
+    }
+
+    #[test]
+    fn private_state_root_uses_explicit_then_xdg_state_then_home() {
+        assert_eq!(
+            resolve_private_state_root(
+                Some("/private".into()),
+                Some("/state".into()),
+                Some("/home/test".into()),
+            ),
+            PathBuf::from("/private"),
+        );
+        assert_eq!(
+            resolve_private_state_root(None, Some("/state".into()), Some("/home/test".into())),
+            PathBuf::from("/state/korri"),
+        );
+        assert_eq!(
+            resolve_private_state_root(None, None, Some("/home/test".into())),
+            PathBuf::from("/home/test/.local/state/korri"),
         );
     }
 }

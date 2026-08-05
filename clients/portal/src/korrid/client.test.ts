@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import { SecretSettingStatus } from "@contracts/generated/korrid"
 import {
   LaunchContributorKind,
   LaunchDisposition,
@@ -410,5 +411,59 @@ describe("local games", () => {
         ],
       },
     })
+  })
+})
+
+describe("sensitive settings", () => {
+  it("serializes SteamGridDB credential writes without expectedRevision", async () => {
+    const bodies: unknown[] = []
+    globalThis.fetch = (async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)))
+      return new Response(
+        JSON.stringify({
+          _tag: "system.settings.steamgriddbCredential.set",
+          outcome: { _tag: "Ok", payload: { status: "Configured" } },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    }) as typeof fetch
+
+    const outcome = await createHttpKorridClient(
+      "http://127.0.0.1:43117",
+      "capability",
+    ).setSteamGridDbCredential("sgdb-secret-token")
+
+    expect(outcome).toEqual({
+      _tag: "Ok",
+      payload: { status: SecretSettingStatus.Configured },
+    })
+    expect(bodies).toEqual([
+      {
+        _tag: "system.settings.steamgriddbCredential.set",
+        payload: { token: "sgdb-secret-token" },
+      },
+    ])
+    expect(JSON.stringify(bodies)).not.toContain("expectedRevision")
+  })
+
+  it("stores only configured/not-configured status in browser memory", async () => {
+    const client = createInMemoryKorridClient()
+
+    await client.setSteamGridDbCredential("sgdb-secret-token")
+    const configured = await client.settingsSnapshot()
+    await client.clearSteamGridDbCredential()
+    const cleared = await client.settingsSnapshot()
+
+    expect(configured).toMatchObject({
+      _tag: "Ok",
+      payload: { steamGridDbCredential: SecretSettingStatus.Configured },
+    })
+    expect(cleared).toMatchObject({
+      _tag: "Ok",
+      payload: { steamGridDbCredential: SecretSettingStatus.NotConfigured },
+    })
+    expect(JSON.stringify({ configured, cleared })).not.toContain(
+      "sgdb-secret-token",
+    )
   })
 })

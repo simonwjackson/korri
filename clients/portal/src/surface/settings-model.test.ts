@@ -1,10 +1,11 @@
 import { describe, expect, it } from "bun:test"
-import type { SettingsSnapshot } from "@contracts/generated/korrid"
+import { SecretSettingStatus, type SettingsSnapshot } from "@contracts/generated/korrid"
 import { type DeviceFacts, settingsFrom } from "./settings-model"
 
 const configuration: SettingsSnapshot = {
   revision: "r1",
   deviceName: "usu",
+  steamGridDbCredential: SecretSettingStatus.NotConfigured,
   plugins: [
     { id: "@korri:mgba", title: "mGBA", enabled: true },
     { id: "@korri:retroarch", title: "RetroArch", enabled: false },
@@ -28,6 +29,24 @@ describe("settingsFrom", () => {
       id: "device-name",
       value: "usu",
       interaction: { kind: "text", maxLength: 64 },
+    })
+  })
+
+  it("publishes SteamGridDB as a write-only sensitive setting", () => {
+    const item = group(
+      {
+        settings: {
+          ...configuration,
+          steamGridDbCredential: SecretSettingStatus.Configured,
+        },
+      },
+      "Metadata",
+    )?.items[0]
+    expect(item).toMatchObject({
+      id: "steamgriddb-credential",
+      label: "SteamGridDB API key",
+      value: "Configured",
+      interaction: { kind: "sensitiveText", placeholder: "Paste API key" },
     })
   })
 

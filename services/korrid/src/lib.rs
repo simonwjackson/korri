@@ -624,6 +624,24 @@ pub struct SettingsSnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_name: Option<String>,
     pub plugins: Vec<PluginSetting>,
+    pub steam_grid_db_credential: config::settings::SecretSettingStatus,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SteamGridDbCredentialSetRequest {
+    pub token: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SteamGridDbCredentialClearRequest {}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SensitiveSettingResult {
+    pub status: config::settings::SecretSettingStatus,
 }
 
 #[typeshare]
@@ -650,6 +668,14 @@ pub enum SettingsSnapshotOutcome {
 #[serde(tag = "_tag", content = "payload")]
 pub enum SettingsUpdateOutcome {
     Ok(SettingsSnapshot),
+    Err(RpcFailure),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
+pub enum SensitiveSettingOutcome {
+    Ok(SensitiveSettingResult),
     Err(RpcFailure),
 }
 
@@ -738,6 +764,10 @@ pub enum RpcRequest {
     SettingsSnapshot(SettingsSnapshotRequest),
     #[serde(rename = "system.settings.update")]
     SettingsUpdate(SettingsUpdateRequest),
+    #[serde(rename = "system.settings.steamgriddbCredential.set")]
+    SteamGridDbCredentialSet(SteamGridDbCredentialSetRequest),
+    #[serde(rename = "system.settings.steamgriddbCredential.clear")]
+    SteamGridDbCredentialClear(SteamGridDbCredentialClearRequest),
 }
 
 #[typeshare]
@@ -772,6 +802,10 @@ pub enum RpcResponse {
     SettingsSnapshot(SettingsSnapshotOutcome),
     #[serde(rename = "system.settings.update")]
     SettingsUpdate(SettingsUpdateOutcome),
+    #[serde(rename = "system.settings.steamgriddbCredential.set")]
+    SteamGridDbCredentialSet(SensitiveSettingOutcome),
+    #[serde(rename = "system.settings.steamgriddbCredential.clear")]
+    SteamGridDbCredentialClear(SensitiveSettingOutcome),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -787,6 +821,7 @@ type RetroarchControlSlot = Arc<Mutex<Option<RetroarchControlAuthority>>>;
 struct BrainRuntime {
     upstream: upstreams::UpstreamRegistry,
     local_storage_root: PathBuf,
+    private_state_root: PathBuf,
     local_file_provision: launcher::FileProvisionMode,
     local_launch_signing_key: Vec<u8>,
     local_launch_reservations: Arc<Mutex<launcher::LaunchPublicationReservations>>,
@@ -1858,7 +1893,10 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
         RpcRequest::SettingsSnapshot(_) => match &state.mode {
             ServerMode::Brain(brain) => RpcResponse::SettingsSnapshot(
                 config::settings::read(&brain.local_storage_root)
-                    .map(settings_snapshot)
+                    .and_then(|readable| {
+                        config::settings::read_sensitive(&brain.private_state_root)
+                            .map(|sensitive| settings_snapshot(readable, sensitive))
+                    })
                     .map(SettingsSnapshotOutcome::Ok)
                     .unwrap_or_else(|error| SettingsSnapshotOutcome::Err(settings_failure(error))),
             ),
@@ -1903,7 +1941,10 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                 }
                 RpcResponse::SettingsUpdate(
                     outcome
-                        .map(settings_snapshot)
+                        .and_then(|readable| {
+                            config::settings::read_sensitive(&brain.private_state_root)
+                                .map(|sensitive| settings_snapshot(readable, sensitive))
+                        })
                         .map(SettingsUpdateOutcome::Ok)
                         .unwrap_or_else(|error| {
                             SettingsUpdateOutcome::Err(settings_failure(error))
@@ -1917,10 +1958,58 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                 }))
             }
         },
+        RpcRequest::SteamGridDbCredentialSet(request) => match &state.mode {
+            ServerMode::Brain(brain) => {
+                let _write = brain
+                    .settings_write_lock
+                    .lock()
+                    .expect("settings write lock poisoned");
+                RpcResponse::SteamGridDbCredentialSet(
+                    config::settings::set_steamgriddb_credential(
+                        &brain.private_state_root,
+                        &request.token,
+                    )
+                    .map(|status| SensitiveSettingOutcome::Ok(SensitiveSettingResult { status }))
+                    .unwrap_or_else(|error| SensitiveSettingOutcome::Err(settings_failure(error))),
+                )
+            }
+            ServerMode::Host(_) => {
+                RpcResponse::SteamGridDbCredentialSet(SensitiveSettingOutcome::Err(RpcFailure {
+                    code: "OperationUnsupported".into(),
+                    message: "settings are available only from the Android brain".into(),
+                }))
+            }
+        },
+        RpcRequest::SteamGridDbCredentialClear(_) => match &state.mode {
+            ServerMode::Brain(brain) => {
+                let _write = brain
+                    .settings_write_lock
+                    .lock()
+                    .expect("settings write lock poisoned");
+                RpcResponse::SteamGridDbCredentialClear(
+                    config::settings::clear_steamgriddb_credential(&brain.private_state_root)
+                        .map(|status| {
+                            SensitiveSettingOutcome::Ok(SensitiveSettingResult { status })
+                        })
+                        .unwrap_or_else(|error| {
+                            SensitiveSettingOutcome::Err(settings_failure(error))
+                        }),
+                )
+            }
+            ServerMode::Host(_) => {
+                RpcResponse::SteamGridDbCredentialClear(SensitiveSettingOutcome::Err(RpcFailure {
+                    code: "OperationUnsupported".into(),
+                    message: "settings are available only from the Android brain".into(),
+                }))
+            }
+        },
     }
 }
 
-fn settings_snapshot(settings: config::settings::ReadableSettings) -> SettingsSnapshot {
+fn settings_snapshot(
+    settings: config::settings::ReadableSettings,
+    sensitive: config::settings::SensitiveSettings,
+) -> SettingsSnapshot {
     SettingsSnapshot {
         revision: settings.revision,
         device_name: settings.device_name,
@@ -1933,6 +2022,7 @@ fn settings_snapshot(settings: config::settings::ReadableSettings) -> SettingsSn
                 enabled: plugin.enabled,
             })
             .collect(),
+        steam_grid_db_credential: sensitive.steam_grid_db_credential,
     }
 }
 
@@ -1973,13 +2063,61 @@ fn default_local_storage_root() -> PathBuf {
         .unwrap_or_else(|| std::env::temp_dir().join("korri"))
 }
 
+fn default_private_state_root() -> PathBuf {
+    std::env::var_os("KORRI_PRIVATE_STATE_ROOT")
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("XDG_STATE_HOME")
+                .map(PathBuf::from)
+                .map(|root| root.join("korri"))
+        })
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .map(|root| root.join(".local/state/korri"))
+        })
+        .unwrap_or_else(|| std::env::temp_dir().join("korri-state"))
+}
+
 /// Build the localhost router protected by a per-server bearer capability.
 /// The exact portal origin is the only browser origin allowed to send it.
 pub fn router_with_capability(rpc_capability: &str, allowed_origin: &str) -> Router {
-    router_with_capability_and_local_root(
+    router_with_capability_and_roots(
         rpc_capability,
         allowed_origin,
         default_local_storage_root(),
+        default_private_state_root(),
+    )
+}
+
+pub fn router_with_capability_and_roots(
+    rpc_capability: &str,
+    allowed_origin: &str,
+    local_storage_root: impl AsRef<Path>,
+    private_state_root: impl AsRef<Path>,
+) -> Router {
+    let local_storage_root = local_storage_root.as_ref().to_owned();
+    let signing_key = generate_launch_signing_key();
+    let local_launch_reservations =
+        Arc::new(Mutex::new(launcher::LaunchPublicationReservations::new()));
+    let moonlight_launch_authority = Arc::new(Mutex::new(launcher::MoonlightLaunchAuthority::new(
+        signing_key.clone(),
+    )));
+    let config_snapshot = config::snapshot::ConfigSnapshotCoordinator::new(&local_storage_root);
+    router_with_capability_local_root_and_provision(
+        rpc_capability,
+        allowed_origin,
+        local_storage_root,
+        private_state_root,
+        launcher::FileProvisionMode::Direct,
+        signing_key,
+        local_launch_reservations,
+        moonlight_launch_authority,
+        Arc::new(Mutex::new(None)),
+        Arc::new(Mutex::new(None)),
+        Arc::new(Mutex::new(None)),
+        NativePlatform::Standalone,
+        config_snapshot,
     )
 }
 
@@ -2000,6 +2138,7 @@ pub fn router_with_capability_and_local_root(
         rpc_capability,
         allowed_origin,
         local_storage_root,
+        default_private_state_root(),
         launcher::FileProvisionMode::Direct,
         signing_key,
         local_launch_reservations,
@@ -2032,6 +2171,7 @@ fn android_router_with_capability_and_local_root(
         rpc_capability,
         allowed_origin,
         local_storage_root,
+        default_private_state_root(),
         launcher::FileProvisionMode::Deferred,
         signing_key,
         local_launch_reservations,
@@ -2048,6 +2188,7 @@ fn router_with_capability_local_root_and_provision(
     rpc_capability: &str,
     allowed_origin: &str,
     local_storage_root: impl AsRef<Path>,
+    private_state_root: impl AsRef<Path>,
     local_file_provision: launcher::FileProvisionMode,
     local_launch_signing_key: Vec<u8>,
     local_launch_reservations: Arc<Mutex<launcher::LaunchPublicationReservations>>,
@@ -2059,12 +2200,14 @@ fn router_with_capability_local_root_and_provision(
     config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
 ) -> Router {
     let local_storage_root = local_storage_root.as_ref().to_owned();
+    let private_state_root = private_state_root.as_ref().to_owned();
     let state = AppState {
         mode: ServerMode::Brain(BrainRuntime {
             upstream: upstreams::UpstreamRegistry::from_env_or_file(
                 &local_storage_root.join("upstreams.json"),
             ),
             local_storage_root,
+            private_state_root,
             local_file_provision,
             local_launch_signing_key,
             local_launch_reservations,
@@ -2179,10 +2322,12 @@ pub fn korrid_version() -> String {
 pub fn start_local_server(
     allowed_origin: &str,
     local_storage_root: &str,
+    private_state_root: &str,
 ) -> Result<u16, ServerError> {
     start_local_server_for_platform(
         allowed_origin,
         local_storage_root,
+        private_state_root,
         NativePlatform::Standalone,
     )
 }
@@ -2193,10 +2338,12 @@ pub fn start_local_server(
 pub(crate) fn start_embedded_android_server(
     allowed_origin: &str,
     local_storage_root: &str,
+    private_state_root: &str,
 ) -> Result<u16, ServerError> {
     start_local_server_for_platform(
         allowed_origin,
         local_storage_root,
+        private_state_root,
         NativePlatform::EmbeddedAndroid,
     )
 }
@@ -2204,6 +2351,7 @@ pub(crate) fn start_embedded_android_server(
 fn start_local_server_for_platform(
     allowed_origin: &str,
     local_storage_root: &str,
+    private_state_root: &str,
     native_platform: NativePlatform,
 ) -> Result<u16, ServerError> {
     let mut slot = server_slot().lock().expect("server mutex poisoned");
@@ -2247,6 +2395,7 @@ fn start_local_server_for_platform(
     let router_moonlight_executor_state = Arc::clone(&moonlight_executor_state);
     let allowed_origin = allowed_origin.to_owned();
     let local_storage_root = local_storage_root.to_owned();
+    let private_state_root = private_state_root.to_owned();
     let moonlight_config_snapshot =
         config::snapshot::ConfigSnapshotCoordinator::new(&local_storage_root);
     let server_config_snapshot = moonlight_config_snapshot.clone();
@@ -2264,6 +2413,7 @@ fn start_local_server_for_platform(
                         &server_capability,
                         &allowed_origin,
                         &local_storage_root,
+                        &private_state_root,
                         launcher::FileProvisionMode::Deferred,
                         server_signing_key,
                         server_local_launch_reservations,
@@ -3749,10 +3899,12 @@ command = ["sh", "-c", "sleep 1"]
         write_wl4_plugin_config(root.path());
         std::fs::create_dir_all(root.path().join("roms")).unwrap();
         std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
+        let private = tempfile::tempdir().unwrap();
         let app = router_with_capability_local_root_and_provision(
             "right-token",
             "https://portal.example",
             root.path(),
+            private.path(),
             launcher::FileProvisionMode::Deferred,
             b"test signing key".to_vec(),
             Arc::new(Mutex::new(launcher::LaunchPublicationReservations::new())),
@@ -3805,9 +3957,11 @@ command = ["sh", "-c", "sleep 1"]
         write_wl4_plugin_config(root.path());
         std::fs::create_dir_all(root.path().join("roms")).unwrap();
         std::fs::write(root.path().join("roms/wl4.gba"), b"123456789").unwrap();
+        let private = tempfile::tempdir().unwrap();
         let port = start_local_server(
             "https://portal.example",
             root.path().to_str().expect("UTF-8 temp path"),
+            private.path().to_str().expect("UTF-8 temp path"),
         )
         .unwrap();
         let _stop = StopServer;
@@ -3833,6 +3987,7 @@ command = ["sh", "-c", "sleep 1"]
         let port = start_local_server_for_platform(
             "https://portal.example",
             root.path().to_str().expect("UTF-8 temp path"),
+            private.path().to_str().expect("UTF-8 temp path"),
             NativePlatform::EmbeddedAndroid,
         )
         .unwrap();

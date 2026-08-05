@@ -302,13 +302,32 @@ export function useLaunchables(
       // gap synchronously so two writes cannot turn one success into a conflict.
       if (settingsBusyRef.current) return
       settingsBusyRef.current = true
+      setSettingsStatus({ _tag: "Saving", settingId })
+
+      if (settingId === "steamgriddb-credential") {
+        const operation =
+          value.trim().length === 0
+            ? korrid.clearSteamGridDbCredential()
+            : korrid.setSteamGridDbCredential(value)
+        void operation.then(result => {
+          settingsBusyRef.current = false
+          if (!mountedRef.current) return
+          if (result._tag === "Err") {
+            settingsProblem(settingId, result.payload.message)
+            return
+          }
+          setSettingsStatus({ _tag: "Idle" })
+          void load()
+        })
+        return
+      }
+
       const revision = factsRef.current.settings?.revision
       if (!revision) {
         settingsBusyRef.current = false
         settingsProblem(settingId, "Settings are not available")
         return
       }
-      setSettingsStatus({ _tag: "Saving", settingId })
       void korrid.updateSetting(revision, settingId, value).then(result => {
         settingsBusyRef.current = false
         if (!mountedRef.current) return

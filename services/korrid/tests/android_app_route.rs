@@ -46,9 +46,11 @@ async fn protected_rpc_lists_and_launches_the_checkpoint_android_route_from_reta
     std::fs::write(root.path().join("config.yaml"), CHECKPOINT_CONFIG).unwrap();
     std::fs::write(root.path().join("library.yaml"), CHECKPOINT_LIBRARY).unwrap();
 
+    let private = tempfile::tempdir().unwrap();
     let port = start_local_server(
         "https://portal.example",
         root.path().to_str().expect("UTF-8 temp path"),
+        private.path().to_str().expect("UTF-8 temp path"),
     )
     .unwrap();
     let _stop = StopServer;

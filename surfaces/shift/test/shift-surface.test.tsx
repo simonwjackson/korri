@@ -95,6 +95,44 @@ describe("ShiftSurface", () => {
     expect(container.querySelectorAll(".shift-monogram").length).toBe(2)
   })
 
+  test("opens configured sensitive settings with an empty password editor", () => {
+    const host = createFixtureHost()
+    render(
+      <ShiftSurface
+        model={model({
+          settings: [
+            {
+              title: "Metadata",
+              items: [
+                {
+                  id: "steamgriddb-credential",
+                  label: "SteamGridDB API key",
+                  value: "Configured",
+                  interaction: {
+                    kind: "sensitiveText",
+                    placeholder: "Paste API key",
+                    maxLength: 256,
+                  },
+                },
+              ],
+            },
+          ],
+        })}
+        host={host}
+      />,
+    )
+
+    const settings = screen.getByRole("button", { name: "Settings" })
+    fireEvent.focus(settings)
+    fireEvent.click(settings)
+    fireEvent.click(screen.getByRole("button", { name: /SteamGridDB API key/ }))
+
+    const input = screen.getByLabelText("SteamGridDB API key") as HTMLInputElement
+    expect(input.getAttribute("type")).toBe("password")
+    expect(input.value).toBe("")
+    expect(screen.queryByDisplayValue("Configured")).toBeNull()
+  })
+
   test("setup actions do not pollute the game rail", () => {
     render(<ShiftSurface model={model()} host={createFixtureHost()} />)
 

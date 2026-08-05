@@ -35,6 +35,7 @@ pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_start(
     _class: JClass,
     allowed_origin: JString,
     local_storage_root: JString,
+    private_state_root: JString,
 ) -> jint {
     let allowed_origin: String = match env.get_string(&allowed_origin) {
         Ok(value) => value.into(),
@@ -50,7 +51,14 @@ pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_start(
             return -1;
         }
     };
-    match start_embedded_android_server(&allowed_origin, &local_storage_root) {
+    let private_state_root: String = match env.get_string(&private_state_root) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error.to_string());
+            return -1;
+        }
+    };
+    match start_embedded_android_server(&allowed_origin, &local_storage_root, &private_state_root) {
         Ok(port) => port.into(),
         Err(error) => {
             let _ = env.throw_new("java/lang/IllegalStateException", error.to_string());

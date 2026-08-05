@@ -106,6 +106,12 @@ export type SurfaceSettingInteraction =
       readonly placeholder?: string
       readonly maxLength?: number
     }
+  | {
+      readonly kind: "sensitiveText"
+      readonly placeholder?: string
+      readonly maxLength?: number
+      readonly clearLabel?: string
+    }
 
 /** One device fact or setting. Korri owns truth and allowed interactions. */
 export interface SurfaceSettingItem {

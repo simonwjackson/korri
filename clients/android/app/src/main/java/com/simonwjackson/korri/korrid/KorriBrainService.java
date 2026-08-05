@@ -13,6 +13,8 @@ import android.util.Log;
 import com.limelight.korri.overlay.KorriActiveLaunch;
 import com.limelight.korri.overlay.KorriOverlayBridge;
 
+import java.io.File;
+
 /**
  * Keeps korrid alive while Korri is not on screen.
  *
@@ -31,6 +33,7 @@ public final class KorriBrainService extends Service {
     private static final int NOTIFICATION_ID = 1;
     private static final String EXTRA_ALLOWED_ORIGIN = "allowedOrigin";
     private static final String EXTRA_LOCAL_STORAGE_ROOT = "localStorageRoot";
+    public static final String EXTRA_PRIVATE_STATE_ROOT = "privateStateRoot";
 
     /**
      * Guards double-starts: the activity and the service both want a running
@@ -169,10 +172,9 @@ public final class KorriBrainService extends Service {
      */
     public static synchronized int ensureRunning(
             Context context, String allowedOrigin, String localStorageRoot) {
-        startBrainIfNeeded(allowedOrigin, localStorageRoot);
-        Intent intent = new Intent(context.getApplicationContext(), KorriBrainService.class)
-                .putExtra(EXTRA_ALLOWED_ORIGIN, allowedOrigin)
-                .putExtra(EXTRA_LOCAL_STORAGE_ROOT, localStorageRoot);
+        String privateStateRoot = privateStateRoot(context);
+        startBrainIfNeeded(allowedOrigin, localStorageRoot, privateStateRoot);
+        Intent intent = launchIntent(context, allowedOrigin, localStorageRoot);
         if (Build.VERSION.SDK_INT >= 26) {
             context.getApplicationContext().startForegroundService(intent);
         } else {
@@ -187,12 +189,26 @@ public final class KorriBrainService extends Service {
                 .stopService(new Intent(context.getApplicationContext(), KorriBrainService.class));
     }
 
+    public static String privateStateRoot(Context context) {
+        File root = new File(context.getApplicationContext().getNoBackupFilesDir(), "korrid-state");
+        return root.getAbsolutePath();
+    }
+
+    public static Intent launchIntent(
+            Context context, String allowedOrigin, String localStorageRoot) {
+        Context application = context.getApplicationContext();
+        return new Intent(application, KorriBrainService.class)
+                .putExtra(EXTRA_ALLOWED_ORIGIN, allowedOrigin)
+                .putExtra(EXTRA_LOCAL_STORAGE_ROOT, localStorageRoot)
+                .putExtra(EXTRA_PRIVATE_STATE_ROOT, privateStateRoot(application));
+    }
+
     private static synchronized void startBrainIfNeeded(
-            String allowedOrigin, String localStorageRoot) {
+            String allowedOrigin, String localStorageRoot, String privateStateRoot) {
         if (started) {
             return;
         }
-        int startedPort = KorridServer.startAndLog(allowedOrigin, localStorageRoot);
+        int startedPort = KorridServer.startAndLog(allowedOrigin, localStorageRoot, privateStateRoot);
         port = startedPort;
         started = true;
     }
@@ -207,13 +223,14 @@ public final class KorriBrainService extends Service {
             }
             String allowedOrigin = intent.getStringExtra(EXTRA_ALLOWED_ORIGIN);
             String localStorageRoot = intent.getStringExtra(EXTRA_LOCAL_STORAGE_ROOT);
-            if (allowedOrigin == null || localStorageRoot == null) {
+            String privateStateRoot = intent.getStringExtra(EXTRA_PRIVATE_STATE_ROOT);
+            if (allowedOrigin == null || localStorageRoot == null || privateStateRoot == null) {
                 Log.e(TAG, "brain service launch parameters missing; stopping");
                 return stopWithoutRestart(startId);
             }
             try {
                 synchronized (KorriBrainService.class) {
-                    startBrainIfNeeded(allowedOrigin, localStorageRoot);
+                    startBrainIfNeeded(allowedOrigin, localStorageRoot, privateStateRoot);
                 }
             } catch (RuntimeException error) {
                 Log.e(TAG, "brain service failed to start korrid; stopping", error);

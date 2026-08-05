@@ -29,6 +29,7 @@ import type {
   SessionPrepareOutcome,
   SessionStatusOutcome,
   SessionStopOutcome,
+  SensitiveSettingOutcome,
   SettingsSnapshot,
   SettingsSnapshotOutcome,
   SettingsUpdateOutcome,
@@ -37,6 +38,7 @@ import {
   AndroidMoonlightEffect,
   LaunchContributorKind,
   LaunchForegroundKind,
+  SecretSettingStatus,
   SessionControlFailureReason,
   SessionStopPhase,
 } from "@contracts/generated/korrid"
@@ -54,6 +56,8 @@ export interface KorridClient {
     settingId: string,
     value: string,
   ): Promise<SettingsUpdateOutcome>
+  setSteamGridDbCredential(token: string): Promise<SensitiveSettingOutcome>
+  clearSteamGridDbCredential(): Promise<SensitiveSettingOutcome>
   catalogSnapshot(): Promise<CatalogSnapshotOutcome>
   moonlightResolve(): Promise<MoonlightResolveOutcome>
   moonlightLaunchPrepare(
@@ -269,6 +273,28 @@ export function createHttpKorridClient(
         const response = await callKorrid(baseUrl, capability, {
           _tag: "system.settings.update",
           payload: { expectedRevision, settingId, value },
+        })
+        return response.outcome
+      } catch (error) {
+        return unreachable(error)
+      }
+    },
+    async setSteamGridDbCredential(token) {
+      try {
+        const response = await callKorrid(baseUrl, capability, {
+          _tag: "system.settings.steamgriddbCredential.set",
+          payload: { token },
+        })
+        return response.outcome
+      } catch (error) {
+        return unreachable(error)
+      }
+    },
+    async clearSteamGridDbCredential() {
+      try {
+        const response = await callKorrid(baseUrl, capability, {
+          _tag: "system.settings.steamgriddbCredential.clear",
+          payload: {},
         })
         return response.outcome
       } catch (error) {
@@ -514,6 +540,7 @@ export function createInMemoryKorridClient(
   let settings: SettingsSnapshot = {
     revision: "in-memory-0",
     deviceName: "Browser",
+    steamGridDbCredential: SecretSettingStatus.NotConfigured,
     plugins: [
       { id: "@korri:android-app", title: "Android", enabled: true },
       { id: "@korri:mgba", title: "mGBA", enabled: true },
@@ -565,6 +592,35 @@ export function createInMemoryKorridClient(
         ),
       }
       return { _tag: "Ok", payload: settings }
+    },
+    async setSteamGridDbCredential(token) {
+      if (token.trim().length === 0) {
+        return {
+          _tag: "Err",
+          payload: {
+            code: "SettingsInvalid",
+            message: "SteamGridDB credential cannot be empty",
+          },
+        }
+      }
+      settings = {
+        ...settings,
+        steamGridDbCredential: SecretSettingStatus.Configured,
+      }
+      return {
+        _tag: "Ok",
+        payload: { status: SecretSettingStatus.Configured },
+      }
+    },
+    async clearSteamGridDbCredential() {
+      settings = {
+        ...settings,
+        steamGridDbCredential: SecretSettingStatus.NotConfigured,
+      }
+      return {
+        _tag: "Ok",
+        payload: { status: SecretSettingStatus.NotConfigured },
+      }
     },
     async catalogSnapshot() {
       if (behavior === "catalog-fail") {
