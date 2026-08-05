@@ -12,6 +12,8 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.storage.StorageManager;
+import android.os.storage.StorageVolume;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -490,7 +492,10 @@ public class KorriShellActivity extends AppCompatActivity {
         public String launchLocal(String specJson) {
             final KorriLocalLaunchSpec.Parsed spec;
             try {
-                spec = KorriLocalLaunchSpec.parse(specJson, new File(localStorageRoot()));
+                spec = KorriLocalLaunchSpec.parse(
+                        specJson,
+                        new File(localStorageRoot()),
+                        this::containsKnownStorageVolume);
             } catch (KorriLocalLaunchSpec.Invalid error) {
                 return launchFailed(error.reason, error.getMessage());
             }
@@ -624,8 +629,35 @@ public class KorriShellActivity extends AppCompatActivity {
                     timeoutMessage);
         }
 
+        private boolean containsKnownStorageVolume(String canonicalPath) throws Exception {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                return false;
+            }
+            StorageManager storageManager = getSystemService(StorageManager.class);
+            if (storageManager == null) {
+                return false;
+            }
+            for (StorageVolume volume : storageManager.getStorageVolumes()) {
+                File directory = volume.getDirectory();
+                if (directory == null) {
+                    continue;
+                }
+                File root = directory.getCanonicalFile();
+                if (canonicalPath.equals(root.getPath())
+                        || canonicalPath.startsWith(root.getPath() + File.separator)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private void provisionDirectory(String targetPath) throws Exception {
-            File directory = new File(targetPath);
+            File korriRoot = new File(localStorageRoot()).getCanonicalFile();
+            File directory = new File(targetPath).getCanonicalFile();
+            String rootPrefix = korriRoot.getPath() + File.separator;
+            if (!directory.getPath().startsWith(rootPrefix)) {
+                throw new IllegalArgumentException("provision path is outside Korri storage");
+            }
             if (!directory.isDirectory() && !directory.mkdirs()) {
                 throw new IllegalStateException("cannot create provisioned directory");
             }

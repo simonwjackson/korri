@@ -121,6 +121,7 @@ export interface LaunchSpec {
 	extras: Record<string, string>;
 	directories: string[];
 	files: ProvisionedFile[];
+	authorizedContentRoot?: string;
 	/** Per-server HMAC. The portal transports it opaquely; native verifies it. */
 	integrity: string;
 }

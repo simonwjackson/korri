@@ -49,6 +49,211 @@ fn registry_from_sources(retroarch_source: &str, mgba_source: &str) -> PluginReg
     .unwrap()
 }
 
+fn state_from_docs(
+    root: &Path,
+    config: &str,
+    library: &str,
+) -> korrid::config::snapshot::ConfigSnapshotState {
+    std::fs::write(root.join("config.yaml"), config).unwrap();
+    std::fs::write(root.join("library.yaml"), library).unwrap();
+    ConfigSnapshotCoordinator::new(root).reload()
+}
+
+fn explicit_storage_config(storage_id: &str, storage_root: &Path) -> String {
+    format!(
+        "host:\n  title: usu\nstorage:\n  {storage_id}:\n    root: {}\n",
+        storage_root.display()
+    )
+}
+
+fn explicit_storage_library(storage_id: &str, target_path: &str, discovery: bool) -> String {
+    let discovery_yaml = if discovery {
+        "          discovery:\n            first-seen-at: 2026-08-05T00:00:00Z\n"
+    } else {
+        ""
+    };
+    format!(
+        "library:\n  wl4-selected:\n    title: Wario Land 4\n    releases:\n      - id: gba\n        system: gba\n        target:\n          kind: file\n          storage: {storage_id}\n          path: {target_path}\n{discovery_yaml}        launch:\n          use: \"@korri:retroarch/retroarch\"\n          runtime: \"@korri:mgba/mgba\"\n"
+    )
+}
+
+#[test]
+fn explicit_storage_root_file_target_launches_through_retroarch() {
+    let korri_root = tempfile::tempdir().unwrap();
+    let selected_root = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(selected_root.path().join("gba")).unwrap();
+    std::fs::write(selected_root.path().join("gba/wl4.gba"), b"rom").unwrap();
+    let state = state_from_docs(
+        korri_root.path(),
+        &explicit_storage_config("selected-gba", selected_root.path()),
+        &explicit_storage_library("selected-gba", "gba/wl4.gba", false),
+    );
+    assert!(state.diagnostic.is_none(), "{:?}", state.diagnostic);
+
+    let route = resolver::resolve_route(&state.snapshot, &registry(true, true), [], "wl4-selected")
+        .expect("explicit storage route");
+    assert_eq!(
+        route.file_target.as_ref().unwrap().storage_id,
+        "selected-gba"
+    );
+
+    let spec = launcher::launch_game(
+        korri_root.path(),
+        "wl4-selected",
+        FileProvisionMode::Deferred,
+        &state,
+        &registry(true, true),
+    )
+    .expect("explicit storage launch spec");
+
+    assert_eq!(
+        spec.extras.get("ROM").map(String::as_str),
+        Some(
+            selected_root
+                .path()
+                .join("gba/wl4.gba")
+                .canonicalize()
+                .unwrap()
+                .to_str()
+                .unwrap()
+        )
+    );
+    assert_eq!(
+        spec.authorized_content_root.as_deref(),
+        Some(
+            selected_root
+                .path()
+                .canonicalize()
+                .unwrap()
+                .to_str()
+                .unwrap()
+        )
+    );
+    assert!(spec
+        .directories
+        .iter()
+        .all(|path| path.starts_with(korri_root.path().to_str().unwrap())));
+    assert!(spec
+        .files
+        .iter()
+        .all(|file| file.path.starts_with(korri_root.path().to_str().unwrap())));
+}
+
+#[test]
+fn discovery_metadata_on_file_targets_does_not_change_launch_resolution() {
+    let korri_root = tempfile::tempdir().unwrap();
+    let selected_root = tempfile::tempdir().unwrap();
+    std::fs::write(selected_root.path().join("wl4.gba"), b"rom").unwrap();
+    let config = explicit_storage_config("selected-gba", selected_root.path());
+    let without_discovery = state_from_docs(
+        korri_root.path(),
+        &config,
+        &explicit_storage_library("selected-gba", "wl4.gba", false),
+    );
+    let with_discovery = state_from_docs(
+        korri_root.path(),
+        &config,
+        &explicit_storage_library("selected-gba", "wl4.gba", true),
+    );
+
+    let plain = resolver::resolve_route(
+        &without_discovery.snapshot,
+        &registry(true, true),
+        [],
+        "wl4-selected",
+    )
+    .expect("plain file target");
+    let discovered = resolver::resolve_route(
+        &with_discovery.snapshot,
+        &registry(true, true),
+        [],
+        "wl4-selected",
+    )
+    .expect("discovery metadata file target");
+
+    assert_eq!(discovered.flattened_target, plain.flattened_target);
+    assert_eq!(discovered.file_target, plain.file_target);
+}
+
+#[test]
+fn explicit_storage_root_failures_are_route_diagnostics() {
+    let korri_root = tempfile::tempdir().unwrap();
+    let missing_root = korri_root.path().join("missing-selected-root");
+    let file_root = tempfile::NamedTempFile::new().unwrap();
+
+    for (storage_id, config, expected) in [
+        (
+            "absent-storage",
+            explicit_storage_config("selected-gba", korri_root.path()),
+            "storage absent-storage is unavailable",
+        ),
+        (
+            "selected-gba",
+            "host:\n  title: usu\nstorage:\n  selected-gba:\n    root: relative/path\n".to_owned(),
+            "storage selected-gba root is not absolute",
+        ),
+        (
+            "selected-gba",
+            explicit_storage_config("selected-gba", &missing_root),
+            "storage selected-gba root is unavailable",
+        ),
+        (
+            "selected-gba",
+            explicit_storage_config("selected-gba", file_root.path()),
+            "storage selected-gba root is not a directory",
+        ),
+    ] {
+        let state = state_from_docs(
+            korri_root.path(),
+            &config,
+            &explicit_storage_library(storage_id, "wl4.gba", false),
+        );
+        let error =
+            resolver::resolve_route(&state.snapshot, &registry(true, true), [], "wl4-selected")
+                .expect_err("invalid storage root should produce a route diagnostic");
+        assert!(
+            error.message.contains(expected),
+            "expected {expected:?}, got {:?}",
+            error.message
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn explicit_storage_rejects_parent_and_symlink_target_escapes() {
+    use std::os::unix::fs::symlink;
+
+    let korri_root = tempfile::tempdir().unwrap();
+    let selected_root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::write(outside.path().join("escaped.gba"), b"rom").unwrap();
+    symlink(
+        outside.path().join("escaped.gba"),
+        selected_root.path().join("linked.gba"),
+    )
+    .unwrap();
+
+    for (target_path, expected) in [
+        ("../escaped.gba", "file target is unsafe"),
+        ("linked.gba", "escapes storage selected-gba root"),
+    ] {
+        let state = state_from_docs(
+            korri_root.path(),
+            &explicit_storage_config("selected-gba", selected_root.path()),
+            &explicit_storage_library("selected-gba", target_path, false),
+        );
+        let error =
+            resolver::resolve_route(&state.snapshot, &registry(true, true), [], "wl4-selected")
+                .expect_err("escaped target should produce a route diagnostic");
+        assert!(
+            error.message.contains(expected),
+            "expected {expected:?}, got {:?}",
+            error.message
+        );
+    }
+}
+
 #[test]
 fn composes_retroarch_launcher_with_mgba_runtime_from_independent_plugins() {
     let root = tempfile::tempdir().unwrap();

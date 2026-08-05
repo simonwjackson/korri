@@ -136,6 +136,7 @@ pub fn launch_game(
             .map(|spec| spec.with_context(context)),
         "@korri:retroarch" => retroarch::launch_route(
             root,
+            &config_state.snapshot,
             &route,
             context,
             provision_mode,

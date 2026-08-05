@@ -187,6 +187,12 @@ pub struct LaunchSpec {
     pub extras: HashMap<String, String>,
     pub directories: Vec<String>,
     pub files: Vec<ProvisionedFile>,
+    #[serde(
+        default,
+        rename = "authorizedContentRoot",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub authorized_content_root: Option<String>,
     /// Per-server HMAC. The portal transports it opaquely; native verifies it.
     pub integrity: String,
 }
@@ -230,6 +236,10 @@ impl LaunchSpec {
             push(&file.path, &mut bytes);
             push(&file.content, &mut bytes);
         }
+        push(
+            self.authorized_content_root.as_deref().unwrap_or(""),
+            &mut bytes,
+        );
         bytes
     }
 
@@ -737,6 +747,7 @@ mod tests {
                 path: "/root/config".into(),
                 content: "config".into(),
             }],
+            authorized_content_root: Some("/root".into()),
             integrity: String::new(),
         }
     }

@@ -1,6 +1,7 @@
 pub mod resolver;
 pub mod settings;
 pub mod snapshot;
+pub mod storage;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -372,13 +373,6 @@ pub fn classify_snapshot_support(snapshot: &ConfigSnapshot) -> Result<(), Unsupp
 
     if let Some(host) = &snapshot.host {
         host.collect_support_issues("host", &mut issues);
-    }
-    if !snapshot.storage.is_empty() {
-        push_issue(
-            &mut issues,
-            "storage",
-            "storage records are not executable in this slice",
-        );
     }
     if !snapshot.provider_links.is_empty() {
         push_issue(

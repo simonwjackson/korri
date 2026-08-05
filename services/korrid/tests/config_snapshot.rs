@@ -106,6 +106,26 @@ fn exact_checkpoint_pair_loads_as_one_authorized_snapshot() {
 }
 
 #[test]
+fn storage_records_load_without_marking_the_snapshot_unsupported() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(
+        root.path().join(CONFIG_FILE_NAME),
+        format!(
+            "host:\n  title: usu\nstorage:\n  selected-gba:\n    root: {}\n",
+            root.path().display()
+        ),
+    )
+    .unwrap();
+    fs::write(root.path().join(LIBRARY_FILE_NAME), "{}\n").unwrap();
+
+    let state = ConfigSnapshotCoordinator::new(root.path()).reload();
+
+    assert_eq!(state.authorization, SnapshotAuthorization::Authorized);
+    assert!(state.diagnostic.is_none());
+    assert!(state.snapshot.storage.contains_key("selected-gba"));
+}
+
+#[test]
 fn malformed_or_unsupported_reload_retains_last_known_good_and_diagnostic_until_valid_reload() {
     let root = tempfile::tempdir().unwrap();
     fs::write(root.path().join(CONFIG_FILE_NAME), CHECKPOINT_CONFIG).unwrap();

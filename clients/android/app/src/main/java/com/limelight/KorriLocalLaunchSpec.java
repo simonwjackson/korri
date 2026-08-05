@@ -30,6 +30,10 @@ final class KorriLocalLaunchSpec {
         }
     }
 
+    interface VolumeContainment {
+        boolean contains(String canonicalPath) throws Exception;
+    }
+
     static final class FileSpec {
         final String path;
         final String content;
@@ -99,6 +103,19 @@ final class KorriLocalLaunchSpec {
     }
 
     static Parsed parse(String specJson, File storageRoot) throws Invalid {
+        File root;
+        try {
+            root = storageRoot.getCanonicalFile();
+        } catch (Exception error) {
+            throw new Invalid("InvalidSpec", "invalid Korri storage root");
+        }
+        return parse(specJson, storageRoot, path -> isUnderOrEqual(path, root.getPath()));
+    }
+
+    static Parsed parse(
+            String specJson,
+            File storageRoot,
+            VolumeContainment volumes) throws Invalid {
         try {
             JSONObject spec = new JSONObject(specJson);
             String launcherId = spec.getString("launcherId");
@@ -135,8 +152,23 @@ final class KorriLocalLaunchSpec {
             }
 
             File root = storageRoot.getCanonicalFile();
-            for (String value : extras.values()) {
-                validateExtraPath(value, root, component);
+            File authorizedContentRoot = null;
+            if (isRetroarch) {
+                authorizedContentRoot = new File(spec.getString("authorizedContentRoot"))
+                        .getCanonicalFile();
+                if (!volumes.contains(authorizedContentRoot.getPath())) {
+                    throw new Invalid("InvalidSpec",
+                            "authorized content root is outside Android storage volumes");
+                }
+                String rom = extras.get("ROM");
+                if (rom == null) {
+                    throw new Invalid("InvalidSpec", "RetroArch launch is missing ROM extra");
+                }
+                requireUnderRoot(rom, authorizedContentRoot, "RetroArch ROM");
+            }
+            for (Map.Entry<String, String> extra : extras.entrySet()) {
+                validateExtraPath(
+                        extra.getKey(), extra.getValue(), root, authorizedContentRoot, component);
             }
 
             JSONArray directoriesJson = spec.getJSONArray("directories");
@@ -179,11 +211,17 @@ final class KorriLocalLaunchSpec {
     }
 
     private static void validateExtraPath(
+            String key,
             String value,
             File storageRoot,
+            File authorizedContentRoot,
             ComponentName component) throws Exception {
         if (value.startsWith("/storage/")) {
-            requireUnderRoot(value, storageRoot, "external-storage extra");
+            if ("ROM".equals(key) && authorizedContentRoot != null) {
+                requireUnderRoot(value, authorizedContentRoot, "RetroArch ROM");
+            } else {
+                requireUnderRoot(value, storageRoot, "external-storage extra");
+            }
         } else if (value.startsWith("/data/data/")) {
             File appDataRoot = new File("/data/data/" + component.getPackageName())
                     .getCanonicalFile();
@@ -198,8 +236,14 @@ final class KorriLocalLaunchSpec {
 
     private static void requireUnderRoot(String path, File root, String label) throws Exception {
         File target = new File(path).getCanonicalFile();
-        if (!target.getPath().startsWith(root.getPath() + File.separator)) {
-            throw new Invalid("InvalidSpec", label + " is outside Korri storage");
+        if (!isUnderOrEqual(target.getPath(), root.getPath())
+                || target.getPath().equals(root.getPath())) {
+            throw new Invalid("InvalidSpec", label + " is outside authorized storage");
         }
+    }
+
+    private static boolean isUnderOrEqual(String canonicalPath, String canonicalRoot) {
+        return canonicalPath.equals(canonicalRoot)
+                || canonicalPath.startsWith(canonicalRoot + File.separator);
     }
 }

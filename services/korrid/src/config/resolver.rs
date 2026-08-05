@@ -11,7 +11,7 @@ use crate::{
     GameIdentity,
 };
 
-use super::{AppPayload, ConfigSnapshot, LibraryItemPayload, Target};
+use super::{storage, AppPayload, ConfigSnapshot, LibraryItemPayload, Target};
 
 const PROCESS_LAUNCHER_KIND: &str = "@korri:process";
 const ANDROID_APP_COMMAND: &str = "android-app";
@@ -408,32 +408,27 @@ fn resolve_route_with_contributions(
         (
             RETROARCH_COMMAND,
             Target::File {
-                discovery: Some(_), ..
+                storage: target_storage,
+                path,
+                ..
             },
         ) => {
-            return Err(unavailable(
-                Some(playable_id),
-                format!(
-                    "release {} file-target discovery metadata is not executable",
-                    release.id.0
-                ),
-            ));
-        }
-        (
-            RETROARCH_COMMAND,
-            Target::File {
-                storage,
-                path,
-                discovery: None,
-            },
-        ) => (
-            launcher_kind.to_owned(),
-            format!("{}:{}", storage.0, path.0),
-            Some(ResolvedFileTarget {
-                storage_id: storage.0.clone(),
+            let file_target = ResolvedFileTarget {
+                storage_id: target_storage.0.clone(),
                 path: path.0.clone(),
-            }),
-        ),
+            };
+            storage::validate_resolved_file_target(snapshot, &file_target).map_err(|error| {
+                unavailable(
+                    Some(playable_id),
+                    format!("release {} {error}", release.id.0),
+                )
+            })?;
+            (
+                launcher_kind.to_owned(),
+                format!("{}:{}", target_storage.0, path.0),
+                Some(file_target),
+            )
+        }
         (_, other) => {
             return Err(unavailable(
                 Some(playable_id),

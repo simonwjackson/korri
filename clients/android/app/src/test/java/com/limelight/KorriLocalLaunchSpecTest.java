@@ -26,6 +26,7 @@ public class KorriLocalLaunchSpecTest {
                         .put("packageName", "com.korri.retroarch")
                         .put("className",
                                 "com.retroarch.browser.retroactivity.RetroActivityFuture"))
+                .put("authorizedContentRoot", "/storage/emulated/0/korri/roms")
                 .put("extras", new JSONObject()
                         .put("ROM", "/storage/emulated/0/korri/roms/wl4.gba")
                         .put("LIBRETRO",
@@ -147,6 +148,47 @@ public class KorriLocalLaunchSpecTest {
         JSONObject wrongType = validSpec();
         wrongType.getJSONObject("extras").put("ROM", 7);
         assertInvalid(wrongType, "InvalidSpec");
+    }
+
+    @Test
+    public void acceptsRetroarchRomBeneathSignedContentRootOutsideKorriStorage() throws Exception {
+        JSONObject spec = validSpec()
+                .put("authorizedContentRoot", "/storage/emulated/0/Games/GBA");
+        spec.getJSONObject("extras")
+                .put("ROM", "/storage/emulated/0/Games/GBA/wl4.gba");
+
+        KorriLocalLaunchSpec.Parsed parsed =
+                KorriLocalLaunchSpec.parse(spec.toString(), ROOT,
+                        path -> path.startsWith("/storage/emulated/0"));
+
+        assertEquals("/storage/emulated/0/Games/GBA/wl4.gba",
+                parsed.extras.get("ROM"));
+    }
+
+    @Test
+    public void rejectsRetroarchRomOutsideSignedContentRoot() throws Exception {
+        JSONObject spec = validSpec()
+                .put("authorizedContentRoot", "/storage/emulated/0/Games/GBA");
+        spec.getJSONObject("extras")
+                .put("ROM", "/storage/emulated/0/Games/Other/wl4.gba");
+
+        assertInvalid(spec, "InvalidSpec");
+    }
+
+    @Test
+    public void rejectsRetroarchContentRootOutsideKnownStorageVolumes() throws Exception {
+        JSONObject spec = validSpec()
+                .put("authorizedContentRoot", "/storage/emulated/99/Games/GBA");
+        spec.getJSONObject("extras")
+                .put("ROM", "/storage/emulated/99/Games/GBA/wl4.gba");
+
+        try {
+            KorriLocalLaunchSpec.parse(spec.toString(), ROOT,
+                    path -> path.startsWith("/storage/emulated/0"));
+            fail("expected invalid spec");
+        } catch (KorriLocalLaunchSpec.Invalid error) {
+            assertEquals("InvalidSpec", error.reason);
+        }
     }
 
     @Test

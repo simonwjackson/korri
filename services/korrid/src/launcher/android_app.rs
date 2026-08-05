@@ -113,6 +113,7 @@ pub fn launch_route(route: &ResolvedRoute) -> Result<LaunchSpec, AndroidAppRoute
         extras: HashMap::new(),
         directories: Vec::new(),
         files: Vec::new(),
+        authorized_content_root: None,
         integrity: String::new(),
     })
 }
