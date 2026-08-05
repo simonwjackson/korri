@@ -69,16 +69,22 @@ function renderSession(
   const container = document.createElement("div")
   document.body.append(container)
   const root = createRoot(container)
-  act(() => {
-    root.render(<SessionScreen adapter={adapter} onExit={onExit} />)
-  })
-  return {
-    container,
-    root,
-    unmount() {
-      act(() => root.unmount())
-      container.remove()
-    },
+  let disposed = false
+  const unmount = () => {
+    if (disposed) return
+    disposed = true
+    act(() => root.unmount())
+    container.remove()
+  }
+
+  try {
+    act(() => {
+      root.render(<SessionScreen adapter={adapter} onExit={onExit} />)
+    })
+    return { container, root, unmount }
+  } catch (error) {
+    unmount()
+    throw error
   }
 }
 
