@@ -35,6 +35,15 @@ grep -F 'traverse_library_to_final_viewport' "$ACCEPTANCE" >/dev/null
 grep -F 'DEBUG_PORTAL_FOCUS_GAME_SH=' "$ACCEPTANCE" >/dev/null
 grep -F 'portal_shot_focuses_wario' "$ACCEPTANCE" >/dev/null
 grep -F 'render_focused_wario_crop_evidence' "$ACCEPTANCE" >/dev/null
+grep -F 'focused_tile_center' "$ACCEPTANCE" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F '"${ADB[@]}" shell input tap "$tap_x" "$tap_y"' "$ACCEPTANCE" >/dev/null
+[[ "$(grep -Fc 'shell input tap' "$ACCEPTANCE")" -eq 1 ]]
+grep -F 'Physical controller confirm remains mandatory' "$ACCEPTANCE" >/dev/null
+if grep -Eq '\.click\(|app\.local-games\.launch' "$ACCEPTANCE"; then
+  echo 'RetroArch UI activation must not use DevTools click or a launch RPC' >&2
+  exit 1
+fi
 grep -F 'focus-crop-4x.png' "$ACCEPTANCE" >/dev/null
 grep -F 'focusOutlinePaddedCropRatio' "$ACCEPTANCE" >/dev/null
 grep -F -- '-colorspace sRGB' "$ACCEPTANCE" >/dev/null
@@ -130,8 +139,8 @@ if grep -Eq 'assert_rgui_menu_visible|assert_rgui_selection_moves|compare -metri
   echo 'RetroArch native menu acceptance must use authenticated status telemetry' >&2
   exit 1
 fi
-if grep -Eq 'input (tap|swipe)' "$ACCEPTANCE"; then
-  echo 'RetroArch acceptance must select the one-item fixture semantically, not by coordinates' >&2
+if grep -Eq 'input swipe|input tap[[:space:]]+[0-9]' "$ACCEPTANCE"; then
+  echo 'RetroArch acceptance must not use swipes or hard-coded tap coordinates' >&2
   exit 1
 fi
 if grep -F 'launch_spec=' "$ACCEPTANCE" >/dev/null; then
@@ -240,6 +249,10 @@ FOCUS_RENDERER="$TMP/focus-renderer.sh"
 sed -n '/^render_focused_wario_crop_evidence() {/,/^}/p' "$ACCEPTANCE" >"$FOCUS_RENDERER"
 # shellcheck source=/dev/null
 source "$FOCUS_RENDERER"
+CENTER_EXTRACTOR="$TMP/focused-tile-center.sh"
+sed -n '/^focused_tile_center() {/,/^}/p' "$ACCEPTANCE" >"$CENTER_EXTRACTOR"
+# shellcheck source=/dev/null
+source "$CENTER_EXTRACTOR"
 cat >"$TMP/focused-wario.svg" <<'SVG'
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="480">
   <rect width="640" height="480" fill="#050505"/>
@@ -257,6 +270,20 @@ magick "$TMP/focused-wario.svg" "$TMP/focused-wario-full.png"
 cat >"$TMP/focused-wario.json" <<'JSON'
 {"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":548,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480}}
 JSON
+[[ "$(focused_tile_center "$TMP/focused-wario.json")" == '589 290' ]]
+for invalid in \
+  '{"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":-1,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480}}' \
+  '{"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":600,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480}}' \
+  '{"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":548,"top":470,"width":82,"height":120},"viewport":{"width":640,"height":480}}' \
+  '{"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":548,"top":230,"width":0,"height":120},"viewport":{"width":640,"height":480}}' \
+  '{"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":1e999,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480}}' \
+  '{"gameId":"wrong","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":548,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480}}'; do
+  printf '%s\n' "$invalid" >"$TMP/invalid-center.json"
+  if focused_tile_center "$TMP/invalid-center.json" >/dev/null 2>&1; then
+    echo "unsafe focused-tile bounds produced a tap center: $invalid" >&2
+    exit 1
+  fi
+done
 # The title is intentionally too small for reliable full-frame OCR. Exact DOM
 # bounds must drive the crop and scale before OCR rather than false-failing.
 tesseract "$TMP/focused-wario-full.png" stdout --psm 6 >"$TMP/full-frame.txt" 2>/dev/null

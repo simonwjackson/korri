@@ -900,11 +900,40 @@ portal_shot_focuses_wario() {
   render_focused_wario_crop_evidence \
     "$image" "$focus_json" "$crop" "$scaled" "$text" "$observation"
 }
+focused_tile_center() {
+  local focus_json="$1"
+  jq -er '
+    def bounded_number:
+      type == "number" and . > -100000 and . < 100000;
+    select(.gameId == "local-game:wl4" and .title == "Wario Land 4")
+    | select(.focused == true and .rectFinitePositive == true
+        and .fullyOnScreen == true)
+    | .bounds as $bounds | .viewport as $viewport
+    | select($bounds.left | bounded_number)
+    | select($bounds.top | bounded_number)
+    | select($bounds.width | bounded_number)
+    | select($bounds.height | bounded_number)
+    | select($viewport.width | bounded_number)
+    | select($viewport.height | bounded_number)
+    | select($bounds.left >= 0 and $bounds.top >= 0
+        and $bounds.width > 0 and $bounds.height > 0
+        and $viewport.width > 0 and $viewport.height > 0
+        and ($bounds.left + $bounds.width) <= $viewport.width
+        and ($bounds.top + $bounds.height) <= $viewport.height)
+    | (($bounds.left + ($bounds.width / 2)) | floor) as $x
+    | (($bounds.top + ($bounds.height / 2)) | floor) as $y
+    | select($x >= 0 and $x < $viewport.width
+        and $y >= 0 and $y < $viewport.height)
+    | "\($x) \($y)"
+  ' "$focus_json"
+}
 launch_wario_entry() {
   local label="$1"
   local pid=""
   local observed_session
   local observed_controls
+  local tap_x tap_y
+  local focus_json="$PORTAL_EVIDENCE_DIR/$label.focus.json"
   focus_wario_in_installed_library "$label"
   sleep 1
   portal_shot_focuses_wario "$label" || {
@@ -912,13 +941,23 @@ launch_wario_entry() {
     return 1
   }
 
-  # DevTools only focused the exact tile. Activation remains a controller event
-  # through the normal installed UI launch path.
+  # DevTools only focused and measured the exact tile. Activate that already
+  # verified installed-UI element through the normal pointer path: never click
+  # through DevTools and never call a launch RPC/native shortcut.
+  if ! read -r tap_x tap_y < <(focused_tile_center "$focus_json"); then
+    echo 'focused Wario bounds did not produce a safe on-screen tap coordinate' >&2
+    return 1
+  fi
+  [[ "$tap_x" =~ ^[0-9]+$ && "$tap_y" =~ ^[0-9]+$ ]] || {
+    echo 'focused Wario center was not an integer coordinate' >&2
+    return 1
+  }
   TARGET_STARTED_BY_GATE=true
-  # DPAD_CENTER is the installed portal's platform-neutral confirm event. The
-  # physical A button is tested separately by the global overlay acceptance.
-  "${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_CENTER
+  "${ADB[@]}" shell input tap "$tap_x" "$tap_y"
   sleep 2
+  # Physical controller confirm remains mandatory in the unified-overlay human
+  # gate; this automated RetroArch gate proves the normal installed pointer UI.
+
   pid="$(package_pid "$FORK_PACKAGE")" || return 1
   [[ -n "$pid" ]] || {
     echo 'focused Wario tile did not launch Korri RetroArch through the portal' >&2

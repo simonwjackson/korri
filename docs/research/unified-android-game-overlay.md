@@ -114,7 +114,10 @@ Acceptance evidence follows these rules:
   named human checkpoints.
 - Guide, D-pad, A/confirm, B/Back, and supported stick/hat checks use the
   physical controller. `adb input` cannot stand in for hardware routing or
-  host observation.
+  host observation. The separate automated RetroArch gate may bounds-tap an
+  exact, focus-proven installed Library tile through Android's normal pointer
+  UI, but that does not satisfy or replace the unified-overlay physical
+  controller confirm checkpoint.
 - Local and stream positives require an exact active `launchId` and controls
   response. Direct-launch and unrelated-app negatives require the expected top
   package plus absence of the Korri overlay window.
