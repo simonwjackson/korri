@@ -1,14 +1,7 @@
 # Android SDK/NDK composition shared by devshells and Nix tasks.
 {
   pkgs,
-  platformVersions ? [
-    "36"
-    "34"
-  ],
-  includeEmulator ? false,
-  includeSystemImages ? false,
-  systemImageTypes ? [ "google_apis" ],
-  abiVersions ? [ "x86_64" ],
+  bridgeEmulatorProfile ? false,
 }:
 let
   buildToolsVersion = "35.0.0";
@@ -19,7 +12,20 @@ let
       buildToolsVersion
       "34.0.0"
     ];
-    inherit platformVersions includeEmulator includeSystemImages systemImageTypes abiVersions;
+    platformVersions = if bridgeEmulatorProfile then [ "34" ] else [ "36" "34" ];
+    includeEmulator = bridgeEmulatorProfile;
+    includeSystemImages = bridgeEmulatorProfile;
+    systemImageTypes = [ "google_apis" ];
+    abiVersions =
+      if bridgeEmulatorProfile then
+        [ "x86_64" ]
+      else
+        [
+          "x86"
+          "x86_64"
+          "armeabi-v7a"
+          "arm64-v8a"
+        ];
     ndkVersions = [ ndkVersion ];
     includeSources = false;
     includeNDK = true;

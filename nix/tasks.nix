@@ -6,11 +6,7 @@ let
   android = import ../clients/android/sdk.nix { inherit pkgs; };
   androidBridgeEmulator = import ../clients/android/sdk.nix {
     inherit pkgs;
-    platformVersions = [ "34" ];
-    includeEmulator = true;
-    includeSystemImages = true;
-    systemImageTypes = [ "google_apis" ];
-    abiVersions = [ "x86_64" ];
+    bridgeEmulatorProfile = true;
   };
 
   rustToolchain = pkgs.rust-bin.stable.latest.default.override {
@@ -166,11 +162,13 @@ let
     android-bridge-contract-check = {
       description = "Run the native bridge contract check in an isolated API 34 x86_64 emulator.";
       runtimeInputs = androidBridgeInputs;
-      env = androidBridgeEnv;
+      env = androidBridgeEnv // {
+        KORRI_PORTAL_BUNDLE = "${packages.portal-bundle}/bin/portal-bundle";
+      };
       script = ''
         ${androidSetup}
         export CARGO_TARGET_DIR="$KORRI_ROOT/.cache/korrid-target"
-        exec "$KORRI_ROOT/clients/android/bridge-contract-check.sh" "$@"
+        exec bash "$KORRI_ROOT/clients/android/bridge-contract-check.sh" "$@"
       '';
     };
 

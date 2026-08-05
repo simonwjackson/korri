@@ -29,6 +29,7 @@ if [[ -z "$BUILD_ANDROID_HOME" || -z "$BUILD_ANDROID_SDK_ROOT" || -z "$BUILD_AND
 fi
 : "${KORRI_EMULATOR_NIX_SDK:?bridge contract check needs KORRI_EMULATOR_NIX_SDK}"
 : "${KORRI_NDK_VERSION:?bridge contract check needs KORRI_NDK_VERSION}"
+: "${KORRI_PORTAL_BUNDLE:?bridge contract check needs KORRI_PORTAL_BUNDLE}"
 
 cleanup() {
   local status=$?
@@ -184,25 +185,26 @@ boot_emulator() {
     >"$EMULATOR_LOG" 2>&1 &
   EMULATOR_PID=$!
 
-  timeout "$BOOT_TIMEOUT_SECONDS" adb -s "$SERIAL" wait-for-device \
-    || fail_with_emulator_diagnostics "Timed out waiting for $SERIAL to become reachable via adb"
-
   local deadline=$((SECONDS + BOOT_TIMEOUT_SECONDS))
   local boot_completed=""
+  local device_state=""
   while (( SECONDS < deadline )); do
     if ! kill -0 "$EMULATOR_PID" >/dev/null 2>&1; then
       fail_with_emulator_diagnostics "Emulator process exited before Android boot completed"
     fi
-    boot_completed="$(adb -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
-    if [[ "$boot_completed" == "1" ]]; then
-      adb -s "$SERIAL" shell input keyevent 82 >/dev/null 2>&1 || true
-      echo "-- emulator boot completed"
-      return 0
+    device_state="$(adb -s "$SERIAL" get-state 2>/dev/null || true)"
+    if [[ "$device_state" == "device" ]]; then
+      boot_completed="$(adb -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+      if [[ "$boot_completed" == "1" ]]; then
+        adb -s "$SERIAL" shell input keyevent 82 >/dev/null 2>&1 || true
+        echo "-- emulator boot completed"
+        return 0
+      fi
     fi
     sleep 2
   done
 
-  fail_with_emulator_diagnostics "Timed out after ${BOOT_TIMEOUT_SECONDS}s waiting for Android boot completion; last sys.boot_completed='$boot_completed'"
+  fail_with_emulator_diagnostics "Timed out after ${BOOT_TIMEOUT_SECONDS}s waiting for Android boot completion; last adb state='$device_state', sys.boot_completed='$boot_completed'"
 }
 
 project_bridge_version() {
@@ -212,10 +214,7 @@ project_bridge_version() {
 
 bundle_portal_assets() {
   echo "== bundle portal assets"
-  cd "$ROOT/clients/portal"
-  bun run build
-  rm -rf "$ANDROID_CLIENT/app/src/main/assets/portal"
-  cp -r dist "$ANDROID_CLIENT/app/src/main/assets/portal"
+  "$KORRI_PORTAL_BUNDLE"
 }
 
 build_x86_64_korrid() {
@@ -247,8 +246,6 @@ export ANDROID_AVD_HOME="$RUN_DIR/avd"
 export ANDROID_EMULATOR_HOME="$RUN_DIR/emulator-home"
 
 materialize_emulator_sdk
-create_avd
-boot_emulator
 
 bridge_version="$(project_bridge_version)"
 if ! [[ "$bridge_version" =~ ^[0-9]+$ ]]; then
@@ -257,6 +254,9 @@ if ! [[ "$bridge_version" =~ ^[0-9]+$ ]]; then
 fi
 bundle_portal_assets
 build_x86_64_korrid
+
+create_avd
+boot_emulator
 run_contract_test "$bridge_version"
 
 echo "bridge contract check passed on $SERIAL"
