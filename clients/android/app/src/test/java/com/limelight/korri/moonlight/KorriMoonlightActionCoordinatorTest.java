@@ -10,6 +10,7 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
@@ -111,7 +112,7 @@ public class KorriMoonlightActionCoordinatorTest {
     }
 
     @Test
-    public void executedEffectSurvivesStatePublicationFailureAndCommandsSkipRefresh() {
+    public void stateRepublishFailureClearsExactGenerationAndInvalidatesExecutor() {
         RecordingPublication publication = new RecordingPublication();
         KorriMoonlightActionCoordinator coordinator =
                 new KorriMoonlightActionCoordinator(publication);
@@ -126,13 +127,46 @@ public class KorriMoonlightActionCoordinatorTest {
         assertEquals(java.util.Collections.singletonList("fill:true"), actions.calls);
         assertEquals(java.util.Collections.singletonList(LAUNCH + ":" + generation),
                 publication.cleared);
-
-        publication.cleared.clear();
-        assertEquals(KorriMoonlightActionExecutor.Outcome.EXECUTED,
+        assertEquals(KorriMoonlightActionExecutor.Outcome.UNAVAILABLE,
                 coordinator.execute(KorriMoonlightActionExecutor.Request.command(
                         LAUNCH, generation,
                         KorriMoonlightActionExecutor.Effect.TOGGLE_KEYBOARD)));
-        assertTrue(publication.cleared.isEmpty());
+    }
+
+    @Test
+    public void overlayRepublishFailureClearsExactGenerationAndInvalidatesExecutor() {
+        RecordingPublication publication = new RecordingPublication();
+        KorriMoonlightActionCoordinator coordinator =
+                new KorriMoonlightActionCoordinator(publication);
+        String generation = coordinator.register(LAUNCH, executor(new RecordingActions()));
+        publication.failPublish = true;
+
+        assertFalse(coordinator.republish(LAUNCH));
+        assertEquals(java.util.Collections.singletonList(LAUNCH + ":" + generation),
+                publication.cleared);
+        assertEquals(KorriMoonlightActionExecutor.Outcome.UNAVAILABLE,
+                coordinator.execute(KorriMoonlightActionExecutor.Request.command(
+                        LAUNCH, generation,
+                        KorriMoonlightActionExecutor.Effect.DISCONNECT)));
+    }
+
+    @Test
+    public void failedSameLaunchReplacementClearsPreviousGenerationAndLeavesUnavailable() {
+        RecordingPublication publication = new RecordingPublication();
+        KorriMoonlightActionCoordinator coordinator =
+                new KorriMoonlightActionCoordinator(publication);
+        RecordingActions first = new RecordingActions();
+        String generationA = coordinator.register(LAUNCH, executor(first));
+        publication.failPublish = true;
+
+        assertNull(coordinator.register(LAUNCH, executor(new RecordingActions())));
+        assertEquals(java.util.Collections.singletonList(LAUNCH + ":" + generationA),
+                publication.cleared);
+        assertEquals(KorriMoonlightActionExecutor.Outcome.UNAVAILABLE,
+                coordinator.execute(KorriMoonlightActionExecutor.Request.command(
+                        LAUNCH, generationA,
+                        KorriMoonlightActionExecutor.Effect.TOGGLE_KEYBOARD)));
+        assertTrue(first.calls.isEmpty());
     }
 
     @Test

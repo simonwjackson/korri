@@ -45,7 +45,10 @@ public final class KorriMoonlightActionCoordinator {
         if (nextLaunchId == null || nextLaunchId.isEmpty() || nextExecutor == null) return null;
         String nextGeneration = generation();
         String state = nextExecutor.stateJson(nextLaunchId, nextGeneration);
-        if (state.isEmpty() || !publication.publish(state)) return null;
+        if (state.isEmpty() || !publication.publish(state)) {
+            invalidateCurrent();
+            return null;
+        }
         launchId = nextLaunchId;
         generation = nextGeneration;
         executor = nextExecutor;
@@ -70,8 +73,9 @@ public final class KorriMoonlightActionCoordinator {
     public synchronized boolean republish(String expectedLaunchId) {
         if (executor == null || !sameLaunch(expectedLaunchId)) return false;
         String state = executor.stateJson(launchId, generation);
-        if (state.isEmpty()) return false;
-        return publication.publish(state);
+        if (!state.isEmpty() && publication.publish(state)) return true;
+        invalidateCurrent();
+        return false;
     }
 
     public KorriMoonlightActionExecutor.Outcome execute(
@@ -99,12 +103,23 @@ public final class KorriMoonlightActionCoordinator {
                 if (isCurrent(selected, selectedLaunch, selectedGeneration)) {
                     if (!publication.publish(selected.stateJson(
                             selectedLaunch, selectedGeneration))) {
-                        publication.clear(selectedLaunch, selectedGeneration);
+                        invalidateCurrent();
                     }
                 }
             }
         }
         return outcome;
+    }
+
+    private void invalidateCurrent() {
+        String invalidatedLaunch = launchId;
+        String invalidatedGeneration = generation;
+        executor = null;
+        launchId = null;
+        generation = null;
+        if (invalidatedLaunch != null && invalidatedGeneration != null) {
+            publication.clear(invalidatedLaunch, invalidatedGeneration);
+        }
     }
 
     private synchronized boolean isCurrent(

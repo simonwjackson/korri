@@ -3617,6 +3617,12 @@ command = ["sh", "-c", "sleep 1"]
         assert!(publish_moonlight_executor_state(
             &serde_json::to_string(&replacement_executor).unwrap()
         ));
+        // A late failed-publication cleanup for generation A cannot erase the
+        // already-published replacement generation B.
+        assert!(!clear_moonlight_executor_state(
+            &stream.launch_id,
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ));
         assert_eq!(
             authorize_platform_instruction(&serde_json::to_string(&old_quit).unwrap()),
             PlatformInstructionAuthorization::Stale
