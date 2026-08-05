@@ -335,6 +335,12 @@ public class KorriShellActivity extends AppCompatActivity {
             gameFolderPicker.cancelled();
             return;
         }
+        if (!hasAllFilesStorageAccess()) {
+            gameFolderPicker.problem(
+                    "StorageAccessDenied",
+                    "Grant Korri file access, then choose a game folder");
+            return;
+        }
         KorriExternalStorageTreeResolver.Result result =
                 KorriExternalStorageTreeResolver.resolve(
                         data.getData().toString(), externalStorageVolumes());
@@ -369,6 +375,11 @@ public class KorriShellActivity extends AppCompatActivity {
         if (KorriBrainService.activeLaunch() != null) {
             KorriBrainService.setOverlayArmed(true);
         }
+    }
+
+    private boolean hasAllFilesStorageAccess() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.R
+                || Environment.isExternalStorageManager();
     }
 
     private List<KorriExternalStorageTreeResolver.Volume> externalStorageVolumes() {
@@ -573,8 +584,7 @@ public class KorriShellActivity extends AppCompatActivity {
         /** Open Android's asynchronous game-folder picker. */
         @JavascriptInterface
         public String openGameFolderPicker() {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-                    && !Environment.isExternalStorageManager()) {
+            if (!hasAllFilesStorageAccess()) {
                 try {
                     requestAllFilesAccess();
                 } catch (Exception ignored) {
