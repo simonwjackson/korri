@@ -22,6 +22,7 @@ pub enum DiscoveryDiagnosticCode {
     HashUnavailable,
     PathUnsupported,
     DiagnosticLimitReached,
+    TraversalLimitReached,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -34,6 +35,7 @@ pub struct DiscoveryDiagnostic {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ScanCandidate {
+    pub storage_rank: usize,
     pub storage_id: String,
     pub storage_root: PathBuf,
     pub canonical_path: PathBuf,
@@ -69,10 +71,37 @@ struct HashCacheEntry {
     hash: String,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TraversalBudget {
+    pub max_entries: usize,
+    pub max_directories: usize,
+    pub max_depth: usize,
+    pub max_sortable_entries: usize,
+}
+
+impl Default for TraversalBudget {
+    fn default() -> Self {
+        Self {
+            max_entries: 100_000,
+            max_directories: 10_000,
+            max_depth: 32,
+            max_sortable_entries: 10_000,
+        }
+    }
+}
+
+#[derive(Default)]
+struct TraversalState {
+    entries: usize,
+    directories: usize,
+    traversal_exhausted: bool,
+}
+
 pub struct FolderScanner<'a> {
     registry: &'a PluginRegistry,
     max_diagnostics: usize,
     max_candidates: usize,
+    budget: TraversalBudget,
 }
 
 impl<'a> FolderScanner<'a> {
@@ -81,16 +110,32 @@ impl<'a> FolderScanner<'a> {
         max_diagnostics: usize,
         max_candidates: usize,
     ) -> Self {
+        Self::with_budget(
+            registry,
+            max_diagnostics,
+            max_candidates,
+            TraversalBudget::default(),
+        )
+    }
+
+    pub fn with_budget(
+        registry: &'a PluginRegistry,
+        max_diagnostics: usize,
+        max_candidates: usize,
+        budget: TraversalBudget,
+    ) -> Self {
         Self {
             registry,
             max_diagnostics,
             max_candidates,
+            budget,
         }
     }
 
     pub fn scan(&self, storages: &[(String, PathBuf)], cache: &mut HashCache) -> ScanReport {
         let mut report = ScanReport::default();
-        for (storage_id, root) in storages {
+        let mut state = TraversalState::default();
+        for (storage_rank, (storage_id, root)) in storages.iter().enumerate() {
             let canonical_root = match root.canonicalize() {
                 Ok(path) => path,
                 Err(_) => {
@@ -118,30 +163,45 @@ impl<'a> FolderScanner<'a> {
                 }
             }
             self.scan_directory(
+                storage_rank,
                 storage_id,
                 &canonical_root,
                 &canonical_root,
+                0,
                 cache,
                 &mut report,
+                &mut state,
             );
         }
-        report.candidates.sort_by(|left, right| {
-            left.storage_id
-                .cmp(&right.storage_id)
-                .then(left.relative_path.cmp(&right.relative_path))
-        });
         report
     }
 
     fn scan_directory(
         &self,
+        storage_rank: usize,
         storage_id: &str,
         root: &Path,
         directory: &Path,
+        depth: usize,
         cache: &mut HashCache,
         report: &mut ScanReport,
+        state: &mut TraversalState,
     ) {
-        let entries = match fs::read_dir(directory) {
+        if state.traversal_exhausted {
+            return;
+        }
+        if depth > self.budget.max_depth {
+            self.push_traversal_exhausted(report, Some(storage_id), safe_relative(root, directory));
+            state.traversal_exhausted = true;
+            return;
+        }
+        if state.directories >= self.budget.max_directories {
+            self.push_traversal_exhausted(report, Some(storage_id), safe_relative(root, directory));
+            state.traversal_exhausted = true;
+            return;
+        }
+        state.directories += 1;
+        let read_dir = match fs::read_dir(directory) {
             Ok(entries) => entries,
             Err(_) => {
                 self.push_diag(
@@ -154,12 +214,44 @@ impl<'a> FolderScanner<'a> {
                 return;
             }
         };
-        let mut entries = entries
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap_or_else(|_| Vec::new());
+        let mut entries = Vec::new();
+        for entry in read_dir {
+            if entries.len() >= self.budget.max_sortable_entries {
+                self.push_traversal_exhausted(
+                    report,
+                    Some(storage_id),
+                    safe_relative(root, directory),
+                );
+                state.traversal_exhausted = true;
+                return;
+            }
+            match entry {
+                Ok(entry) => entries.push(entry),
+                Err(_) => self.push_diag(
+                    report,
+                    DiscoveryDiagnosticCode::EntryUnavailable,
+                    Some(storage_id),
+                    safe_relative(root, directory),
+                    "folder entry is unreadable",
+                ),
+            }
+        }
         entries.sort_by_key(|entry| entry.file_name());
 
         for entry in entries {
+            if state.traversal_exhausted {
+                return;
+            }
+            if state.entries >= self.budget.max_entries {
+                self.push_traversal_exhausted(
+                    report,
+                    Some(storage_id),
+                    safe_relative(root, directory),
+                );
+                state.traversal_exhausted = true;
+                return;
+            }
+            state.entries += 1;
             let original_path = entry.path();
             let canonical = match original_path.canonicalize() {
                 Ok(path) => path,
@@ -198,18 +290,36 @@ impl<'a> FolderScanner<'a> {
                 }
             };
             if metadata.is_dir() {
-                self.scan_directory(storage_id, root, &canonical, cache, report);
+                self.scan_directory(
+                    storage_rank,
+                    storage_id,
+                    root,
+                    &canonical,
+                    depth + 1,
+                    cache,
+                    report,
+                    state,
+                );
                 continue;
             }
             if !metadata.is_file() {
                 continue;
             }
-            self.scan_file(storage_id, root, &canonical, metadata.len(), cache, report);
+            self.scan_file(
+                storage_rank,
+                storage_id,
+                root,
+                &canonical,
+                metadata.len(),
+                cache,
+                report,
+            );
         }
     }
 
     fn scan_file(
         &self,
+        storage_rank: usize,
         storage_id: &str,
         root: &Path,
         path: &Path,
@@ -307,6 +417,7 @@ impl<'a> FolderScanner<'a> {
         };
         report.hashed_bytes += read_bytes;
         report.candidates.push(ScanCandidate {
+            storage_rank,
             storage_id: storage_id.to_owned(),
             storage_root: root.to_owned(),
             canonical_path: path.to_owned(),
@@ -321,6 +432,28 @@ impl<'a> FolderScanner<'a> {
             launcher: claim.launcher.clone(),
             runtime: claim.runtime.clone(),
         });
+    }
+
+    fn push_traversal_exhausted(
+        &self,
+        report: &mut ScanReport,
+        storage_id: Option<&str>,
+        path: Option<String>,
+    ) {
+        if report
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == DiscoveryDiagnosticCode::TraversalLimitReached)
+        {
+            return;
+        }
+        self.push_diag(
+            report,
+            DiscoveryDiagnosticCode::TraversalLimitReached,
+            storage_id,
+            path,
+            "discovery traversal budget was exhausted; additional entries were omitted",
+        );
     }
 
     fn push_diag(

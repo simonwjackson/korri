@@ -21,7 +21,7 @@ use crate::{
     discovery::{
         scanner::{
             DiscoveryDiagnostic, DiscoveryDiagnosticCode, FolderScanner, HashCache, ScanCandidate,
-            ScanReport,
+            ScanReport, TraversalBudget,
         },
         title,
     },
@@ -34,12 +34,17 @@ const OWNERSHIP_FILE: &str = "ownership.json";
 const REPAIR_FILE: &str = "repair.json";
 const DEFAULT_MAX_DIAGNOSTICS: usize = 1000;
 const DEFAULT_MAX_CANDIDATES: usize = 10_000;
+const DEFAULT_MAX_ENTRIES: usize = 100_000;
+const DEFAULT_MAX_DIRECTORIES: usize = 10_000;
+const DEFAULT_MAX_DEPTH: usize = 32;
+const DEFAULT_MAX_SORTABLE_ENTRIES: usize = 10_000;
 
 #[derive(Clone)]
 pub struct DiscoveryCoordinator {
     readable_root: PathBuf,
     private_root: PathBuf,
     write_lock: Arc<Mutex<()>>,
+    scan_lock: Arc<Mutex<()>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -47,6 +52,10 @@ pub struct DiscoveryOptions {
     pub first_seen_at: String,
     pub max_diagnostics: usize,
     pub max_candidates: usize,
+    pub max_entries: usize,
+    pub max_directories: usize,
+    pub max_depth: usize,
+    pub max_sortable_entries: usize,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -81,6 +90,10 @@ impl Default for DiscoveryOptions {
             first_seen_at: format!("unix:{seconds}"),
             max_diagnostics: DEFAULT_MAX_DIAGNOSTICS,
             max_candidates: DEFAULT_MAX_CANDIDATES,
+            max_entries: DEFAULT_MAX_ENTRIES,
+            max_directories: DEFAULT_MAX_DIRECTORIES,
+            max_depth: DEFAULT_MAX_DEPTH,
+            max_sortable_entries: DEFAULT_MAX_SORTABLE_ENTRIES,
         }
     }
 }
@@ -99,6 +112,7 @@ impl DiscoveryCoordinator {
             readable_root: readable_root.as_ref().to_owned(),
             private_root: private_root.as_ref().to_owned(),
             write_lock,
+            scan_lock: Arc::new(Mutex::new(())),
         }
     }
 
@@ -119,8 +133,8 @@ impl DiscoveryCoordinator {
         let mut document = parse_mapping(&config_yaml)?;
         let mut private = PrivateState::read(&self.private_root)?;
         let storage_id = storage_id_for_root(&canonical_root, &document, &private);
-        set_storage_record(&mut document, &storage_id, &canonical_root)?;
-        private.remember_storage(&storage_id);
+        let record = set_storage_record(&mut document, &storage_id, &canonical_root)?;
+        private.remember_owned_storage(&storage_id, &canonical_root, &record);
         private.repair.pending_scans.insert(storage_id.clone());
         private.write(&self.private_root)?;
         config_yaml = serialize_mapping(document)?;
@@ -154,18 +168,8 @@ impl DiscoveryCoordinator {
             .insert(storage_id.to_owned());
         private.write(&self.private_root)?;
 
-        let config_yaml = read_fixed(&self.readable_root, CONFIG_FILE_NAME)?;
-        let library_yaml = read_fixed(&self.readable_root, LIBRARY_FILE_NAME)?;
-        let expected_revision = revision(&config_yaml);
-        let mut document = parse_mapping(&config_yaml)?;
-        remove_storage_record(&mut document, storage_id)?;
-        let candidate_config = serialize_mapping(document)?;
-        validate_pair(&candidate_config, &library_yaml)?;
-        write_atomically(
-            &self.readable_root.join(CONFIG_FILE_NAME),
-            candidate_config.as_bytes(),
-            &expected_revision,
-        )?;
+        private.storage_order.retain(|id| id != storage_id);
+        private.write(&self.private_root)?;
         drop(_guard);
 
         let mut report = self.rescan(options)?;
@@ -177,47 +181,99 @@ impl DiscoveryCoordinator {
         &self,
         options: &DiscoveryOptions,
     ) -> Result<DiscoveryMutationReport, DiscoveryError> {
+        let mut report = DiscoveryMutationReport::default();
+        let (config_revision, library_revision, registry, storages, mut hash_cache) = {
+            let _guard = self
+                .write_lock
+                .lock()
+                .expect("discovery write lock poisoned");
+            ensure_fixed_files(&self.readable_root)?;
+            let mut private = PrivateState::read(&self.private_root)?;
+            let mut config_yaml = read_fixed(&self.readable_root, CONFIG_FILE_NAME)?;
+            let mut library_yaml = read_fixed(&self.readable_root, LIBRARY_FILE_NAME)?;
+            let mut repaired = apply_pending_ownership(&library_yaml, &mut private)?;
+
+            if !private.repair.pending_removals.is_empty() {
+                let removals: Vec<String> =
+                    private.repair.pending_removals.iter().cloned().collect();
+                let cleanup = cleanup_removed_storages(
+                    &self.readable_root,
+                    &config_yaml,
+                    &library_yaml,
+                    &mut private,
+                    &removals,
+                )?;
+                report.removed_library_records += cleanup.removed_items;
+                report.removed_releases += cleanup.removed_releases;
+                repaired |= cleanup.changed;
+                library_yaml = read_fixed(&self.readable_root, LIBRARY_FILE_NAME)?;
+
+                let storage_cleanup = cleanup_removed_storage_records(
+                    &self.readable_root,
+                    &config_yaml,
+                    &library_yaml,
+                    &mut private,
+                    &removals,
+                )?;
+                repaired |= storage_cleanup.changed;
+                if storage_cleanup.changed {
+                    config_yaml = read_fixed(&self.readable_root, CONFIG_FILE_NAME)?;
+                }
+                for storage_id in removals {
+                    private.repair.pending_removals.remove(&storage_id);
+                }
+            }
+
+            if repaired {
+                report.repaired = true;
+            }
+            private.write(&self.private_root)?;
+            let snapshot = validate_pair(&config_yaml, &library_yaml)?;
+            let registry = plugin_policy::registry_for_snapshot(&snapshot)
+                .map_err(|error| DiscoveryError::Candidate(error.to_string()))?;
+            let config_doc = parse_mapping(&config_yaml)?;
+            (
+                revision(&config_yaml),
+                revision(&library_yaml),
+                registry,
+                ordered_storages(&snapshot, &config_doc, &private),
+                private.hash_cache.clone(),
+            )
+        };
+
+        let _scan_guard = self.scan_lock.lock().expect("discovery scan lock poisoned");
+        let scanner = FolderScanner::with_budget(
+            &registry,
+            options.max_diagnostics,
+            options.max_candidates,
+            TraversalBudget {
+                max_entries: options.max_entries,
+                max_directories: options.max_directories,
+                max_depth: options.max_depth,
+                max_sortable_entries: options.max_sortable_entries,
+            },
+        );
+        let mut scan = scanner.scan(&storages, &mut hash_cache);
+        append_dedupe_diagnostics(&mut scan, options.max_diagnostics);
+        drop(_scan_guard);
+
         let _guard = self
             .write_lock
             .lock()
             .expect("discovery write lock poisoned");
-        ensure_fixed_files(&self.readable_root)?;
         let mut private = PrivateState::read(&self.private_root)?;
-        let mut report = DiscoveryMutationReport::default();
-
+        private.hash_cache = hash_cache;
         let config_yaml = read_fixed(&self.readable_root, CONFIG_FILE_NAME)?;
-        let mut library_yaml = read_fixed(&self.readable_root, LIBRARY_FILE_NAME)?;
-        let snapshot = validate_pair(&config_yaml, &library_yaml)?;
-        let registry = plugin_policy::registry_for_snapshot(&snapshot)
-            .map_err(|error| DiscoveryError::Candidate(error.to_string()))?;
-
-        if !private.repair.pending_removals.is_empty() {
-            let removals: Vec<String> = private.repair.pending_removals.iter().cloned().collect();
-            let cleanup = cleanup_removed_storages(
-                &self.readable_root,
-                &config_yaml,
-                &library_yaml,
-                &mut private,
-                &removals,
-            )?;
-            report.removed_library_records += cleanup.removed_items;
-            report.removed_releases += cleanup.removed_releases;
-            report.repaired = cleanup.changed;
-            library_yaml = read_fixed(&self.readable_root, LIBRARY_FILE_NAME)?;
-            for storage_id in removals {
-                private.repair.pending_removals.remove(&storage_id);
-            }
+        let library_yaml = read_fixed(&self.readable_root, LIBRARY_FILE_NAME)?;
+        apply_pending_ownership(&library_yaml, &mut private)?;
+        if revision(&config_yaml) != config_revision || revision(&library_yaml) != library_revision
+        {
             private.write(&self.private_root)?;
+            return Err(DiscoveryError::Conflict);
         }
-
-        let snapshot = validate_pair(&config_yaml, &library_yaml)?;
-        let storages = ordered_storages(&snapshot, &private);
-        let scanner =
-            FolderScanner::new(&registry, options.max_diagnostics, options.max_candidates);
-        let mut scan = scanner.scan(&storages, &mut private.hash_cache);
-        append_dedupe_diagnostics(&mut scan, options.max_diagnostics);
         let reconciliation = reconcile_candidates(
             &self.readable_root,
+            &self.private_root,
             &config_yaml,
             &library_yaml,
             &mut private,
@@ -241,6 +297,8 @@ struct PrivateState {
     #[serde(default)]
     ownership: OwnershipJournal,
     #[serde(default)]
+    storage_ownership: StorageOwnershipJournal,
+    #[serde(default)]
     repair: RepairJournal,
     #[serde(default)]
     storage_order: Vec<String>,
@@ -250,6 +308,18 @@ struct PrivateState {
 struct OwnershipJournal {
     #[serde(default)]
     releases: BTreeMap<String, OwnedRelease>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+struct StorageOwnershipJournal {
+    #[serde(default)]
+    storages: BTreeMap<String, OwnedStorage>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct OwnedStorage {
+    root: String,
+    fingerprint: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -266,9 +336,11 @@ struct RepairJournal {
     pending_removals: BTreeSet<String>,
     #[serde(default)]
     pending_scans: BTreeSet<String>,
+    #[serde(default)]
+    pending_ownership: BTreeMap<String, OwnedRelease>,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct ReconcileStats {
     changed: bool,
     added_items: usize,
@@ -281,6 +353,7 @@ impl PrivateState {
         Ok(Self {
             hash_cache: read_json(&state_file(root, HASH_CACHE_FILE))?,
             ownership: read_json(&state_file(root, OWNERSHIP_FILE))?,
+            storage_ownership: read_json(&state_file(root, "storage-ownership.json"))?,
             repair: read_json(&state_file(root, REPAIR_FILE))?,
             storage_order: read_json(&state_file(root, "storage-order.json"))?,
         })
@@ -291,6 +364,10 @@ impl PrivateState {
             .map_err(|error| DiscoveryError::Storage(error.to_string()))?;
         write_json_atomically(&state_file(root, HASH_CACHE_FILE), &self.hash_cache)?;
         write_json_atomically(&state_file(root, OWNERSHIP_FILE), &self.ownership)?;
+        write_json_atomically(
+            &state_file(root, "storage-ownership.json"),
+            &self.storage_ownership,
+        )?;
         write_json_atomically(&state_file(root, REPAIR_FILE), &self.repair)?;
         write_json_atomically(&state_file(root, "storage-order.json"), &self.storage_order)?;
         Ok(())
@@ -300,6 +377,24 @@ impl PrivateState {
         if !self.storage_order.iter().any(|id| id == storage_id) {
             self.storage_order.push(storage_id.to_owned());
         }
+    }
+
+    fn remember_owned_storage(&mut self, storage_id: &str, root: &Path, record: &Mapping) {
+        self.remember_storage(storage_id);
+        self.storage_ownership.storages.insert(
+            storage_id.to_owned(),
+            OwnedStorage {
+                root: root.to_string_lossy().into_owned(),
+                fingerprint: fingerprint_mapping(record),
+            },
+        );
+    }
+
+    fn storage_is_owned_current(&self, storage_id: &str, record: Option<&Mapping>) -> bool {
+        let Some(owned) = self.storage_ownership.storages.get(storage_id) else {
+            return false;
+        };
+        record.is_some_and(|record| owned.fingerprint == fingerprint_mapping(record))
     }
 
     fn is_owned_current(
@@ -327,6 +422,7 @@ impl PrivateState {
 
 fn reconcile_candidates(
     root: &Path,
+    private_root: &Path,
     config_yaml: &str,
     library_yaml: &str,
     private: &mut PrivateState,
@@ -339,8 +435,10 @@ fn reconcile_candidates(
     let mut stats = ReconcileStats::default();
 
     let mut generated_by_path = BTreeMap::<(String, String), (String, String)>::new();
+    let mut generated_by_canonical = BTreeMap::<PathBuf, (String, String)>::new();
     let mut generated_by_hash = BTreeMap::<String, (String, String)>::new();
     let mut authored_by_path = BTreeMap::<(String, String), (String, String)>::new();
+    let mut authored_by_canonical = BTreeMap::<PathBuf, (String, String)>::new();
     let mut authored_by_hash = BTreeMap::<String, (String, String)>::new();
 
     for (playable_id, item_payload) in &snapshot.library {
@@ -355,10 +453,19 @@ fn reconcile_candidates(
             let release_id = release.id.0.clone();
             if let Some(Target::File { storage, path, .. }) = &release.target {
                 let key = (storage.0.clone(), path.0.clone());
+                let canonical = release_canonical_path(&snapshot, &storage.0, &path.0);
                 if current_owned {
                     generated_by_path.insert(key, (playable_id.clone(), release_id.clone()));
+                    if let Some(canonical) = canonical {
+                        generated_by_canonical
+                            .insert(canonical, (playable_id.clone(), release_id.clone()));
+                    }
                 } else {
                     authored_by_path.insert(key, (playable_id.clone(), release_id.clone()));
+                    if let Some(canonical) = canonical {
+                        authored_by_canonical
+                            .insert(canonical, (playable_id.clone(), release_id.clone()));
+                    }
                 }
             }
             if let Some(identity) = &release.identity {
@@ -372,10 +479,69 @@ fn reconcile_candidates(
         }
     }
 
+    let mut authored_reserved_canonical = BTreeSet::<PathBuf>::new();
+    let mut authored_reserved_hashes = BTreeSet::<String>::new();
+    for candidate in candidates {
+        let path_key = (
+            candidate.storage_id.clone(),
+            candidate.relative_path.clone(),
+        );
+        let authored_match = authored_by_path.get(&path_key).cloned().or_else(|| {
+            authored_by_canonical
+                .get(&candidate.canonical_path)
+                .cloned()
+        });
+        if let Some((playable_id, release_id)) = authored_match {
+            if backfill_authored_identity(
+                library,
+                &playable_id,
+                &release_id,
+                &candidate.hash,
+                private,
+            )? {
+                stats.changed = true;
+            }
+            authored_reserved_canonical.insert(candidate.canonical_path.clone());
+            authored_reserved_hashes.insert(candidate.hash.clone());
+        } else if authored_by_hash.contains_key(&candidate.hash) {
+            authored_reserved_canonical.insert(candidate.canonical_path.clone());
+            authored_reserved_hashes.insert(candidate.hash.clone());
+        }
+    }
+
+    let mut generated_shadowed_by_authored = BTreeSet::<String>::new();
+    for hash in &authored_reserved_hashes {
+        if let Some((playable_id, _)) = generated_by_hash.get(hash) {
+            generated_shadowed_by_authored.insert(playable_id.clone());
+        }
+    }
+    for canonical in &authored_reserved_canonical {
+        if let Some((playable_id, _)) = generated_by_canonical.get(canonical) {
+            generated_shadowed_by_authored.insert(playable_id.clone());
+        }
+    }
+    for playable_id in generated_shadowed_by_authored {
+        if library.remove(Value::String(playable_id.clone())).is_some() {
+            private
+                .ownership
+                .releases
+                .retain(|_, owned| owned.playable_id != playable_id);
+            stats.changed = true;
+            stats.removed_items += 1;
+            stats.removed_releases += 1;
+        }
+    }
+
     let mut claimed_canonical = BTreeSet::<PathBuf>::new();
     let mut claimed_hashes = BTreeSet::<String>::new();
     let mut assigned_ids = BTreeSet::<String>::new();
+    let mut planned_ownership = BTreeMap::<String, OwnedRelease>::new();
     for candidate in candidates {
+        if authored_reserved_canonical.contains(&candidate.canonical_path)
+            || authored_reserved_hashes.contains(&candidate.hash)
+        {
+            continue;
+        }
         if !claimed_canonical.insert(candidate.canonical_path.clone()) {
             continue;
         }
@@ -386,23 +552,14 @@ fn reconcile_candidates(
             candidate.storage_id.clone(),
             candidate.relative_path.clone(),
         );
-        if authored_by_path.contains_key(&path_key)
-            || authored_by_hash.contains_key(&candidate.hash)
-        {
-            if backfill_authored_identity(
-                library,
-                &authored_by_path,
-                &path_key,
-                &candidate.hash,
-                private,
-            )? {
-                stats.changed = true;
-            }
-            continue;
-        }
         let existing_generated = generated_by_path
             .get(&path_key)
             .cloned()
+            .or_else(|| {
+                generated_by_canonical
+                    .get(&candidate.canonical_path)
+                    .cloned()
+            })
             .or_else(|| generated_by_hash.get(&candidate.hash).cloned());
         let (playable_id, release_id, was_existing) =
             if let Some((playable_id, release_id)) = existing_generated {
@@ -419,32 +576,42 @@ fn reconcile_candidates(
         let fingerprint = fingerprint_item(&item);
         let key = Value::String(playable_id.clone());
         let old = library.get(&key).cloned();
+        let ownership = OwnedRelease {
+            storage_id: candidate.storage_id.clone(),
+            playable_id: playable_id.clone(),
+            release_id: release_id.clone(),
+            fingerprint,
+        };
         if old.as_ref().and_then(Value::as_mapping) != Some(&item) {
             library.insert(key, Value::Mapping(item.clone()));
+            planned_ownership.insert(ownership_key(&playable_id, &release_id), ownership);
             stats.changed = true;
             if !was_existing {
                 stats.added_items += 1;
             }
+        } else {
+            private
+                .ownership
+                .releases
+                .insert(ownership_key(&playable_id, &release_id), ownership);
         }
-        private.ownership.releases.insert(
-            ownership_key(&playable_id, &release_id),
-            OwnedRelease {
-                storage_id: candidate.storage_id.clone(),
-                playable_id: playable_id.clone(),
-                release_id,
-                fingerprint,
-            },
-        );
     }
 
     if stats.changed {
+        for (key, ownership) in &planned_ownership {
+            private
+                .repair
+                .pending_ownership
+                .insert(key.clone(), ownership.clone());
+        }
+        private.write(private_root)?;
         let candidate_library = serialize_mapping(library_doc)?;
         validate_pair(config_yaml, &candidate_library)?;
-        write_atomically(
-            &root.join(LIBRARY_FILE_NAME),
-            candidate_library.as_bytes(),
-            &revision(library_yaml),
-        )?;
+        commit_library_atomically(root, config_yaml, library_yaml, &candidate_library)?;
+        for (key, ownership) in planned_ownership {
+            private.ownership.releases.insert(key.clone(), ownership);
+            private.repair.pending_ownership.remove(&key);
+        }
     }
     Ok(stats)
 }
@@ -507,10 +674,39 @@ fn cleanup_removed_storages(
     if stats.changed {
         let candidate_library = serialize_mapping(library_doc)?;
         validate_pair(config_yaml, &candidate_library)?;
+        commit_library_atomically(root, config_yaml, library_yaml, &candidate_library)?;
+    }
+    Ok(stats)
+}
+
+fn cleanup_removed_storage_records(
+    root: &Path,
+    config_yaml: &str,
+    library_yaml: &str,
+    private: &mut PrivateState,
+    storage_ids: &[String],
+) -> Result<ReconcileStats, DiscoveryError> {
+    let mut config_doc = parse_mapping(config_yaml)?;
+    let mut stats = ReconcileStats::default();
+    for storage_id in storage_ids {
+        let record = storage_record(&config_doc, storage_id);
+        if !private.storage_is_owned_current(storage_id, record.as_ref()) {
+            continue;
+        }
+        if library_references_storage(library_yaml, storage_id)? {
+            continue;
+        }
+        remove_storage_record(&mut config_doc, storage_id)?;
+        private.storage_ownership.storages.remove(storage_id);
+        stats.changed = true;
+    }
+    if stats.changed {
+        let candidate_config = serialize_mapping(config_doc)?;
+        validate_pair(&candidate_config, library_yaml)?;
         write_atomically(
-            &root.join(LIBRARY_FILE_NAME),
-            candidate_library.as_bytes(),
-            &revision(library_yaml),
+            &root.join(CONFIG_FILE_NAME),
+            candidate_config.as_bytes(),
+            &revision(config_yaml),
         )?;
     }
     Ok(stats)
@@ -518,25 +714,22 @@ fn cleanup_removed_storages(
 
 fn backfill_authored_identity(
     library: &mut Mapping,
-    authored_by_path: &BTreeMap<(String, String), (String, String)>,
-    path_key: &(String, String),
+    playable_id: &str,
+    release_id: &str,
     hash: &str,
     private: &PrivateState,
 ) -> Result<bool, DiscoveryError> {
-    let Some((playable_id, release_id)) = authored_by_path.get(path_key).cloned() else {
-        return Ok(false);
-    };
     let Some(item) = library
-        .get_mut(Value::String(playable_id.clone()))
+        .get_mut(Value::String(playable_id.to_owned()))
         .and_then(Value::as_mapping_mut)
     else {
         return Ok(false);
     };
-    if private.is_owned_current(&playable_id, item, None) {
+    if private.is_owned_current(playable_id, item, None) {
         return Ok(false);
     }
     for release in item_releases_mut(item) {
-        if mapping_string(release, "id").as_deref() == Some(&release_id)
+        if mapping_string(release, "id").as_deref() == Some(release_id)
             && !release.contains_key(Value::String("identity".into()))
         {
             release.insert(Value::String("identity".into()), identity_value(hash));
@@ -705,18 +898,16 @@ fn append_dedupe_diagnostics(scan: &mut ScanReport, max_diagnostics: usize) {
 
 fn ordered_storages(
     snapshot: &config::ConfigSnapshot,
+    config_doc: &Mapping,
     private: &PrivateState,
 ) -> Vec<(String, PathBuf)> {
-    let mut seen = BTreeSet::new();
     let mut storages = Vec::new();
     for storage_id in &private.storage_order {
-        if let Some(storage) = snapshot.storage.get(storage_id) {
-            seen.insert(storage_id.clone());
-            storages.push((storage_id.clone(), PathBuf::from(&storage.root.0)));
+        let record = storage_record(config_doc, storage_id);
+        if !private.storage_is_owned_current(storage_id, record.as_ref()) {
+            continue;
         }
-    }
-    for (storage_id, storage) in &snapshot.storage {
-        if seen.insert(storage_id.clone()) {
+        if let Some(storage) = snapshot.storage.get(storage_id) {
             storages.push((storage_id.clone(), PathBuf::from(&storage.root.0)));
         }
     }
@@ -732,11 +923,14 @@ fn storage_id_for_root(root: &Path, config: &Mapping, private: &PrivateState) ->
             let Some(key) = key.as_str() else {
                 continue;
             };
-            if value
-                .as_mapping()
-                .and_then(|mapping| mapping.get(Value::String("root".into())))
+            let Some(record) = value.as_mapping() else {
+                continue;
+            };
+            if record
+                .get(Value::String("root".into()))
                 .and_then(Value::as_str)
                 .is_some_and(|value| Path::new(value).canonicalize().ok().as_deref() == Some(root))
+                && private.storage_is_owned_current(key, Some(record))
             {
                 return key.to_owned();
             }
@@ -764,15 +958,18 @@ fn set_storage_record(
     document: &mut Mapping,
     storage_id: &str,
     root: &Path,
-) -> Result<(), DiscoveryError> {
+) -> Result<Mapping, DiscoveryError> {
     let storage = mapping_at(document, "storage")?;
     let mut record = Mapping::new();
     record.insert(
         Value::String("root".into()),
         Value::String(root.to_string_lossy().into_owned()),
     );
-    storage.insert(Value::String(storage_id.into()), Value::Mapping(record));
-    Ok(())
+    storage.insert(
+        Value::String(storage_id.into()),
+        Value::Mapping(record.clone()),
+    );
+    Ok(record)
 }
 
 fn remove_storage_record(document: &mut Mapping, storage_id: &str) -> Result<(), DiscoveryError> {
@@ -846,6 +1043,102 @@ fn mapping_at<'a>(parent: &'a mut Mapping, key: &str) -> Result<&'a mut Mapping,
 
 fn read_fixed(root: &Path, name: &str) -> Result<String, DiscoveryError> {
     fs::read_to_string(root.join(name)).map_err(|error| DiscoveryError::Storage(error.to_string()))
+}
+
+fn apply_pending_ownership(
+    library_yaml: &str,
+    private: &mut PrivateState,
+) -> Result<bool, DiscoveryError> {
+    if private.repair.pending_ownership.is_empty() {
+        return Ok(false);
+    }
+    let library_doc = parse_mapping(library_yaml)?;
+    let library = library_doc
+        .get(Value::String("library".into()))
+        .and_then(Value::as_mapping);
+    let mut changed = false;
+    let pending: Vec<(String, OwnedRelease)> = private
+        .repair
+        .pending_ownership
+        .iter()
+        .map(|(key, ownership)| (key.clone(), ownership.clone()))
+        .collect();
+    for (key, ownership) in pending {
+        let matches = library
+            .and_then(|library| library.get(Value::String(ownership.playable_id.clone())))
+            .and_then(Value::as_mapping)
+            .is_some_and(|item| fingerprint_item(item) == ownership.fingerprint);
+        if matches {
+            private.ownership.releases.insert(key.clone(), ownership);
+        }
+        private.repair.pending_ownership.remove(&key);
+        changed = true;
+    }
+    Ok(changed)
+}
+
+fn release_canonical_path(
+    snapshot: &config::ConfigSnapshot,
+    storage_id: &str,
+    relative_path: &str,
+) -> Option<PathBuf> {
+    let storage = snapshot.storage.get(storage_id)?;
+    Path::new(&storage.root.0)
+        .join(relative_path)
+        .canonicalize()
+        .ok()
+}
+
+fn library_references_storage(
+    library_yaml: &str,
+    storage_id: &str,
+) -> Result<bool, DiscoveryError> {
+    let library_doc = parse_mapping(library_yaml)?;
+    Ok(library_doc
+        .get(Value::String("library".into()))
+        .and_then(Value::as_mapping)
+        .into_iter()
+        .flat_map(|library| library.values())
+        .filter_map(Value::as_mapping)
+        .flat_map(item_releases)
+        .any(|release| {
+            release
+                .get(Value::String("target".into()))
+                .and_then(Value::as_mapping)
+                .and_then(|target| target.get(Value::String("storage".into())))
+                .and_then(Value::as_str)
+                == Some(storage_id)
+        }))
+}
+
+fn storage_record(document: &Mapping, storage_id: &str) -> Option<Mapping> {
+    document
+        .get(Value::String("storage".into()))
+        .and_then(Value::as_mapping)
+        .and_then(|storage| storage.get(Value::String(storage_id.into())))
+        .and_then(Value::as_mapping)
+        .cloned()
+}
+
+fn commit_library_atomically(
+    root: &Path,
+    config_yaml: &str,
+    library_yaml: &str,
+    candidate_library: &str,
+) -> Result<(), DiscoveryError> {
+    let current_config = read_fixed(root, CONFIG_FILE_NAME)?;
+    let current_library = read_fixed(root, LIBRARY_FILE_NAME)?;
+    if revision(&current_config) != revision(config_yaml)
+        || revision(&current_library) != revision(library_yaml)
+    {
+        return Err(DiscoveryError::Conflict);
+    }
+    validate_pair(&current_config, candidate_library)?;
+    write_atomically(
+        &root.join(LIBRARY_FILE_NAME),
+        candidate_library.as_bytes(),
+        &revision(&current_library),
+    )
 }
 
 fn write_atomically(
@@ -968,7 +1261,11 @@ fn mapping_string(mapping: &Mapping, key: &str) -> Option<String> {
 }
 
 fn fingerprint_item(item: &Mapping) -> String {
-    let bytes = serde_yaml::to_string(&Value::Mapping(item.clone())).unwrap_or_default();
+    fingerprint_mapping(item)
+}
+
+fn fingerprint_mapping(mapping: &Mapping) -> String {
+    let bytes = serde_yaml::to_string(&Value::Mapping(mapping.clone())).unwrap_or_default();
     format!("sha256:{}", hex::encode(Sha256::digest(bytes.as_bytes())))
 }
 
@@ -994,12 +1291,17 @@ fn route_is_resolvable(snapshot: &config::ConfigSnapshot, playable_id: &str) -> 
 mod tests {
     use super::*;
     use crate::config::snapshot::ConfigSnapshotCoordinator;
+    use std::{
+        thread,
+        time::{Duration, Instant},
+    };
 
     fn options() -> DiscoveryOptions {
         DiscoveryOptions {
             first_seen_at: "2026-08-05T00:00:00Z".into(),
             max_diagnostics: 100,
             max_candidates: 100,
+            ..DiscoveryOptions::default()
         }
     }
 
@@ -1009,6 +1311,120 @@ mod tests {
 
     fn read_library(root: &Path) -> String {
         fs::read_to_string(root.join(LIBRARY_FILE_NAME)).unwrap()
+    }
+
+    #[test]
+    fn pending_ownership_repairs_crash_after_library_commit_before_final_private_write() {
+        let readable = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("wl4.gba"), b"rom").unwrap();
+        let discovery = coordinator(readable.path(), private.path());
+        let storage_id = discovery
+            .add_location(root.path(), &options())
+            .unwrap()
+            .storage_id
+            .unwrap();
+
+        let mut private_state = PrivateState::read(private.path()).unwrap();
+        private_state.repair.pending_ownership = private_state.ownership.releases.clone();
+        private_state.ownership.releases.clear();
+        private_state.write(private.path()).unwrap();
+
+        discovery.remove_location(&storage_id, &options()).unwrap();
+
+        let state = ConfigSnapshotCoordinator::new(readable.path()).reload();
+        assert!(state.snapshot.library.is_empty());
+        let private_state = PrivateState::read(private.path()).unwrap();
+        assert!(private_state.repair.pending_ownership.is_empty());
+    }
+
+    #[test]
+    fn stale_config_revision_rejects_library_commit() {
+        let readable = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("one.gba"), b"one").unwrap();
+        fs::write(root.path().join("two.gba"), b"two").unwrap();
+        let discovery = coordinator(readable.path(), private.path());
+        let added = discovery.add_location(root.path(), &options()).unwrap();
+        let storage_id = added.storage_id.unwrap();
+        let config_yaml = read_fixed(readable.path(), CONFIG_FILE_NAME).unwrap();
+        let library_yaml = read_fixed(readable.path(), LIBRARY_FILE_NAME).unwrap();
+        fs::write(root.path().join("three.gba"), b"tri").unwrap();
+        fs::write(
+            readable.path().join(CONFIG_FILE_NAME),
+            format!("{config_yaml}\n# external edit during scan\n"),
+        )
+        .unwrap();
+        let candidate = ScanCandidate {
+            storage_rank: 0,
+            storage_id,
+            storage_root: root.path().canonicalize().unwrap(),
+            canonical_path: root.path().join("three.gba").canonicalize().unwrap(),
+            relative_path: "three.gba".into(),
+            file_name: "three.gba".into(),
+            extension: "gba".into(),
+            title: "two".into(),
+            hash: "sha256:cddd67830982a78cc83998c15c13e49e1cb6bea286c4507cb5510d9c6aba4ec3".into(),
+            size: 3,
+            claim_id: "@korri:mgba/gba".into(),
+            system: "gba".into(),
+            launcher: "@korri:retroarch/retroarch".into(),
+            runtime: Some("@korri:mgba/mgba".into()),
+        };
+        let mut private_state = PrivateState::read(private.path()).unwrap();
+
+        let result = reconcile_candidates(
+            readable.path(),
+            private.path(),
+            &config_yaml,
+            &library_yaml,
+            &mut private_state,
+            &[candidate],
+            &options(),
+        );
+
+        assert!(
+            matches!(result, Err(DiscoveryError::Conflict)),
+            "{result:?}"
+        );
+    }
+
+    #[test]
+    fn scan_does_not_hold_yaml_write_lock_while_hashing() {
+        let readable = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let rom = root.path().join("big.gba");
+        fs::write(&rom, vec![7u8; 32 * 1024 * 1024]).unwrap();
+        let lock = Arc::new(Mutex::new(()));
+        let discovery =
+            DiscoveryCoordinator::with_write_lock(readable.path(), private.path(), lock.clone());
+        discovery.add_location(root.path(), &options()).unwrap();
+        fs::write(&rom, vec![8u8; 32 * 1024 * 1024]).unwrap();
+        let worker = {
+            let discovery = discovery.clone();
+            thread::spawn(move || discovery.rescan(&options()))
+        };
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut observed_unlocked = false;
+        while Instant::now() < deadline {
+            if let Ok(_guard) = lock.try_lock() {
+                if !worker.is_finished() {
+                    observed_unlocked = true;
+                    break;
+                }
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            observed_unlocked,
+            "write lock stayed held for the whole scan"
+        );
+        let report = worker.join().unwrap().unwrap();
+        assert!(report.scan.hashed_bytes > 0);
     }
 
     #[test]
@@ -1065,7 +1481,7 @@ mod tests {
         fs::write(readable.path().join(LIBRARY_FILE_NAME), "library:\n  curated:\n    title: Curated Title\n    releases:\n      - id: gba\n        system: gba\n        target:\n          kind: file\n          storage: selected\n          path: wl4.gba\n        launch:\n          use: \"@korri:retroarch/retroarch\"\n          runtime: \"@korri:mgba/mgba\"\n").unwrap();
 
         coordinator(readable.path(), private.path())
-            .rescan(&options())
+            .add_location(root.path(), &options())
             .unwrap();
         let library = read_library(readable.path());
         assert!(library.contains("Curated Title"));
