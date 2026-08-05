@@ -17,6 +17,7 @@ use tokio::sync::oneshot;
 use typeshare::typeshare;
 
 pub mod config;
+pub mod discovery;
 
 pub const VERSION: &str = "korrid-v0";
 const ANDROID_BUNDLED_PORTAL_ORIGIN: &str = "https://appassets.androidplatform.net";
