@@ -26,14 +26,24 @@ grep -F 'reset_portal_selection_to_top' "$ACCEPTANCE" >/dev/null
 grep -F 'portal_shot_focuses_wario' "$ACCEPTANCE" >/dev/null
 grep -F 'brightness" -ge 60' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_DPAD_CENTER' "$ACCEPTANCE" >/dev/null
+grep -F 'KEYCODE_BUTTON_MODE' "$ACCEPTANCE" >/dev/null
+grep -F 'invoke_overlay_row 1' "$ACCEPTANCE" >/dev/null
+grep -F 'assert_rgui_menu_visible' "$ACCEPTANCE" >/dev/null
+grep -F 'KEYCODE_BACK' "$ACCEPTANCE" >/dev/null
+grep -F 'invoke_overlay_row 2' "$ACCEPTANCE" >/dev/null
+grep -F 'enabled_accessibility_services' "$ACCEPTANCE" >/dev/null
 grep -F 'use: "@korri:retroarch/retroarch"' "$WL4_LIBRARY" >/dev/null
 grep -F 'runtime: "@korri:mgba/mgba"' "$WL4_LIBRARY" >/dev/null
-if grep -Eq 'input (tap|swipe)|KEYCODE_DPAD_DOWN' "$ACCEPTANCE"; then
-  echo 'RetroArch acceptance must select the one-item fixture semantically, not by coordinates or positional descent' >&2
+if grep -Eq 'input (tap|swipe)' "$ACCEPTANCE"; then
+  echo 'RetroArch acceptance must select the one-item fixture semantically, not by coordinates' >&2
   exit 1
 fi
 if grep -Eq 'pm (clear|grant|install|uninstall)| adb install' "$ACCEPTANCE"; then
   echo 'RetroArch acceptance must not mutate the installed target package' >&2
+  exit 1
+fi
+if grep -Eq 'settings (put|delete) secure (enabled_accessibility_services|accessibility_enabled)' "$ACCEPTANCE"; then
+  echo 'RetroArch acceptance must not modify Android accessibility settings' >&2
   exit 1
 fi
 

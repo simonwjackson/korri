@@ -44,7 +44,14 @@ per `NNNN-description.patch` and record its upstream-facing rationale here.
 - `0006-protect-korri-launch-surface.patch` — disables the upstream core-sideload
   activity and requires Korri's signature-level launch permission for explicit
   gameplay intents, preserving the signed LaunchSpec boundary.
-- `0007-authenticate-korri-control.patch` — derives a per-korrid-server control
-  token into the signed launch extras and requires it before the Android UDP
-  server accepts either allowlisted command; missing or stale tokens fail
-  closed.
+- `0007-authenticate-korri-control.patch` — consumes the launch-bound control
+  token attached natively to the gameplay intent and authenticates before the
+  Android UDP allowlist or dispatch; missing, malformed, or stale tokens fail
+  closed. The token is retained privately by korrid and is absent from the
+  serialized LaunchSpec, Java/JavaScript serialization, and logs; JNI attaches
+  it directly to the trusted gameplay intent.
+- `0008-korri-session-control-acknowledgements.patch` — adds only `SHOW_MENU`
+  to the authenticated Android allowlist, ensures the menu is alive instead of
+  blindly toggling it closed, and returns exact `SHOW_MENU OK`/`SHOW_MENU ERROR`
+  and `QUIT OK` acknowledgements. `GET_STATUS` remains upstream's established
+  reply. Authentication still precedes allowlist selection and dispatch.

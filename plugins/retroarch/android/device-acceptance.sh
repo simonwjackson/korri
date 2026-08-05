@@ -348,11 +348,10 @@ if ! jq -e '
   exit 1
 fi
 launch_spec="$(rpc '{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}')"
-token="$(sed -n 's/.*"KORRI_CONTROL_TOKEN":"\([0-9a-f]\{64\}\)".*/\1/p' <<<"$launch_spec")"
-[[ ${#token} == 64 ]] || {
-  echo 'signed launch spec did not contain a 64-character control token' >&2
+if grep -q 'KORRI_CONTROL_TOKEN' <<<"$launch_spec"; then
+  echo 'private RetroArch control authority leaked into the serialized launch spec' >&2
   exit 1
-}
+fi
 session="$(rpc '{"_tag":"app.session.status","payload":{}}')"
 if grep -q '"active":{' <<<"$session"; then
   echo 'host streaming session is active; stop it before local-runtime acceptance' >&2
@@ -364,17 +363,43 @@ udp() {
   "${ADB[@]}" shell "printf '%s\\n' '$payload' | toybox timeout 2 nc -4 -u -q 1 127.0.0.1 55355" 2>/dev/null | tr -d '\r'
 }
 wait_playing() {
-  local response=''
+  local pid=''
   for _ in $(seq 1 30); do
-    response="$(udp "$token GET_STATUS" || true)"
-    grep -q '^GET_STATUS PLAYING mGBA,wl4,crc32=' <<<"$response" && {
-      printf '%s\n' "$response"
+    if ! pid="$(package_pid "$FORK_PACKAGE")"; then
+      return 1
+    fi
+    [[ -n "$pid" ]] && {
+      printf 'RetroArch process %s\n' "$pid"
       return 0
     }
     sleep 1
   done
-  echo "fork did not report PLAYING: ${response:-no response}" >&2
+  echo 'fork process did not become live' >&2
   return 1
+}
+press_guide() {
+  "${ADB[@]}" shell input -d 0 keyevent KEYCODE_BUTTON_MODE
+  sleep 1
+}
+invoke_overlay_row() {
+  local rows_after_resume="$1"
+  press_guide
+  for _ in $(seq 1 "$rows_after_resume"); do
+    "${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_DOWN
+  done
+  "${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_CENTER
+  sleep 1
+}
+assert_rgui_menu_visible() {
+  local image="$PORTAL_EVIDENCE_DIR/retroarch-rgui-menu.png"
+  local text="$PORTAL_EVIDENCE_DIR/retroarch-rgui-menu.ocr.txt"
+  "${ADB[@]}" shell screencap -p /sdcard/korri-acceptance.png >/dev/null
+  "${ADB[@]}" pull /sdcard/korri-acceptance.png "$image" >/dev/null
+  tesseract "$image" stdout --psm 6 >"$text" 2>/dev/null
+  grep -qi 'quick menu' "$text" || {
+    echo "command-opened RGUI menu was not observable; evidence is in $PORTAL_EVIDENCE_DIR" >&2
+    return 1
+  }
 }
 wait_stopped() {
   local pid=""
@@ -447,6 +472,14 @@ launch_wario_entry() {
   return 1
 }
 
+enabled_accessibility_services="$("${ADB[@]}" shell settings get secure enabled_accessibility_services | tr -d '\r')"
+if ! grep -q 'com.limelight.korri.overlay.KorriOverlayService' \
+    <<<"$enabled_accessibility_services"; then
+  echo 'Korri gameplay overlay accessibility service must be enabled by the device owner' >&2
+  echo 'acceptance will not modify Android accessibility settings' >&2
+  exit 1
+fi
+
 launch_wario_entry first
 status_first="$(wait_playing)"
 if ! pid_first="$(package_pid "$FORK_PACKAGE")"; then
@@ -454,15 +487,32 @@ if ! pid_first="$(package_pid "$FORK_PACKAGE")"; then
 fi
 [[ -n "$pid_first" ]] || { echo 'fork process is missing after launch' >&2; exit 1; }
 
-# Loopback is transport, not authority: blank/stale tokens and extra verbs fail closed.
-stale_token="${token%?}$([[ "${token: -1}" == 0 ]] && printf 1 || printf 0)"
+# Loopback is transport, not authority: missing, malformed, stale-looking,
+# and arbitrary unauthenticated payloads receive no usable response.
+malformed_token="$(printf '0%.0s' $(seq 1 63))"
+stale_token="$(printf '0%.0s' $(seq 1 64))"
 [[ -z "$(udp 'GET_STATUS' || true)" ]]
+[[ -z "$(udp "$malformed_token GET_STATUS" || true)" ]]
 [[ -z "$(udp "$stale_token GET_STATUS" || true)" ]]
-[[ -z "$(udp "$token VERSION" || true)" ]]
+[[ -z "$(udp "$stale_token VERSION" || true)" ]]
 if ! current_pid="$(package_pid "$FORK_PACKAGE")"; then
   exit 1
 fi
 [[ "$current_pid" == "$pid_first" ]]
+
+# Non-destructive native-menu journey. The accessibility grant is user-owned;
+# this gate only drives Guide and never writes Android accessibility settings.
+invoke_overlay_row 1
+assert_rgui_menu_visible
+"${ADB[@]}" shell input -d 0 keyevent KEYCODE_BACK
+sleep 1
+if ! current_pid="$(package_pid "$FORK_PACKAGE")"; then
+  exit 1
+fi
+[[ "$current_pid" == "$pid_first" ]]
+press_guide
+"${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_CENTER
+sleep 1
 
 # Android pause must synchronously replace the auto-state before suspension.
 before_mtime="$("${ADB[@]}" shell stat -c %Y "$STATE_FILE" 2>/dev/null | tr -d '\r' || printf 0)"
@@ -502,7 +552,9 @@ auto_load_log="$("${ADB[@]}" logcat -d 2>/dev/null | \
 
 before_quit_mtime="$("${ADB[@]}" shell stat -c %Y "$STATE_FILE" | tr -d '\r')"
 sleep 1
-udp "$token QUIT" >/dev/null || true
+# Resume is row zero, Open RetroArch menu is row one, and destructive Quit is row two.
+# Completion requires the explicit native QUIT acknowledgement before the sheet dismisses.
+invoke_overlay_row 2
 wait_stopped
 after_quit_mtime="$("${ADB[@]}" shell stat -c %Y "$STATE_FILE" | tr -d '\r')"
 [[ "$after_quit_mtime" -gt "$before_quit_mtime" ]] || {

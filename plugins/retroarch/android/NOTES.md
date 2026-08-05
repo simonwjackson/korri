@@ -55,11 +55,13 @@ nix run .#ra-accept -- <adb-serial>
 ```
 
 `ra-accept` additionally launches Wario through the Korri portal, verifies the
-signed per-server `GET_STATUS`/`QUIT` token, rejects missing/stale tokens and
-extra verbs, proves HOME synchronously refreshes a non-empty auto-state,
-relaunches, quits gracefully, and checks that stock RetroArch stayed installed
-and stopped. On device `100.65.66.40:39991`, the gate wiped fork-private
-state, re-extracted the bundled core, reported
+private launch-bound control authority is absent from the serialized LaunchSpec,
+rejects missing/malformed/stale-looking UDP authority, drives the Korri overlay
+to open and return from the native RGUI menu, proves HOME synchronously refreshes
+a non-empty auto-state, invokes acknowledged graceful Quit through the overlay,
+and checks that stock RetroArch stayed installed and stopped. The earlier
+pre-U7 gate on device `100.65.66.40:39991` wiped fork-private state,
+re-extracted the bundled core, reported
 `GET_STATUS PLAYING mGBA,wl4,crc32=d6141609`, wrote a non-empty pause state,
 logged a successful auto-state load on relaunch, refreshed the state again on
 graceful `QUIT`, returned to Korri on display 0, and preserved
@@ -80,12 +82,27 @@ APK asset synchronously before native startup to
 compares the bundled bytes with the mGBA plugin output. The APK carriage is
 temporary and does not transfer plugin ownership to `@korri:retroarch`.
 
+## Command-opened menu source proof
+
+The pinned v1.22.2 Android build already compiles `HAVE_MENU` and `HAVE_RGUI`
+in `pkg/android/phoenix-common/jni/Android.mk`. Its `command_event()` handles
+`CMD_EVENT_MENU_TOGGLE`, and RGUI is compiled from `menu/drivers/rgui.c` through
+the Android Griffin build. RGUI is the smallest usable built-in driver for the
+14 MB APK because its default font, layout, and color themes are compiled in;
+it does not require the buildbot asset pack used by XMB/Ozone/MaterialUI.
+Korri's generated Wario config therefore selects `menu_driver = "rgui"` while
+retaining `kiosk_mode_enable = "true"`, `input_menu_toggle_gamepad_combo = "0"`,
+and `input_menu_toggle = "nul"`. This enables only the authenticated ensure-open
+command; it does not generally restore RetroArch settings or hardware UI access.
+Menu rendering, z-order, controller usability, return to gameplay, and graceful
+Quit remain device-only U8 evidence until an approved device run records them.
+
 ## Caveats
 
-- **No menu asset pack bundled**: buildbot's 184 MB APK includes RA's asset pack added
-  during their packaging; our 14 MB APK is the bare frontend. RA can fetch
-  assets at runtime; the fork decides whether to bundle (likely yes, alongside
-  bundled cores — kiosk mode needs no menu assets at all).
+- **No menu asset pack bundled**: buildbot's 184 MB APK includes an asset pack
+  added during packaging; the 14 MB Korri APK is the bare frontend. The selected
+  RGUI path is source-grounded specifically because it is usable without that
+  pack. Optional asset-driven menu presentation remains unavailable.
 - The fork is intentionally installed beside the stock buildbot package. Do
   not repoint Korri launch metadata to `com.retroarch.aarch64`; that package
   remains user-owned stock RetroArch.
