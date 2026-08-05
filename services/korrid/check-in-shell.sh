@@ -33,13 +33,16 @@ sed -i -e 's/[[:space:]]\+$//' -e '${/^$/d;}' "$GENERATED_TS"
 
 cd "$ROOT/clients/portal"
 bun install --frozen-lockfile --ignore-scripts
+cd "$ROOT/surfaces/shift"
+bun install --frozen-lockfile --ignore-scripts
+
+cd "$ROOT/clients/portal"
 bun run typecheck
 bun test
 
 # Shift is its own package with its own toolchain: check it on its own terms so
 # a surface break is reported as a surface break, not as a portal failure.
 cd "$ROOT/surfaces/shift"
-bun install --frozen-lockfile --ignore-scripts
 bun run typecheck
 bun test
 

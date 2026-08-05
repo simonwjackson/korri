@@ -411,6 +411,8 @@ let
         pkgs.coreutils
       ];
       script = ''
+        cd "$KORRI_ROOT/surfaces/shift"
+        bun install --frozen-lockfile --ignore-scripts
         cd "$KORRI_ROOT/clients/portal"
         bun install --frozen-lockfile --ignore-scripts
         bun run build
@@ -423,6 +425,8 @@ let
       description = "Run portal unit tests and typecheck.";
       runtimeInputs = [ pkgs.bun ];
       script = ''
+        cd "$KORRI_ROOT/surfaces/shift"
+        bun install --frozen-lockfile --ignore-scripts
         cd "$KORRI_ROOT/clients/portal"
         bun install --frozen-lockfile --ignore-scripts
         bun test
