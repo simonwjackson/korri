@@ -173,6 +173,43 @@ fi
 TMP="$(mktemp -d)"
 cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
+
+ACTIVITY_PARSER="$TMP/activity-dump-parser.sh"
+sed -n '/^activity_dump_has_live_component() {/,/^}/p' "$ACCEPTANCE" >"$ACTIVITY_PARSER"
+# shellcheck source=/dev/null
+source "$ACTIVITY_PARSER"
+GAME_COMPONENT='com.simonwjackson.korri.debug/com.limelight.Game'
+FORK_COMPONENT='com.korri.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture'
+STOCK_COMPONENT='com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture'
+# Attached task ids (t0+) are live even when the record is paused/history.
+activity_dump_has_live_component \
+  "    mLastPausedActivity: ActivityRecord{ac82bb6 u0 $GAME_COMPONENT t69}" \
+  "$GAME_COMPONENT"
+activity_dump_has_live_component \
+  "    * Hist #0: ActivityRecord{aabbcc u0 $FORK_COMPONENT t0}" \
+  'com.korri.retroarch/'
+activity_dump_has_live_component \
+  "    * Hist #0: ActivityRecord{ddeeff u0 $STOCK_COMPONENT t42}" \
+  'com.retroarch.aarch64/'
+# A resumed/top Game record is live even if a malformed summary says t-1.
+activity_dump_has_live_component \
+  "    topResumedActivity=ActivityRecord{112233 u0 $GAME_COMPONENT t-1 f}" \
+  "$GAME_COMPONENT"
+# Destroyed/finishing t-1 bookkeeping is not an attached task.
+for component in "$GAME_COMPONENT" 'com.korri.retroarch/' 'com.retroarch.aarch64/'; do
+  case "$component" in
+    "$GAME_COMPONENT") record="$GAME_COMPONENT" ;;
+    'com.korri.retroarch/') record="$FORK_COMPONENT" ;;
+    'com.retroarch.aarch64/') record="$STOCK_COMPONENT" ;;
+  esac
+  if activity_dump_has_live_component \
+    "    mLastPausedActivity: ActivityRecord{445566 u0 $record t-1 f}}" \
+    "$component"; then
+    echo "activity parser treated destroyed t-1 tombstone as live: $component" >&2
+    exit 1
+  fi
+done
+
 UDP_ASSERTION="$TMP/assert-udp-no-response.sh"
 sed -n '/^assert_udp_no_response() {/,/^}/p' "$ACCEPTANCE" >"$UDP_ASSERTION"
 # shellcheck source=/dev/null

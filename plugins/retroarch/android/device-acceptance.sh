@@ -140,10 +140,30 @@ assert_shell_foreground() {
     | grep -F "$KORRI_ACTIVITY" >/dev/null
 }
 
+activity_dump_has_live_component() {
+  local activities="$1"
+  local component_needle="$2"
+  local line
+  while IFS= read -r line; do
+    [[ "$line" == *"$component_needle"* ]] || continue
+    # A resumed/top record is live regardless of whether this Android build
+    # includes a task id on the same summary line.
+    if [[ "$line" =~ (topResumedActivity|mResumedActivity|ResumedActivity)[:=] ]]; then
+      return 0
+    fi
+    # ActivityRecord task ids are `t0` and above. Framework bookkeeping may
+    # retain destroyed/finishing tombstones as `t-1 f`; those are not tasks.
+    if [[ "$line" =~ ActivityRecord\{.*[[:space:]]t[0-9]+([[:space:]}]|$) ]]; then
+      return 0
+    fi
+  done <<<"$activities"
+  return 1
+}
+
 assert_no_artemis_game_activity() {
   local activities
   activities="$("${ADB[@]}" shell dumpsys activity activities | tr -d '\r')" || return 1
-  if grep -Fq "$KORRI_GAME_COMPONENT" <<<"$activities"; then
+  if activity_dump_has_live_component "$activities" "$KORRI_GAME_COMPONENT"; then
     echo 'RetroArch acceptance requires no Artemis Game Activity in any active task, so it cannot exercise Artemis Game SharedPreferences' >&2
     return 1
   fi
@@ -152,7 +172,8 @@ assert_no_artemis_game_activity() {
 assert_no_retroarch_activities() {
   local activities
   activities="$("${ADB[@]}" shell dumpsys activity activities | tr -d '\r')" || return 1
-  if grep -Eq "($FORK_PACKAGE|$STOCK_PACKAGE)/" <<<"$activities"; then
+  if activity_dump_has_live_component "$activities" "$FORK_PACKAGE/" \
+    || activity_dump_has_live_component "$activities" "$STOCK_PACKAGE/"; then
     echo 'RetroArch acceptance requires no Korri or stock RetroArch Activity in any active task before mutation' >&2
     return 1
   fi
