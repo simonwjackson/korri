@@ -1,7 +1,7 @@
 ---
 title: "feat: Backfill high-risk test coverage"
 type: feat
-status: active
+status: completed
 date: 2026-08-05
 verify_command: "nix run .#korrid-check && nix run .#android-bridge-contract-check"
 ---
