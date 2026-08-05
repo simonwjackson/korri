@@ -44,8 +44,8 @@ import com.simonwjackson.korri.korrid.KorridServer;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.json.JSONTokener;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
@@ -53,11 +53,6 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
 
 /**
  * SPIKE: Korri web-shell launcher embedded in the Artemis APK.
@@ -103,9 +98,11 @@ public class KorriShellActivity extends AppCompatActivity {
 
         // Embedded korrid: only this exact portal origin may present the
         // per-server capability to the localhost brain.
-        final String portalUrl = portalUrl();
+        final KorriTrustedPortalWebViewPolicy portalPolicy =
+                new KorriTrustedPortalWebViewPolicy();
+        final String portalUrl = portalPolicy.portalUrl();
         korridPort = KorriBrainService.ensureRunning(
-                this, portalOrigin(portalUrl), localStorageRoot());
+                this, portalPolicy.portalOrigin(), localStorageRoot());
         korridCapability = KorridServer.capability();
 
         computerManagerBound = bindService(new Intent(this, ComputerManagerService.class),
@@ -124,31 +121,71 @@ public class KorriShellActivity extends AppCompatActivity {
                 .build();
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                return handleNavigation(request.getUrl(), request.isForMainFrame());
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                return handleNavigation(Uri.parse(url), true);
+            }
+
+            @Override
             public WebResourceResponse shouldInterceptRequest(
                     WebView view, WebResourceRequest request) {
-                return assetLoader.shouldInterceptRequest(request.getUrl());
+                if (!"GET".equalsIgnoreCase(request.getMethod())) {
+                    // The trusted portal talks to its localhost brain with
+                    // capability-bearing POST requests. Untrusted documents
+                    // cannot load in this WebView, so do not mistake RPC for
+                    // script/image/subframe resource loading.
+                    return null;
+                }
+                if (!portalPolicy.isTrustedPortalAsset(request.getUrl())) {
+                    return blockedWebResource();
+                }
+                WebResourceResponse response = assetLoader.shouldInterceptRequest(request.getUrl());
+                return response != null ? response : blockedWebResource();
+            }
+
+            @Override
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                syncNativeBridgeForUrl(view, Uri.parse(url), portalPolicy);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
+                syncNativeBridgeForUrl(view, Uri.parse(url), portalPolicy);
                 view.evaluateJavascript("document.title", title ->
                         Log.i("KorriPortal", "title=" + title));
+            }
+
+            private boolean handleNavigation(Uri uri, boolean mainFrame) {
+                KorriTrustedPortalWebViewPolicy.NavigationAction action =
+                        portalPolicy.navigationAction(uri, mainFrame);
+                if (action == KorriTrustedPortalWebViewPolicy.NavigationAction.ALLOW_IN_WEBVIEW) {
+                    return false;
+                }
+                if (action == KorriTrustedPortalWebViewPolicy.NavigationAction.OPEN_EXTERNALLY) {
+                    try {
+                        startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                    } catch (Exception error) {
+                        Log.w("KorriPortal", "blocked external navigation: " + uri, error);
+                    }
+                }
+                return true;
             }
         });
         if (BuildConfig.DEBUG) {
             WebView.setWebContentsDebuggingEnabled(true);
         }
 
-        webView.addJavascriptInterface(new KorriNativeBridge(), "KorriNative");
+        syncNativeBridgeForUrl(webView, Uri.parse(portalUrl), portalPolicy);
         webView.loadUrl(portalUrl);
         setContentView(webView);
     }
 
-    /**
-     * The portal ships as bundled assets (built by `nix run .#portal-bundle`).
-     * Debug builds may override with -PkorriPortalUrl=http://<ip>:5173 for
-     * a live Vite dev-server loop on the device.
-     */
+    /** The portal ships as bundled assets (built by `nix run .#portal-bundle`). */
+
     /** True when the user can actually see Korri's background notice. */
     private boolean notificationsAllowed() {
         return androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled();
@@ -169,20 +206,22 @@ public class KorriShellActivity extends AppCompatActivity {
         return getSharedPreferences(NOTIFICATION_PREFS, MODE_PRIVATE);
     }
 
-    private String portalUrl() {
-        String devUrl = BuildConfig.PORTAL_DEV_URL;
-        if (BuildConfig.DEBUG && devUrl != null && !devUrl.isEmpty()) {
-            return devUrl;
-        }
-        return "https://appassets.androidplatform.net/assets/portal/index.html";
+
+    private static WebResourceResponse blockedWebResource() {
+        return new WebResourceResponse(
+                "text/plain",
+                "UTF-8",
+                new ByteArrayInputStream(new byte[0]));
     }
 
-    private static String portalOrigin(String url) {
-        Uri uri = Uri.parse(url);
-        if (uri.getScheme() == null || uri.getEncodedAuthority() == null) {
-            throw new IllegalArgumentException("portal URL has no origin: " + url);
+    private void syncNativeBridgeForUrl(
+            WebView view,
+            Uri uri,
+            KorriTrustedPortalWebViewPolicy portalPolicy) {
+        view.removeJavascriptInterface("KorriNative");
+        if (portalPolicy.isTrustedPortalAsset(uri)) {
+            view.addJavascriptInterface(new KorriNativeBridge(), "KorriNative");
         }
-        return uri.getScheme() + "://" + uri.getEncodedAuthority();
     }
 
     /** Android supplies storage location; korrid owns everything beneath it. */
@@ -827,104 +866,7 @@ public class KorriShellActivity extends AppCompatActivity {
             }
         }
 
-        // --- Spike-era surface below: not yet part of the treaty ---
 
-        /**
-         * Korrid control-plane RPC (Effect RPC over HTTP, single request).
-         * Runs on the WebView JS-bridge thread, so a blocking call is fine.
-         * Legacy diagnostic RPC surface; stream startup is not reachable here.
-         */
-        @JavascriptInterface
-        public String korriRpc(String rpcUrl, String tag, String payloadJson) {
-            try {
-                JSONObject body = new JSONObject();
-                body.put("_tag", "Request");
-                // Effect RPC request ids must parse as BigInt on the server.
-                body.put("id", String.valueOf(System.currentTimeMillis() * 1000
-                        + (long) (Math.random() * 1000)));
-                body.put("tag", tag);
-                body.put("payload", new JSONObject(payloadJson));
-                body.put("headers", new JSONArray());
-
-                OkHttpClient client = new OkHttpClient.Builder()
-                        .callTimeout(20, TimeUnit.SECONDS)
-                        .build();
-                Request request = new Request.Builder()
-                        .url(rpcUrl)
-                        .post(RequestBody.create(body.toString(),
-                                MediaType.get("application/json")))
-                        .build();
-
-                try (Response response = client.newCall(request).execute()) {
-                    String text = response.body() != null ? response.body().string() : "";
-                    if (!response.isSuccessful()) {
-                        return errorResult("HTTP " + response.code() + ": " + text);
-                    }
-                    Object parsed = new JSONTokener(text).nextValue();
-                    JSONArray frames = parsed instanceof JSONArray
-                            ? (JSONArray) parsed
-                            : new JSONArray().put(parsed);
-                    for (int i = 0; i < frames.length(); i++) {
-                        JSONObject frame = frames.optJSONObject(i);
-                        if (frame == null) continue;
-                        JSONObject exit = frame.optJSONObject("exit");
-                        if (exit == null) continue;
-                        if ("Success".equals(exit.optString("_tag"))) {
-                            JSONObject ok = new JSONObject();
-                            ok.put("status", "ok");
-                            ok.put("value", exit.opt("value"));
-                            return ok.toString();
-                        }
-                        return errorResult("rpc-failure: " + exit);
-                    }
-                    return errorResult("no Exit frame in RPC response");
-                }
-            } catch (Exception e) {
-                return errorResult(e.getMessage() != null ? e.getMessage() : "rpc failed");
-            }
-        }
-
-        @JavascriptInterface
-        public void openArtemisUi() {
-            // Escape hatch into the stock Artemis PcView for pairing/setup.
-            runOnUiThread(() -> startActivity(
-                    new Intent(KorriShellActivity.this, PcView.class)));
-        }
-
-        @JavascriptInterface
-        public void openArtemisSettings() {
-            // Escape hatch into Artemis streaming settings for tinkering.
-            runOnUiThread(() -> startActivity(new Intent(KorriShellActivity.this,
-                    com.limelight.preferences.StreamSettings.class)));
-        }
-
-        // --- Korri settings contract (theme-free; web surface owns all UI) ---
-
-        @JavascriptInterface
-        public String getSettingsSchema() {
-            return KorriSettingsBridge.schemaJson(KorriShellActivity.this);
-        }
-
-        @JavascriptInterface
-        public String getSettingsValues() {
-            return KorriSettingsBridge.valuesJson(KorriShellActivity.this);
-        }
-
-        @JavascriptInterface
-        public String setSetting(String key, String jsonValue) {
-            return KorriSettingsBridge.applySetting(KorriShellActivity.this, key, jsonValue);
-        }
-
-        private String errorResult(String message) {
-            try {
-                JSONObject error = new JSONObject();
-                error.put("status", "failed");
-                error.put("message", message);
-                return error.toString();
-            } catch (Exception e) {
-                return "{\"status\":\"failed\"}";
-            }
-        }
     }
 
     private ComputerManagerService.ComputerManagerBinder awaitBinder(int seconds) {

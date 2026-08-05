@@ -1,0 +1,103 @@
+package com.limelight;
+
+import android.net.Uri;
+import android.webkit.JavascriptInterface;
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+
+import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.Set;
+import java.util.TreeSet;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+@RunWith(RobolectricTestRunner.class)
+public class KorriTrustedPortalWebViewPolicyTest {
+    private static final Set<String> TREATY_METHODS = new TreeSet<>(Arrays.asList(
+            "backgroundNotice",
+            "bridgeVersion",
+            "korridCapability",
+            "korridPort",
+            "launchLocal",
+            "openNotificationSettings",
+            "openPairing",
+            "openStorageAccessSettings",
+            "queryStreamApps",
+            "queryStreamHosts",
+            "requestBackgroundNotice",
+            "startStream",
+            "storageAccess",
+            "systemInfo"));
+
+    private final KorriTrustedPortalWebViewPolicy policy = new KorriTrustedPortalWebViewPolicy();
+
+    @Test
+    public void javascriptBridgeExposesOnlyTheBridgeTreatyMethods() throws Exception {
+        Class<?> bridge = Class.forName("com.limelight.KorriShellActivity$KorriNativeBridge");
+        Set<String> exposed = new TreeSet<>();
+        for (Method method : bridge.getDeclaredMethods()) {
+            if (method.getAnnotation(JavascriptInterface.class) != null) {
+                exposed.add(method.getName());
+            }
+        }
+
+        assertEquals(TREATY_METHODS, exposed);
+        assertFalse(exposed.contains("korriRpc"));
+        assertFalse(exposed.contains("launchGame"));
+        assertFalse(exposed.contains("getSettingsSchema"));
+        assertFalse(exposed.contains("setSetting"));
+    }
+
+    @Test
+    public void trustedPortalOriginIsCanonicalHttpsAssetOrigin() {
+        assertEquals("https://appassets.androidplatform.net/assets/portal/index.html",
+                policy.portalUrl());
+        assertEquals("https://appassets.androidplatform.net", policy.portalOrigin());
+        assertTrue(policy.isTrustedPortalAsset(Uri.parse(
+                "https://appassets.androidplatform.net:443/assets/portal/index.html")));
+        assertTrue(policy.isTrustedPortalAsset(Uri.parse(
+                "https://APPASSETS.ANDROIDPLATFORM.NET/assets/portal/chunk.js")));
+    }
+
+    @Test
+    public void untrustedMainFrameNavigationCannotEnterThePrivilegedWebView() {
+        assertEquals(
+                KorriTrustedPortalWebViewPolicy.NavigationAction.ALLOW_IN_WEBVIEW,
+                policy.navigationAction(Uri.parse(
+                        "https://appassets.androidplatform.net/assets/portal/index.html"), true));
+        assertEquals(
+                KorriTrustedPortalWebViewPolicy.NavigationAction.OPEN_EXTERNALLY,
+                policy.navigationAction(Uri.parse("https://example.com/page"), true));
+        assertEquals(
+                KorriTrustedPortalWebViewPolicy.NavigationAction.BLOCK,
+                policy.navigationAction(Uri.parse("http://127.0.0.1:43117/rpc"), true));
+        assertEquals(
+                KorriTrustedPortalWebViewPolicy.NavigationAction.BLOCK,
+                policy.navigationAction(Uri.parse("javascript:alert(1)"), true));
+    }
+
+    @Test
+    public void subframesAndResourcesMustStayOnTheTrustedAssetOrigin() {
+        assertTrue(policy.isTrustedPortalAsset(Uri.parse(
+                "https://appassets.androidplatform.net/assets/portal/style.css")));
+        assertFalse(policy.isTrustedPortalAsset(Uri.parse(
+                "https://appassets.androidplatform.net.evil/assets/portal/style.css")));
+        assertFalse(policy.isTrustedPortalAsset(Uri.parse(
+                "http://appassets.androidplatform.net/assets/portal/style.css")));
+        assertFalse(policy.isTrustedPortalAsset(Uri.parse(
+                "https://appassets.androidplatform.net:444/assets/portal/style.css")));
+        assertFalse(policy.isTrustedPortalAsset(Uri.parse(
+                "https://appassets.androidplatform.net/assetsevil/portal/style.css")));
+        assertFalse(policy.isTrustedPortalAsset(Uri.parse(
+                "https://example.com/assets/portal/style.css")));
+
+        assertEquals(
+                KorriTrustedPortalWebViewPolicy.NavigationAction.BLOCK,
+                policy.navigationAction(Uri.parse("https://example.com/frame.html"), false));
+    }
+}
