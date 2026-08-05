@@ -1,5 +1,5 @@
 #!/usr/bin/env nix-shell
-#! nix-shell -i bash -p bash android-tools bun cargo-ndk clang coreutils gawk git gnugrep gnused
+#! nix-shell -i bash -p bash android-tools bun cargo-ndk clang coreutils gawk git gnugrep gnused util-linux
 # shellcheck shell=bash
 # Runs the real native bridge contract test against an isolated headless emulator.
 set -euo pipefail
@@ -21,7 +21,7 @@ ADB_TIMEOUT_SECONDS=10
 RUN_DIR=""
 EMULATOR_PID=""
 EMULATOR_LOG=""
-LOCK_DIR="$ROOT/.cache/android-bridge-contract-check.lock"
+LOCK_FILE="$ROOT/.cache/android-bridge-contract-check.lock"
 LOCK_ACQUIRED=false
 BUILD_ANDROID_HOME="${ANDROID_HOME:-}"
 BUILD_ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-}"
@@ -77,12 +77,8 @@ cleanup() {
     rm -rf "$RUN_DIR" || cleanup_failed=true
   fi
   if [[ "$LOCK_ACQUIRED" == true ]]; then
-    if [[ "$(cat "$LOCK_DIR/owner-pid" 2>/dev/null)" == "$$" ]]; then
-      rm -rf "$LOCK_DIR" || cleanup_failed=true
-    else
-      echo "bridge contract check no longer owns lock $LOCK_DIR" >&2
-      cleanup_failed=true
-    fi
+    flock -u 9 || cleanup_failed=true
+    exec 9>&-
   fi
 
   if [[ "$cleanup_failed" == true && "$status" -eq 0 ]]; then
@@ -114,30 +110,12 @@ fail_with_emulator_diagnostics() {
 }
 
 acquire_lock() {
-  local owner_pid=""
-  local stale_lock=""
-
-  mkdir -p "$(dirname "$LOCK_DIR")"
-  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-    owner_pid="$(cat "$LOCK_DIR/owner-pid" 2>/dev/null || true)"
-    if [[ "$owner_pid" =~ ^[0-9]+$ ]] && kill -0 "$owner_pid" >/dev/null 2>&1; then
-      echo "android-bridge-contract-check uses fixed emulator port $EMULATOR_PORT and process $owner_pid owns $LOCK_DIR" >&2
-      exit 1
-    fi
-
-    stale_lock="$LOCK_DIR.stale.$$"
-    if ! mv "$LOCK_DIR" "$stale_lock" 2>/dev/null; then
-      echo "android-bridge-contract-check could not claim stale lock $LOCK_DIR" >&2
-      exit 1
-    fi
-    rm -rf "$stale_lock"
-    if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-      echo "android-bridge-contract-check lost the race to claim $LOCK_DIR" >&2
-      exit 1
-    fi
-    echo "-- recovered stale bridge contract check lock"
+  mkdir -p "$(dirname "$LOCK_FILE")"
+  exec 9>"$LOCK_FILE"
+  if ! flock -n 9; then
+    echo "android-bridge-contract-check uses fixed emulator port $EMULATOR_PORT and another run owns $LOCK_FILE" >&2
+    exit 1
   fi
-  printf '%s\n' "$$" >"$LOCK_DIR/owner-pid"
   LOCK_ACQUIRED=true
 }
 
@@ -278,7 +256,7 @@ run_contract_test() {
   export ANDROID_SERIAL="$SERIAL"
   cd "$ANDROID_CLIENT"
   set +e
-  timeout --foreground "$CONTRACT_TEST_TIMEOUT_SECONDS" ./gradlew \
+  timeout --kill-after=30s "$CONTRACT_TEST_TIMEOUT_SECONDS" ./gradlew \
     :app:connectedDebugAndroidTest \
     -Pandroid.testInstrumentationRunnerArguments.bridgeVersion="$bridge_version" \
     -Pandroid.testInstrumentationRunnerArguments.class=com.limelight.KorriNativeBridgeContractTest

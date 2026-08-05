@@ -50,6 +50,7 @@ let
     pkgs.gnugrep
     pkgs.gnused
     pkgs.llvmPackages.libclang
+    pkgs.util-linux
   ];
   androidBridgeEnv = androidEnv // {
     ANDROID_NDK_HOME = android.ndkRoot;
