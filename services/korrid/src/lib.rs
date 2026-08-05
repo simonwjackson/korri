@@ -606,6 +606,74 @@ pub struct HealthRequest {}
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct DiscoverySnapshotRequest {}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveryRegisterReceiptRequest {
+    pub receipt: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveryRemoveLocationRequest {
+    pub location_id: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct DiscoveryRescanRequest {}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
+pub enum DiscoveryState {
+    Idle {},
+    Scanning {},
+    Enriching {},
+    Problem {},
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveryLocationSummary {
+    pub id: String,
+    pub label: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveryDiagnostic {
+    pub code: String,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location_id: Option<String>,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoverySnapshot {
+    pub generation: String,
+    pub state: DiscoveryState,
+    pub locations: Vec<DiscoveryLocationSummary>,
+    pub diagnostics: Vec<DiscoveryDiagnostic>,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
+pub enum DiscoverySnapshotOutcome {
+    Ok(DiscoverySnapshot),
+    Err(RpcFailure),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SettingsSnapshotRequest {}
 
 #[typeshare]
@@ -761,6 +829,14 @@ pub enum RpcRequest {
     LocalGameLaunch(LocalGameLaunchRequest),
     #[serde(rename = "system.health")]
     Health(HealthRequest),
+    #[serde(rename = "app.discovery.snapshot")]
+    DiscoverySnapshot(DiscoverySnapshotRequest),
+    #[serde(rename = "app.discovery.registerReceipt")]
+    DiscoveryRegisterReceipt(DiscoveryRegisterReceiptRequest),
+    #[serde(rename = "app.discovery.removeLocation")]
+    DiscoveryRemoveLocation(DiscoveryRemoveLocationRequest),
+    #[serde(rename = "app.discovery.rescan")]
+    DiscoveryRescan(DiscoveryRescanRequest),
     #[serde(rename = "system.settings.snapshot")]
     SettingsSnapshot(SettingsSnapshotRequest),
     #[serde(rename = "system.settings.update")]
@@ -799,6 +875,14 @@ pub enum RpcResponse {
     LocalGameLaunch(LocalGameLaunchOutcome),
     #[serde(rename = "system.health")]
     Health(HealthOutcome),
+    #[serde(rename = "app.discovery.snapshot")]
+    DiscoverySnapshot(DiscoverySnapshotOutcome),
+    #[serde(rename = "app.discovery.registerReceipt")]
+    DiscoveryRegisterReceipt(DiscoverySnapshotOutcome),
+    #[serde(rename = "app.discovery.removeLocation")]
+    DiscoveryRemoveLocation(DiscoverySnapshotOutcome),
+    #[serde(rename = "app.discovery.rescan")]
+    DiscoveryRescan(DiscoverySnapshotOutcome),
     #[serde(rename = "system.settings.snapshot")]
     SettingsSnapshot(SettingsSnapshotOutcome),
     #[serde(rename = "system.settings.update")]
@@ -832,6 +916,7 @@ struct BrainRuntime {
     moonlight_executor_state: Arc<Mutex<Option<MoonlightExecutorState>>>,
     native_platform: NativePlatform,
     config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
+    discovery: discovery::DiscoveryLifecycleCoordinator,
     /** Serialises revision-check + replace; external file-manager edits are
      * detected by the revision inside this same critical section. */
     settings_write_lock: Arc<Mutex<()>>,
@@ -1891,6 +1976,59 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
         RpcRequest::Health(_) => RpcResponse::Health(HealthOutcome::Ok(Health {
             version: VERSION.into(),
         })),
+        RpcRequest::DiscoverySnapshot(_) => match &state.mode {
+            ServerMode::Brain(brain) => RpcResponse::DiscoverySnapshot(
+                DiscoverySnapshotOutcome::Ok(discovery_snapshot(brain.discovery.snapshot())),
+            ),
+            ServerMode::Host(_) => {
+                RpcResponse::DiscoverySnapshot(DiscoverySnapshotOutcome::Err(RpcFailure {
+                    code: "OperationUnsupported".into(),
+                    message: "discovery is available only from the Android brain".into(),
+                }))
+            }
+        },
+        RpcRequest::DiscoveryRegisterReceipt(request) => match &state.mode {
+            ServerMode::Brain(brain) => RpcResponse::DiscoveryRegisterReceipt(
+                brain
+                    .discovery
+                    .register_receipt(&request.receipt)
+                    .map(discovery_snapshot)
+                    .map(DiscoverySnapshotOutcome::Ok)
+                    .unwrap_or_else(|error| {
+                        DiscoverySnapshotOutcome::Err(folder_selection_failure(error))
+                    }),
+            ),
+            ServerMode::Host(_) => {
+                RpcResponse::DiscoveryRegisterReceipt(DiscoverySnapshotOutcome::Err(RpcFailure {
+                    code: "OperationUnsupported".into(),
+                    message: "discovery is available only from the Android brain".into(),
+                }))
+            }
+        },
+        RpcRequest::DiscoveryRemoveLocation(request) => match &state.mode {
+            ServerMode::Brain(brain) => {
+                RpcResponse::DiscoveryRemoveLocation(DiscoverySnapshotOutcome::Ok(
+                    discovery_snapshot(brain.discovery.remove_location(request.location_id)),
+                ))
+            }
+            ServerMode::Host(_) => {
+                RpcResponse::DiscoveryRemoveLocation(DiscoverySnapshotOutcome::Err(RpcFailure {
+                    code: "OperationUnsupported".into(),
+                    message: "discovery is available only from the Android brain".into(),
+                }))
+            }
+        },
+        RpcRequest::DiscoveryRescan(_) => match &state.mode {
+            ServerMode::Brain(brain) => RpcResponse::DiscoveryRescan(DiscoverySnapshotOutcome::Ok(
+                discovery_snapshot(brain.discovery.rescan()),
+            )),
+            ServerMode::Host(_) => {
+                RpcResponse::DiscoveryRescan(DiscoverySnapshotOutcome::Err(RpcFailure {
+                    code: "OperationUnsupported".into(),
+                    message: "discovery is available only from the Android brain".into(),
+                }))
+            }
+        },
         RpcRequest::SettingsSnapshot(_) => match &state.mode {
             ServerMode::Brain(brain) => RpcResponse::SettingsSnapshot(
                 config::settings::read(&brain.local_storage_root)
@@ -2024,6 +2162,47 @@ fn settings_snapshot(
             })
             .collect(),
         steam_grid_db_credential: sensitive.steam_grid_db_credential,
+    }
+}
+
+fn discovery_snapshot(snapshot: discovery::DiscoverySnapshot) -> DiscoverySnapshot {
+    DiscoverySnapshot {
+        generation: snapshot.generation,
+        state: match snapshot.state {
+            discovery::DiscoveryPhase::Idle => DiscoveryState::Idle {},
+            discovery::DiscoveryPhase::Scanning => DiscoveryState::Scanning {},
+            discovery::DiscoveryPhase::Enriching => DiscoveryState::Enriching {},
+            discovery::DiscoveryPhase::Problem => DiscoveryState::Problem {},
+        },
+        locations: snapshot
+            .locations
+            .into_iter()
+            .map(|location| DiscoveryLocationSummary {
+                id: location.id,
+                label: location.label,
+            })
+            .collect(),
+        diagnostics: snapshot
+            .diagnostics
+            .into_iter()
+            .map(|diagnostic| DiscoveryDiagnostic {
+                code: diagnostic.code,
+                message: diagnostic.message,
+                location_id: diagnostic.location_id,
+            })
+            .collect(),
+    }
+}
+
+fn folder_selection_failure(error: discovery::FolderSelectionGrantError) -> RpcFailure {
+    let code = match &error {
+        discovery::FolderSelectionGrantError::InvalidPath(_) => "FolderSelectionInvalid",
+        discovery::FolderSelectionGrantError::Unknown => "FolderSelectionReceiptUnknown",
+        discovery::FolderSelectionGrantError::Expired => "FolderSelectionReceiptExpired",
+    };
+    RpcFailure {
+        code: code.into(),
+        message: error.to_string(),
     }
 }
 
@@ -2200,8 +2379,49 @@ fn router_with_capability_local_root_and_provision(
     native_platform: NativePlatform,
     config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
 ) -> Router {
+    router_with_capability_local_root_provision_and_grants(
+        rpc_capability,
+        allowed_origin,
+        local_storage_root,
+        private_state_root,
+        local_file_provision,
+        local_launch_signing_key,
+        local_launch_reservations,
+        moonlight_launch_authority,
+        active_android_launch,
+        retroarch_control_authority,
+        moonlight_executor_state,
+        native_platform,
+        config_snapshot,
+        discovery::FolderSelectionGrantStore::default(),
+    )
+}
+
+fn router_with_capability_local_root_provision_and_grants(
+    rpc_capability: &str,
+    allowed_origin: &str,
+    local_storage_root: impl AsRef<Path>,
+    private_state_root: impl AsRef<Path>,
+    local_file_provision: launcher::FileProvisionMode,
+    local_launch_signing_key: Vec<u8>,
+    local_launch_reservations: Arc<Mutex<launcher::LaunchPublicationReservations>>,
+    moonlight_launch_authority: Arc<Mutex<launcher::MoonlightLaunchAuthority>>,
+    active_android_launch: Arc<Mutex<Option<launcher::AndroidActiveLaunch>>>,
+    retroarch_control_authority: RetroarchControlSlot,
+    moonlight_executor_state: Arc<Mutex<Option<MoonlightExecutorState>>>,
+    native_platform: NativePlatform,
+    config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
+    folder_selection_grants: discovery::FolderSelectionGrantStore,
+) -> Router {
     let local_storage_root = local_storage_root.as_ref().to_owned();
     let private_state_root = private_state_root.as_ref().to_owned();
+    let settings_write_lock = Arc::new(Mutex::new(()));
+    let discovery = discovery::DiscoveryLifecycleCoordinator::new(
+        &local_storage_root,
+        &private_state_root,
+        settings_write_lock.clone(),
+        folder_selection_grants.clone(),
+    );
     let state = AppState {
         mode: ServerMode::Brain(BrainRuntime {
             upstream: upstreams::UpstreamRegistry::from_env_or_file(
@@ -2218,7 +2438,8 @@ fn router_with_capability_local_root_and_provision(
             moonlight_executor_state,
             native_platform,
             config_snapshot,
-            settings_write_lock: Arc::new(Mutex::new(())),
+            discovery,
+            settings_write_lock,
         }),
         rpc_capability: Some(rpc_capability.into()),
     };
@@ -2304,6 +2525,7 @@ struct ServerHandle {
     moonlight_launch_authority: Arc<Mutex<launcher::MoonlightLaunchAuthority>>,
     moonlight_config_snapshot: config::snapshot::ConfigSnapshotCoordinator,
     native_platform: NativePlatform,
+    folder_selection_grants: discovery::FolderSelectionGrantStore,
     stop: oneshot::Sender<()>,
     thread: JoinHandle<()>,
 }
@@ -2394,6 +2616,8 @@ fn start_local_server_for_platform(
     let router_retroarch_control_authority = Arc::clone(&retroarch_control_authority);
     let moonlight_executor_state = Arc::new(Mutex::new(None));
     let router_moonlight_executor_state = Arc::clone(&moonlight_executor_state);
+    let folder_selection_grants = discovery::FolderSelectionGrantStore::default();
+    let server_folder_selection_grants = folder_selection_grants.clone();
     let allowed_origin = allowed_origin.to_owned();
     let local_storage_root = local_storage_root.to_owned();
     let private_state_root = private_state_root.to_owned();
@@ -2410,7 +2634,7 @@ fn start_local_server_for_platform(
                     .expect("convert localhost listener");
                 axum::serve(
                     listener,
-                    router_with_capability_local_root_and_provision(
+                    router_with_capability_local_root_provision_and_grants(
                         &server_capability,
                         &allowed_origin,
                         &local_storage_root,
@@ -2424,6 +2648,7 @@ fn start_local_server_for_platform(
                         router_moonlight_executor_state,
                         native_platform,
                         server_config_snapshot,
+                        server_folder_selection_grants,
                     ),
                 )
                 .with_graceful_shutdown(async {
@@ -2449,6 +2674,7 @@ fn start_local_server_for_platform(
         moonlight_launch_authority,
         moonlight_config_snapshot,
         native_platform,
+        folder_selection_grants,
         stop,
         thread,
     });
@@ -2482,6 +2708,20 @@ pub fn local_server_capability() -> Option<String> {
         .expect("server mutex poisoned")
         .as_ref()
         .map(|server| server.rpc_capability.clone())
+}
+
+pub fn issue_folder_selection_receipt(
+    canonical_approved_path: &str,
+) -> Result<String, discovery::FolderSelectionGrantError> {
+    let store = server_slot()
+        .lock()
+        .expect("server mutex poisoned")
+        .as_ref()
+        .map(|server| server.folder_selection_grants.clone())
+        .ok_or(discovery::FolderSelectionGrantError::Unknown)?;
+    store
+        .issue_approved_path(canonical_approved_path)
+        .map(|grant| grant.token)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -3631,6 +3871,196 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         serde_json::from_slice(&body).unwrap()
+    }
+
+    fn discovery_test_router(
+        readable: &Path,
+        private: &Path,
+        grants: discovery::FolderSelectionGrantStore,
+    ) -> Router {
+        let signing_key = b"test signing key".to_vec();
+        router_with_capability_local_root_provision_and_grants(
+            "right-token",
+            "https://portal.example",
+            readable,
+            private,
+            launcher::FileProvisionMode::Direct,
+            signing_key.clone(),
+            Arc::new(Mutex::new(launcher::LaunchPublicationReservations::new())),
+            Arc::new(Mutex::new(launcher::MoonlightLaunchAuthority::new(signing_key))),
+            Arc::new(Mutex::new(None)),
+            Arc::new(Mutex::new(None)),
+            Arc::new(Mutex::new(None)),
+            NativePlatform::Standalone,
+            config::snapshot::ConfigSnapshotCoordinator::new(readable),
+            grants,
+        )
+    }
+
+    async fn wait_for_discovery_idle(app: Router) -> serde_json::Value {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            let body = rpc_body_authorized(
+                app.clone(),
+                r#"{"_tag":"app.discovery.snapshot","payload":{}}"#,
+                Some("right-token"),
+            )
+            .await;
+            let tag = body["outcome"]["payload"]["state"]["_tag"].as_str();
+            if tag == Some("Idle") || tag == Some("Problem") {
+                return body;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "discovery did not settle: {body}"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    #[tokio::test]
+    async fn discovery_register_receipt_reaches_idle_with_visible_game() {
+        let readable = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        let folder = tempfile::tempdir().unwrap();
+        std::fs::write(folder.path().join("game.gba"), b"rom").unwrap();
+        let grants = discovery::FolderSelectionGrantStore::default();
+        let receipt = grants.issue_approved_path(folder.path()).unwrap().token;
+        let app = discovery_test_router(readable.path(), private.path(), grants);
+
+        let body = rpc_body_authorized(
+            app.clone(),
+            &serde_json::json!({"_tag":"app.discovery.registerReceipt","payload":{"receipt": receipt}}).to_string(),
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(body["outcome"]["_tag"], "Ok");
+        assert_eq!(body["outcome"]["payload"]["state"]["_tag"], "Scanning");
+
+        let idle = wait_for_discovery_idle(app.clone()).await;
+        assert_eq!(idle["outcome"]["payload"]["state"]["_tag"], "Idle");
+        assert_eq!(
+            idle["outcome"]["payload"]["locations"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        let games = rpc_body_authorized(
+            app,
+            r#"{"_tag":"app.local-games.list","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(games["outcome"]["payload"]["games"][0]["id"], "game");
+    }
+
+    #[tokio::test]
+    async fn discovery_rejects_unknown_expired_and_replayed_receipts() {
+        let readable = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        let folder = tempfile::tempdir().unwrap();
+        let grants = discovery::FolderSelectionGrantStore::new(std::time::Duration::from_millis(1));
+        let replay = grants.issue_approved_path(folder.path()).unwrap().token;
+        let expired = grants.issue_approved_path(folder.path()).unwrap().token;
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let app = discovery_test_router(readable.path(), private.path(), grants);
+
+        for (receipt, code) in [
+            (expired, "FolderSelectionReceiptExpired"),
+            ("missing".to_owned(), "FolderSelectionReceiptUnknown"),
+        ] {
+            let body = rpc_body_authorized(
+                app.clone(),
+                &serde_json::json!({"_tag":"app.discovery.registerReceipt","payload":{"receipt": receipt}}).to_string(),
+                Some("right-token"),
+            )
+            .await;
+            assert_eq!(body["outcome"]["_tag"], "Err");
+            assert_eq!(body["outcome"]["payload"]["code"], code);
+        }
+
+        let restarted = discovery::FolderSelectionGrantStore::default();
+        let restarted_app = discovery_test_router(readable.path(), private.path(), restarted);
+        let body = rpc_body_authorized(
+            restarted_app,
+            &serde_json::json!({"_tag":"app.discovery.registerReceipt","payload":{"receipt": replay}}).to_string(),
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(
+            body["outcome"]["payload"]["code"],
+            "FolderSelectionReceiptUnknown"
+        );
+    }
+
+    #[tokio::test]
+    async fn discovery_rescan_coalesces_while_catalog_stays_readable() {
+        let readable = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        let folder = tempfile::tempdir().unwrap();
+        std::fs::write(folder.path().join("one.gba"), b"one").unwrap();
+        let grants = discovery::FolderSelectionGrantStore::default();
+        let receipt = grants.issue_approved_path(folder.path()).unwrap().token;
+        let app = discovery_test_router(readable.path(), private.path(), grants);
+        rpc_body_authorized(
+            app.clone(),
+            &serde_json::json!({"_tag":"app.discovery.registerReceipt","payload":{"receipt": receipt}}).to_string(),
+            Some("right-token"),
+        )
+        .await;
+        let during = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"app.discovery.rescan","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(during["outcome"]["payload"]["state"]["_tag"], "Scanning");
+        let games = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"app.local-games.list","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(games["outcome"]["_tag"], "Ok");
+        let idle = wait_for_discovery_idle(app).await;
+        assert_eq!(idle["outcome"]["payload"]["state"]["_tag"], "Idle");
+    }
+
+    #[tokio::test]
+    async fn discovery_invalid_location_reports_problem_without_erasing_catalog() {
+        let readable = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        let good = tempfile::tempdir().unwrap();
+        std::fs::write(good.path().join("good.gba"), b"good").unwrap();
+        let bad = tempfile::tempdir().unwrap();
+        let grants = discovery::FolderSelectionGrantStore::default();
+        let good_receipt = grants.issue_approved_path(good.path()).unwrap().token;
+        let bad_receipt = grants.issue_approved_path(bad.path()).unwrap().token;
+        let app = discovery_test_router(readable.path(), private.path(), grants);
+        rpc_body_authorized(
+            app.clone(),
+            &serde_json::json!({"_tag":"app.discovery.registerReceipt","payload":{"receipt": good_receipt}}).to_string(),
+            Some("right-token"),
+        )
+        .await;
+        wait_for_discovery_idle(app.clone()).await;
+        drop(bad);
+        rpc_body_authorized(
+            app.clone(),
+            &serde_json::json!({"_tag":"app.discovery.registerReceipt","payload":{"receipt": bad_receipt}}).to_string(),
+            Some("right-token"),
+        )
+        .await;
+        let problem = wait_for_discovery_idle(app.clone()).await;
+        assert_eq!(problem["outcome"]["payload"]["state"]["_tag"], "Problem");
+        let games = rpc_body_authorized(
+            app,
+            r#"{"_tag":"app.local-games.list","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(games["outcome"]["payload"]["games"][0]["id"], "good");
     }
 
     #[tokio::test]

@@ -9,6 +9,7 @@ import {
 } from "@contracts/generated/korrid"
 import {
   callKorrid,
+  createDiscoverySnapshotPoller,
   createHttpKorridClient,
   createInMemoryKorridClient,
 } from "./client"
@@ -411,6 +412,96 @@ describe("local games", () => {
         ],
       },
     })
+  })
+})
+
+describe("discovery", () => {
+  it("serializes receipt registration through the generated tag", async () => {
+    let body: unknown
+    globalThis.fetch = (async (_input, init) => {
+      body = JSON.parse(String(init?.body))
+      return new Response(
+        JSON.stringify({
+          _tag: "app.discovery.registerReceipt",
+          outcome: {
+            _tag: "Ok",
+            payload: {
+              generation: "g1",
+              state: { _tag: "Scanning", payload: {} },
+              locations: [],
+              diagnostics: [],
+            },
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    }) as typeof fetch
+
+    const outcome = await createHttpKorridClient(
+      "http://127.0.0.1:43117",
+      "capability",
+    ).registerDiscoveryReceipt("receipt-1")
+
+    expect(outcome).toMatchObject({
+      _tag: "Ok",
+      payload: { state: { _tag: "Scanning" } },
+    })
+    expect(body).toEqual({
+      _tag: "app.discovery.registerReceipt",
+      payload: { receipt: "receipt-1" },
+    })
+  })
+
+  it("browser memory exposes the discovery lifecycle without raw paths", async () => {
+    const client = createInMemoryKorridClient()
+
+    expect(await client.discoverySnapshot()).toMatchObject({
+      _tag: "Ok",
+      payload: { generation: "in-memory-0", state: { _tag: "Idle" } },
+    })
+    expect(await client.registerDiscoveryReceipt("receipt-1")).toMatchObject({
+      _tag: "Ok",
+      payload: { state: { _tag: "Scanning" } },
+    })
+    expect(await client.registerDiscoveryReceipt("")).toMatchObject({
+      _tag: "Err",
+      payload: { code: "FolderSelectionReceiptUnknown" },
+    })
+  })
+
+  it("polling publishes changed generations once and never overlaps requests", async () => {
+    let generation = 0
+    let active = 0
+    let maxActive = 0
+    const published: string[] = []
+    const poller = createDiscoverySnapshotPoller(
+      {
+        async discoverySnapshot() {
+          active += 1
+          maxActive = Math.max(maxActive, active)
+          await new Promise(resolve => setTimeout(resolve, 5))
+          active -= 1
+          return {
+            _tag: "Ok",
+            payload: {
+              generation: `g${generation}`,
+              state: { _tag: "Idle", payload: {} },
+              locations: [],
+              diagnostics: [],
+            },
+          }
+        },
+      },
+      snapshot => published.push(snapshot.generation),
+    )
+
+    await Promise.all([poller.pollNow(), poller.pollNow()])
+    await poller.pollNow()
+    generation += 1
+    await poller.pollNow()
+
+    expect(maxActive).toBe(1)
+    expect(published).toEqual(["g0", "g1"])
   })
 })
 

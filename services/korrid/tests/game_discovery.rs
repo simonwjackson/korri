@@ -1,8 +1,15 @@
-use std::fs;
+use std::{
+    fs,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use korrid::{
     config::{resolver, snapshot::ConfigSnapshotCoordinator, Target},
-    discovery::{DiscoveryCoordinator, DiscoveryDiagnosticCode, DiscoveryOptions},
+    discovery::{
+        DiscoveryCoordinator, DiscoveryDiagnosticCode, DiscoveryLifecycleCoordinator,
+        DiscoveryOptions, DiscoveryPhase, FolderSelectionGrantError, FolderSelectionGrantStore,
+    },
     plugin_policy,
 };
 
@@ -13,6 +20,149 @@ fn options() -> DiscoveryOptions {
         max_candidates: 100,
         ..DiscoveryOptions::default()
     }
+}
+
+fn lifecycle(
+    readable: &tempfile::TempDir,
+    private: &tempfile::TempDir,
+    grants: FolderSelectionGrantStore,
+) -> DiscoveryLifecycleCoordinator {
+    DiscoveryLifecycleCoordinator::new(
+        readable.path(),
+        private.path(),
+        Arc::new(Mutex::new(())),
+        grants,
+    )
+    .with_options(options())
+}
+
+fn wait_until_idle(
+    discovery: &DiscoveryLifecycleCoordinator,
+) -> korrid::discovery::DiscoverySnapshot {
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        let snapshot = discovery.snapshot();
+        if !matches!(
+            snapshot.state,
+            DiscoveryPhase::Scanning | DiscoveryPhase::Enriching
+        ) {
+            return snapshot;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "discovery did not settle"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn folder_selection_receipts_are_one_use_short_lived_and_pathless() {
+    let folder = tempfile::tempdir().unwrap();
+    let grants = FolderSelectionGrantStore::new(Duration::from_millis(20));
+    let receipt = grants.issue_approved_path(folder.path()).unwrap().token;
+    assert!(!receipt.contains(folder.path().to_string_lossy().as_ref()));
+    assert_eq!(
+        grants.consume(&receipt).unwrap(),
+        folder.path().canonicalize().unwrap()
+    );
+    assert_eq!(
+        grants.consume(&receipt).unwrap_err(),
+        FolderSelectionGrantError::Unknown
+    );
+
+    let expired = grants.issue_approved_path(folder.path()).unwrap().token;
+    std::thread::sleep(Duration::from_millis(30));
+    assert_eq!(
+        grants.consume(&expired).unwrap_err(),
+        FolderSelectionGrantError::Expired
+    );
+
+    let restarted = FolderSelectionGrantStore::new(Duration::from_secs(60));
+    assert_eq!(
+        restarted.consume(&expired).unwrap_err(),
+        FolderSelectionGrantError::Unknown
+    );
+}
+
+#[test]
+fn lifecycle_registers_receipt_and_publishes_scanning_then_idle_with_game_visible() {
+    let readable = tempfile::tempdir().unwrap();
+    let private = tempfile::tempdir().unwrap();
+    let folder = tempfile::tempdir().unwrap();
+    fs::write(folder.path().join("game.gba"), b"rom").unwrap();
+    let grants = FolderSelectionGrantStore::default();
+    let discovery = lifecycle(&readable, &private, grants.clone());
+    let receipt = grants.issue_approved_path(folder.path()).unwrap().token;
+
+    let scanning = discovery.register_receipt(&receipt).unwrap();
+    assert_eq!(scanning.state, DiscoveryPhase::Scanning);
+    assert!(matches!(
+        discovery.register_receipt(&receipt),
+        Err(FolderSelectionGrantError::Unknown)
+    ));
+
+    let idle = wait_until_idle(&discovery);
+    assert_eq!(idle.state, DiscoveryPhase::Idle);
+    assert_eq!(idle.locations.len(), 1);
+    assert!(ConfigSnapshotCoordinator::new(readable.path())
+        .reload()
+        .snapshot
+        .library
+        .contains_key("game"));
+}
+
+#[test]
+fn lifecycle_coalesces_active_rescans() {
+    let readable = tempfile::tempdir().unwrap();
+    let private = tempfile::tempdir().unwrap();
+    let folder = tempfile::tempdir().unwrap();
+    fs::write(folder.path().join("one.gba"), b"one").unwrap();
+    let grants = FolderSelectionGrantStore::default();
+    let discovery = lifecycle(&readable, &private, grants.clone());
+    let receipt = grants.issue_approved_path(folder.path()).unwrap().token;
+
+    discovery.register_receipt(&receipt).unwrap();
+    let rescan = discovery.rescan();
+    assert_eq!(rescan.state, DiscoveryPhase::Scanning);
+    let idle = wait_until_idle(&discovery);
+
+    assert_eq!(idle.state, DiscoveryPhase::Idle);
+    assert_eq!(
+        ConfigSnapshotCoordinator::new(readable.path())
+            .reload()
+            .snapshot
+            .library
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn lifecycle_reports_invalid_location_without_hiding_existing_catalog() {
+    let readable = tempfile::tempdir().unwrap();
+    let private = tempfile::tempdir().unwrap();
+    let good = tempfile::tempdir().unwrap();
+    let bad = tempfile::tempdir().unwrap();
+    fs::write(good.path().join("good.gba"), b"good").unwrap();
+    let grants = FolderSelectionGrantStore::default();
+    let discovery = lifecycle(&readable, &private, grants.clone());
+    let good_receipt = grants.issue_approved_path(good.path()).unwrap().token;
+    discovery.register_receipt(&good_receipt).unwrap();
+    wait_until_idle(&discovery);
+    let bad_receipt = grants.issue_approved_path(bad.path()).unwrap().token;
+    drop(bad);
+
+    discovery.register_receipt(&bad_receipt).unwrap();
+    let problem = wait_until_idle(&discovery);
+
+    assert_eq!(problem.state, DiscoveryPhase::Problem);
+    assert!(!problem.diagnostics.is_empty());
+    assert!(ConfigSnapshotCoordinator::new(readable.path())
+        .reload()
+        .snapshot
+        .library
+        .contains_key("good"));
 }
 
 #[test]

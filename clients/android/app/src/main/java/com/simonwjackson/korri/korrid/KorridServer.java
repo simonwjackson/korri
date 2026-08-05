@@ -43,6 +43,8 @@ public final class KorridServer {
             String launchId, String generation);
     /** Verify and consume one protected instruction for the current launch. */
     public static native String authorizePlatformInstruction(String instructionJson);
+    /** Returns a short-lived one-use receipt for an Android-validated game folder. */
+    public static native String issueFolderSelectionReceipt(String canonicalApprovedPath);
     public static native void stop();
 
     public static int startAndLog(

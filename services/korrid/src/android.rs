@@ -4,8 +4,8 @@
 use crate::{
     active_android_launch, authorize_local_launch_spec, authorize_moonlight_launch_spec,
     authorize_platform_instruction, clear_active_android_launch, clear_moonlight_executor_state,
-    korrid_version, local_server_capability, publish_local_active_launch,
-    publish_moonlight_active_launch, publish_moonlight_executor_state,
+    issue_folder_selection_receipt, korrid_version, local_server_capability,
+    publish_local_active_launch, publish_moonlight_active_launch, publish_moonlight_executor_state,
     start_embedded_android_server, stop_local_server, MoonlightLaunchAuthorization,
 };
 use jni::{
@@ -82,6 +82,34 @@ pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_capabili
         },
         None => {
             let _ = env.throw_new("java/lang/IllegalStateException", "korrid is not running");
+            ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_issueFolderSelectionReceipt(
+    mut env: JNIEnv,
+    _class: JClass,
+    canonical_approved_path: JString,
+) -> jstring {
+    let canonical_approved_path: String = match env.get_string(&canonical_approved_path) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error.to_string());
+            return ptr::null_mut();
+        }
+    };
+    match issue_folder_selection_receipt(&canonical_approved_path) {
+        Ok(receipt) => match env.new_string(receipt) {
+            Ok(value) => value.into_raw(),
+            Err(error) => {
+                let _ = env.throw_new("java/lang/IllegalStateException", error.to_string());
+                ptr::null_mut()
+            }
+        },
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error.to_string());
             ptr::null_mut()
         }
     }

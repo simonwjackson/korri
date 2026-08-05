@@ -79,6 +79,48 @@ export interface CatalogSnapshot {
 export interface CatalogSnapshotRequest {
 }
 
+export interface DiscoveryDiagnostic {
+	code: string;
+	message: string;
+	locationId?: string;
+}
+
+export interface DiscoveryLocationSummary {
+	id: string;
+	label: string;
+}
+
+export interface DiscoveryRegisterReceiptRequest {
+	receipt: string;
+}
+
+export interface DiscoveryRemoveLocationRequest {
+	locationId: string;
+}
+
+export interface DiscoveryRescanRequest {
+}
+
+export type DiscoveryState =
+	| { _tag: "Idle", payload: {
+}}
+	| { _tag: "Scanning", payload: {
+}}
+	| { _tag: "Enriching", payload: {
+}}
+	| { _tag: "Problem", payload: {
+}};
+
+export interface DiscoverySnapshot {
+	generation: string;
+	state: DiscoveryState;
+	locations: DiscoveryLocationSummary[];
+	diagnostics: DiscoveryDiagnostic[];
+}
+
+export interface DiscoverySnapshotRequest {
+}
+
 export interface GameProviderIdentity {
 	provider: string;
 	ref: string;
@@ -393,6 +435,10 @@ export type CatalogSnapshotOutcome =
 	| { _tag: "Ok", payload: CatalogSnapshot }
 	| { _tag: "Err", payload: RpcFailure };
 
+export type DiscoverySnapshotOutcome =
+	| { _tag: "Ok", payload: DiscoverySnapshot }
+	| { _tag: "Err", payload: RpcFailure };
+
 export type HealthOutcome =
 	| { _tag: "Ok", payload: Health }
 	| { _tag: "Err", payload: RpcFailure };
@@ -430,6 +476,10 @@ export type RpcRequest =
 	| { _tag: "app.local-games.list", payload: LocalGamesListRequest }
 	| { _tag: "app.local-games.launch", payload: LocalGameLaunchRequest }
 	| { _tag: "system.health", payload: HealthRequest }
+	| { _tag: "app.discovery.snapshot", payload: DiscoverySnapshotRequest }
+	| { _tag: "app.discovery.registerReceipt", payload: DiscoveryRegisterReceiptRequest }
+	| { _tag: "app.discovery.removeLocation", payload: DiscoveryRemoveLocationRequest }
+	| { _tag: "app.discovery.rescan", payload: DiscoveryRescanRequest }
 	| { _tag: "system.settings.snapshot", payload: SettingsSnapshotRequest }
 	| { _tag: "system.settings.update", payload: SettingsUpdateRequest }
 	| { _tag: "system.settings.steamgriddbCredential.set", payload: SteamGridDbCredentialSetRequest }
@@ -448,6 +498,10 @@ export type RpcResponse =
 	| { _tag: "app.local-games.list", outcome: LocalGamesListOutcome }
 	| { _tag: "app.local-games.launch", outcome: LocalGameLaunchOutcome }
 	| { _tag: "system.health", outcome: HealthOutcome }
+	| { _tag: "app.discovery.snapshot", outcome: DiscoverySnapshotOutcome }
+	| { _tag: "app.discovery.registerReceipt", outcome: DiscoverySnapshotOutcome }
+	| { _tag: "app.discovery.removeLocation", outcome: DiscoverySnapshotOutcome }
+	| { _tag: "app.discovery.rescan", outcome: DiscoverySnapshotOutcome }
 	| { _tag: "system.settings.snapshot", outcome: SettingsSnapshotOutcome }
 	| { _tag: "system.settings.update", outcome: SettingsUpdateOutcome }
 	| { _tag: "system.settings.steamgriddbCredential.set", outcome: SensitiveSettingOutcome }

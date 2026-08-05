@@ -8,6 +8,8 @@
 import type {
   ActiveSession,
   CatalogSnapshotOutcome,
+  DiscoverySnapshot,
+  DiscoverySnapshotOutcome,
   Game,
   HealthOutcome,
   LaunchSpec,
@@ -58,6 +60,10 @@ export interface KorridClient {
   ): Promise<SettingsUpdateOutcome>
   setSteamGridDbCredential(token: string): Promise<SensitiveSettingOutcome>
   clearSteamGridDbCredential(): Promise<SensitiveSettingOutcome>
+  discoverySnapshot(): Promise<DiscoverySnapshotOutcome>
+  registerDiscoveryReceipt(receipt: string): Promise<DiscoverySnapshotOutcome>
+  removeDiscoveryLocation(locationId: string): Promise<DiscoverySnapshotOutcome>
+  rescanDiscovery(): Promise<DiscoverySnapshotOutcome>
   catalogSnapshot(): Promise<CatalogSnapshotOutcome>
   moonlightResolve(): Promise<MoonlightResolveOutcome>
   moonlightLaunchPrepare(
@@ -301,6 +307,50 @@ export function createHttpKorridClient(
         return unreachable(error)
       }
     },
+    async discoverySnapshot() {
+      try {
+        const response = await callKorrid(baseUrl, capability, {
+          _tag: "app.discovery.snapshot",
+          payload: {},
+        })
+        return response.outcome
+      } catch (error) {
+        return unreachable(error)
+      }
+    },
+    async registerDiscoveryReceipt(receipt) {
+      try {
+        const response = await callKorrid(baseUrl, capability, {
+          _tag: "app.discovery.registerReceipt",
+          payload: { receipt },
+        })
+        return response.outcome
+      } catch (error) {
+        return unreachable(error)
+      }
+    },
+    async removeDiscoveryLocation(locationId) {
+      try {
+        const response = await callKorrid(baseUrl, capability, {
+          _tag: "app.discovery.removeLocation",
+          payload: { locationId },
+        })
+        return response.outcome
+      } catch (error) {
+        return unreachable(error)
+      }
+    },
+    async rescanDiscovery() {
+      try {
+        const response = await callKorrid(baseUrl, capability, {
+          _tag: "app.discovery.rescan",
+          payload: {},
+        })
+        return response.outcome
+      } catch (error) {
+        return unreachable(error)
+      }
+    },
     async catalogSnapshot() {
       try {
         const response = await callKorrid(baseUrl, capability, {
@@ -450,6 +500,7 @@ export interface InMemoryKorridClientConfig {
   readonly localGames?: readonly LocalGame[]
   readonly localLaunchSpecs?: Readonly<Record<string, LaunchSpec>>
   readonly localFailures?: readonly { readonly code: string; readonly message: string }[]
+  readonly discovery?: DiscoverySnapshot
   /** Seed an active host session for now-playing flows. */
   readonly activeSession?: ActiveSession
   /** Seed the dedicated gameplay-overlay browser/test consumer. */
@@ -566,6 +617,22 @@ export function createInMemoryKorridClient(
     }
     return moonlight
   }
+  let discovery: DiscoverySnapshot = config.discovery ?? {
+    generation: "in-memory-0",
+    state: { _tag: "Idle", payload: {} },
+    locations: [],
+    diagnostics: [],
+  }
+  let discoveryRevision = 0
+  const nextDiscovery = (state = discovery.state): DiscoverySnapshot => {
+    discoveryRevision += 1
+    discovery = {
+      ...discovery,
+      generation: `in-memory-discovery-${discoveryRevision}`,
+      state,
+    }
+    return discovery
+  }
   return {
     async health() {
       return { _tag: "Ok", payload: { version: "korrid-in-memory" } }
@@ -621,6 +688,31 @@ export function createInMemoryKorridClient(
         _tag: "Ok",
         payload: { status: SecretSettingStatus.NotConfigured },
       }
+    },
+    async discoverySnapshot() {
+      return { _tag: "Ok", payload: discovery }
+    },
+    async registerDiscoveryReceipt(receipt) {
+      if (receipt === "") {
+        return {
+          _tag: "Err",
+          payload: {
+            code: "FolderSelectionReceiptUnknown",
+            message: "folder selection receipt is unknown or has already been used",
+          },
+        }
+      }
+      return { _tag: "Ok", payload: nextDiscovery({ _tag: "Scanning", payload: {} }) }
+    },
+    async removeDiscoveryLocation(locationId) {
+      discovery = {
+        ...discovery,
+        locations: discovery.locations.filter(location => location.id !== locationId),
+      }
+      return { _tag: "Ok", payload: nextDiscovery({ _tag: "Scanning", payload: {} }) }
+    },
+    async rescanDiscovery() {
+      return { _tag: "Ok", payload: nextDiscovery({ _tag: "Scanning", payload: {} }) }
     },
     async catalogSnapshot() {
       if (behavior === "catalog-fail") {
@@ -804,6 +896,33 @@ export function createInMemoryKorridClient(
           _tag: "Completed",
           payload: { launchId },
         },
+      }
+    },
+  }
+}
+
+export interface DiscoverySnapshotPoller {
+  pollNow(): Promise<void>
+}
+
+export function createDiscoverySnapshotPoller(
+  client: Pick<KorridClient, "discoverySnapshot">,
+  publish: (snapshot: DiscoverySnapshot) => void,
+): DiscoverySnapshotPoller {
+  let inFlight = false
+  let lastGeneration: string | undefined
+  return {
+    async pollNow() {
+      if (inFlight) return
+      inFlight = true
+      try {
+        const outcome = await client.discoverySnapshot()
+        if (outcome._tag === "Ok" && outcome.payload.generation !== lastGeneration) {
+          lastGeneration = outcome.payload.generation
+          publish(outcome.payload)
+        }
+      } finally {
+        inFlight = false
       }
     },
   }
