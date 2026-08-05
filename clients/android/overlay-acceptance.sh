@@ -255,12 +255,13 @@ cleanup() {
       pid="$(package_pid "$KORRI_PACKAGE" 2>/dev/null || printf probe-failed)"
       [[ -z "$pid" ]] || safe=false
     fi
-    if [[ "$safe" == true ]]; then
-      restore_exact_state || safe=false
-      [[ "$safe" == true ]] && release_lock || safe=false
-    fi
     if [[ "$safe" != true ]]; then
       echo "could not establish safe quiescence; backup and lock retained at $BACKUP_REMOTE and $LOCK_REMOTE" >&2
+      status=1
+    elif ! restore_exact_state; then
+      status=1
+    elif ! release_lock; then
+      echo "device state was restored, but the acceptance lock remains at $LOCK_REMOTE" >&2
       status=1
     fi
   elif [[ "$LOCK_ACQUIRED" == true ]]; then
