@@ -32,6 +32,18 @@ const declaration = {
         },
       },
     },
+    discovery: {
+      fileReleases: {
+        "gba-files": {
+          id: "@korri:mgba/gba-files",
+          title: "Game Boy Advance ROM files",
+          extensions: ["gba"],
+          system: "gba",
+          launcher: "@korri:retroarch/retroarch",
+          runtime: "@korri:mgba/mgba",
+        },
+      },
+    },
   },
 } as const
 

@@ -7,7 +7,7 @@
 use std::{env, fs, process};
 
 use korrid::plugin::{load_plugin_source, Plugin, PluginRegistry};
-use korrid::plugin_policy::{resolve_enabled_plugin_ids, PluginPolicyLayer};
+use korrid::plugin_policy::{MGBA_PLUGIN_ID, RETROARCH_PLUGIN_ID, RETROARCH_PLUGIN_SOURCE};
 
 enum ReportMode {
     Enabled,
@@ -56,12 +56,18 @@ fn run() -> Result<(), String> {
 
 fn print_report(plugin: Plugin, enabled: bool) -> Result<(), String> {
     let plugin_id = plugin.id().to_owned();
-    let enabled_ids = resolve_enabled_plugin_ids([PluginPolicyLayer::from_enabled([(
-        plugin_id.as_str(),
-        enabled,
-    )])]);
-    let registry =
-        PluginRegistry::new(vec![plugin], enabled_ids).map_err(|error| error.to_string())?;
+    let mut plugins = Vec::new();
+    let mut enabled_ids = Vec::new();
+    if plugin_id == MGBA_PLUGIN_ID {
+        plugins
+            .push(load_plugin_source(RETROARCH_PLUGIN_SOURCE).map_err(|error| error.to_string())?);
+        enabled_ids.push(RETROARCH_PLUGIN_ID.to_owned());
+    }
+    if enabled {
+        enabled_ids.push(plugin_id.clone());
+    }
+    plugins.push(plugin);
+    let registry = PluginRegistry::new(plugins, enabled_ids).map_err(|error| error.to_string())?;
 
     println!("plugin: {plugin_id}");
     println!(
@@ -87,19 +93,26 @@ fn print_report(plugin: Plugin, enabled: bool) -> Result<(), String> {
         "provider",
         registry
             .providers()
-            .values()
-            .map(|record| record.id.as_str()),
+            .iter()
+            .filter(|(id, _)| id.as_str() == plugin_id)
+            .map(|(_, record)| record.id.as_str()),
     );
+    let owned_prefix = format!("{plugin_id}/");
     print_records(
         "system",
-        registry.systems().values().map(|record| record.id.as_str()),
+        registry
+            .systems()
+            .iter()
+            .filter(|(id, _)| id.starts_with(&owned_prefix))
+            .map(|(_, record)| record.id.as_str()),
     );
     print_records(
         "launcher",
         registry
             .launchers()
-            .values()
-            .map(|record| record.id.as_str()),
+            .iter()
+            .filter(|(id, _)| id.starts_with(&owned_prefix))
+            .map(|(_, record)| record.id.as_str()),
     );
     print_records(
         "transport",
@@ -112,8 +125,17 @@ fn print_report(plugin: Plugin, enabled: bool) -> Result<(), String> {
         "runtime",
         registry
             .runtimes()
+            .iter()
+            .filter(|(id, _)| id.starts_with(&owned_prefix))
+            .map(|(_, record)| record.id.as_str()),
+    );
+    print_records(
+        "discovery",
+        registry
+            .file_release_discovery_claims()
             .values()
-            .map(|record| record.id.as_str()),
+            .filter(|claim| claim.id.starts_with(&owned_prefix))
+            .map(|claim| claim.id.as_str()),
     );
     print_records(
         "session-control",

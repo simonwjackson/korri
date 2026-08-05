@@ -2,7 +2,7 @@
 //!
 //! This is the narrow legacy plugin seam exercised by the Android application
 //! checkpoint: a plugin identifies itself and contributes provider, system,
-//! launcher, transport, runtime, and contextual session-control records. Plugins
+//! launcher, transport, runtime, file-release discovery, and contextual session-control records. Plugins
 //! still perform no effects; this module only evaluates, validates, normalizes,
 //! and announces their declarations.
 
@@ -37,6 +37,8 @@ pub struct SystemRecord {
     pub id: String,
     #[serde(default, deserialize_with = "deserialize_optional_non_null")]
     pub title: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_non_null")]
+    pub aliases: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
@@ -92,6 +94,29 @@ pub struct RuntimeRecord {
     pub linux: Option<LinuxRuntimeRecord>,
     #[serde(default, deserialize_with = "deserialize_optional_non_null")]
     pub supports: Option<RuntimeSupportsRecord>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FileReleaseDiscoveryClaim {
+    pub id: String,
+    pub title: Option<String>,
+    pub extensions: Vec<String>,
+    pub system: String,
+    pub launcher: String,
+    pub runtime: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct FileReleaseDiscoveryContribution {
+    pub id: String,
+    #[serde(default, deserialize_with = "deserialize_optional_non_null")]
+    pub title: Option<String>,
+    pub extensions: Vec<String>,
+    pub system: String,
+    pub launcher: String,
+    #[serde(default, deserialize_with = "deserialize_optional_non_null")]
+    pub runtime: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
@@ -350,6 +375,7 @@ pub struct Plugin {
     transports: BTreeMap<String, TransportRecord>,
     runtimes: BTreeMap<String, RuntimeRecord>,
     session_controls: BTreeMap<String, SessionControlRecord>,
+    file_release_discovery_claims: BTreeMap<String, FileReleaseDiscoveryClaim>,
 }
 
 impl Plugin {
@@ -382,6 +408,7 @@ pub struct PluginRegistry {
     transports: BTreeMap<String, TransportRecord>,
     runtimes: BTreeMap<String, RuntimeRecord>,
     session_controls: BTreeMap<String, SessionControlRecord>,
+    file_release_discovery_claims: BTreeMap<String, FileReleaseDiscoveryClaim>,
 }
 
 impl PluginRegistry {
@@ -412,6 +439,7 @@ impl PluginRegistry {
         let mut transports = BTreeMap::new();
         let mut runtimes = BTreeMap::new();
         let mut session_controls = BTreeMap::new();
+        let mut file_release_discovery_claims = BTreeMap::new();
 
         for plugin in by_id.values() {
             registered_provider_ids
@@ -472,6 +500,50 @@ impl PluginRegistry {
             }
         }
 
+        let enabled_system_ids: BTreeSet<String> =
+            systems.values().map(|record| record.id.clone()).collect();
+        for plugin_id in &enabled_plugin_ids {
+            let plugin = by_id
+                .get(plugin_id)
+                .expect("enabled plugin ids were validated above");
+            for claim in plugin.file_release_discovery_claims.values() {
+                validate_discovery_reference(
+                    &registered_system_ids,
+                    &claim.id,
+                    "system",
+                    &claim.system,
+                )?;
+                validate_discovery_reference(
+                    &registered_launcher_ids,
+                    &claim.id,
+                    "launcher",
+                    &claim.launcher,
+                )?;
+                if let Some(runtime) = &claim.runtime {
+                    validate_discovery_reference(
+                        &registered_runtime_ids,
+                        &claim.id,
+                        "runtime",
+                        runtime,
+                    )?;
+                }
+
+                let references_enabled = enabled_system_ids.contains(&claim.system)
+                    && launchers.contains_key(&claim.launcher)
+                    && claim
+                        .runtime
+                        .as_ref()
+                        .is_none_or(|runtime| runtimes.contains_key(runtime));
+                if references_enabled {
+                    insert_unique(
+                        &mut file_release_discovery_claims,
+                        claim.id.clone(),
+                        claim.clone(),
+                    )?;
+                }
+            }
+        }
+
         Ok(Self {
             plugins: by_id,
             enabled_plugin_ids,
@@ -487,6 +559,7 @@ impl PluginRegistry {
             transports,
             runtimes,
             session_controls,
+            file_release_discovery_claims,
         })
     }
 
@@ -553,6 +626,28 @@ impl PluginRegistry {
     pub fn session_controls(&self) -> &BTreeMap<String, SessionControlRecord> {
         &self.session_controls
     }
+
+    pub fn file_release_discovery_claims(&self) -> &BTreeMap<String, FileReleaseDiscoveryClaim> {
+        &self.file_release_discovery_claims
+    }
+
+    pub fn file_release_discovery_claims_for_extension(
+        &self,
+        extension: &str,
+    ) -> Vec<&FileReleaseDiscoveryClaim> {
+        let Ok(extension) = normalize_extension(extension) else {
+            return Vec::new();
+        };
+        self.file_release_discovery_claims
+            .values()
+            .filter(|claim| {
+                claim
+                    .extensions
+                    .iter()
+                    .any(|candidate| candidate == &extension)
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Error)]
@@ -577,6 +672,12 @@ pub enum PluginError {
     UnknownEnabledPlugin(String),
     #[error("duplicate contributed record id {0}")]
     DuplicateContribution(String),
+    #[error("discovery claim {claim_id} references unknown {kind} {referenced_id}")]
+    UnknownDiscoveryReference {
+        claim_id: String,
+        kind: &'static str,
+        referenced_id: String,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -599,6 +700,8 @@ struct PluginContributions {
     config: PluginConfigContributions,
     #[serde(default, rename = "sessionControls")]
     session_controls: BTreeMap<String, SessionControlRecord>,
+    #[serde(default)]
+    discovery: PluginDiscoveryContributions,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -614,6 +717,13 @@ struct PluginConfigContributions {
     transports: BTreeMap<String, TransportRecord>,
     #[serde(default)]
     runtimes: BTreeMap<String, RuntimeRecord>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PluginDiscoveryContributions {
+    #[serde(default)]
+    file_releases: BTreeMap<String, FileReleaseDiscoveryContribution>,
 }
 
 pub fn load_plugin_source(source: &str) -> Result<Plugin, PluginError> {
@@ -870,6 +980,70 @@ fn normalize_plugin(mut declaration: PluginDeclaration) -> Result<Plugin, Plugin
         control.local_id = local_id.clone();
     }
 
+    let mut file_release_discovery_claims = BTreeMap::new();
+    for (local_id, claim) in declaration.contributes.discovery.file_releases {
+        if local_id.is_empty() {
+            return Err(PluginError::EmptyContributionId {
+                kind: "discovery file release",
+            });
+        }
+        let expected_id = plugin_record_id(&id, &local_id);
+        if claim.id != expected_id {
+            return Err(PluginError::InvalidContribution {
+                kind: "discovery file release",
+                record_id: local_id,
+                reason: format!("record id {} must be {expected_id}", claim.id),
+            });
+        }
+        if claim.system.is_empty()
+            || claim.launcher.is_empty()
+            || claim.runtime.as_deref() == Some("")
+        {
+            return Err(PluginError::InvalidContribution {
+                kind: "discovery file release",
+                record_id: claim.id,
+                reason: "system, launcher, and runtime references must be non-empty".to_owned(),
+            });
+        }
+        let mut extensions = Vec::new();
+        let mut seen_extensions = BTreeSet::new();
+        for extension in claim.extensions {
+            let normalized = normalize_extension(&extension).map_err(|reason| {
+                PluginError::InvalidContribution {
+                    kind: "discovery file release",
+                    record_id: claim.id.clone(),
+                    reason,
+                }
+            })?;
+            if !seen_extensions.insert(normalized.clone()) {
+                return Err(PluginError::InvalidContribution {
+                    kind: "discovery file release",
+                    record_id: claim.id,
+                    reason: format!("duplicate normalized extension {normalized}"),
+                });
+            }
+            extensions.push(normalized);
+        }
+        if extensions.is_empty() {
+            return Err(PluginError::InvalidContribution {
+                kind: "discovery file release",
+                record_id: claim.id,
+                reason: "at least one extension is required".to_owned(),
+            });
+        }
+        file_release_discovery_claims.insert(
+            expected_id.clone(),
+            FileReleaseDiscoveryClaim {
+                id: expected_id,
+                title: claim.title,
+                extensions,
+                system: claim.system,
+                launcher: claim.launcher,
+                runtime: claim.runtime,
+            },
+        );
+    }
+
     Ok(Plugin {
         id,
         title,
@@ -880,7 +1054,25 @@ fn normalize_plugin(mut declaration: PluginDeclaration) -> Result<Plugin, Plugin
         transports: declaration.contributes.config.transports,
         runtimes: declaration.contributes.config.runtimes,
         session_controls: declaration.contributes.session_controls,
+        file_release_discovery_claims,
     })
+}
+
+fn validate_discovery_reference(
+    registered_ids: &BTreeSet<String>,
+    claim_id: &str,
+    kind: &'static str,
+    referenced_id: &str,
+) -> Result<(), PluginError> {
+    if registered_ids.contains(referenced_id) {
+        Ok(())
+    } else {
+        Err(PluginError::UnknownDiscoveryReference {
+            claim_id: claim_id.to_owned(),
+            kind,
+            referenced_id: referenced_id.to_owned(),
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1036,6 +1228,25 @@ fn is_provider_segment(value: &str) -> bool {
                 || character.is_ascii_digit()
                 || matches!(character, '.' | '_' | '-')
         })
+}
+
+fn normalize_extension(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    let normalized = trimmed
+        .strip_prefix('.')
+        .unwrap_or(trimmed)
+        .to_ascii_lowercase();
+    if normalized.is_empty() {
+        return Err("extension must not be empty".to_owned());
+    }
+    if normalized
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric())
+    {
+        Ok(normalized)
+    } else {
+        Err(format!("extension {value} contains unsupported characters"))
+    }
 }
 
 fn is_android_identifier(value: &str, allow_dollar: bool) -> bool {

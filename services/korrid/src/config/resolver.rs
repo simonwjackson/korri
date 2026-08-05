@@ -655,6 +655,7 @@ fn compose_contributions(snapshot: &ConfigSnapshot, registry: &PluginRegistry) -
                 SystemRecord {
                     id: id.clone(),
                     title: system.title.clone().or_else(|| system.name.clone()),
+                    aliases: system.aliases.clone(),
                 },
             );
         }

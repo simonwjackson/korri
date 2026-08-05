@@ -26,7 +26,9 @@ plugin file runs on every device: **source is portable where binaries are not.**
 The first bundled production source is `plugins/android-app.plugin.ts`. It is
 byte-for-byte pinned to the reviewed checkpoint copy under
 `docs/research/android-app-plugin-schema-checkpoint/`, and parity is part of the
-check suite so either copy changing alone fails.
+check suite so either copy changing alone fails. The mGBA production source is
+shared by the repository plugin path and the bundled korrid path so discovery
+and runtime declarations cannot drift.
 
 ## The sandbox is empty on purpose
 
@@ -41,14 +43,19 @@ itself to one machine by reaching for local resources.
 korrid strictly decodes evaluated declarations into the narrow legacy plugin
 seam proven by the Android application schema checkpoint. Bundled plugins are
 registered from repository-owned source, and generic policy layers keyed by
-plugin ID decide enablement. The built-in layer enables `@korri:android-app`, `@korri:mgba`, and
-`@korri:retroarch` by default; a later layer can disable any ID without changing
-registry code or adding an integration-specific switch.
+plugin ID decide enablement. The built-in layer enables `@korri:android-app`,
+`@korri:mgba`, and `@korri:retroarch` by default; a later layer can disable any
+ID without changing registry code or adding an integration-specific switch. The
+user policy layer is intentionally empty for these slices.
 
 An enabled plugin can contribute provider, system, launcher, transport, runtime,
-and contextual session-control records. Disabled plugins remain registered but
-contribute nothing while still reserving every declared identity, including
-control identities. Unsupported fields and explicit `null` values fail rather
+file-release discovery, and contextual session-control records. Disabled plugins
+remain registered but contribute nothing while still reserving every declared
+identity, including control identities. Discovery records are data-only extension
+claims that name existing system, launcher, and runtime records. They never
+receive filesystem handles or executable callbacks; the scanner performs
+traversal and asks the enabled registry which normalized file extensions are
+claimed. Unsupported declaration fields and explicit `null` values fail rather
 than disappearing. As in legacy, contribution keys retain the contributing
 plugin's identity; records retain strict schema IDs for route resolution.
 

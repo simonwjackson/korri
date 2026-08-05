@@ -63,9 +63,13 @@ fn enabled_retroarch_plugin_announces_only_its_launcher_component() {
 
 #[test]
 fn enabled_mgba_plugin_announces_its_system_and_runtime() {
-    let plugin = load_plugin_source(MGBA_PLUGIN).expect("mGBA plugin should load");
-    let registry = PluginRegistry::new(vec![plugin], vec!["@korri:mgba".to_owned()])
-        .expect("mGBA plugin should register");
+    let retroarch = load_plugin_source(RETROARCH_PLUGIN).expect("RetroArch plugin should load");
+    let mgba = load_plugin_source(MGBA_PLUGIN).expect("mGBA plugin should load");
+    let registry = PluginRegistry::new(
+        vec![retroarch, mgba],
+        vec!["@korri:retroarch".to_owned(), "@korri:mgba".to_owned()],
+    )
+    .expect("mGBA plugin should register");
 
     assert_eq!(
         registry
@@ -163,6 +167,99 @@ fn enabled_moonlight_plugin_declares_artemis_streaming_and_the_full_control_inve
             "@korri:moonlight/touch-sensitivity",
         ]
     );
+}
+
+#[test]
+fn plugin_system_aliases_follow_the_readable_system_shape() {
+    let plugin = decode_plugin_declaration(
+        r#"{
+          "namespace":"@korri",
+          "name":"other",
+          "contributes":{
+            "config":{
+              "systems":{
+                "gba":{"id":"gba","title":"Game Boy Advance","aliases":["game-boy-advance"]}
+              }
+            }
+          }
+        }"#,
+    )
+    .expect("system aliases should decode like readable systems");
+    let registry = PluginRegistry::new(vec![plugin], vec!["@korri:other".to_owned()])
+        .expect("plugin should register");
+
+    assert_eq!(
+        registry
+            .systems()
+            .get("@korri:other/gba")
+            .and_then(|system| system.aliases.as_deref()),
+        Some(&["game-boy-advance".to_owned()][..])
+    );
+}
+
+#[test]
+fn enabled_mgba_plugin_announces_gba_file_release_discovery_claim() {
+    let retroarch = load_plugin_source(RETROARCH_PLUGIN).expect("RetroArch plugin should load");
+    let mgba = load_plugin_source(MGBA_PLUGIN).expect("mGBA plugin should load");
+    let registry = PluginRegistry::new(
+        vec![retroarch, mgba],
+        vec!["@korri:retroarch".to_owned(), "@korri:mgba".to_owned()],
+    )
+    .expect("mGBA discovery claim should register");
+
+    let claims = registry.file_release_discovery_claims_for_extension(".GBA");
+    assert_eq!(claims.len(), 1);
+    let claim = claims[0];
+    assert_eq!(claim.id, "@korri:mgba/gba-files");
+    assert_eq!(claim.extensions, vec!["gba".to_owned()]);
+    assert_eq!(claim.system, "gba");
+    assert_eq!(claim.launcher, "@korri:retroarch/retroarch");
+    assert_eq!(claim.runtime.as_deref(), Some("@korri:mgba/mgba"));
+    assert!(registry
+        .file_release_discovery_claims_for_extension("nes")
+        .is_empty());
+}
+
+#[test]
+fn malformed_discovery_claims_fail_explicitly() {
+    let malformed_at_decode = [
+        MGBA_PLUGIN.replace(
+            "id: \"@korri:mgba/gba-files\"",
+            "id: \"@korri:retroarch/gba-files\"",
+        ),
+        MGBA_PLUGIN.replace("extensions: [\"gba\"]", "extensions: [\"gba\", \".GBA\"]"),
+        MGBA_PLUGIN.replace("extensions: [\"gba\"]", "extensions: []"),
+        MGBA_PLUGIN.replace(
+            "extensions: [\"gba\"]",
+            "extensions: [\"gba\"], discover: () => []",
+        ),
+    ];
+    for source in malformed_at_decode {
+        assert!(
+            load_plugin_source(&source).is_err(),
+            "malformed discovery declaration unexpectedly loaded: {source}"
+        );
+    }
+
+    for source in [
+        MGBA_PLUGIN.replace("system: \"gba\"", "system: \"gb\""),
+        MGBA_PLUGIN.replace(
+            "launcher: \"@korri:retroarch/retroarch\"",
+            "launcher: \"@korri:missing/retroarch\"",
+        ),
+        MGBA_PLUGIN.replace(
+            "runtime: \"@korri:mgba/mgba\"",
+            "runtime: \"@korri:missing/mgba\"",
+        ),
+    ] {
+        let retroarch = load_plugin_source(RETROARCH_PLUGIN).expect("RetroArch plugin should load");
+        let mgba = load_plugin_source(&source).expect("plugin shape should decode");
+        PluginRegistry::new(
+            vec![retroarch, mgba],
+            vec!["@korri:retroarch".to_owned(), "@korri:mgba".to_owned()],
+        )
+        .expect_err("unknown discovery route identities must reject the registry");
+    }
 }
 
 #[test]

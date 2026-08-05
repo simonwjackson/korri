@@ -21,6 +21,7 @@ const ENABLED_REPORT: &str = concat!(
     "launcher: @korri:android-app/android-app\n",
     "transport: none\n",
     "runtime: none\n",
+    "discovery: none\n",
     "session-control: none\n",
 );
 
@@ -34,6 +35,7 @@ const DISABLED_REPORT: &str = concat!(
     "launcher: none\n",
     "transport: none\n",
     "runtime: none\n",
+    "discovery: none\n",
     "session-control: none\n",
 );
 
@@ -47,6 +49,7 @@ const MGBA_ENABLED_REPORT: &str = concat!(
     "launcher: none\n",
     "transport: none\n",
     "runtime: @korri:mgba/mgba\n",
+    "discovery: @korri:mgba/gba-files\n",
     "session-control: none\n",
 );
 
@@ -61,6 +64,7 @@ const RETROARCH_ENABLED_REPORT: &str = concat!(
     "launcher: @korri:retroarch/retroarch\n",
     "transport: none\n",
     "runtime: none\n",
+    "discovery: none\n",
     "session-control: @korri:retroarch/open-menu\n",
     "session-control: @korri:retroarch/quit\n",
 );

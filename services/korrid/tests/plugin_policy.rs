@@ -50,6 +50,14 @@ fn bundled_policy_enables_first_party_android_plugins_by_default() {
         .launchers()
         .contains_key("@korri:retroarch/retroarch"));
     assert!(registry.runtimes().contains_key("@korri:mgba/mgba"));
+    assert_eq!(
+        registry
+            .file_release_discovery_claims()
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec!["@korri:mgba/gba-files"]
+    );
 }
 
 #[test]
@@ -83,6 +91,25 @@ fn later_user_policy_layer_disables_bundled_moonlight_normally() {
         .session_controls()
         .keys()
         .any(|id| id.starts_with("@korri:moonlight/")));
+}
+
+#[test]
+fn disabling_mgba_withholds_its_discovery_claim_but_not_retroarch_launcher() {
+    let plugins = bundled_plugins().expect("bundled plugins should load");
+    let enabled_ids = resolve_enabled_plugin_ids([
+        bundled_plugin_policy_layer(),
+        PluginPolicyLayer::from_enabled([("@korri:mgba", false)]),
+    ]);
+    let registry = PluginRegistry::new(plugins, enabled_ids)
+        .expect("disabled mGBA plugin should remain registered");
+
+    assert!(registry
+        .launchers()
+        .contains_key("@korri:retroarch/retroarch"));
+    assert!(registry
+        .file_release_discovery_claims_for_extension("gba")
+        .is_empty());
+    assert!(registry.owns_registered_runtime_id("@korri:mgba/mgba"));
 }
 
 #[test]
