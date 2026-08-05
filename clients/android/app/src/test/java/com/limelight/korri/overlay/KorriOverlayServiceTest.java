@@ -9,6 +9,7 @@ import org.robolectric.RobolectricTestRunner;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
@@ -99,20 +100,49 @@ public class KorriOverlayServiceTest {
     }
 
     @Test
-    public void ownAccessibilityWindowDoesNotBreakGuideClose() {
-        KorriOverlayService.StateMachine state = new KorriOverlayService.StateMachine(
-                "com.simonwjackson.korri");
-        state.updateSession(artemis(), true);
-        state.updateForeground("com.simonwjackson.korri", "com.limelight.Game");
-        state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN);
-        state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP);
-        assertTrue(state.isShowing());
+    public void measuredFrameLayoutEventIsOwnedWhileOverlayIsShowing() {
+        KorriOverlayService.StateMachine state = openOverlay();
 
-        state.updateForeground("com.simonwjackson.korri", KorriOverlayService.class.getName());
+        assertTrue(state.ownsVisibleOverlayForeground("com.simonwjackson.korri"));
+        assertNull(state.updateForeground(
+                "com.simonwjackson.korri", "android.widget.FrameLayout"));
+        assertTrue(state.isShowing());
+        assertTrue(state.hasMatchedLaunch(LAUNCH));
+    }
+
+    @Test
+    public void guideReleaseClosesAfterOwnOverlayForegroundEvent() {
+        KorriOverlayService.StateMachine state = openOverlay();
+        state.updateForeground("com.simonwjackson.korri", "android.widget.FrameLayout");
+
         assertTrue(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN));
         assertTrue(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP));
         assertFalse(state.isShowing());
         assertEquals(2, state.toggleCount());
+    }
+
+    @Test
+    public void launcherForegroundEventStillSuspendsAndHidesVisibleOverlay() {
+        KorriOverlayService.StateMachine state = openOverlay();
+
+        assertFalse(state.ownsVisibleOverlayForeground("com.sec.android.app.launcher"));
+        assertEquals(LAUNCH, state.updateForeground(
+                "com.sec.android.app.launcher", "com.android.launcher3.Launcher"));
+        assertFalse(state.isShowing());
+        assertFalse(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN));
+    }
+
+    @Test
+    public void shellForegroundMismatchesNormallyAfterOverlayDismissal() {
+        KorriOverlayService.StateMachine state = openOverlay();
+        state.updateForeground("com.simonwjackson.korri", "android.widget.FrameLayout");
+        state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN);
+        state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP);
+
+        assertFalse(state.ownsVisibleOverlayForeground("com.simonwjackson.korri"));
+        assertEquals(LAUNCH, state.updateForeground(
+                "com.simonwjackson.korri", "com.limelight.KorriShellActivity"));
+        assertFalse(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN));
     }
 
     @Test
@@ -192,5 +222,16 @@ public class KorriOverlayServiceTest {
 
         assertFalse(state.onKey(KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_DOWN));
         assertFalse(state.onKey(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.ACTION_DOWN));
+    }
+
+    private static KorriOverlayService.StateMachine openOverlay() {
+        KorriOverlayService.StateMachine state = new KorriOverlayService.StateMachine(
+                "com.simonwjackson.korri");
+        state.updateSession(artemis(), true);
+        state.updateForeground("com.simonwjackson.korri", "com.limelight.Game");
+        state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN);
+        state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP);
+        assertTrue(state.isShowing());
+        return state;
     }
 }

@@ -66,13 +66,12 @@ public final class KorriOverlayService extends AccessibilityService {
         KorriActiveLaunch observedLaunch = syncSession();
         String packageName = event.getPackageName().toString();
         String className = event.getClassName() == null ? null : event.getClassName().toString();
+        boolean ownedOverlayForeground = state.ownsVisibleOverlayForeground(packageName);
         String suspendedLaunchId = state.updateForeground(packageName, className);
         if (suspendedLaunchId != null) {
             KorriBrainService.suspendOverlay(suspendedLaunchId);
         }
-        if (continuity != null
-                && !(getPackageName().equals(packageName)
-                        && KorriOverlayService.class.getName().equals(className))) {
+        if (continuity != null && !ownedOverlayForeground) {
             continuity.updateForeground(packageName, className);
         }
         if (observedLaunch == null) {
@@ -146,13 +145,18 @@ public final class KorriOverlayService extends AccessibilityService {
             }
         }
 
+        /** The U5 window host drives this same seam after real show/hide operations. */
+        public void updateOverlayVisibility(boolean visible) {
+            if (!visible || !destroyed) showing = visible;
+        }
+
+        public boolean ownsVisibleOverlayForeground(String packageName) {
+            return showing && servicePackage.equals(packageName);
+        }
+
         /** Returns the exact launch newly suspended by foreground discontinuity. */
         public String updateForeground(String packageName, String className) {
-            if (showing
-                    && servicePackage.equals(packageName)
-                    && KorriOverlayService.class.getName().equals(className)) {
-                return null;
-            }
+            if (ownsVisibleOverlayForeground(packageName)) return null;
             boolean wasMatchedForeground = isForegroundMatch()
                     && launch != null
                     && launch.launchId().equals(matchedLaunchId);
@@ -190,7 +194,7 @@ public final class KorriOverlayService extends AccessibilityService {
                 if (guideOwned) {
                     guideOwned = false;
                     if (!canceled && active) {
-                        showing = !showing;
+                        updateOverlayVisibility(!showing);
                         toggleCount++;
                     }
                 }
@@ -212,7 +216,7 @@ public final class KorriOverlayService extends AccessibilityService {
         }
 
         public void interrupt() {
-            showing = false;
+            updateOverlayVisibility(false);
             guideOwned = false;
         }
 
@@ -239,7 +243,7 @@ public final class KorriOverlayService extends AccessibilityService {
         }
 
         private void hide() {
-            showing = false;
+            updateOverlayVisibility(false);
         }
     }
 }
