@@ -515,61 +515,48 @@ fi
 # hide a pre-existing Game/RetroArch activity and would invalidate preflight.
 assert_pristine_gate_state
 
-# Deeper debug acceptance reads the bridge directly through WebView inspection;
-# no secret crosses logcat. Prior logcat is retained and filtered to the exact
-# existing Korri process before candidate endpoints are authenticated.
-capability="${KORRI_ANDROID_DEBUG_CAPABILITY:-}"
-if [[ -z "$capability" ]]; then
-  capability="$("$DEBUG_CAPABILITY_SH" "$SERIAL" "$KORRI_PACKAGE")"
+# Atomically read the live port and capability from exactly one trusted main
+# portal DevTools target. Neither value is recovered from historical logcat.
+authority_json="${KORRI_ANDROID_DEBUG_AUTHORITY_JSON:-}"
+if [[ -z "$authority_json" ]]; then
+  authority_json="$("$DEBUG_CAPABILITY_SH" "$SERIAL" "$KORRI_PACKAGE" --json)"
 fi
-port=''
+jq -e '
+  type == "object" and (keys == ["capability", "port"])
+  and (.port | type == "number" and floor == . and . >= 1 and . <= 65535)
+  and (.capability | type == "string" and test("^[0-9a-f]{64}$"))
+' <<<"$authority_json" >/dev/null || {
+  echo 'Debug authority helper returned an invalid current authority.' >&2
+  exit 1
+}
+port="$(jq -er '.port' <<<"$authority_json")"
+capability="$(jq -er '.capability' <<<"$authority_json")"
 discover_live_korri_authority() {
-  local logs=''
-  local portal_ready=''
-  local candidate=''
   local health=''
-  local -a candidates=()
-
-  logs="$("${ADB[@]}" logcat -d --pid="$existing_korri_pid" -s KorridServer:I KorriPortal:I 2>/dev/null)" || return 1
-  portal_ready="$(grep 'title="Korri"' <<<"$logs" | tail -1)" || return 1
-  [[ -n "$portal_ready" ]] || return 1
-  mapfile -t candidates < <(
-    sed -n 's/.*listening on 127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p' <<<"$logs" \
-      | tac | awk '!seen[$0]++'
-  )
-  for candidate in "${candidates[@]}"; do
-    [[ "$candidate" =~ ^[0-9]+$ && "$candidate" -ge 1024 && "$candidate" -le 65535 ]] || continue
-    "${ADB[@]}" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
-    "${ADB[@]}" forward "tcp:$HOST_PORT" "tcp:$candidate" >/dev/null || continue
-    FORWARD_ACTIVE=true
-    if ! health="$(curl --fail --silent --show-error \
-      --connect-timeout 2 --max-time 5 \
-      -H 'content-type: application/json' \
-      -H "authorization: Bearer $capability" \
-      -d '{"_tag":"system.health","payload":{}}' \
-      "http://127.0.0.1:$HOST_PORT/rpc" 2>/dev/null)"; then
-      "${ADB[@]}" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
-      FORWARD_ACTIVE=false
-      continue
-    fi
-    if jq -e '
-      ._tag == "system.health"
-      and .outcome._tag == "Ok"
-      and (.outcome.payload.version | type == "string" and length > 0)
-    ' <<<"$health" >/dev/null 2>&1; then
-      port="$candidate"
-      return 0
-    fi
+  "${ADB[@]}" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
+  "${ADB[@]}" forward "tcp:$HOST_PORT" "tcp:$port" >/dev/null || return 1
+  FORWARD_ACTIVE=true
+  if ! health="$(curl --fail --silent --show-error \
+    --connect-timeout 2 --max-time 5 \
+    -H 'content-type: application/json' \
+    -H "authorization: Bearer $capability" \
+    -d '{"_tag":"system.health","payload":{}}' \
+    "http://127.0.0.1:$HOST_PORT/rpc" 2>/dev/null)"; then
     "${ADB[@]}" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
     FORWARD_ACTIVE=false
-  done
-  return 1
+    return 1
+  fi
+  jq -e '
+    ._tag == "system.health"
+    and .outcome._tag == "Ok"
+    and (.outcome.payload.version | type == "string" and length > 0)
+  ' <<<"$health" >/dev/null 2>&1 || {
+    "${ADB[@]}" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
+    FORWARD_ACTIVE=false
+    return 1
+  }
 }
-for _ in $(seq 1 30); do
-  discover_live_korri_authority && break
-  sleep 1
-done
-[[ -n "$port" ]] || {
+discover_live_korri_authority || {
   echo 'No live Korri brain/portal authority could be safely discovered and validated.' >&2
   echo 'Open Korri normally, leave its Shell visible, and rerun; do not force-stop, reinstall, or clear Korri.' >&2
   exit 1

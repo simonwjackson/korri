@@ -14,6 +14,7 @@ RETROARCH_ACCEPTANCE="$ROOT/plugins/retroarch/android/device-acceptance.sh"
 KORRI_SHELL="$ROOT/clients/android/app/src/main/java/com/limelight/KorriShellActivity.java"
 ANDROID_GAME="$ROOT/clients/android/app/src/main/java/com/limelight/Game.java"
 OVERLAY_SERVICE="$ROOT/clients/android/app/src/main/java/com/limelight/korri/overlay/KorriOverlayService.java"
+DEBUG_AUTHORITY="$CRATE/android-debug-capability.sh"
 DEBUG_PORTAL_RELOAD="$CRATE/android-debug-reload-portal.sh"
 DEBUG_PORTAL_FOCUS_GAME="$CRATE/android-debug-focus-portal-game.sh"
 
@@ -33,6 +34,7 @@ unset \
   KORRI_ANDROID_APP_ROUTE_JOURNEY_SH \
   KORRI_ANDROID_APP_ROUTE_SMOKE_SH \
   KORRI_ANDROID_DEVICE \
+  KORRI_ANDROID_DEBUG_AUTHORITY_JSON \
   KORRI_ANDROID_DEBUG_CAPABILITY \
   KORRI_ANDROID_DEBUG_PORTAL_RELOAD_SH \
   KORRI_ANDROID_DEBUG_PORTAL_FOCUS_GAME_SH \
@@ -43,18 +45,44 @@ unset \
   KORRI_TESSERACT_BIN \
   SHOTS
 
-# Child gates exercise their authenticated assertions with a deterministic
-# test-only value rather than recovering one from the fake logcat stream.
+# Child gates exercise authenticated assertions with a deterministic atomic
+# authority rather than recovering a port from fake or historical logcat.
+export KORRI_ANDROID_DEBUG_AUTHORITY_JSON='{"port":43210,"capability":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
 export KORRI_ANDROID_DEBUG_CAPABILITY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$JOURNEY_RESUME" \
   "$OVERLAY_ACCEPTANCE" "$RETROARCH_ACCEPTANCE" \
   "$CRATE/android-debug-capability.sh" "$CRATE/android-debug-reload-portal.sh" \
   "$CRATE/android-debug-focus-portal-game.sh" \
+  "$CRATE/test-android-debug-capability.sh" \
   "$CRATE/test-android-debug-reload-portal.sh" \
   "$CRATE/test-android-debug-focus-portal-game.sh"
+"$CRATE/test-android-debug-capability.sh"
 "$CRATE/test-android-debug-reload-portal.sh"
 "$CRATE/test-android-debug-focus-portal-game.sh"
+grep -F "https://appassets.androidplatform.net/assets/portal/index.html" "$DEBUG_AUTHORITY" >/dev/null
+grep -F '({port: KorriNative.korridPort(), capability: KorriNative.korridCapability()})' "$DEBUG_AUTHORITY" >/dev/null
+grep -F 'keys == ["capability", "port"]' "$DEBUG_AUTHORITY" >/dev/null
+grep -F 'test("^[0-9a-f]{64}$")' "$DEBUG_AUTHORITY" >/dev/null
+if grep -Eq 'logcat|KorridServer|KorriPortal' "$DEBUG_AUTHORITY"; then
+  echo 'debug authority must not depend on logcat readiness or port history' >&2
+  exit 1
+fi
+for acceptance in "$OVERLAY_ACCEPTANCE" "$RETROARCH_ACCEPTANCE"; do
+  grep -F 'KORRI_ANDROID_DEBUG_AUTHORITY_JSON' "$acceptance" >/dev/null
+  # shellcheck disable=SC2016 # Literal source-contract needle.
+  grep -F -- '"$DEBUG_CAPABILITY_SH" "$SERIAL" "$KORRI_PACKAGE" --json' "$acceptance" >/dev/null
+  discovery_source="$(sed -n '/^discover_live_korri_authority() {/,/^}/p' "$acceptance")"
+  if grep -Eq 'logcat|KorridServer|KorriPortal|listening on 127' <<<"$discovery_source"; then
+    echo "authority discovery must not depend on historical logcat: $acceptance" >&2
+    exit 1
+  fi
+  # shellcheck disable=SC2016 # Literal source-contract pattern.
+  if grep -Eq '(echo|printf)[^[:cntrl:]]*\$(authority_json|CAPABILITY|capability)' "$acceptance"; then
+    echo "acceptance must never print its debug authority: $acceptance" >&2
+    exit 1
+  fi
+done
 grep -F "https://appassets.androidplatform.net/assets/portal/index.html" "$DEBUG_PORTAL_RELOAD" >/dev/null
 grep -F "expected exactly one bundled main Korri portal page" "$DEBUG_PORTAL_RELOAD" >/dev/null
 grep -F "performance.timeOrigin" "$DEBUG_PORTAL_RELOAD" >/dev/null

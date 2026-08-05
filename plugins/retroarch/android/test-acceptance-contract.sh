@@ -119,10 +119,14 @@ if sed '/^[[:space:]]*#/d' "$ACCEPTANCE" \
   echo 'RetroArch acceptance must never stop or kill Korri after the user-owned grant' >&2
   exit 1
 fi
-if grep -Eq 'logcat[[:space:]]+-c' "$ACCEPTANCE"; then
-  echo 'RetroArch acceptance must retain prior logcat while discovering the live authority' >&2
+discovery_source="$(sed -n '/^discover_live_korri_authority() {/,/^}/p' "$ACCEPTANCE")"
+if grep -Eq 'logcat|KorridServer|KorriPortal|listening on 127' <<<"$discovery_source"; then
+  echo 'RetroArch authority discovery must not depend on historical logcat' >&2
   exit 1
 fi
+grep -F 'KORRI_ANDROID_DEBUG_AUTHORITY_JSON' "$ACCEPTANCE" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F -- '"$DEBUG_CAPABILITY_SH" "$SERIAL" "$KORRI_PACKAGE" --json' "$ACCEPTANCE" >/dev/null
 if grep -Eq 'settings (put|delete) secure (enabled_accessibility_services|accessibility_enabled)' "$ACCEPTANCE"; then
   echo 'RetroArch acceptance must not modify Android accessibility settings' >&2
   exit 1

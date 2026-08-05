@@ -438,42 +438,38 @@ rpc() {
 }
 
 discover_live_korri_authority() {
-  local logs
-  local portal_ready
-  local candidate
+  local authority_json
+  local port
   local health
-  local -a candidates=()
 
-  logs="$(adb_shell "logcat -d --pid='$KORRI_PID' -s KorridServer:I KorriPortal:I")" || return 1
-  portal_ready="$(grep 'title="Korri"' <<<"$logs" | tail -1)" || return 1
-  [[ -n "$portal_ready" ]] || return 1
-  mapfile -t candidates < <(
-    sed -n 's/.*listening on 127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p' <<<"$logs" \
-      | tac | awk '!seen[$0]++'
-  )
-  CAPABILITY="${KORRI_ANDROID_DEBUG_CAPABILITY:-}"
-  [[ -n "$CAPABILITY" ]] || CAPABILITY="$($DEBUG_CAPABILITY_SH "$SERIAL" "$KORRI_PACKAGE")"
-  for candidate in "${candidates[@]}"; do
-    [[ "$candidate" =~ ^[0-9]+$ && "$candidate" -ge 1024 && "$candidate" -le 65535 ]] || continue
-    adb_target -s "$SERIAL" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
-    adb_target -s "$SERIAL" forward "tcp:$HOST_PORT" "tcp:$candidate" >/dev/null || continue
-    FORWARD_ACTIVE=true
-    if ! health="$(rpc '{"_tag":"system.health","payload":{}}')"; then
-      adb_target -s "$SERIAL" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
-      FORWARD_ACTIVE=false
-      continue
-    fi
-    if jq -e '
-      ._tag == "system.health"
-      and .outcome._tag == "Ok"
-      and (.outcome.payload.version | type == "string" and length > 0)
-    ' <<<"$health" >/dev/null; then
-      return 0
-    fi
+  # Bind the port and capability from one evaluation in exactly one trusted
+  # main portal. Historical readiness records are neither required nor consulted.
+  authority_json="${KORRI_ANDROID_DEBUG_AUTHORITY_JSON:-}"
+  [[ -n "$authority_json" ]] || authority_json="$("$DEBUG_CAPABILITY_SH" "$SERIAL" "$KORRI_PACKAGE" --json)"
+  jq -e '
+    type == "object" and (keys == ["capability", "port"])
+    and (.port | type == "number" and floor == . and . >= 1 and . <= 65535)
+    and (.capability | type == "string" and test("^[0-9a-f]{64}$"))
+  ' <<<"$authority_json" >/dev/null || return 1
+  port="$(jq -er '.port' <<<"$authority_json")"
+  CAPABILITY="$(jq -er '.capability' <<<"$authority_json")"
+  adb_target -s "$SERIAL" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
+  adb_target -s "$SERIAL" forward "tcp:$HOST_PORT" "tcp:$port" >/dev/null || return 1
+  FORWARD_ACTIVE=true
+  if ! health="$(rpc '{"_tag":"system.health","payload":{}}')"; then
     adb_target -s "$SERIAL" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
     FORWARD_ACTIVE=false
-  done
-  return 1
+    return 1
+  fi
+  jq -e '
+    ._tag == "system.health"
+    and .outcome._tag == "Ok"
+    and (.outcome.payload.version | type == "string" and length > 0)
+  ' <<<"$health" >/dev/null || {
+    adb_target -s "$SERIAL" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
+    FORWARD_ACTIVE=false
+    return 1
+  }
 }
 
 session_is_idle() {

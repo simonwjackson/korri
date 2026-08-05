@@ -1,5 +1,5 @@
 #!/usr/bin/env nix-shell
-#! nix-shell -i bash -p bash coreutils curl gnugrep gnused android-tools unzip jq
+#! nix-shell -i bash -p bash coreutils curl gnugrep gnused android-tools unzip jq websocat
 # shellcheck shell=bash
 # Install the built APK and call Rust Axum over adb forward.
 set -euo pipefail
