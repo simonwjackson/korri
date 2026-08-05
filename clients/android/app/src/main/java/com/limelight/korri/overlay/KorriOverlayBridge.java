@@ -38,6 +38,7 @@ public final class KorriOverlayBridge {
     }
 
     public interface Commands {
+        void ready();
         void dismiss();
         String authorizeInstruction(String instructionJson);
     }
@@ -115,6 +116,11 @@ public final class KorriOverlayBridge {
             String type = message.getString("type");
             switch (type) {
                 case "ready":
+                    if (message.length() == 1) {
+                        commands.ready();
+                        sendAuthority();
+                    }
+                    return;
                 case "refresh-authority":
                     if (message.length() == 1) sendAuthority();
                     return;

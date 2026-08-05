@@ -106,7 +106,8 @@ public class KorriOverlayServiceTest {
     public void measuredFrameLayoutEventIsOwnedWhileOverlayIsShowing() {
         KorriOverlayService.StateMachine state = openOverlay();
 
-        assertTrue(state.ownsVisibleOverlayForeground("com.simonwjackson.korri"));
+        assertTrue(state.ownsVisibleOverlayForeground(
+                "com.simonwjackson.korri", "android.widget.FrameLayout"));
         assertNull(state.updateForeground(
                 "com.simonwjackson.korri", "android.widget.FrameLayout"));
         assertTrue(state.isShowing());
@@ -128,11 +129,33 @@ public class KorriOverlayServiceTest {
     public void launcherForegroundEventStillSuspendsAndHidesVisibleOverlay() {
         KorriOverlayService.StateMachine state = openOverlay();
 
-        assertFalse(state.ownsVisibleOverlayForeground("com.sec.android.app.launcher"));
+        assertFalse(state.ownsVisibleOverlayForeground(
+                "com.sec.android.app.launcher", "com.android.launcher3.Launcher"));
         assertEquals(LAUNCH, state.updateForeground(
                 "com.sec.android.app.launcher", "com.android.launcher3.Launcher"));
         assertFalse(state.isShowing());
         assertFalse(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN));
+    }
+
+    @Test
+    public void shellActivityIsNeverOwnedEvenWhileOverlayIsVisible() {
+        KorriOverlayService.StateMachine state = openOverlay();
+
+        assertFalse(state.ownsVisibleOverlayForeground(
+                "com.simonwjackson.korri", "com.limelight.KorriShellActivity"));
+        assertEquals(LAUNCH, state.updateForeground(
+                "com.simonwjackson.korri", "com.limelight.KorriShellActivity"));
+        assertFalse(state.isShowing());
+    }
+
+    @Test
+    public void unknownSamePackageClassFailsClosedWhileOverlayIsVisible() {
+        KorriOverlayService.StateMachine state = openOverlay();
+
+        assertFalse(state.ownsVisibleOverlayForeground(
+                "com.simonwjackson.korri", "com.simonwjackson.korri.UnknownWindow"));
+        assertEquals(LAUNCH, state.updateForeground(
+                "com.simonwjackson.korri", "com.simonwjackson.korri.UnknownWindow"));
     }
 
     @Test
@@ -142,7 +165,8 @@ public class KorriOverlayServiceTest {
         state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN);
         state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP);
 
-        assertFalse(state.ownsVisibleOverlayForeground("com.simonwjackson.korri"));
+        assertFalse(state.ownsVisibleOverlayForeground(
+                "com.simonwjackson.korri", "com.limelight.KorriShellActivity"));
         assertEquals(LAUNCH, state.updateForeground(
                 "com.simonwjackson.korri", "com.limelight.KorriShellActivity"));
         assertFalse(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN));
@@ -229,27 +253,27 @@ public class KorriOverlayServiceTest {
 
     @Test
     public void showingOverlayConsumesAndSemanticallyTranslatesEveryOwnedInput() throws Exception {
-        assertInput(KeyEvent.KEYCODE_DPAD_UP,
+        KorriOverlayService.OverlayInput input = new KorriOverlayService.OverlayInput();
+        assertInput(input, KeyEvent.KEYCODE_DPAD_UP,
                 "{\"type\":\"direction\",\"direction\":\"up\",\"source\":\"gamepad\"}",
                 false);
-        assertInput(KeyEvent.KEYCODE_DPAD_RIGHT,
+        assertInput(input, KeyEvent.KEYCODE_DPAD_RIGHT,
                 "{\"type\":\"direction\",\"direction\":\"right\","
                         + "\"repeat\":true,\"source\":\"gamepad\"}",
                 false, 3);
-        assertInput(KeyEvent.KEYCODE_BUTTON_A,
+        assertInput(input, KeyEvent.KEYCODE_BUTTON_A,
                 "{\"type\":\"confirm\",\"source\":\"gamepad\"}", false);
-        assertInput(KeyEvent.KEYCODE_BACK,
+        assertInput(input, KeyEvent.KEYCODE_BACK,
                 "{\"type\":\"back\",\"source\":\"gamepad\"}", true);
-        assertInput(KeyEvent.KEYCODE_BUTTON_B,
+        assertInput(input, KeyEvent.KEYCODE_BUTTON_B,
                 "{\"type\":\"back\",\"source\":\"gamepad\"}", true);
-        assertInput(KeyEvent.KEYCODE_BUTTON_START,
+        assertInput(input, KeyEvent.KEYCODE_BUTTON_START,
                 "{\"type\":\"menu\",\"source\":\"gamepad\"}", false);
-        assertInput(KeyEvent.KEYCODE_BUTTON_SELECT,
+        assertInput(input, KeyEvent.KEYCODE_BUTTON_SELECT,
                 "{\"type\":\"options\",\"source\":\"gamepad\"}", false);
 
-        KorriOverlayService.OverlayInput.Decision release =
-                KorriOverlayService.OverlayInput.route(
-                        KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_UP, 0, true);
+        KorriOverlayService.OverlayInput.Decision release = input.route(
+                        1, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_UP, 0, true, false);
         assertTrue(release.consumed());
         assertNull(release.inputJson());
         assertFalse(release.dismiss());
@@ -258,11 +282,120 @@ public class KorriOverlayServiceTest {
     @Test
     public void removedOverlayPassesGameplayInputThrough() {
         KorriOverlayService.OverlayInput.Decision decision =
-                KorriOverlayService.OverlayInput.route(
-                        KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.ACTION_DOWN, 0, false);
+                new KorriOverlayService.OverlayInput().route(
+                        1, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.ACTION_DOWN,
+                        0, false, false);
         assertFalse(decision.consumed());
         assertNull(decision.inputJson());
         assertFalse(decision.dismiss());
+    }
+
+    @Test
+    public void heldPreOverlayKeyRemainsUnownedThroughRepeatAndRelease() {
+        KorriOverlayService.OverlayInput input = new KorriOverlayService.OverlayInput();
+
+        assertFalse(input.route(7, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_DOWN,
+                0, false, false).consumed());
+        assertFalse(input.route(7, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_DOWN,
+                1, true, false).consumed());
+        assertFalse(input.route(7, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_UP,
+                0, true, false).consumed());
+    }
+
+    @Test
+    public void ownedKeyReleaseRemainsConsumedAfterOverlayCloses() {
+        KorriOverlayService.OverlayInput input = new KorriOverlayService.OverlayInput();
+
+        assertTrue(input.route(7, KeyEvent.KEYCODE_BACK, KeyEvent.ACTION_DOWN,
+                0, true, false).dismiss());
+        KorriOverlayService.OverlayInput.Decision release = input.route(
+                7, KeyEvent.KEYCODE_BACK, KeyEvent.ACTION_UP, 0, false, false);
+
+        assertTrue(release.consumed());
+        assertFalse(release.dismiss());
+        assertFalse(input.route(7, KeyEvent.KEYCODE_BACK, KeyEvent.ACTION_UP,
+                0, false, false).consumed());
+    }
+
+    @Test
+    public void ownershipIsPerDeviceAndConfirmRepeatHasNoDuplicateSemanticAction() {
+        KorriOverlayService.OverlayInput input = new KorriOverlayService.OverlayInput();
+        assertTrue(input.route(7, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_DOWN,
+                0, true, false).consumed());
+
+        KorriOverlayService.OverlayInput.Decision repeat = input.route(
+                7, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_DOWN, 2, true, false);
+        assertTrue(repeat.consumed());
+        assertNull(repeat.inputJson());
+        assertFalse(input.route(8, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_UP,
+                0, true, false).consumed());
+        assertTrue(input.route(7, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_UP,
+                0, false, true).consumed());
+    }
+
+    @Test
+    public void factoryFailureAfterAttachCleansEveryResourceInReverseOnce() {
+        KorriOverlayService.OverlayResources resources =
+                new KorriOverlayService.OverlayResources();
+        List<String> cleanup = new ArrayList<>();
+        resources.add(() -> cleanup.add("web"));
+        resources.add(() -> cleanup.add("root"));
+
+        resources.destroy();
+        resources.destroy();
+
+        assertEquals(java.util.Arrays.asList("root", "web"), cleanup);
+        assertTrue(resources.isDestroyed());
+    }
+
+    @Test
+    public void neverReadyAndFatalBootstrapFailuresReturnInputOnce() {
+        final Runnable[] scheduled = new Runnable[1];
+        final int[] cancelCount = { 0 };
+        final int[] fatalCount = { 0 };
+        KorriOverlayService.BootstrapGuard timeout = new KorriOverlayService.BootstrapGuard(
+                callback -> {
+                    scheduled[0] = callback;
+                    return () -> cancelCount[0]++;
+                },
+                () -> fatalCount[0]++);
+        timeout.start();
+
+        scheduled[0].run();
+        timeout.fail();
+        timeout.destroy();
+
+        assertEquals(1, fatalCount[0]);
+        assertEquals(1, cancelCount[0]);
+    }
+
+    @Test
+    public void readyCancelsBootstrapTimeoutWithoutHiding() {
+        final int[] cancelCount = { 0 };
+        final int[] fatalCount = { 0 };
+        KorriOverlayService.BootstrapGuard bootstrap =
+                new KorriOverlayService.BootstrapGuard(
+                        callback -> () -> cancelCount[0]++,
+                        () -> fatalCount[0]++);
+        bootstrap.start();
+
+        bootstrap.ready();
+        bootstrap.fail();
+
+        assertEquals(1, cancelCount[0]);
+        assertEquals(0, fatalCount[0]);
+    }
+
+    @Test
+    public void productionWebViewTreatsMainFrameAndRendererLossAsFatal() throws Exception {
+        String source = new String(java.nio.file.Files.readAllBytes(
+                java.nio.file.Path.of(
+                        "src/main/java/com/limelight/korri/overlay/KorriOverlayService.java")),
+                java.nio.charset.StandardCharsets.UTF_8);
+
+        assertTrue(source.contains("if (request.isForMainFrame()) fatal.run()"));
+        assertTrue(source.contains("onRenderProcessGone"));
+        assertTrue(source.contains("fatal.run();\n            return true;"));
     }
 
     @Test
@@ -292,15 +425,20 @@ public class KorriOverlayServiceTest {
         assertFalse(windows.isVisible());
     }
 
-    private static void assertInput(int keyCode, String json, boolean dismiss) {
-        assertInput(keyCode, json, dismiss, 0);
+    private static void assertInput(
+            KorriOverlayService.OverlayInput input,
+            int keyCode, String json, boolean dismiss) {
+        assertInput(input, keyCode, json, dismiss, 0);
     }
 
     private static void assertInput(
+            KorriOverlayService.OverlayInput input,
             int keyCode, String json, boolean dismiss, int repeatCount) {
-        KorriOverlayService.OverlayInput.Decision decision =
-                KorriOverlayService.OverlayInput.route(
-                        keyCode, KeyEvent.ACTION_DOWN, repeatCount, true);
+        if (repeatCount > 0) {
+            input.route(1, keyCode, KeyEvent.ACTION_DOWN, 0, true, false);
+        }
+        KorriOverlayService.OverlayInput.Decision decision = input.route(
+                1, keyCode, KeyEvent.ACTION_DOWN, repeatCount, true, false);
         assertTrue(decision.consumed());
         assertEquals(json, decision.inputJson());
         assertEquals(dismiss, decision.dismiss());

@@ -12,6 +12,8 @@ import android.view.KeyEvent;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
+import android.webkit.RenderProcessGoneDetail;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -29,18 +31,25 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /** Production session scope, input edge, and global gameplay-overlay window. */
 public final class KorriOverlayService extends AccessibilityService {
     private static final long LIVENESS_CHECK_DELAY_MS = 500;
     private static final int MAX_LIVENESS_CHECKS = 8;
+    private static final long OVERLAY_READY_TIMEOUT_MS = 10_000;
 
     private StateMachine state;
     private KorriLaunchContinuity continuity;
     private KorriActiveSessionMonitor sessionMonitor;
     private WindowController windowController;
+    private final OverlayInput overlayInput = new OverlayInput();
 
     @Override
     protected void onServiceConnected() {
@@ -86,8 +95,9 @@ public final class KorriOverlayService extends AccessibilityService {
             return consumed;
         }
 
-        OverlayInput.Decision decision = OverlayInput.route(
-                event.getKeyCode(), event.getAction(), event.getRepeatCount(), state.isShowing());
+        OverlayInput.Decision decision = overlayInput.route(
+                event.getDeviceId(), event.getKeyCode(), event.getAction(),
+                event.getRepeatCount(), state.isShowing(), event.isCanceled());
         if (!decision.consumed()) return false;
         if (decision.inputJson() != null && windowController != null) {
             windowController.sendInput(decision.inputJson());
@@ -107,7 +117,8 @@ public final class KorriOverlayService extends AccessibilityService {
         KorriActiveLaunch observedLaunch = syncSession();
         String packageName = event.getPackageName().toString();
         String className = event.getClassName() == null ? null : event.getClassName().toString();
-        boolean ownedOverlayForeground = state.ownsVisibleOverlayForeground(packageName);
+        boolean ownedOverlayForeground =
+                state.ownsVisibleOverlayForeground(packageName, className);
         String suspendedLaunchId = state.updateForeground(packageName, className);
         reconcileWindow();
         if (suspendedLaunchId != null) {
@@ -140,6 +151,8 @@ public final class KorriOverlayService extends AccessibilityService {
         continuity = null;
         windowController = null;
         super.onDestroy();
+        // Accessibility input callbacks cannot follow service destruction.
+        overlayInput.destroy();
     }
 
     private KorriActiveLaunch syncSession() {
@@ -168,84 +181,107 @@ public final class KorriOverlayService extends AccessibilityService {
 
     @SuppressLint("SetJavaScriptEnabled")
     private OverlayWindow createOverlayWindow() throws Exception {
-        WindowManager windows = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
-        FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.TRANSPARENT);
-        WebView web = new WebView(this);
-        web.setBackgroundColor(Color.TRANSPARENT);
-        configureWebView(web);
+        OverlayResources resources = new OverlayResources();
+        try {
+            WindowManager windows = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+            FrameLayout root = new FrameLayout(this);
+            root.setBackgroundColor(Color.TRANSPARENT);
+            resources.add(root::removeAllViews);
 
-        WebViewAssetLoader assets = new WebViewAssetLoader.Builder()
-                .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
-                .build();
-        KorriOverlayBridge bridge = new KorriOverlayBridge(
-                KorriBrainService::overlayAuthority,
-                new KorriOverlayBridge.Commands() {
-                    @Override
-                    public void dismiss() {
-                        dismissOverlay();
-                    }
+            WebView web = new WebView(this);
+            web.setBackgroundColor(Color.TRANSPARENT);
+            configureWebView(web);
+            resources.add(() -> {
+                web.stopLoading();
+                web.destroy();
+            });
 
-                    @Override
-                    public String authorizeInstruction(String instructionJson) {
-                        return KorridServer.authorizePlatformInstruction(instructionJson);
-                    }
-                },
-                messageJson -> web.evaluateJavascript(
-                        "window.__korriOverlayMessage && window.__korriOverlayMessage("
-                                + JSONObject.quote(messageJson) + ")",
-                        null));
-        if (!bridge.attachTo(web)) {
-            web.destroy();
-            throw new IllegalStateException("WebMessageListener is unavailable");
-        }
-        web.setWebViewClient(new LockedWebViewClient(assets));
-        root.addView(web, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT));
+            Handler handler = new Handler(Looper.getMainLooper());
+            BootstrapGuard bootstrap = new BootstrapGuard(
+                    callback -> {
+                        handler.postDelayed(callback, OVERLAY_READY_TIMEOUT_MS);
+                        return () -> handler.removeCallbacks(callback);
+                    },
+                    this::dismissOverlay);
+            resources.add(bootstrap::destroy);
 
-        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                android.graphics.PixelFormat.TRANSLUCENT);
-        windows.addView(root, params);
-        web.loadUrl(KorriOverlayBridge.OVERLAY_URL);
+            WebViewAssetLoader assets = new WebViewAssetLoader.Builder()
+                    .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                    .build();
+            KorriOverlayBridge bridge = new KorriOverlayBridge(
+                    KorriBrainService::overlayAuthority,
+                    new KorriOverlayBridge.Commands() {
+                        @Override
+                        public void ready() {
+                            bootstrap.ready();
+                        }
 
-        return new OverlayWindow() {
-            private boolean destroyed;
-            private String authorityIdentity = identity(KorriBrainService.overlayAuthority());
+                        @Override
+                        public void dismiss() {
+                            dismissOverlay();
+                        }
 
-            @Override
-            public void sendInput(String inputJson) {
-                if (!destroyed) bridge.sendInput(inputJson);
+                        @Override
+                        public String authorizeInstruction(String instructionJson) {
+                            return KorridServer.authorizePlatformInstruction(instructionJson);
+                        }
+                    },
+                    messageJson -> web.evaluateJavascript(
+                            "window.__korriOverlayMessage && window.__korriOverlayMessage("
+                                    + JSONObject.quote(messageJson) + ")",
+                            null));
+            if (!bridge.attachTo(web)) {
+                throw new IllegalStateException("WebMessageListener is unavailable");
             }
+            web.setWebViewClient(new LockedWebViewClient(assets, bootstrap::fail));
+            root.addView(web, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
 
-            @Override
-            public void refreshAuthority() {
-                if (destroyed) return;
-                KorriOverlayBridge.Authority authority = KorriBrainService.overlayAuthority();
-                String next = identity(authority);
-                if (next == null || !next.equals(authorityIdentity)) {
-                    authorityIdentity = next;
-                    bridge.sendAuthority();
-                }
-            }
-
-            @Override
-            public void destroy() {
-                if (destroyed) return;
-                destroyed = true;
+            WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                    android.graphics.PixelFormat.TRANSLUCENT);
+            windows.addView(root, params);
+            resources.add(() -> {
                 try {
                     windows.removeViewImmediate(root);
                 } catch (RuntimeException ignored) {
                 }
-                web.stopLoading();
-                web.destroy();
-                root.removeAllViews();
-            }
-        };
+            });
+            web.loadUrl(KorriOverlayBridge.OVERLAY_URL);
+            bootstrap.start();
+
+            return new OverlayWindow() {
+                private String authorityIdentity = identity(KorriBrainService.overlayAuthority());
+
+                @Override
+                public void sendInput(String inputJson) {
+                    if (!resources.isDestroyed()) bridge.sendInput(inputJson);
+                }
+
+                @Override
+                public void refreshAuthority() {
+                    if (resources.isDestroyed()) return;
+                    KorriOverlayBridge.Authority authority = KorriBrainService.overlayAuthority();
+                    String next = identity(authority);
+                    if (next == null || !next.equals(authorityIdentity)) {
+                        authorityIdentity = next;
+                        bridge.sendAuthority();
+                    }
+                }
+
+                @Override
+                public void destroy() {
+                    resources.destroy();
+                }
+            };
+        } catch (Exception | Error failure) {
+            resources.destroy();
+            throw failure;
+        }
     }
 
     private static String identity(KorriOverlayBridge.Authority authority) {
@@ -270,9 +306,11 @@ public final class KorriOverlayService extends AccessibilityService {
 
     private final class LockedWebViewClient extends WebViewClient {
         private final WebViewAssetLoader assets;
+        private final Runnable fatal;
 
-        LockedWebViewClient(WebViewAssetLoader assets) {
+        LockedWebViewClient(WebViewAssetLoader assets, Runnable fatal) {
             this.assets = assets;
+            this.fatal = fatal;
         }
 
         @Override
@@ -288,6 +326,24 @@ public final class KorriOverlayService extends AccessibilityService {
             return !KorriOverlayBridge.allowRequest(
                     Uri.parse(address), "GET", true, new HashMap<>(),
                     KorriBrainService.overlayAuthority());
+        }
+
+        @Override
+        public void onReceivedError(
+                WebView view, WebResourceRequest request, WebResourceError error) {
+            if (request.isForMainFrame()) fatal.run();
+        }
+
+        @Override
+        public void onReceivedHttpError(
+                WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
+            if (request.isForMainFrame()) fatal.run();
+        }
+
+        @Override
+        public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+            fatal.run();
+            return true;
         }
 
         @Override
@@ -329,6 +385,77 @@ public final class KorriOverlayService extends AccessibilityService {
                 "Blocked",
                 new HashMap<>(),
                 new ByteArrayInputStream("blocked".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    interface TimeoutScheduler {
+        KorriLaunchContinuity.Cancellable schedule(Runnable callback);
+    }
+
+    /** One-shot bootstrap/fatal guard shared by timeout and WebView failures. */
+    static final class BootstrapGuard {
+        private final TimeoutScheduler scheduler;
+        private final Runnable fatal;
+        private KorriLaunchContinuity.Cancellable timeout;
+        private boolean finished;
+
+        BootstrapGuard(TimeoutScheduler scheduler, Runnable fatal) {
+            this.scheduler = scheduler;
+            this.fatal = fatal;
+        }
+
+        void start() {
+            if (!finished && timeout == null) timeout = scheduler.schedule(this::fail);
+        }
+
+        void ready() {
+            finish(false);
+        }
+
+        void fail() {
+            finish(true);
+        }
+
+        void destroy() {
+            finish(false);
+        }
+
+        private void finish(boolean notifyFatal) {
+            if (finished) return;
+            finished = true;
+            if (timeout != null) timeout.cancel();
+            timeout = null;
+            if (notifyFatal) fatal.run();
+        }
+    }
+
+    /** Reverse-order ownership for partially and fully constructed windows. */
+    static final class OverlayResources {
+        private final List<Runnable> cleanup = new ArrayList<>();
+        private boolean destroyed;
+
+        void add(Runnable action) {
+            if (destroyed) {
+                action.run();
+                return;
+            }
+            cleanup.add(action);
+        }
+
+        boolean isDestroyed() {
+            return destroyed;
+        }
+
+        void destroy() {
+            if (destroyed) return;
+            destroyed = true;
+            for (int index = cleanup.size() - 1; index >= 0; index--) {
+                try {
+                    cleanup.get(index).run();
+                } catch (RuntimeException ignored) {
+                }
+            }
+            cleanup.clear();
+        }
     }
 
     public interface OverlayWindow {
@@ -417,12 +544,41 @@ public final class KorriOverlayService extends AccessibilityService {
             }
         }
 
-        public static Decision route(
-                int keyCode, int action, int repeatCount, boolean showing) {
-            if (!showing) return new Decision(false, null, false);
+        private static final class OwnedKey {
+            private final int deviceId;
+            private final int keyCode;
+
+            OwnedKey(int deviceId, int keyCode) {
+                this.deviceId = deviceId;
+                this.keyCode = keyCode;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                if (!(other instanceof OwnedKey)) return false;
+                OwnedKey key = (OwnedKey) other;
+                return deviceId == key.deviceId && keyCode == key.keyCode;
+            }
+
+            @Override
+            public int hashCode() {
+                return Objects.hash(deviceId, keyCode);
+            }
+        }
+
+        private final Set<OwnedKey> owned = new HashSet<>();
+        private boolean destroyed;
+
+        public Decision route(
+                int deviceId,
+                int keyCode,
+                int action,
+                int repeatCount,
+                boolean showing,
+                boolean canceled) {
+            if (destroyed) return new Decision(false, null, false);
             String type;
             String direction = null;
-            boolean dismiss = false;
             switch (keyCode) {
                 case KeyEvent.KEYCODE_DPAD_UP:
                     type = "direction";
@@ -447,7 +603,6 @@ public final class KorriOverlayService extends AccessibilityService {
                 case KeyEvent.KEYCODE_BACK:
                 case KeyEvent.KEYCODE_BUTTON_B:
                     type = "back";
-                    dismiss = true;
                     break;
                 case KeyEvent.KEYCODE_MENU:
                 case KeyEvent.KEYCODE_BUTTON_START:
@@ -459,9 +614,24 @@ public final class KorriOverlayService extends AccessibilityService {
                 default:
                     return new Decision(false, null, false);
             }
+
+            OwnedKey key = new OwnedKey(deviceId, keyCode);
+            boolean isOwned = owned.contains(key);
+            if (canceled || action == KeyEvent.ACTION_UP) {
+                if (isOwned) owned.remove(key);
+                return new Decision(isOwned, null, false);
+            }
             if (action != KeyEvent.ACTION_DOWN) {
+                return new Decision(isOwned, null, false);
+            }
+            if (!isOwned) {
+                if (!showing || repeatCount != 0) return new Decision(false, null, false);
+                owned.add(key);
+            } else if (repeatCount > 0 && direction == null) {
                 return new Decision(true, null, false);
             }
+
+            boolean dismiss = "back".equals(type) && repeatCount == 0;
             try {
                 JSONObject input = new JSONObject().put("type", type);
                 if (direction != null) {
@@ -473,6 +643,11 @@ public final class KorriOverlayService extends AccessibilityService {
             } catch (Exception error) {
                 return new Decision(true, null, dismiss);
             }
+        }
+
+        public void destroy() {
+            destroyed = true;
+            owned.clear();
         }
     }
 
@@ -513,12 +688,17 @@ public final class KorriOverlayService extends AccessibilityService {
             if (!visible || !destroyed) showing = visible;
         }
 
-        public boolean ownsVisibleOverlayForeground(String packageName) {
-            return showing && servicePackage.equals(packageName);
+        public boolean ownsVisibleOverlayForeground(String packageName, String className) {
+            if (!showing || !servicePackage.equals(packageName) || className == null) {
+                return false;
+            }
+            // Measured TYPE_ACCESSIBILITY_OVERLAY roots report the platform root,
+            // never one of Korri's Activity classes. Unknown classes fail closed.
+            return FrameLayout.class.getName().equals(className);
         }
 
         public String updateForeground(String packageName, String className) {
-            if (ownsVisibleOverlayForeground(packageName)) return null;
+            if (ownsVisibleOverlayForeground(packageName, className)) return null;
             boolean wasMatchedForeground = isForegroundMatch()
                     && launch != null
                     && launch.launchId().equals(matchedLaunchId);

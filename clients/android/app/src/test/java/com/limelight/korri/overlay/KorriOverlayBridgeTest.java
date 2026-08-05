@@ -99,6 +99,7 @@ public class KorriOverlayBridgeTest {
         bridge.onMessage("{\"type\":\"refresh-authority\"}",
                 KorriOverlayBridge.ASSET_ORIGIN, true);
 
+        assertEquals(1, commands.readyCount);
         assertEquals(2, sender.messages.size());
         for (String encoded : sender.messages) {
             JSONObject message = new JSONObject(encoded);
@@ -224,8 +225,14 @@ public class KorriOverlayBridgeTest {
     }
 
     private static final class RecordingCommands implements KorriOverlayBridge.Commands {
+        int readyCount;
         int dismissCount;
         final List<String> instructions = new ArrayList<>();
+
+        @Override
+        public void ready() {
+            readyCount++;
+        }
 
         @Override
         public void dismiss() {
