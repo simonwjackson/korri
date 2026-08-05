@@ -743,6 +743,17 @@ wait_stopped() {
   echo 'fork did not stop after graceful QUIT' >&2
   return 1
 }
+traverse_library_to_final_viewport() {
+  local step
+  local max_steps=12
+  # Shift's complete Library is virtualized. Traverse through its real focus
+  # model until Down sticks at the final row, making the trailing Wario tile
+  # rendered before the strict debug helper attempts to focus it.
+  for ((step = 1; step <= max_steps; step++)); do
+    "${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_DOWN
+    sleep 0.15
+  done
+}
 focus_wario_in_installed_library() {
   local label="$1"
   local focus_observation
@@ -751,6 +762,8 @@ focus_wario_in_installed_library() {
   # it. DevTools may focus the exact rendered tile but may never activate it.
   "${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_RIGHT
   "${ADB[@]}" shell input -d 0 keyevent KEYCODE_BUTTON_A
+  sleep 0.5
+  traverse_library_to_final_viewport
   focus_observation="$("$DEBUG_PORTAL_FOCUS_GAME_SH" \
     "$SERIAL" "$KORRI_PACKAGE" wl4 'Wario Land 4')"
   jq -e '

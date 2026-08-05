@@ -31,6 +31,7 @@ grep -F 'GATE_LAUNCH_IDS' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_no_artemis_game_activity' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_korri_process_unchanged' "$ACCEPTANCE" >/dev/null
 grep -F 'focus_wario_in_installed_library' "$ACCEPTANCE" >/dev/null
+grep -F 'traverse_library_to_final_viewport' "$ACCEPTANCE" >/dev/null
 grep -F 'DEBUG_PORTAL_FOCUS_GAME_SH=' "$ACCEPTANCE" >/dev/null
 grep -F 'portal_shot_focuses_wario' "$ACCEPTANCE" >/dev/null
 grep -F 'brightness" -ge 60' "$ACCEPTANCE" >/dev/null
@@ -79,6 +80,28 @@ grep -F 'invoke_overlay_row 2' "$ACCEPTANCE" >/dev/null
 grep -F 'enabled_accessibility_services' "$ACCEPTANCE" >/dev/null
 grep -F 'use: "@korri:retroarch/retroarch"' "$WL4_LIBRARY" >/dev/null
 grep -F 'runtime: "@korri:mgba/mgba"' "$WL4_LIBRARY" >/dev/null
+library_focus_source="$(sed -n '/^focus_wario_in_installed_library() {/,/^}/p' "$ACCEPTANCE")"
+open_library_line="$(grep -nF 'KEYCODE_BUTTON_A' <<<"$library_focus_source" | head -1 | cut -d: -f1)"
+traversal_line="$(grep -nF 'traverse_library_to_final_viewport' <<<"$library_focus_source" | head -1 | cut -d: -f1)"
+strict_focus_line="$(grep -nF 'DEBUG_PORTAL_FOCUS_GAME_SH' <<<"$library_focus_source" | head -1 | cut -d: -f1)"
+[[ -n "$open_library_line" && -n "$traversal_line" && -n "$strict_focus_line" \
+  && "$open_library_line" -lt "$traversal_line" \
+  && "$traversal_line" -lt "$strict_focus_line" ]] || {
+  echo 'RetroArch acceptance must traverse the real Library focus model before strict Wario focus' >&2
+  exit 1
+}
+traversal_source="$(sed -n '/^traverse_library_to_final_viewport() {/,/^}/p' "$ACCEPTANCE")"
+traversal_max="$(sed -n 's/^[[:space:]]*local max_steps=\([0-9][0-9]*\)$/\1/p' <<<"$traversal_source")"
+[[ "$traversal_max" =~ ^[0-9]+$ && "$traversal_max" -ge 1 && "$traversal_max" -le 20 ]] || {
+  echo 'RetroArch Library traversal must have a small explicit bound' >&2
+  exit 1
+}
+grep -F 'KEYCODE_DPAD_DOWN' <<<"$traversal_source" >/dev/null
+grep -F 'sleep 0.15' <<<"$traversal_source" >/dev/null
+if grep -Eq 'DEBUG_PORTAL_FOCUS_GAME_SH|input (tap|swipe)' <<<"$traversal_source"; then
+  echo 'RetroArch Library traversal must use only bounded controller focus movement' >&2
+  exit 1
+fi
 if grep -Eq 'assert_rgui_menu_visible|assert_rgui_selection_moves|compare -metric' "$ACCEPTANCE"; then
   echo 'RetroArch native menu acceptance must use authenticated status telemetry' >&2
   exit 1
