@@ -12,6 +12,9 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @RunWith(RobolectricTestRunner.class)
 public class KorriOverlayServiceTest {
     private static final String LAUNCH = "0123456789abcdef0123456789abcdef";
@@ -222,6 +225,116 @@ public class KorriOverlayServiceTest {
 
         assertFalse(state.onKey(KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_DOWN));
         assertFalse(state.onKey(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.ACTION_DOWN));
+    }
+
+    @Test
+    public void showingOverlayConsumesAndSemanticallyTranslatesEveryOwnedInput() throws Exception {
+        assertInput(KeyEvent.KEYCODE_DPAD_UP,
+                "{\"type\":\"direction\",\"direction\":\"up\",\"source\":\"gamepad\"}",
+                false);
+        assertInput(KeyEvent.KEYCODE_DPAD_RIGHT,
+                "{\"type\":\"direction\",\"direction\":\"right\","
+                        + "\"repeat\":true,\"source\":\"gamepad\"}",
+                false, 3);
+        assertInput(KeyEvent.KEYCODE_BUTTON_A,
+                "{\"type\":\"confirm\",\"source\":\"gamepad\"}", false);
+        assertInput(KeyEvent.KEYCODE_BACK,
+                "{\"type\":\"back\",\"source\":\"gamepad\"}", true);
+        assertInput(KeyEvent.KEYCODE_BUTTON_B,
+                "{\"type\":\"back\",\"source\":\"gamepad\"}", true);
+        assertInput(KeyEvent.KEYCODE_BUTTON_START,
+                "{\"type\":\"menu\",\"source\":\"gamepad\"}", false);
+        assertInput(KeyEvent.KEYCODE_BUTTON_SELECT,
+                "{\"type\":\"options\",\"source\":\"gamepad\"}", false);
+
+        KorriOverlayService.OverlayInput.Decision release =
+                KorriOverlayService.OverlayInput.route(
+                        KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_UP, 0, true);
+        assertTrue(release.consumed());
+        assertNull(release.inputJson());
+        assertFalse(release.dismiss());
+    }
+
+    @Test
+    public void removedOverlayPassesGameplayInputThrough() {
+        KorriOverlayService.OverlayInput.Decision decision =
+                KorriOverlayService.OverlayInput.route(
+                        KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.ACTION_DOWN, 0, false);
+        assertFalse(decision.consumed());
+        assertNull(decision.inputJson());
+        assertFalse(decision.dismiss());
+    }
+
+    @Test
+    public void windowLifecycleAddsRemovesRefreshesAndDestroysIdempotently() {
+        RecordingWindowFactory factory = new RecordingWindowFactory();
+        KorriOverlayService.WindowController windows =
+                new KorriOverlayService.WindowController(factory);
+
+        windows.setVisible(true);
+        windows.setVisible(true);
+        windows.refreshAuthority();
+        assertTrue(windows.isVisible());
+        assertEquals(1, factory.created.size());
+        assertEquals(1, factory.created.get(0).refreshCount);
+
+        windows.setVisible(false);
+        windows.setVisible(false);
+        assertFalse(windows.isVisible());
+        assertEquals(1, factory.created.get(0).destroyCount);
+
+        windows.setVisible(true);
+        windows.destroy();
+        windows.destroy();
+        windows.setVisible(true);
+        assertEquals(2, factory.created.size());
+        assertEquals(1, factory.created.get(1).destroyCount);
+        assertFalse(windows.isVisible());
+    }
+
+    private static void assertInput(int keyCode, String json, boolean dismiss) {
+        assertInput(keyCode, json, dismiss, 0);
+    }
+
+    private static void assertInput(
+            int keyCode, String json, boolean dismiss, int repeatCount) {
+        KorriOverlayService.OverlayInput.Decision decision =
+                KorriOverlayService.OverlayInput.route(
+                        keyCode, KeyEvent.ACTION_DOWN, repeatCount, true);
+        assertTrue(decision.consumed());
+        assertEquals(json, decision.inputJson());
+        assertEquals(dismiss, decision.dismiss());
+    }
+
+    private static final class RecordingWindowFactory
+            implements KorriOverlayService.WindowFactory {
+        final List<RecordingWindow> created = new ArrayList<>();
+
+        @Override
+        public KorriOverlayService.OverlayWindow create() {
+            RecordingWindow window = new RecordingWindow();
+            created.add(window);
+            return window;
+        }
+    }
+
+    private static final class RecordingWindow
+            implements KorriOverlayService.OverlayWindow {
+        int refreshCount;
+        int destroyCount;
+
+        @Override
+        public void sendInput(String inputJson) {}
+
+        @Override
+        public void refreshAuthority() {
+            refreshCount++;
+        }
+
+        @Override
+        public void destroy() {
+            destroyCount++;
+        }
     }
 
     private static KorriOverlayService.StateMachine openOverlay() {

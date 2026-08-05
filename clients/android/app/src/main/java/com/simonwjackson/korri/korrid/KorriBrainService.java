@@ -11,6 +11,7 @@ import android.os.IBinder;
 import android.util.Log;
 
 import com.limelight.korri.overlay.KorriActiveLaunch;
+import com.limelight.korri.overlay.KorriOverlayBridge;
 
 /**
  * Keeps korrid alive while Korri is not on screen.
@@ -74,6 +75,13 @@ public final class KorriBrainService extends Service {
 
     public static synchronized KorriActiveLaunch activeLaunch() {
         return activeLaunch;
+    }
+
+    /** Current process-local authority for the dedicated overlay WebView. */
+    public static synchronized KorriOverlayBridge.Authority overlayAuthority() {
+        if (!started || port <= 0 || activeLaunch == null) return null;
+        return new KorriOverlayBridge.Authority(
+                port, KorridServer.capability(), activeLaunch.launchId());
     }
 
     public static synchronized boolean isOverlayArmed() {
