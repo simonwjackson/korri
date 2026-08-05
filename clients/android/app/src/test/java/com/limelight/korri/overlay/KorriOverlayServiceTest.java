@@ -396,6 +396,7 @@ public class KorriOverlayServiceTest {
         assertTrue(source.contains("if (request.isForMainFrame()) fatal.run()"));
         assertTrue(source.contains("onRenderProcessGone"));
         assertTrue(source.contains("fatal.run();\n            return true;"));
+        assertTrue(source.contains("if (fatalDuringCreate[0])"));
     }
 
     @Test

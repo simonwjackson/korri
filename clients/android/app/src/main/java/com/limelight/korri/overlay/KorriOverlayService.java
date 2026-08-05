@@ -197,12 +197,17 @@ public final class KorriOverlayService extends AccessibilityService {
             });
 
             Handler handler = new Handler(Looper.getMainLooper());
+            boolean[] fatalDuringCreate = { false };
+            Runnable fatal = () -> {
+                fatalDuringCreate[0] = true;
+                dismissOverlay();
+            };
             BootstrapGuard bootstrap = new BootstrapGuard(
                     callback -> {
                         handler.postDelayed(callback, OVERLAY_READY_TIMEOUT_MS);
                         return () -> handler.removeCallbacks(callback);
                     },
-                    this::dismissOverlay);
+                    fatal);
             resources.add(bootstrap::destroy);
 
             WebViewAssetLoader assets = new WebViewAssetLoader.Builder()
@@ -253,6 +258,9 @@ public final class KorriOverlayService extends AccessibilityService {
             });
             web.loadUrl(KorriOverlayBridge.OVERLAY_URL);
             bootstrap.start();
+            if (fatalDuringCreate[0]) {
+                throw new IllegalStateException("overlay bootstrap failed during creation");
+            }
 
             return new OverlayWindow() {
                 private String authorityIdentity = identity(KorriBrainService.overlayAuthority());
