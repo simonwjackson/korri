@@ -1414,7 +1414,10 @@ command = ["sh", "-c", "sleep 1"]
         .unwrap();
         let _stop = StopServer;
         let first_capability = local_server_capability().unwrap();
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+            .unwrap();
         let first_url = format!("http://127.0.0.1:{first_port}/rpc");
         let response = launch_wl4(&client, &first_url, &first_capability).await;
         let mut spec = response["outcome"]["payload"].clone();
@@ -1437,7 +1440,10 @@ command = ["sh", "-c", "sleep 1"]
         )
         .unwrap();
         let second_capability = local_server_capability().unwrap();
-        assert_ne!(first_capability, second_capability);
+        assert!(
+            first_capability != second_capability,
+            "server restart must rotate the capability"
+        );
         let second_url = format!("http://127.0.0.1:{second_port}/rpc");
         let second_response = launch_wl4(&client, &second_url, &second_capability).await;
         let second_spec_json =
@@ -1554,6 +1560,27 @@ command = ["sh", "-c", "sleep 1"]
             disabled_launch["outcome"]["payload"]["code"],
             "LocalRouteUnavailable"
         );
+
+        let stale_enable_request = serde_json::json!({
+            "_tag": "system.settings.update",
+            "payload": {
+                "expectedRevision": revision,
+                "settingId": plugin_policy::ANDROID_APP_PLUGIN_ID,
+                "value": "true"
+            }
+        })
+        .to_string();
+        let stale_enable =
+            rpc_body_authorized(app.clone(), &stale_enable_request, Some("right-token")).await;
+        assert_eq!(stale_enable["outcome"]["_tag"], "Err");
+        assert_eq!(stale_enable["outcome"]["payload"]["code"], "SettingsConflict");
+        let still_disabled = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"app.local-games.list","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert!(listed_game_ids(&still_disabled).is_empty());
 
         let enable_request = serde_json::json!({
             "_tag": "system.settings.update",
