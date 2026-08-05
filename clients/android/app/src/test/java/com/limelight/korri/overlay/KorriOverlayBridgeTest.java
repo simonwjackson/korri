@@ -201,6 +201,23 @@ public class KorriOverlayBridgeTest {
     }
 
     @Test
+    public void androidStartupKeepsTheConfiguredShellOriginAlongsideBundledOverlayOrigin()
+            throws Exception {
+        String shell = new String(Files.readAllBytes(
+                Path.of("src/main/java/com/limelight/KorriShellActivity.java")),
+                StandardCharsets.UTF_8);
+        String bridge = new String(Files.readAllBytes(
+                Path.of("src/main/java/com/limelight/korri/overlay/KorriOverlayBridge.java")),
+                StandardCharsets.UTF_8);
+
+        assertTrue(shell.contains(
+                "KorriBrainService.ensureRunning(\n                this, portalOrigin(portalUrl)"));
+        assertTrue(bridge.contains(
+                "ASSET_ORIGIN = \"https://appassets.androidplatform.net\""));
+        assertFalse(shell.contains("allowOrigin(\"*\")"));
+    }
+
+    @Test
     public void publicBridgeSurfaceContainsNoShellPowersOrJavascriptInterface() {
         List<String> methods = new ArrayList<>();
         for (Method method : KorriOverlayBridge.class.getDeclaredMethods()) {

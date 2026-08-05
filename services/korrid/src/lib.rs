@@ -19,6 +19,7 @@ use typeshare::typeshare;
 pub mod config;
 
 pub const VERSION: &str = "korrid-v0";
+const ANDROID_BUNDLED_PORTAL_ORIGIN: &str = "https://appassets.androidplatform.net";
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1389,11 +1390,21 @@ fn router_with_capability_local_root_and_provision(
         }),
         rpc_capability: Some(rpc_capability.into()),
     };
-    let origin: HeaderValue = allowed_origin
+    let configured_origin: HeaderValue = allowed_origin
         .parse()
         .expect("allowed portal origin must be a valid header value");
+    let allowed_origins = if native_platform == NativePlatform::EmbeddedAndroid {
+        let bundled_origin = HeaderValue::from_static(ANDROID_BUNDLED_PORTAL_ORIGIN);
+        let mut origins = vec![configured_origin];
+        if origins[0] != bundled_origin {
+            origins.push(bundled_origin);
+        }
+        tower_http::cors::AllowOrigin::list(origins)
+    } else {
+        tower_http::cors::AllowOrigin::exact(configured_origin)
+    };
     let cors = tower_http::cors::CorsLayer::new()
-        .allow_origin(origin)
+        .allow_origin(allowed_origins)
         .allow_methods([Method::POST])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
     Router::new()
@@ -3196,6 +3207,66 @@ command = ["sh", "-c", "sleep 1"]
                 .unwrap(),
             "https://evil.example"
         );
+    }
+
+    #[tokio::test]
+    async fn android_cors_allows_bundled_overlay_and_configured_shell_origins_only() {
+        let root = tempfile::tempdir().unwrap();
+        let app = android_router_with_capability_and_local_root(
+            "right-token",
+            "http://10.0.2.2:5173",
+            root.path(),
+        );
+        for origin in [
+            "https://appassets.androidplatform.net",
+            "http://10.0.2.2:5173",
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("OPTIONS")
+                        .uri("/rpc")
+                        .header(header::ORIGIN, origin)
+                        .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                        .header(
+                            header::ACCESS_CONTROL_REQUEST_HEADERS,
+                            "content-type,authorization",
+                        )
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                response
+                    .headers()
+                    .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                    .unwrap(),
+                origin
+            );
+        }
+
+        let foreign = app
+            .oneshot(
+                Request::builder()
+                    .method("OPTIONS")
+                    .uri("/rpc")
+                    .header(header::ORIGIN, "https://evil.example")
+                    .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                    .header(
+                        header::ACCESS_CONTROL_REQUEST_HEADERS,
+                        "content-type,authorization",
+                    )
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(foreign
+            .headers()
+            .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .is_none());
     }
 
     #[test]
