@@ -173,6 +173,63 @@ describe("callKorrid", () => {
     })
   })
 
+  it("lists and invokes controls only for the supplied launch identity", async () => {
+    const bodies: unknown[] = []
+    globalThis.fetch = (async (_input, init) => {
+      const body = JSON.parse(String(init?.body))
+      bodies.push(body)
+      const listing = body._tag === "app.session.controls"
+      return new Response(
+        JSON.stringify(
+          listing
+            ? {
+                _tag: body._tag,
+                outcome: {
+                  _tag: "Ok",
+                  payload: { launchId: body.payload.launchId, groups: [] },
+                },
+              }
+            : {
+                _tag: body._tag,
+                outcome: {
+                  _tag: "Ok",
+                  payload: {
+                    _tag: "Completed",
+                    payload: { launchId: body.payload.launchId },
+                  },
+                },
+              },
+        ),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    }) as typeof fetch
+    const client = createHttpKorridClient(
+      "http://127.0.0.1:43117",
+      "capability",
+    )
+
+    await client.sessionControls("launch-1")
+    await client.invokeSessionControl("launch-1", "fill", {
+      kind: "toggle",
+      value: true,
+    })
+
+    expect(bodies).toEqual([
+      {
+        _tag: "app.session.controls",
+        payload: { launchId: "launch-1" },
+      },
+      {
+        _tag: "app.session.control.invoke",
+        payload: {
+          launchId: "launch-1",
+          controlId: "fill",
+          value: { kind: "toggle", value: true },
+        },
+      },
+    ])
+  })
+
   it("aborts session status at its UI deadline", async () => {
     globalThis.fetch = ((_input, init) =>
       new Promise((_resolve, reject) => {

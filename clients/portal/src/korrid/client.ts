@@ -19,6 +19,10 @@ import type {
   MoonlightResolveOutcome,
   RpcRequest,
   RpcResponse,
+  SessionControlInvokeOutcome,
+  SessionControlValue,
+  SessionControls,
+  SessionControlsOutcome,
   SessionPrepareOutcome,
   SessionStatusOutcome,
   SessionStopOutcome,
@@ -29,6 +33,7 @@ import type {
 import {
   LaunchContributorKind,
   LaunchForegroundKind,
+  SessionControlFailureReason,
   SessionStopPhase,
 } from "@contracts/generated/korrid"
 
@@ -59,6 +64,12 @@ export interface KorridClient {
   sessionPrepare(gameId: string, host?: string): Promise<SessionPrepareOutcome>
   sessionStatus(timeoutMs?: number): Promise<SessionStatusOutcome>
   sessionStop(): Promise<SessionStopOutcome>
+  sessionControls(launchId: string): Promise<SessionControlsOutcome>
+  invokeSessionControl(
+    launchId: string,
+    controlId: string,
+    value?: SessionControlValue,
+  ): Promise<SessionControlInvokeOutcome>
 }
 
 const RPC_TIMEOUT_MS = 25_000
@@ -100,6 +111,22 @@ const statusUnavailable = (error: unknown): SessionStatusOutcome =>
         },
       }
     : unreachable(error)
+
+const controlsUnavailable = (): SessionControlsOutcome => ({
+  _tag: "Err",
+  payload: {
+    reason: SessionControlFailureReason.Unavailable,
+    message: "Gameplay controls are unavailable right now.",
+  },
+})
+
+const invocationUnavailable = (): SessionControlInvokeOutcome => ({
+  _tag: "Err",
+  payload: {
+    reason: SessionControlFailureReason.Unavailable,
+    message: "That gameplay control is unavailable right now.",
+  },
+})
 
 export function createHttpKorridClient(
   baseUrl: string,
@@ -246,6 +273,30 @@ export function createHttpKorridClient(
         return unreachable(error)
       }
     },
+    async sessionControls(launchId) {
+      try {
+        const response = await callKorrid(baseUrl, capability, {
+          _tag: "app.session.controls",
+          payload: { launchId },
+        })
+        return response.outcome
+      } catch {
+        return controlsUnavailable()
+      }
+    },
+    async invokeSessionControl(launchId, controlId, value) {
+      try {
+        const response = await callKorrid(baseUrl, capability, {
+          _tag: "app.session.control.invoke",
+          payload: value === undefined
+            ? { launchId, controlId }
+            : { launchId, controlId, value },
+        })
+        return response.outcome
+      } catch {
+        return invocationUnavailable()
+      }
+    },
   }
 }
 
@@ -266,12 +317,69 @@ export interface InMemoryKorridClientConfig {
   readonly localFailures?: readonly { readonly code: string; readonly message: string }[]
   /** Seed an active host session for now-playing flows. */
   readonly activeSession?: ActiveSession
+  /** Seed the dedicated gameplay-overlay browser/test consumer. */
+  readonly sessionControls?: SessionControls
+  readonly sessionControlBehavior?: "ok" | "unavailable" | "invoke-fail"
 }
 
 const sampleGames: readonly Game[] = [
   { id: "skate3", title: "Skate 3" },
   { id: "neverball", title: "Neverball" },
 ]
+
+function updateInMemoryControl(
+  controls: SessionControls,
+  controlId: string,
+  value: SessionControlValue,
+): SessionControls {
+  return {
+    ...controls,
+    groups: controls.groups.map(group => ({
+      ...group,
+      controls: group.controls.map(control => {
+        if (control.id !== controlId) return control
+        switch (value.kind) {
+          case "toggle":
+            return control.interaction.kind === "toggle"
+              ? {
+                  ...control,
+                  interaction: {
+                    kind: "toggle" as const,
+                    payload: { value: value.value },
+                  },
+                }
+              : control
+          case "choice":
+            return control.interaction.kind === "choice"
+              ? {
+                  ...control,
+                  interaction: {
+                    ...control.interaction,
+                    payload: {
+                      ...control.interaction.payload,
+                      value: value.value,
+                    },
+                  },
+                }
+              : control
+          case "range":
+            return control.interaction.kind === "range"
+              ? {
+                  ...control,
+                  interaction: {
+                    ...control.interaction,
+                    payload: {
+                      ...control.interaction.payload,
+                      value: value.value,
+                    },
+                  },
+                }
+              : control
+        }
+      }),
+    })),
+  }
+}
 
 export function createInMemoryKorridClient(
   config: InMemoryKorridClientConfig = {},
@@ -289,6 +397,8 @@ export function createInMemoryKorridClient(
   const localLaunchSpecs = config.localLaunchSpecs ?? {}
   const localFailures = config.localFailures
   let activeSession = config.activeSession
+  let overlayControls = config.sessionControls
+  const sessionControlBehavior = config.sessionControlBehavior ?? "ok"
   let settings: SettingsSnapshot = {
     revision: "in-memory-0",
     deviceName: "Browser",
@@ -473,6 +583,60 @@ export function createInMemoryKorridClient(
       }
       activeSession = undefined
       return { _tag: "Ok", payload: { phase: SessionStopPhase.Stopped } }
+    },
+    async sessionControls(launchId) {
+      if (
+        sessionControlBehavior === "unavailable" ||
+        overlayControls === undefined
+      ) {
+        return controlsUnavailable()
+      }
+      if (overlayControls.launchId !== launchId) {
+        return {
+          _tag: "Err",
+          payload: {
+            reason: SessionControlFailureReason.StaleSession,
+            message: "The gameplay session changed.",
+          },
+        }
+      }
+      return { _tag: "Ok", payload: overlayControls }
+    },
+    async invokeSessionControl(launchId, controlId, value) {
+      if (sessionControlBehavior === "invoke-fail") {
+        return invocationUnavailable()
+      }
+      if (overlayControls === undefined || overlayControls.launchId !== launchId) {
+        return {
+          _tag: "Err",
+          payload: {
+            reason: SessionControlFailureReason.StaleSession,
+            message: "The gameplay session changed.",
+          },
+        }
+      }
+      const selected = overlayControls.groups
+        .flatMap(group => group.controls)
+        .find(control => control.id === controlId)
+      if (!selected) {
+        return {
+          _tag: "Err",
+          payload: {
+            reason: SessionControlFailureReason.UnknownControl,
+            message: "That gameplay control is unavailable.",
+          },
+        }
+      }
+      if (value !== undefined) {
+        overlayControls = updateInMemoryControl(overlayControls, controlId, value)
+      }
+      return {
+        _tag: "Ok",
+        payload: {
+          _tag: "Completed",
+          payload: { launchId },
+        },
+      }
     },
   }
 }

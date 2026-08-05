@@ -1,6 +1,7 @@
 import type {
   LaunchSpec as GeneratedLaunchSpec,
   MoonlightLaunchSpec as GeneratedMoonlightLaunchSpec,
+  PlatformInstruction,
 } from "../generated/korrid"
 
 /**
@@ -122,6 +123,58 @@ export type BridgeInputEvent =
   | { readonly type: "options"; readonly source: "gamepad" }
   /** Guide/system remains semantic; its Android key code never crosses. */
   | { readonly type: "system"; readonly source: "gamepad" }
+
+// ── Dedicated gameplay-overlay entry and messages ──────────────────────
+
+/** Query treaty selecting the global gameplay-overlay portal composition. */
+export const GAMEPLAY_OVERLAY_SCREEN_PARAM = "screen"
+export const GAMEPLAY_OVERLAY_SCREEN_VALUE = "gameplay-overlay"
+
+/** Synthetic HTTPS origin served only from APK assets by WebViewAssetLoader. */
+export const KORRI_ASSET_ORIGIN = "https://appassets.androidplatform.net"
+export const GAMEPLAY_OVERLAY_URL =
+  `${KORRI_ASSET_ORIGIN}/assets/portal/index.html?${GAMEPLAY_OVERLAY_SCREEN_PARAM}=${GAMEPLAY_OVERLAY_SCREEN_VALUE}`
+
+/** AndroidX WebMessageListener object. It has only postMessage(String). */
+export const GAMEPLAY_OVERLAY_MESSAGE_OBJECT = "KorriOverlay"
+/** The one encoded Android -> JS receiver installed by the overlay entry. */
+export const GAMEPLAY_OVERLAY_RECEIVER = "__korriOverlayMessage"
+
+export interface GameplayOverlayConfig {
+  readonly korridPort: number
+  readonly korridCapability: string
+  readonly launchId: string
+}
+
+export type GameplayOverlayInstructionResult =
+  | { readonly _tag: "Executed" }
+  | { readonly _tag: "Unavailable"; readonly message: string }
+  | { readonly _tag: "Rejected"; readonly message: string }
+
+/** The complete JS -> native overlay vocabulary. No shell powers are inherited. */
+export type GameplayOverlayToNativeMessage =
+  | { readonly type: "ready" }
+  | { readonly type: "dismiss" }
+  | { readonly type: "refresh-authority" }
+  | {
+      readonly type: "execute-protected-instruction"
+      readonly requestId: string
+      readonly instruction: PlatformInstruction
+    }
+
+/** The complete native -> JS overlay vocabulary. */
+export type GameplayOverlayToPortalMessage =
+  | { readonly type: "config"; readonly payload: GameplayOverlayConfig }
+  | { readonly type: "input"; readonly payload: BridgeInputEvent }
+  | {
+      readonly type: "instruction-result"
+      readonly requestId: string
+      readonly outcome: GameplayOverlayInstructionResult
+    }
+
+export interface KorriOverlayMessageSurface {
+  postMessage(messageJson: string): void
+}
 
 // ── Shell surface (JS -> Kotlin) ────────────────────────────────────────
 

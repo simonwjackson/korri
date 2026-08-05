@@ -1,4 +1,6 @@
 import {
+  GAMEPLAY_OVERLAY_SCREEN_PARAM,
+  GAMEPLAY_OVERLAY_SCREEN_VALUE,
   SESSION_SCREEN_PARAM,
   SESSION_SCREEN_VALUE,
   type KorriNativeBridgeSurface,
@@ -17,12 +19,16 @@ import {
   createHttpKorridClient,
   createInMemoryKorridClient,
 } from "./korrid/client"
+import { createInMemoryOverlayController } from "./overlay/in-memory-overlay-controller"
+import { createOverlayController } from "./overlay/overlay-controller"
+import { createNativeOverlayConnection } from "./overlay/overlay-native"
+import { OverlayRoot } from "./overlay/OverlayRoot"
 import { createSessionLifecycleAdapter } from "./session/lifecycle-adapter"
-import { SurfaceRoot } from "./surface/SurfaceRoot"
 import {
   createFixtureLifecycleAdapter,
   SessionScreen,
 } from "./session/SessionScreen"
+import { SurfaceRoot } from "./surface/SurfaceRoot"
 import "./index.css"
 
 declare global {
@@ -32,43 +38,18 @@ declare global {
   }
 }
 
-// Composition root: this is the one place that knows whether we're inside
-// the Android shell (KorriNative injected) or a desktop browser dev session
-// (in-memory bridge, keyboard input).
-const bus = createInputBus()
-bus.use(createKeyboardAdapter())
-bus.use(createKorriNativeAdapter())
-
-// Surfaces render focusable controls and react to focus; translating semantic
-// directions into real DOM focus is the host's job, not theirs.
-createSpatialFocusController(bus)
-
-const bridge = window.KorriNative
-  ? createKorriNativeLauncherBridge(window.KorriNative)
-  : createInMemoryLauncherBridge()
-
-// The brain: embedded korrid inside the shell, in-memory in browser dev.
-// Loopback http from the synthetic https origin is exempt from WebView
-// mixed-content blocking (verified on device).
-const korridPort = window.KorriNative?.korridPort() ?? -1
-const korridCapability = window.KorriNative?.korridCapability() ?? ""
-const korrid =
-  korridPort > 0 && korridCapability !== ""
-    ? createHttpKorridClient(
-        `http://127.0.0.1:${korridPort}`,
-        korridCapability,
-      )
-    : createInMemoryKorridClient()
-
 const rootElement = document.getElementById("app")
 if (!rootElement) throw new Error("#app element not found")
+const root = ReactDOM.createRoot(rootElement)
+const query = new URLSearchParams(window.location.search)
 
 // The session screen is the same bundled app booted with a query param
 // (treaty: SESSION_SCREEN_PARAM). Inside the stream Activity's overlay the
 // shell injects KorriSession; in browser dev a fixture timeline plays.
 const isSessionScreen =
-  new URLSearchParams(window.location.search).get(SESSION_SCREEN_PARAM) ===
-  SESSION_SCREEN_VALUE
+  query.get(SESSION_SCREEN_PARAM) === SESSION_SCREEN_VALUE
+const isGameplayOverlay =
+  query.get(GAMEPLAY_OVERLAY_SCREEN_PARAM) === GAMEPLAY_OVERLAY_SCREEN_VALUE
 
 if (isSessionScreen) {
   const session = window.KorriSession
@@ -79,11 +60,60 @@ if (isSessionScreen) {
     if (session) session.exitToPortal()
     else window.location.search = ""
   }
-  ReactDOM.createRoot(rootElement).render(
-    <SessionScreen adapter={adapter} onExit={exit} />,
-  )
+  root.render(<SessionScreen adapter={adapter} onExit={exit} />)
+} else if (isGameplayOverlay) {
+  const bus = createInputBus()
+  createSpatialFocusController(bus)
+  if (window.KorriOverlay) {
+    const connection = createNativeOverlayConnection(window.KorriOverlay, bus)
+    connection.start(config => {
+      const korrid = createHttpKorridClient(
+        `http://127.0.0.1:${config.korridPort}`,
+        config.korridCapability,
+      )
+      root.render(
+        <OverlayRoot
+          key={`${config.korridPort}:${config.korridCapability}:${config.launchId}`}
+          bus={bus}
+          controller={createOverlayController({
+            launchId: config.launchId,
+            korrid,
+            platform: connection.platform,
+          })}
+        />,
+      )
+    })
+  } else {
+    bus.use(createKeyboardAdapter())
+    root.render(
+      <OverlayRoot
+        bus={bus}
+        controller={createInMemoryOverlayController()}
+      />,
+    )
+  }
 } else {
-  ReactDOM.createRoot(rootElement).render(
-    <SurfaceRoot bus={bus} bridge={bridge} korrid={korrid} />,
-  )
+  // Composition root: this is the one place that knows whether we're inside
+  // the Android shell or a desktop browser dev session.
+  const bus = createInputBus()
+  bus.use(createKeyboardAdapter())
+  bus.use(createKorriNativeAdapter())
+  createSpatialFocusController(bus)
+
+  const bridge = window.KorriNative
+    ? createKorriNativeLauncherBridge(window.KorriNative)
+    : createInMemoryLauncherBridge()
+
+  // The brain: embedded korrid inside the shell, in-memory in browser dev.
+  const korridPort = window.KorriNative?.korridPort() ?? -1
+  const korridCapability = window.KorriNative?.korridCapability() ?? ""
+  const korrid =
+    korridPort > 0 && korridCapability !== ""
+      ? createHttpKorridClient(
+          `http://127.0.0.1:${korridPort}`,
+          korridCapability,
+        )
+      : createInMemoryKorridClient()
+
+  root.render(<SurfaceRoot bus={bus} bridge={bridge} korrid={korrid} />)
 }
