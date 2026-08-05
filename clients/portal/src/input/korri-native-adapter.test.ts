@@ -32,7 +32,7 @@ describe("parseBridgeInputEvent", () => {
       "options",
       "system",
     ] as const) {
-      expect(parseBridgeInputEvent(JSON.stringify({ type }))).toEqual({
+      expect(parseBridgeInputEvent(JSON.stringify({ type, source: "gamepad" }))).toEqual({
         type,
         source: "gamepad",
       })
@@ -43,6 +43,10 @@ describe("parseBridgeInputEvent", () => {
     expect(parseBridgeInputEvent("not json")).toBeNull()
     expect(parseBridgeInputEvent("42")).toBeNull()
     expect(parseBridgeInputEvent(JSON.stringify({ type: "warp" }))).toBeNull()
+    expect(parseBridgeInputEvent(JSON.stringify({
+      type: "confirm",
+      source: "keyboard",
+    }))).toBeNull()
     expect(
       parseBridgeInputEvent(JSON.stringify({ type: "direction", direction: "in" })),
     ).toBeNull()
@@ -63,9 +67,13 @@ describe("createKorriNativeAdapter", () => {
     const push = host.__korriInput as (json: string) => void
     expect(typeof push).toBe("function")
 
-    push(JSON.stringify({ type: "confirm" }))
+    push(JSON.stringify({ type: "confirm", source: "gamepad" }))
     push("garbage")
-    push(JSON.stringify({ type: "direction", direction: "left" }))
+    push(JSON.stringify({
+      type: "direction",
+      direction: "left",
+      source: "gamepad",
+    }))
 
     expect(emitted).toEqual([
       { type: "confirm", source: "gamepad" },

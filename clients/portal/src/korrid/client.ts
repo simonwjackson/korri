@@ -19,6 +19,9 @@ import type {
   MoonlightResolveOutcome,
   RpcRequest,
   RpcResponse,
+  PlatformInstruction,
+  SessionControl,
+  SessionControlFailure,
   SessionControlInvokeOutcome,
   SessionControlValue,
   SessionControls,
@@ -31,6 +34,7 @@ import type {
   SettingsUpdateOutcome,
 } from "@contracts/generated/korrid"
 import {
+  AndroidMoonlightEffect,
   LaunchContributorKind,
   LaunchForegroundKind,
   SessionControlFailureReason,
@@ -127,6 +131,109 @@ const invocationUnavailable = (): SessionControlInvokeOutcome => ({
     message: "That gameplay control is unavailable right now.",
   },
 })
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function isSessionControlFailure(value: unknown): value is SessionControlFailure {
+  if (!isRecord(value) || typeof value.message !== "string") return false
+  return Object.values(SessionControlFailureReason).includes(
+    value.reason as SessionControlFailureReason,
+  )
+}
+
+function isSessionControlValue(value: unknown): value is SessionControlValue {
+  if (!isRecord(value) || typeof value.kind !== "string") return false
+  if (value.kind === "toggle") return typeof value.value === "boolean"
+  if (value.kind === "choice") return typeof value.value === "string"
+  return value.kind === "range" && typeof value.value === "number" &&
+    Number.isFinite(value.value)
+}
+
+function isSessionControl(value: unknown): value is SessionControl {
+  if (!isRecord(value) || typeof value.id !== "string" ||
+    typeof value.label !== "string" || typeof value.enabled !== "boolean" ||
+    typeof value.destructive !== "boolean" ||
+    typeof value.dismissOnSuccess !== "boolean" || !isRecord(value.interaction)
+  ) return false
+  if (value.description !== undefined && typeof value.description !== "string") return false
+  if (value.disabledReason !== undefined && typeof value.disabledReason !== "string") return false
+  const interaction = value.interaction
+  if (interaction.kind === "command") return interaction.payload === undefined
+  if (!isRecord(interaction.payload)) return false
+  const payload = interaction.payload
+  if (interaction.kind === "toggle") {
+    return typeof payload.value === "boolean"
+  }
+  if (interaction.kind === "choice") {
+    return typeof payload.value === "string" &&
+      Array.isArray(payload.options) &&
+      payload.options.every(option => isRecord(option) &&
+        typeof option.value === "string" && typeof option.label === "string")
+  }
+  return interaction.kind === "range" &&
+    ["value", "min", "max", "step"].every(key =>
+      typeof payload[key] === "number" && Number.isFinite(payload[key]))
+}
+
+function isSessionControls(value: unknown): value is SessionControls {
+  return isRecord(value) && typeof value.launchId === "string" &&
+    (value.title === undefined || typeof value.title === "string") &&
+    Array.isArray(value.groups) && value.groups.every(group =>
+      isRecord(group) && typeof group.id === "string" &&
+      typeof group.label === "string" && Array.isArray(group.controls) &&
+      group.controls.every(isSessionControl))
+}
+
+function isPlatformInstruction(value: unknown): value is PlatformInstruction {
+  if (!isRecord(value) || typeof value.launchId !== "string" ||
+    typeof value.actionId !== "string" || typeof value.nonce !== "string" ||
+    typeof value.integrity !== "string" || !isRecord(value.effect) ||
+    value.effect.kind !== "android-moonlight" ||
+    !Object.values(AndroidMoonlightEffect).includes(
+      value.effect.payload as AndroidMoonlightEffect,
+    )
+  ) return false
+  return value.value === undefined || isSessionControlValue(value.value)
+}
+
+function decodeSessionControlsResponse(value: unknown): SessionControlsOutcome | null {
+  if (!isRecord(value) || value._tag !== "app.session.controls" ||
+    !isRecord(value.outcome)) return null
+  const outcome = value.outcome
+  if (outcome._tag === "Ok" && isSessionControls(outcome.payload)) {
+    return { _tag: "Ok", payload: outcome.payload }
+  }
+  if (outcome._tag === "Err" && isSessionControlFailure(outcome.payload)) {
+    return { _tag: "Err", payload: outcome.payload }
+  }
+  return null
+}
+
+function decodeSessionControlInvokeResponse(
+  value: unknown,
+): SessionControlInvokeOutcome | null {
+  if (!isRecord(value) || value._tag !== "app.session.control.invoke" ||
+    !isRecord(value.outcome)) return null
+  const outcome = value.outcome
+  if (outcome._tag === "Err" && isSessionControlFailure(outcome.payload)) {
+    return { _tag: "Err", payload: outcome.payload }
+  }
+  if (outcome._tag !== "Ok" || !isRecord(outcome.payload)) return null
+  const result = outcome.payload
+  if (result._tag === "Completed" && isRecord(result.payload) &&
+    typeof result.payload.launchId === "string") {
+    return {
+      _tag: "Ok",
+      payload: { _tag: "Completed", payload: { launchId: result.payload.launchId } },
+    }
+  }
+  if (result._tag === "PlatformInstruction" && isPlatformInstruction(result.payload)) {
+    return { _tag: "Ok", payload: { _tag: "PlatformInstruction", payload: result.payload } }
+  }
+  return null
+}
 
 export function createHttpKorridClient(
   baseUrl: string,
@@ -275,24 +382,24 @@ export function createHttpKorridClient(
     },
     async sessionControls(launchId) {
       try {
-        const response = await callKorrid(baseUrl, capability, {
+        const response: unknown = await callKorrid(baseUrl, capability, {
           _tag: "app.session.controls",
           payload: { launchId },
         })
-        return response.outcome
+        return decodeSessionControlsResponse(response) ?? controlsUnavailable()
       } catch {
         return controlsUnavailable()
       }
     },
     async invokeSessionControl(launchId, controlId, value) {
       try {
-        const response = await callKorrid(baseUrl, capability, {
+        const response: unknown = await callKorrid(baseUrl, capability, {
           _tag: "app.session.control.invoke",
           payload: value === undefined
             ? { launchId, controlId }
             : { launchId, controlId, value },
         })
-        return response.outcome
+        return decodeSessionControlInvokeResponse(response) ?? invocationUnavailable()
       } catch {
         return invocationUnavailable()
       }

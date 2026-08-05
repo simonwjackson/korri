@@ -3,6 +3,7 @@ import {
   LaunchContributorKind,
   LaunchForegroundKind,
   MoonlightImplementation,
+  SessionControlFailureReason,
 } from "@contracts/generated/korrid"
 import {
   callKorrid,
@@ -228,6 +229,39 @@ describe("callKorrid", () => {
         },
       },
     ])
+  })
+
+  it("maps malformed successful control RPC payloads to calm unavailability", async () => {
+    const responses = [
+      { _tag: "wrong.tag", outcome: { _tag: "Ok", payload: { groups: [] } } },
+      { _tag: "app.session.control.invoke", outcome: {
+        _tag: "Ok",
+        payload: { _tag: "UnknownResult" },
+      } },
+    ]
+    globalThis.fetch = (async () => new Response(
+      JSON.stringify(responses.shift()),
+      { status: 200, headers: { "content-type": "application/json" } },
+    )) as unknown as typeof fetch
+    const client = createHttpKorridClient(
+      "http://127.0.0.1:43117",
+      "capability",
+    )
+
+    expect(await client.sessionControls("launch-1")).toEqual({
+      _tag: "Err",
+      payload: {
+        reason: SessionControlFailureReason.Unavailable,
+        message: "Gameplay controls are unavailable right now.",
+      },
+    })
+    expect(await client.invokeSessionControl("launch-1", "fill")).toEqual({
+      _tag: "Err",
+      payload: {
+        reason: SessionControlFailureReason.Unavailable,
+        message: "That gameplay control is unavailable right now.",
+      },
+    })
   })
 
   it("aborts session status at its UI deadline", async () => {

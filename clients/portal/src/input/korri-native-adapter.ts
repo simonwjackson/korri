@@ -26,8 +26,13 @@ export function parseBridgeInputEvent(json: string): InputAction | null {
   }
   if (typeof value !== "object" || value === null) return null
   const event = value as Partial<BridgeInputEvent>
+  if (event.source !== "gamepad") return null
 
   if (event.type === "direction") {
+    const keys = Object.keys(value).sort().join(",")
+    if (keys !== "direction,source,type" && keys !== "direction,repeat,source,type") {
+      return null
+    }
     if (typeof event.direction !== "string") return null
     if (!directions.has(event.direction)) return null
     if (event.repeat !== undefined && typeof event.repeat !== "boolean") return null
@@ -39,6 +44,7 @@ export function parseBridgeInputEvent(json: string): InputAction | null {
     }
   }
   if (typeof event.type === "string" && simpleTypes.has(event.type)) {
+    if (Object.keys(value).sort().join(",") !== "source,type") return null
     return {
       type: event.type as "confirm" | "back" | "menu" | "options" | "system",
       source: "gamepad",

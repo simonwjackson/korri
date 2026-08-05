@@ -114,12 +114,67 @@ describe("native overlay message connection", () => {
       "not-json",
       JSON.stringify({ type: "launch", payload: {} }),
       JSON.stringify({ type: "config", payload: { korridPort: "43117" } }),
+      JSON.stringify({ type: "config", payload: {
+        korridPort: 0,
+        korridCapability: "capability",
+        launchId: "launch",
+      } }),
+      JSON.stringify({ type: "config", payload: {
+        korridPort: 43117,
+        korridCapability: " ",
+        launchId: "launch",
+      } }),
       JSON.stringify({ type: "input", payload: { type: "key", keyCode: 19 } }),
+      JSON.stringify({ type: "input", payload: {
+        type: "confirm",
+        source: "keyboard",
+      } }),
+      JSON.stringify({ type: "instruction-result", requestId: "request", outcome: {
+        _tag: "Executed",
+        message: "not allowed",
+      } }),
+      JSON.stringify({ type: "instruction-result", requestId: "request", outcome: {
+        _tag: "Unavailable",
+        message: "",
+      } }),
     ]) window.__korriOverlayMessage?.(value)
 
     expect(configs).toEqual([])
     expect(received).toEqual([])
     expect(surface.messages).toEqual([{ type: "ready" }])
     stop()
+  })
+
+  test("bounds protected instructions and clears pending timers on response and dispose", async () => {
+    const surface = recordingSurface()
+    const connection = createNativeOverlayConnection(
+      surface,
+      createInputBus(),
+      { instructionTimeoutMs: 5 },
+    )
+    const stop = connection.start(() => {})
+    const instruction = {
+      launchId: "0123456789abcdef0123456789abcdef",
+      actionId: "fill",
+      nonce: "nonce",
+      value: { kind: "toggle" as const, value: true },
+      effect: {
+        kind: "android-moonlight" as const,
+        payload: AndroidMoonlightEffect.SetFillMode,
+      },
+      integrity: "opaque",
+    }
+
+    expect(await connection.platform.executeProtectedInstruction(instruction)).toEqual({
+      _tag: "Unavailable",
+      message: "The gameplay action timed out.",
+    })
+
+    const disposed = connection.platform.executeProtectedInstruction(instruction)
+    stop()
+    expect(await disposed).toEqual({
+      _tag: "Unavailable",
+      message: "The gameplay overlay closed before the action completed.",
+    })
   })
 })

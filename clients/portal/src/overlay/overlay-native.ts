@@ -17,37 +17,86 @@ declare global {
   }
 }
 
+function record(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value).sort()
+  return actual.length === keys.length &&
+    [...keys].sort().every((key, index) => actual[index] === key)
+}
+
+function nonempty(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0
+}
+
 function parsePortalMessage(json: string): GameplayOverlayToPortalMessage | null {
-  let value: unknown
+  let parsed: unknown
   try {
-    value = JSON.parse(json)
+    parsed = JSON.parse(json)
   } catch {
     return null
   }
-  if (typeof value !== "object" || value === null || !("type" in value)) return null
-  const message = value as Partial<GameplayOverlayToPortalMessage>
+  const message = record(parsed)
+  if (!message || typeof message.type !== "string") return null
   if (message.type === "config") {
-    const payload = message.payload
+    const payload = record(message.payload)
     if (
-      typeof payload !== "object" || payload === null ||
-      !("korridPort" in payload) || typeof payload.korridPort !== "number" ||
-      !("korridCapability" in payload) || typeof payload.korridCapability !== "string" ||
-      !("launchId" in payload) || typeof payload.launchId !== "string"
+      !exactKeys(message, ["type", "payload"]) || !payload ||
+      !exactKeys(payload, ["korridPort", "korridCapability", "launchId"]) ||
+      !Number.isInteger(payload.korridPort) || (payload.korridPort as number) <= 0 ||
+      !nonempty(payload.korridCapability) || !nonempty(payload.launchId)
     ) return null
-    return message as GameplayOverlayToPortalMessage
+    return {
+      type: "config",
+      payload: {
+        korridPort: payload.korridPort as number,
+        korridCapability: payload.korridCapability,
+        launchId: payload.launchId,
+      },
+    }
   }
   if (message.type === "input") {
-    const parsed = parseBridgeInputEvent(JSON.stringify(message.payload))
-    return parsed ? message as GameplayOverlayToPortalMessage : null
+    if (!exactKeys(message, ["type", "payload"])) return null
+    const input = parseBridgeInputEvent(JSON.stringify(message.payload))
+    if (!input) return null
+    if (input.type === "direction") {
+      return {
+        type: "input",
+        payload: {
+          type: "direction",
+          direction: input.direction,
+          ...(input.repeat === true ? { repeat: true } : {}),
+          source: "gamepad",
+        },
+      }
+    }
+    return { type: "input", payload: { type: input.type, source: "gamepad" } }
   }
   if (message.type === "instruction-result") {
+    const outcome = record(message.outcome)
     if (
-      typeof message.requestId !== "string" ||
-      typeof message.outcome !== "object" || message.outcome === null ||
-      !("_tag" in message.outcome) ||
-      !["Executed", "Unavailable", "Rejected"].includes(message.outcome._tag)
+      !exactKeys(message, ["type", "requestId", "outcome"]) ||
+      !nonempty(message.requestId) || !outcome || typeof outcome._tag !== "string"
     ) return null
-    return message as GameplayOverlayToPortalMessage
+    if (outcome._tag === "Executed" && exactKeys(outcome, ["_tag"])) {
+      return { type: "instruction-result", requestId: message.requestId, outcome: {
+        _tag: "Executed",
+      } }
+    }
+    if (
+      (outcome._tag === "Unavailable" || outcome._tag === "Rejected") &&
+      exactKeys(outcome, ["_tag", "message"]) && nonempty(outcome.message)
+    ) {
+      return {
+        type: "instruction-result",
+        requestId: message.requestId,
+        outcome: { _tag: outcome._tag, message: outcome.message },
+      }
+    }
   }
   return null
 }
@@ -64,16 +113,24 @@ export interface NativeOverlayConnection {
   start(onConfig: (config: GameplayOverlayConfig) => void): () => void
 }
 
+export interface NativeOverlayConnectionOptions {
+  readonly instructionTimeoutMs?: number
+}
+
+const INSTRUCTION_TIMEOUT_MS = 5_000
+
 /** Purpose-built message connection; it cannot express any full-shell operation. */
 export function createNativeOverlayConnection(
   surface: KorriOverlayMessageSurface,
   bus: InputBus,
+  options: NativeOverlayConnectionOptions = {},
 ): NativeOverlayConnection {
   let requestSequence = 0
-  const pending = new Map<
-    string,
-    (outcome: GameplayOverlayInstructionResult) => void
-  >()
+  const instructionTimeoutMs = options.instructionTimeoutMs ?? INSTRUCTION_TIMEOUT_MS
+  const pending = new Map<string, {
+    readonly resolve: (outcome: GameplayOverlayInstructionResult) => void
+    readonly timer: ReturnType<typeof setTimeout>
+  }>()
 
   const platform: OverlayPlatform = {
     dismiss() {
@@ -86,7 +143,14 @@ export function createNativeOverlayConnection(
       requestSequence += 1
       const requestId = `instruction-${requestSequence}`
       return new Promise(resolve => {
-        pending.set(requestId, resolve)
+        const timer = setTimeout(() => {
+          if (!pending.delete(requestId)) return
+          resolve({
+            _tag: "Unavailable",
+            message: "The gameplay action timed out.",
+          })
+        }, instructionTimeoutMs)
+        pending.set(requestId, { resolve, timer })
         post(surface, {
           type: "execute-protected-instruction",
           requestId,
@@ -108,10 +172,11 @@ export function createNativeOverlayConnection(
           const action = parseBridgeInputEvent(JSON.stringify(message.payload))
           if (action) bus.emit(action)
         } else {
-          const resolve = pending.get(message.requestId)
-          if (resolve) {
+          const request = pending.get(message.requestId)
+          if (request) {
             pending.delete(message.requestId)
-            resolve(message.outcome)
+            clearTimeout(request.timer)
+            request.resolve(message.outcome)
           }
         }
       }
@@ -121,8 +186,9 @@ export function createNativeOverlayConnection(
         if (window[GAMEPLAY_OVERLAY_RECEIVER] === receiver) {
           delete window[GAMEPLAY_OVERLAY_RECEIVER]
         }
-        for (const resolve of pending.values()) {
-          resolve({
+        for (const request of pending.values()) {
+          clearTimeout(request.timer)
+          request.resolve({
             _tag: "Unavailable",
             message: "The gameplay overlay closed before the action completed.",
           })
