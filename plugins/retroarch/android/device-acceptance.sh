@@ -802,37 +802,111 @@ focus_wario_in_installed_library() {
   jq -e '
     .view == "library" and .gameId == "local-game:wl4"
     and .title == "Wario Land 4" and .focused == true
+    and .rectFinitePositive == true and .fullyOnScreen == true
+    and (.bounds.width > 0) and (.bounds.height > 0)
+    and (.viewport.width > 0) and (.viewport.height > 0)
   ' <<<"$focus_observation" >/dev/null
   printf '%s\n' "$focus_observation" >"$PORTAL_EVIDENCE_DIR/$label.focus.json"
 }
+render_focused_wario_crop_evidence() {
+  local image="$1"
+  local focus_json="$2"
+  local crop="$3"
+  local scaled="$4"
+  local text="$5"
+  local observation="$6"
+  local image_width image_height
+  local crop_x crop_y crop_width crop_height
+  local element_x element_y element_width element_height
+  local padding=10
+  local ring_image="${crop}.focus-element.png"
+  local ring_band ring_top ring_bottom ring_left ring_right ring_ratio
+
+  jq -e '
+    .gameId == "local-game:wl4" and .title == "Wario Land 4"
+    and .focused == true and .rectFinitePositive == true and .fullyOnScreen == true
+    and (.bounds.left | type == "number") and (.bounds.top | type == "number")
+    and (.bounds.width | type == "number") and .bounds.width > 0
+    and (.bounds.height | type == "number") and .bounds.height > 0
+    and (.viewport.width | type == "number") and .viewport.width > 0
+    and (.viewport.height | type == "number") and .viewport.height > 0
+  ' "$focus_json" >/dev/null
+  read -r image_width image_height < <(
+    magick identify -format '%w %h' "$image"
+    printf '\n'
+  )
+  [[ "$image_width" =~ ^[0-9]+$ && "$image_height" =~ ^[0-9]+$ \
+    && "$image_width" -gt 0 && "$image_height" -gt 0 ]] || return 1
+
+  read -r crop_x crop_y crop_width crop_height \
+    element_x element_y element_width element_height < <(jq -r \
+    --argjson imageWidth "$image_width" --argjson imageHeight "$image_height" \
+    --argjson padding "$padding" '
+      (.bounds.left * $imageWidth / .viewport.width | floor) as $left
+      | (.bounds.top * $imageHeight / .viewport.height | floor) as $top
+      | ((.bounds.left + .bounds.width) * $imageWidth / .viewport.width | ceil) as $right
+      | ((.bounds.top + .bounds.height) * $imageHeight / .viewport.height | ceil) as $bottom
+      | ([0, $left - $padding] | max) as $x
+      | ([0, $top - $padding] | max) as $y
+      | ([$imageWidth, $right + $padding] | min) as $x2
+      | ([$imageHeight, $bottom + $padding] | min) as $y2
+      | [$x, $y, $x2 - $x, $y2 - $y,
+         $left, $top, $right - $left, $bottom - $top] | @tsv
+    ' "$focus_json")
+  [[ "$crop_x" =~ ^[0-9]+$ && "$crop_y" =~ ^[0-9]+$ \
+    && "$crop_width" =~ ^[0-9]+$ && "$crop_height" =~ ^[0-9]+$ \
+    && "$element_x" =~ ^[0-9]+$ && "$element_y" =~ ^[0-9]+$ \
+    && "$element_width" =~ ^[0-9]+$ && "$element_height" =~ ^[0-9]+$ \
+    && "$crop_width" -gt 0 && "$crop_height" -gt 0 \
+    && "$element_width" -gt 0 && "$element_height" -gt 0 ]] || return 1
+
+  magick "$image" -crop "${crop_width}x${crop_height}+${crop_x}+${crop_y}" +repage "$crop"
+  magick "$image" -crop "${element_width}x${element_height}+${element_x}+${element_y}" \
+    +repage "$ring_image"
+  ring_band=$((element_width < 6 || element_height < 6 ? 1 : 6))
+  ring_top="$(magick "$ring_image" -crop "${element_width}x${ring_band}+0+0" +repage \
+    -alpha off -colorspace RGB -fx 'g > 0.55 && b > 0.65 && r < 0.5 ? 1 : 0' \
+    -format '%[fx:mean]' info:)"
+  ring_bottom="$(magick "$ring_image" \
+    -crop "${element_width}x${ring_band}+0+$((element_height - ring_band))" +repage \
+    -alpha off -colorspace RGB -fx 'g > 0.55 && b > 0.65 && r < 0.5 ? 1 : 0' \
+    -format '%[fx:mean]' info:)"
+  ring_left="$(magick "$ring_image" -crop "${ring_band}x${element_height}+0+0" +repage \
+    -alpha off -colorspace RGB -fx 'g > 0.55 && b > 0.65 && r < 0.5 ? 1 : 0' \
+    -format '%[fx:mean]' info:)"
+  ring_right="$(magick "$ring_image" \
+    -crop "${ring_band}x${element_height}+$((element_width - ring_band))+0" +repage \
+    -alpha off -colorspace RGB -fx 'g > 0.55 && b > 0.65 && r < 0.5 ? 1 : 0' \
+    -format '%[fx:mean]' info:)"
+  ring_ratio="$(printf '%s\n' "$ring_top" "$ring_bottom" "$ring_left" "$ring_right" \
+    | awk 'BEGIN { max = 0 } { if ($1 + 0 > max) max = $1 + 0 } END { print max }')"
+  awk -v ratio="$ring_ratio" 'BEGIN { exit !(ratio + 0 >= 0.08) }' || return 1
+  magick "$crop" -filter point -resize 400% "$scaled"
+  tesseract "$scaled" stdout --psm 6 >"$text" 2>/dev/null
+  tr '\n' ' ' <"$text" | grep -Eqi 'wario[[:space:]]+land[[:space:]]+4' || return 1
+  jq -cn \
+    --argjson x "$crop_x" --argjson y "$crop_y" \
+    --argjson width "$crop_width" --argjson height "$crop_height" \
+    --argjson elementX "$element_x" --argjson elementY "$element_y" \
+    --argjson elementWidth "$element_width" --argjson elementHeight "$element_height" \
+    --argjson ringRatio "$ring_ratio" \
+    '{crop:{x:$x,y:$y,width:$width,height:$height},
+      focusedElement:{x:$elementX,y:$elementY,width:$elementWidth,height:$elementHeight},
+      focusRingBoundaryMaxRatio:$ringRatio,activeElementVerified:true,
+      ocrTitle:"Wario Land 4"}' >"$observation"
+}
+
 portal_shot_focuses_wario() {
   local label="$1"
   local image="$PORTAL_EVIDENCE_DIR/$label.png"
-  local deskewed="$PORTAL_EVIDENCE_DIR/$label.ocr.png"
-  local text="$PORTAL_EVIDENCE_DIR/$label.ocr.txt"
-  local tsv="$PORTAL_EVIDENCE_DIR/$label.ocr.tsv"
-  local left=""
-  local top=""
-  local width=""
-  local height=""
-  local sample_x
-  local sample_y
-  local brightness
+  local focus_json="$PORTAL_EVIDENCE_DIR/$label.focus.json"
+  local crop="$PORTAL_EVIDENCE_DIR/$label.focus-crop.png"
+  local scaled="$PORTAL_EVIDENCE_DIR/$label.focus-crop-4x.png"
+  local text="$PORTAL_EVIDENCE_DIR/$label.focus-crop.ocr.txt"
+  local observation="$PORTAL_EVIDENCE_DIR/$label.focus-crop.json"
   "${ADB[@]}" exec-out screencap -p >"$image"
-  magick "$image" -deskew 40% "$deskewed"
-  tesseract "$deskewed" stdout --psm 6 >"$text" 2>/dev/null
-  tesseract "$deskewed" stdout --psm 6 tsv >"$tsv" 2>/dev/null
-  if ! grep -qi 'wario' "$text" || ! grep -qi 'land' "$text"; then
-    return 1
-  fi
-  read -r left top width height < <(
-    awk -F '\t' 'tolower($12) == "wario" { print $7, $8, $9, $10; exit }' "$tsv"
-  )
-  [[ "$left" =~ ^[0-9]+$ && "$top" =~ ^[0-9]+$ && "$width" =~ ^[0-9]+$ && "$height" =~ ^[0-9]+$ ]] || return 1
-  sample_x=$((left > 12 ? left - 12 : left + width + 12))
-  sample_y=$((top + height / 2))
-  brightness="$(magick "$deskewed" -crop "1x1+$sample_x+$sample_y" -format '%[fx:round(100*(r+g+b)/3)]' info:)"
-  [[ "$brightness" =~ ^[0-9]+$ && "$brightness" -ge 60 ]]
+  render_focused_wario_crop_evidence \
+    "$image" "$focus_json" "$crop" "$scaled" "$text" "$observation"
 }
 launch_wario_entry() {
   local label="$1"

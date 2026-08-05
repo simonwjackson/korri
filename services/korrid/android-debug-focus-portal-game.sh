@@ -158,6 +158,13 @@ case "$mode" in
       }
       const target = exactMatches[0];
       target.focus();
+      const rect = target.getBoundingClientRect();
+      const rectValues = [rect.left, rect.top, rect.width, rect.height, rect.right, rect.bottom];
+      const rectFinitePositive = rectValues.every(Number.isFinite)
+        && rect.width > 0 && rect.height > 0;
+      const fullyOnScreen = rectFinitePositive
+        && rect.left >= 0 && rect.top >= 0
+        && rect.right <= window.innerWidth && rect.bottom <= window.innerHeight;
       return {
         href: location.href,
         view: 'library',
@@ -167,11 +174,25 @@ case "$mode" in
         exactMatches: exactMatches.length,
         activeExact: document.activeElement === target
           && document.activeElement.getAttribute('data-shift-game-id') === gameId
-          && document.activeElement.getAttribute('aria-label') === title
+          && document.activeElement.getAttribute('aria-label') === title,
+        bounds: {left: rect.left, top: rect.top, width: rect.width, height: rect.height},
+        viewport: {width: window.innerWidth, height: window.innerHeight},
+        rectFinitePositive,
+        fullyOnScreen
       };
     })()"
     predicate='.href == $url and .view == "library" and .gameId == $gameId and .title == $title
-      and .renderedIdMatches == 1 and .exactMatches == 1 and .activeExact == true'
+      and .renderedIdMatches == 1 and .exactMatches == 1 and .activeExact == true
+      and .rectFinitePositive == true and .fullyOnScreen == true
+      and (.bounds | type == "object") and (.viewport | type == "object")
+      and (.bounds.left | type == "number") and (.bounds.top | type == "number")
+      and (.bounds.width | type == "number") and .bounds.width > 0
+      and (.bounds.height | type == "number") and .bounds.height > 0
+      and (.viewport.width | type == "number") and .viewport.width > 0
+      and (.viewport.height | type == "number") and .viewport.height > 0
+      and .bounds.left >= 0 and .bounds.top >= 0
+      and (.bounds.left + .bounds.width) <= .viewport.width
+      and (.bounds.top + .bounds.height) <= .viewport.height'
     failure='trusted main portal Library did not expose exactly one focusable game with the expected identity'
     ;;
 esac
@@ -203,7 +224,8 @@ case "$mode" in
       '{url:$url,view:"library",verified:true}'
     ;;
   --game)
-    "$JQ_BIN" -cn --arg url "$TRUSTED_PORTAL_URL" --arg gameId "$game_id" --arg title "$title" \
-      '{url:$url,view:"library",gameId:$gameId,title:$title,focused:true}'
+    "$JQ_BIN" -c \
+      '{url:.href,view,gameId,title,focused:.activeExact,bounds,viewport,
+        rectFinitePositive,fullyOnScreen}' <<<"$verified"
     ;;
 esac

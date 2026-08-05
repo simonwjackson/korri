@@ -34,7 +34,14 @@ grep -F 'focus_wario_in_installed_library' "$ACCEPTANCE" >/dev/null
 grep -F 'traverse_library_to_final_viewport' "$ACCEPTANCE" >/dev/null
 grep -F 'DEBUG_PORTAL_FOCUS_GAME_SH=' "$ACCEPTANCE" >/dev/null
 grep -F 'portal_shot_focuses_wario' "$ACCEPTANCE" >/dev/null
-grep -F 'brightness" -ge 60' "$ACCEPTANCE" >/dev/null
+grep -F 'render_focused_wario_crop_evidence' "$ACCEPTANCE" >/dev/null
+grep -F 'focus-crop-4x.png' "$ACCEPTANCE" >/dev/null
+grep -F 'focusRingBoundaryMaxRatio' "$ACCEPTANCE" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract pattern includes `$12`.
+if grep -Eq 'deskew|tolower\(\$12\) == "wario"|brightness.*-ge' "$ACCEPTANCE"; then
+  echo 'RetroArch focus evidence must not depend on full-frame OCR title coordinates' >&2
+  exit 1
+fi
 # shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F -- '"$SERIAL" "$KORRI_PACKAGE" --library' "$ACCEPTANCE" >/dev/null
 # shellcheck disable=SC2016 # Literal source-contract needle.
@@ -226,5 +233,43 @@ for rejected in \
     exit 1
   fi
 done
+
+FOCUS_RENDERER="$TMP/focus-renderer.sh"
+sed -n '/^render_focused_wario_crop_evidence() {/,/^}/p' "$ACCEPTANCE" >"$FOCUS_RENDERER"
+# shellcheck source=/dev/null
+source "$FOCUS_RENDERER"
+cat >"$TMP/focused-wario.svg" <<'SVG'
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480">
+  <rect width="640" height="480" fill="#050505"/>
+  <g transform="translate(548,230)">
+    <rect width="82" height="120" rx="8" fill="#17343d" stroke="#32c7e6" stroke-width="4"/>
+    <text x="41" y="112" text-anchor="middle" font-family="DejaVu Sans" font-size="9" fill="white">Wario Land 4</text>
+  </g>
+</svg>
+SVG
+magick "$TMP/focused-wario.svg" "$TMP/focused-wario-full.png"
+cat >"$TMP/focused-wario.json" <<'JSON'
+{"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":548,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480}}
+JSON
+# The title is intentionally too small for reliable full-frame OCR. Exact DOM
+# bounds must drive the crop and scale before OCR rather than false-failing.
+tesseract "$TMP/focused-wario-full.png" stdout --psm 6 >"$TMP/full-frame.txt" 2>/dev/null
+if grep -Eqi 'wario[[:space:]]+land[[:space:]]+4' "$TMP/full-frame.txt"; then
+  echo 'deterministic focused-Wario fixture unexpectedly became full-frame OCR-readable' >&2
+  exit 1
+fi
+render_focused_wario_crop_evidence \
+  "$TMP/focused-wario-full.png" "$TMP/focused-wario.json" \
+  "$TMP/focused-wario-crop.png" "$TMP/focused-wario-crop-4x.png" \
+  "$TMP/focused-wario-crop.txt" "$TMP/focused-wario-observation.json"
+jq -e '
+  .crop == {x:538,y:220,width:102,height:140}
+  and .focusedElement == {x:548,y:230,width:82,height:120}
+  and .focusRingBoundaryMaxRatio >= 0.08
+  and .activeElementVerified == true
+  and .ocrTitle == "Wario Land 4"
+' "$TMP/focused-wario-observation.json" >/dev/null
+grep -Eqi 'wario[[:space:]]+land[[:space:]]+4' "$TMP/focused-wario-crop.txt"
+[[ -s "$TMP/focused-wario-crop.png" && -s "$TMP/focused-wario-crop-4x.png" ]]
 
 printf 'RetroArch acceptance config-safety contract passed\n'

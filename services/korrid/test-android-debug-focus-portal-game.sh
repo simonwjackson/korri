@@ -41,8 +41,9 @@ elif grep -Fq 'visibleLibraryRoots' <<<"$expression"; then
   value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"library","visibleLibraryRoots":1}'
 else
   case "${FAKE_GAME_RESULT:-ok}" in
-    ok) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"library","gameId":"local-game:wl4","title":"Wario Land 4","renderedIdMatches":1,"exactMatches":1,"activeExact":true}' ;;
-    ambiguous) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"library","gameId":"local-game:wl4","title":"Wario Land 4","renderedIdMatches":2,"exactMatches":2,"activeExact":false}' ;;
+    ok) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"library","gameId":"local-game:wl4","title":"Wario Land 4","renderedIdMatches":1,"exactMatches":1,"activeExact":true,"bounds":{"left":548.5,"top":230.25,"width":82,"height":120},"viewport":{"width":640,"height":480},"rectFinitePositive":true,"fullyOnScreen":true}' ;;
+    ambiguous) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"library","gameId":"local-game:wl4","title":"Wario Land 4","renderedIdMatches":2,"exactMatches":2,"activeExact":false,"bounds":{"left":0,"top":0,"width":0,"height":0},"viewport":{"width":640,"height":480},"rectFinitePositive":false,"fullyOnScreen":false}' ;;
+    offscreen) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"library","gameId":"local-game:wl4","title":"Wario Land 4","renderedIdMatches":1,"exactMatches":1,"activeExact":true,"bounds":{"left":620,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480},"rectFinitePositive":true,"fullyOnScreen":false}' ;;
     *) exit 2 ;;
   esac
 fi
@@ -81,6 +82,9 @@ game="$($HELPER fake-device com.simonwjackson.korri.debug --game local-game:wl4 
 jq -e --arg url "$trusted" '
   .url == $url and .view == "library" and .gameId == "local-game:wl4"
   and .title == "Wario Land 4" and .focused == true
+  and .bounds == {left:548.5,top:230.25,width:82,height:120}
+  and .viewport == {width:640,height:480}
+  and .rectFinitePositive == true and .fullyOnScreen == true
 ' <<<"$game" >/dev/null
 
 grep -F 'forward tcp:43123 localabstract:webview_devtools_remote_4242' "$FAKE_ADB_LOG" >/dev/null
@@ -88,6 +92,9 @@ grep -F 'forward --remove tcp:43123' "$FAKE_ADB_LOG" >/dev/null
 grep -F 'button[data-korri-part=\"shift.cine-library-tile\"][aria-label=\"Library\"]' "$FAKE_EVAL_LOG" >/dev/null
 grep -F "document.querySelectorAll('[data-shift-library]').length !== 1" "$FAKE_EVAL_LOG" >/dev/null
 grep -F 'target.focus()' "$FAKE_EVAL_LOG" >/dev/null
+grep -F 'target.getBoundingClientRect()' "$FAKE_EVAL_LOG" >/dev/null
+grep -F 'rectFinitePositive' "$FAKE_EVAL_LOG" >/dev/null
+grep -F 'fullyOnScreen' "$FAKE_EVAL_LOG" >/dev/null
 for forbidden in '.click(' 'dispatchEvent(' KorriNative korridCapability 'fetch(' XMLHttpRequest surface=overlay example.invalid; do
   if grep -F "$forbidden" "$FAKE_EVAL_LOG" >/dev/null; then
     echo "debug focus evaluated forbidden content: $forbidden" >&2
@@ -110,6 +117,15 @@ if "$HELPER" fake-device com.simonwjackson.korri.debug --game local-game:wl4 'Wa
   exit 1
 fi
 grep -F 'did not expose exactly one focusable game' "$TMP/ambiguous.err" >/dev/null
+unset FAKE_GAME_RESULT
+
+export FAKE_GAME_RESULT=offscreen
+if "$HELPER" fake-device com.simonwjackson.korri.debug --game local-game:wl4 'Wario Land 4' \
+  >"$TMP/offscreen.out" 2>"$TMP/offscreen.err"; then
+  echo 'debug focus helper accepted an off-screen focused game' >&2
+  exit 1
+fi
+grep -F 'did not expose exactly one focusable game' "$TMP/offscreen.err" >/dev/null
 unset FAKE_GAME_RESULT
 
 jq -cn --arg url "$trusted" \
