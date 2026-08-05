@@ -80,7 +80,7 @@ const declaration = {
       localCursor: {
         id: "@korri:moonlight/local-cursor",
         owner: { kind: "transport", id: transport },
-        label: "Toggle local mouse cursor (physical mouse needed)",
+        label: "Toggle local mouse cursor(physical mouse needed)",
         interaction: { kind: "command" },
         effect: "@korri:moonlight/set-local-cursor",
         dismissOnSuccess: true,
