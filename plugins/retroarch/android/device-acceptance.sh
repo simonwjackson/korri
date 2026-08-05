@@ -34,7 +34,14 @@ LIBRARY_REMOTE="$ANDROID_STORAGE_ROOT/library.yaml"
 RETROARCH_CONFIG_REMOTE="$ANDROID_STORAGE_ROOT/retroarch.cfg"
 CHECKPOINT_CONFIG="$ROOT/docs/research/retroarch-plugin-route/config.yaml"
 CHECKPOINT_LIBRARY="$ROOT/docs/research/retroarch-plugin-route/library-wl4.yaml"
-CHECKPOINT_BACKUP_DIR="$ANDROID_STORAGE_ROOT/.retroarch-route-check-backup-$$"
+RUN_NONCE="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+[[ "$RUN_NONCE" =~ ^[0-9a-f]{32}$ ]] || {
+  echo 'could not create a random RetroArch acceptance run nonce' >&2
+  exit 1
+}
+CHECKPOINT_BACKUP_DIR="$ANDROID_STORAGE_ROOT/.retroarch-route-check-backup-$RUN_NONCE"
+BACKUP_OWNER_REMOTE="$CHECKPOINT_BACKUP_DIR/.korri-acceptance-owner"
+UDP_COMPLETION_MARKER="korri-udp-probe-complete-$RUN_NONCE"
 LOCK_REMOTE="$ANDROID_STORAGE_ROOT/.android-app-route-check.lock"
 LOCK_OWNER_REMOTE="$LOCK_REMOTE/owner"
 CONFIG_WAS_PRESENT=false
@@ -48,6 +55,7 @@ STATE_DIR_WAS_PRESENT=false
 SAVE_DIR_WAS_PRESENT=false
 SCREENSHOTS_DIR_WAS_PRESENT=false
 CHECKPOINT_RESTORE_NEEDED=false
+BACKUP_CREATED=false
 FORWARD_ACTIVE=false
 LOCK_ACQUIRED=false
 TARGET_STARTED_BY_GATE=false
@@ -139,6 +147,15 @@ assert_no_artemis_game_activity() {
   fi
 }
 
+assert_no_retroarch_activities() {
+  local activities
+  activities="$("${ADB[@]}" shell dumpsys activity activities | tr -d '\r')" || return 1
+  if grep -Eq "($FORK_PACKAGE|$STOCK_PACKAGE)/" <<<"$activities"; then
+    echo 'RetroArch acceptance requires no Korri or stock RetroArch Activity in any active task before mutation' >&2
+    return 1
+  fi
+}
+
 assert_korri_process_unchanged() {
   local current
   current="$(package_pid "$KORRI_PACKAGE")" || return 1
@@ -146,6 +163,36 @@ assert_korri_process_unchanged() {
     echo 'Korri PID changed during RetroArch acceptance' >&2
     return 1
   }
+}
+
+assert_pristine_gate_state() {
+  local fork_pid
+  local stock_pid
+  assert_shell_foreground
+  assert_no_artemis_game_activity
+  assert_no_retroarch_activities
+  fork_pid="$(package_pid "$FORK_PACKAGE")" || return 1
+  stock_pid="$(package_pid "$STOCK_PACKAGE")" || return 1
+  [[ -z "$fork_pid" && -z "$stock_pid" ]] || {
+    echo 'RetroArch acceptance requires both Korri and stock RetroArch processes to be stopped before mutation' >&2
+    return 1
+  }
+  assert_korri_process_unchanged
+}
+
+assert_session_idle() {
+  local session
+  session="$(rpc '{"_tag":"app.session.status","payload":{}}')" || return 1
+  jq -e '.outcome._tag == "Ok" and (.outcome.payload.active | not)' \
+    <<<"$session" >/dev/null || {
+    echo 'an app.session launch is active; end it before RetroArch acceptance mutates device data' >&2
+    return 1
+  }
+}
+
+revalidate_gate_state_after_mutation() {
+  assert_pristine_gate_state
+  assert_session_idle
 }
 
 record_gate_launch() {
@@ -220,6 +267,36 @@ release_device_lock() {
   LOCK_ACQUIRED=false
 }
 
+create_owned_backup() {
+  if [[ "$(remote_state "$CHECKPOINT_BACKUP_DIR")" == present ]]; then
+    echo "refusing pre-existing backup directory: $CHECKPOINT_BACKUP_DIR" >&2
+    return 1
+  fi
+  "${ADB[@]}" shell "if mkdir '$CHECKPOINT_BACKUP_DIR' 2>/dev/null; then printf '%s\\n' '$RUN_NONCE' > '$BACKUP_OWNER_REMOTE'; else exit 73; fi"
+  local owner
+  owner="$("${ADB[@]}" shell "cat '$BACKUP_OWNER_REMOTE'" | tr -d '\r\n')" || return 1
+  [[ "$owner" == "$RUN_NONCE" ]] || {
+    echo "backup ownership marker mismatch after creation: $CHECKPOINT_BACKUP_DIR" >&2
+    return 1
+  }
+  BACKUP_CREATED=true
+}
+
+remove_owned_backup() {
+  [[ "$BACKUP_CREATED" == true ]] || return 0
+  local owner
+  owner="$("${ADB[@]}" shell "cat '$BACKUP_OWNER_REMOTE'" 2>/dev/null | tr -d '\r\n')" || {
+    echo "refusing to remove backup without its ownership marker: $CHECKPOINT_BACKUP_DIR" >&2
+    return 1
+  }
+  [[ "$owner" == "$RUN_NONCE" ]] || {
+    echo "refusing to remove backup owned by another run: $CHECKPOINT_BACKUP_DIR" >&2
+    return 1
+  }
+  "${ADB[@]}" shell "test \"\$(cat '$BACKUP_OWNER_REMOTE')\" = '$RUN_NONCE' && rm -rf '$CHECKPOINT_BACKUP_DIR'" || return 1
+  BACKUP_CREATED=false
+}
+
 restore_checkpoint_files() {
   local restore_failed=false
   local directory=""
@@ -268,8 +345,8 @@ restore_checkpoint_files() {
     echo "RetroArch acceptance failed to restore device data; backup retained at $CHECKPOINT_BACKUP_DIR" >&2
     return 1
   fi
-  if ! "${ADB[@]}" shell "rm -rf '$CHECKPOINT_BACKUP_DIR'" >/dev/null 2>&1; then
-    echo "RetroArch acceptance restored device data but could not remove $CHECKPOINT_BACKUP_DIR" >&2
+  if ! remove_owned_backup; then
+    echo "RetroArch acceptance restored device data but could not remove its owned backup $CHECKPOINT_BACKUP_DIR" >&2
     return 1
   fi
   CHECKPOINT_RESTORE_NEEDED=false
@@ -330,7 +407,7 @@ cleanup() {
   fi
   if [[ "$safe_to_restore" == true ]]; then
     if [[ "$CHECKPOINT_RESTORE_NEEDED" != true ]]; then
-      "${ADB[@]}" shell "rm -rf '$CHECKPOINT_BACKUP_DIR'" >/dev/null 2>&1 || cleanup_failed=true
+      remove_owned_backup || cleanup_failed=true
       release_device_lock || cleanup_failed=true
     elif restore_checkpoint_files; then
       release_device_lock || cleanup_failed=true
@@ -353,7 +430,7 @@ trap cleanup EXIT
 
 provision_checkpoint_files() {
   acquire_device_lock
-  "${ADB[@]}" shell "rm -rf '$CHECKPOINT_BACKUP_DIR'; mkdir -p '$CHECKPOINT_BACKUP_DIR'"
+  create_owned_backup
   backup_path_if_present "$CONFIG_REMOTE" config.yaml CONFIG_WAS_PRESENT
   backup_path_if_present "$LIBRARY_REMOTE" library.yaml LIBRARY_WAS_PRESENT
   backup_path_if_present "$RETROARCH_CONFIG_REMOTE" retroarch.cfg RETROARCH_CONFIG_WAS_PRESENT
@@ -409,7 +486,7 @@ existing_korri_pid="$(package_pid "$KORRI_PACKAGE")"
   echo 'Open Korri normally, leave its Shell visible, and rerun this gate; do not force-stop or reinstall Korri.' >&2
   exit 1
 }
-provision_checkpoint_files
+assert_pristine_gate_state
 PORTAL_EVIDENCE_DIR="$(mktemp -d)"
 permission_info="$("${ADB[@]}" shell dumpsys package permissions | \
   grep -A6 'Permission \[com.korri.retroarch.permission.LAUNCH\]' || true)"
@@ -427,15 +504,9 @@ if [[ "$sdk_level" -ge 30 ]]; then
     exit 1
   }
 fi
-"${ADB[@]}" shell am start --display 0 -n "$KORRI_ACTIVITY" >/dev/null
-SHELL_BROUGHT_FORWARD=true
-foreground_korri_pid="$(package_pid "$KORRI_PACKAGE")"
-assert_no_artemis_game_activity
-[[ "$foreground_korri_pid" == "$existing_korri_pid" ]] || {
-  echo 'Bringing Korri Shell forward changed the existing Korri process; refusing uncertain brain authority.' >&2
-  echo 'Leave Korri open and rerun after confirming its accessibility service is still enabled. Do not force-stop or reinstall it.' >&2
-  exit 1
-}
+# The user must present the already-running Shell. Foregrounding it here could
+# hide a pre-existing Game/RetroArch activity and would invalidate preflight.
+assert_pristine_gate_state
 
 # Deeper debug acceptance reads the bridge directly through WebView inspection;
 # no secret crosses logcat. Prior logcat is retained and filtered to the exact
@@ -452,8 +523,8 @@ discover_live_korri_authority() {
   local health=''
   local -a candidates=()
 
-  logs="$("${ADB[@]}" logcat -d --pid="$existing_korri_pid" -s KorridServer:I KorriPortal:I 2>/dev/null || true)"
-  portal_ready="$(grep 'title="Korri"' <<<"$logs" | tail -1 || true)"
+  logs="$("${ADB[@]}" logcat -d --pid="$existing_korri_pid" -s KorridServer:I KorriPortal:I 2>/dev/null)" || return 1
+  portal_ready="$(grep 'title="Korri"' <<<"$logs" | tail -1)" || return 1
   [[ -n "$portal_ready" ]] || return 1
   mapfile -t candidates < <(
     sed -n 's/.*listening on 127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p' <<<"$logs" \
@@ -464,12 +535,16 @@ discover_live_korri_authority() {
     "${ADB[@]}" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
     "${ADB[@]}" forward "tcp:$HOST_PORT" "tcp:$candidate" >/dev/null || continue
     FORWARD_ACTIVE=true
-    health="$(curl --fail --silent --show-error \
+    if ! health="$(curl --fail --silent --show-error \
       --connect-timeout 2 --max-time 5 \
       -H 'content-type: application/json' \
       -H "authorization: Bearer $capability" \
       -d '{"_tag":"system.health","payload":{}}' \
-      "http://127.0.0.1:$HOST_PORT/rpc" 2>/dev/null || true)"
+      "http://127.0.0.1:$HOST_PORT/rpc" 2>/dev/null)"; then
+      "${ADB[@]}" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
+      FORWARD_ACTIVE=false
+      continue
+    fi
     if jq -e '
       ._tag == "system.health"
       and .outcome._tag == "Ok"
@@ -518,6 +593,18 @@ assert_old_launch_rejected() {
   jq -e '.outcome._tag == "Err" and (.outcome.payload.reason == "StaleSession" or .outcome.payload.reason == "Unavailable")' <<<"$controls" >/dev/null
   jq -e '.outcome._tag == "Err" and (.outcome.payload.reason == "StaleSession" or .outcome.payload.reason == "Unavailable")' <<<"$invocation" >/dev/null
 }
+
+# Discovery and every pristine-state assertion precede the first config,
+# library, state, save, or preferences mutation.
+discover_live_korri_authority || {
+  echo 'The already-running Korri RPC became unavailable before mutation.' >&2
+  exit 1
+}
+assert_pristine_gate_state
+assert_session_idle
+provision_checkpoint_files
+revalidate_gate_state_after_mutation
+
 local_games="$(rpc '{"_tag":"app.local-games.list","payload":{}}')"
 if ! jq -e '
   .outcome._tag == "Ok"
@@ -529,11 +616,18 @@ if ! jq -e '
   echo "RetroArch acceptance did not load the one-item Wario fixture: $local_games" >&2
   exit 1
 fi
-session="$(rpc '{"_tag":"app.session.status","payload":{}}')"
-if grep -q '"active":{' <<<"$session"; then
-  echo 'host streaming session is active; stop it before local-runtime acceptance' >&2
-  exit 1
-fi
+
+assert_adb_probe_ready() {
+  local state
+  state="$(timeout 15 "$ADB_BIN" -s "$SERIAL" get-state | tr -d '\r\n')" || {
+    echo 'adb transport is not ready for the UDP negative probe' >&2
+    return 1
+  }
+  [[ "$state" == device ]] || {
+    echo "adb transport changed state before the UDP negative probe: $state" >&2
+    return 1
+  }
+}
 
 assert_udp_probe_ready() {
   local tools
@@ -549,7 +643,22 @@ assert_udp_probe_ready() {
 udp_unauthenticated() {
   local port="$1"
   timeout 15 "$ADB_BIN" -s "$SERIAL" shell \
-    "toybox dd if=/dev/zero bs=66 count=1 2>/dev/null | toybox timeout 2 nc -4 -u -q 1 127.0.0.1 '$port'" 2>&1 | tr -d '\r'
+    "output=\$(toybox dd if=/dev/zero bs=66 count=1 2>/dev/null | toybox timeout 2 nc -4 -u -q 1 127.0.0.1 '$port' 2>&1); rc=\$?; printf '%s remote_nc_rc=%s remote_nc_output=%s\\n' '$UDP_COMPLETION_MARKER' \"\$rc\" \"\$output\"" \
+    | tr -d '\r'
+}
+
+assert_udp_no_response() {
+  local marker="$1"
+  local remote_result="$2"
+  if [[ "$remote_result" != "$marker "* ]]; then
+    echo 'UDP probe transport failed before its remote completion marker' >&2
+    return 1
+  fi
+  local expected="$marker remote_nc_rc=124 remote_nc_output="
+  if [[ "$remote_result" != "$expected" ]]; then
+    echo "unauthenticated UDP probe must report exact remote rc=124 and no response; observed=$remote_result" >&2
+    return 1
+  fi
 }
 wait_playing() {
   local pid=''
@@ -732,15 +841,13 @@ assert_no_artemis_game_activity
 # no response and cannot forge a command.
 control_port="$("${ADB[@]}" shell "grep '^network_cmd_port = ' '$RETROARCH_CONFIG_REMOTE'" | tr -cd '0-9')"
 [[ "$control_port" =~ ^[0-9]+$ && "$control_port" -ge 49152 && "$control_port" -le 65535 ]]
+assert_adb_probe_ready
 assert_udp_probe_ready
-set +e
-udp_output="$(udp_unauthenticated "$control_port")"
-udp_rc=$?
-set -e
-if [[ "$udp_rc" -ne 124 || -n "$udp_output" ]]; then
-  echo "unauthenticated UDP probe must time out with rc=124 and no response; rc=$udp_rc output=$udp_output" >&2
+if ! udp_remote_result="$(udp_unauthenticated "$control_port")"; then
+  echo 'UDP probe transport failed before its remote completion marker' >&2
   exit 1
 fi
+assert_udp_no_response "$UDP_COMPLETION_MARKER" "$udp_remote_result"
 if ! current_pid="$(package_pid "$FORK_PACKAGE")"; then
   exit 1
 fi
