@@ -764,10 +764,12 @@ focus_wario_in_installed_library() {
   "${ADB[@]}" shell input -d 0 keyevent KEYCODE_BUTTON_A
   sleep 0.5
   traverse_library_to_final_viewport
+  # Korrid's local RPC id is `wl4`; the folded surface identity is namespaced
+  # so it cannot collide with peer or provider entries.
   focus_observation="$("$DEBUG_PORTAL_FOCUS_GAME_SH" \
-    "$SERIAL" "$KORRI_PACKAGE" wl4 'Wario Land 4')"
+    "$SERIAL" "$KORRI_PACKAGE" 'local-game:wl4' 'Wario Land 4')"
   jq -e '
-    .view == "library" and .gameId == "wl4"
+    .view == "library" and .gameId == "local-game:wl4"
     and .title == "Wario Land 4" and .focused == true
   ' <<<"$focus_observation" >/dev/null
   printf '%s\n' "$focus_observation" >"$PORTAL_EVIDENCE_DIR/$label.focus.json"
