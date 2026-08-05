@@ -345,6 +345,46 @@ describe("overlay controller", () => {
     expect(maximumActive).toBe(1)
   })
 
+  test("serializes invocations across different controls", async () => {
+    const listed = controls()
+    listed.groups[0]!.controls.push({
+      id: "latency",
+      label: "Latency",
+      enabled: true,
+      destructive: false,
+      dismissOnSuccess: false,
+      interaction: { kind: "range", payload: { value: 1, min: 1, max: 3, step: 1 } },
+    })
+    const firstResult = deferred<SessionControlInvokeOutcome>()
+    const calls: string[] = []
+    const korrid = recordingKorrid({ listed: [{ _tag: "Ok", payload: listed }] })
+    korrid.invokeSessionControl = async (_launchId, controlId) => {
+      calls.push(controlId)
+      if (controlId === "fill") return firstResult.promise
+      return {
+        _tag: "Ok",
+        payload: { _tag: "Completed", payload: { launchId: LAUNCH_A } },
+      }
+    }
+    const controller = createOverlayController({
+      launchId: LAUNCH_A,
+      korrid,
+      platform: recordingPlatform(),
+    })
+    await controller.refresh()
+
+    const fill = controller.invoke("fill", { kind: "toggle", value: true })
+    const latency = controller.invoke("latency", { kind: "range", value: 2 })
+    expect(calls).toEqual(["fill"])
+    firstResult.resolve({
+      _tag: "Ok",
+      payload: { _tag: "Completed", payload: { launchId: LAUNCH_A } },
+    })
+    await Promise.all([fill, latency])
+
+    expect(calls).toEqual(["fill", "latency"])
+  })
+
   test("requests automatic authority refresh at most once until authority changes", async () => {
     const korrid = recordingKorrid({
       listed: [{

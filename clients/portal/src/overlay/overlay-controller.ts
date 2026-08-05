@@ -154,10 +154,38 @@ export function createOverlayController({
     readonly value: SurfaceGameplayControlValue
     readonly generation: number
     readonly epoch: number
+    readonly launchId: string
+    readonly korrid: KorridClient
     readonly resolve: readonly (() => void)[]
   }
   type ValueQueue = { running: boolean; pending?: ValueRequest }
   const valueQueues = new Map<string, ValueQueue>()
+  type ScheduledInvocation = {
+    readonly run: () => Promise<void>
+    readonly resolve: () => void
+  }
+  const scheduledInvocations: ScheduledInvocation[] = []
+  let invocationRunning = false
+
+  const runNextInvocation = () => {
+    const next = scheduledInvocations.shift()
+    if (!next) {
+      invocationRunning = false
+      return
+    }
+    void next.run().finally(() => {
+      next.resolve()
+      runNextInvocation()
+    })
+  }
+
+  const scheduleInvocation = (run: () => Promise<void>): Promise<void> =>
+    new Promise(resolve => {
+      scheduledInvocations.push({ run, resolve })
+      if (invocationRunning) return
+      invocationRunning = true
+      runNextInvocation()
+    })
 
   const current = (expectedGeneration: number, expectedEpoch: number) =>
     !destroyed && accepting && expectedGeneration === generation &&
@@ -238,6 +266,7 @@ export function createOverlayController({
 
   const clearPending = () => {
     operationEpoch += 1
+    for (const scheduled of scheduledInvocations.splice(0)) scheduled.resolve()
     for (const queue of valueQueues.values()) {
       for (const resolve of queue.pending?.resolve ?? []) resolve()
       queue.pending = undefined
@@ -314,14 +343,14 @@ export function createOverlayController({
         ? controlFrom(currentModel.presentation, controlId)
         : undefined
       if (control?.enabled && control.id !== "overlay:resume") {
-        await execute(
+        await scheduleInvocation(() => execute(
           control,
           request.value,
           request.generation,
           request.epoch,
-          launchId,
-          korrid,
-        )
+          request.launchId,
+          request.korrid,
+        ))
       }
       for (const resolve of request.resolve) resolve()
     }
@@ -347,14 +376,14 @@ export function createOverlayController({
       const expectedEpoch = ++operationEpoch
       const expectedLaunchId = launchId
       const expectedKorrid = korrid
-      const flight = execute(
+      const flight = scheduleInvocation(() => execute(
         control,
         undefined,
         expectedGeneration,
         expectedEpoch,
         expectedLaunchId,
         expectedKorrid,
-      ).finally(() => {
+      )).finally(() => {
         if (commandFlights.get(controlId) === flight) commandFlights.delete(controlId)
       })
       commandFlights.set(controlId, flight)
@@ -374,6 +403,8 @@ export function createOverlayController({
         value,
         generation: expectedGeneration,
         epoch: expectedEpoch,
+        launchId,
+        korrid,
         resolve: [...(prior?.resolve ?? []), resolve],
       }
       void runValueQueue(controlId, queue!)
