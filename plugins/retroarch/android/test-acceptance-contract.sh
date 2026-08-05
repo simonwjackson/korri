@@ -30,9 +30,12 @@ grep -F 'exec-out screencap -p' "$ACCEPTANCE" >/dev/null
 grep -F 'GATE_LAUNCH_IDS' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_no_artemis_game_activity' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_korri_process_unchanged' "$ACCEPTANCE" >/dev/null
-grep -F 'reset_portal_selection_to_top' "$ACCEPTANCE" >/dev/null
+grep -F 'focus_wario_in_installed_library' "$ACCEPTANCE" >/dev/null
+grep -F 'DEBUG_PORTAL_FOCUS_GAME_SH=' "$ACCEPTANCE" >/dev/null
 grep -F 'portal_shot_focuses_wario' "$ACCEPTANCE" >/dev/null
 grep -F 'brightness" -ge 60' "$ACCEPTANCE" >/dev/null
+grep -F 'KEYCODE_DPAD_RIGHT' "$ACCEPTANCE" >/dev/null
+grep -F 'KEYCODE_BUTTON_A' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_DPAD_CENTER' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_BUTTON_MODE' "$ACCEPTANCE" >/dev/null
 grep -F 'invoke_overlay_row 1' "$ACCEPTANCE" >/dev/null

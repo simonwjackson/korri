@@ -36,7 +36,7 @@ expression="$(jq -r '.params.expression' <<<"$request")"
 if grep -Fq 'setTimeout(() => location.reload(), 100)' <<<"$expression"; then
   value='{"requested":true,"href":"https://appassets.androidplatform.net/assets/portal/index.html","beforeTimeOrigin":1000}'
 elif grep -Fq 'gameMatches' <<<"$expression"; then
-  value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","exactPortal":true,"readyState":"complete","timeOrigin":2000,"navigationType":"reload","mounted":true,"loadError":false,"gameMatches":1}'
+  value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","exactPortal":true,"readyState":"complete","timeOrigin":2000,"navigationType":"reload","mounted":true,"homeMatches":1,"libraryMatches":0,"loadError":false,"gameMatches":1}'
 else
   value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","exactPortal":true,"readyState":"complete","timeOrigin":1000}'
 fi

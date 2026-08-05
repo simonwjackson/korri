@@ -156,6 +156,8 @@ probe_expression="(() => {
     timeOrigin: performance.timeOrigin,
     navigationType: performance.getEntriesByType('navigation')[0]?.type ?? null,
     mounted: document.querySelector('[data-shift-surface]') !== null,
+    homeMatches: document.querySelectorAll('[data-shift-home]').length,
+    libraryMatches: document.querySelectorAll('[data-shift-library]').length,
     loadError: Array.from(document.querySelectorAll('[data-korri-part]'))
       .some((element) => element.getAttribute('data-korri-part') === 'shift.home-load-error'),
     gameMatches
@@ -173,7 +175,8 @@ for _ in $(seq 1 80); do
     # that the trusted portal performed a fresh, error-free mount.
     predicate='.exactPortal == true and .href == $url and .readyState == "complete"
       and .timeOrigin > $before and .navigationType == "reload"
-      and .mounted == true and .loadError == false'
+      and .mounted == true and .homeMatches == 1 and .libraryMatches == 0
+      and .loadError == false'
     if "$JQ_BIN" -e --arg url "$TRUSTED_PORTAL_URL" --argjson before "$before_time_origin" \
       "$predicate" <<<"$candidate" >/dev/null; then
       verified="$candidate"

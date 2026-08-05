@@ -15,6 +15,7 @@ KORRI_SHELL="$ROOT/clients/android/app/src/main/java/com/limelight/KorriShellAct
 ANDROID_GAME="$ROOT/clients/android/app/src/main/java/com/limelight/Game.java"
 OVERLAY_SERVICE="$ROOT/clients/android/app/src/main/java/com/limelight/korri/overlay/KorriOverlayService.java"
 DEBUG_PORTAL_RELOAD="$CRATE/android-debug-reload-portal.sh"
+DEBUG_PORTAL_FOCUS_GAME="$CRATE/android-debug-focus-portal-game.sh"
 
 # The review's canonical cases must stay deterministic even when a developer's
 # shell is primed for an alternate device-gate run. Individual alternate cases
@@ -34,6 +35,7 @@ unset \
   KORRI_ANDROID_DEVICE \
   KORRI_ANDROID_DEBUG_CAPABILITY \
   KORRI_ANDROID_DEBUG_PORTAL_RELOAD_SH \
+  KORRI_ANDROID_DEBUG_PORTAL_FOCUS_GAME_SH \
   KORRI_ANDROID_SMOKE_LIBRARY \
   KORRI_ANDROID_UPSTREAMS_CONFIG \
   KORRI_JOURNEY_EXPECTED_TITLE \
@@ -48,8 +50,11 @@ export KORRI_ANDROID_DEBUG_CAPABILITY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$JOURNEY_RESUME" \
   "$OVERLAY_ACCEPTANCE" "$RETROARCH_ACCEPTANCE" \
   "$CRATE/android-debug-capability.sh" "$CRATE/android-debug-reload-portal.sh" \
-  "$CRATE/test-android-debug-reload-portal.sh"
+  "$CRATE/android-debug-focus-portal-game.sh" \
+  "$CRATE/test-android-debug-reload-portal.sh" \
+  "$CRATE/test-android-debug-focus-portal-game.sh"
 "$CRATE/test-android-debug-reload-portal.sh"
+"$CRATE/test-android-debug-focus-portal-game.sh"
 grep -F "https://appassets.androidplatform.net/assets/portal/index.html" "$DEBUG_PORTAL_RELOAD" >/dev/null
 grep -F "expected exactly one bundled main Korri portal page" "$DEBUG_PORTAL_RELOAD" >/dev/null
 grep -F "performance.timeOrigin" "$DEBUG_PORTAL_RELOAD" >/dev/null
@@ -63,11 +68,26 @@ if grep -Eq 'force-stop|am[[:space:]]+kill|pm[[:space:]]+clear|install|uninstall
   echo 'debug portal reload must never restart, clear, or reinstall Korri' >&2
   exit 1
 fi
+grep -F "https://appassets.androidplatform.net/assets/portal/index.html" "$DEBUG_PORTAL_FOCUS_GAME" >/dev/null
+grep -F "expected exactly one bundled main Korri portal page" "$DEBUG_PORTAL_FOCUS_GAME" >/dev/null
+grep -F "document.querySelectorAll('[data-shift-library]').length !== 1" "$DEBUG_PORTAL_FOCUS_GAME" >/dev/null
+grep -F 'target.focus()' "$DEBUG_PORTAL_FOCUS_GAME" >/dev/null
+if grep -Eq 'KorriNative|korridCapability|surface=overlay|\.click\(|fetch\(|XMLHttpRequest' "$DEBUG_PORTAL_FOCUS_GAME"; then
+  echo 'debug portal focus must not activate games, inspect capabilities, use network, or select overlay pages' >&2
+  exit 1
+fi
+if grep -Eq 'force-stop|am[[:space:]]+kill|pm[[:space:]]+(clear|install|uninstall)|adb[[:space:]]+(install|uninstall)' "$DEBUG_PORTAL_FOCUS_GAME"; then
+  echo 'debug portal focus must never restart, clear, or reinstall Korri' >&2
+  exit 1
+fi
 for acceptance in "$OVERLAY_ACCEPTANCE" "$RETROARCH_ACCEPTANCE"; do
   grep -F 'DEBUG_PORTAL_RELOAD_SH=' "$acceptance" >/dev/null
   grep -F -- "--expect-game wl4 'Wario Land 4'" "$acceptance" >/dev/null
   grep -F -- '--expect-portal' "$acceptance" >/dev/null
 done
+grep -F 'DEBUG_PORTAL_FOCUS_GAME_SH=' "$RETROARCH_ACCEPTANCE" >/dev/null
+grep -F 'KEYCODE_DPAD_RIGHT' "$RETROARCH_ACCEPTANCE" >/dev/null
+grep -F 'KEYCODE_BUTTON_A' "$RETROARCH_ACCEPTANCE" >/dev/null
 
 # Unified-overlay acceptance remains human-led and state restoring. These
 # source contracts deliberately do not substitute for the device gate.

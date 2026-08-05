@@ -29,6 +29,7 @@ HOST_PORT="${KORRI_ACCEPTANCE_HOST_PORT:-43119}"
 ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
 DEBUG_CAPABILITY_SH="${KORRI_ANDROID_DEBUG_CAPABILITY_SH:-$ROOT/services/korrid/android-debug-capability.sh}"
 DEBUG_PORTAL_RELOAD_SH="${KORRI_ANDROID_DEBUG_PORTAL_RELOAD_SH:-$ROOT/services/korrid/android-debug-reload-portal.sh}"
+DEBUG_PORTAL_FOCUS_GAME_SH="${KORRI_ANDROID_DEBUG_PORTAL_FOCUS_GAME_SH:-$ROOT/services/korrid/android-debug-focus-portal-game.sh}"
 ANDROID_STORAGE_ROOT="/sdcard/korri"
 CONFIG_REMOTE="$ANDROID_STORAGE_ROOT/config.yaml"
 LIBRARY_REMOTE="$ANDROID_STORAGE_ROOT/library.yaml"
@@ -755,10 +756,21 @@ wait_stopped() {
   echo 'fork did not stop after graceful QUIT' >&2
   return 1
 }
-reset_portal_selection_to_top() {
-  for _ in $(seq 1 12); do
-    "${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_UP
-  done
+focus_wario_in_installed_library() {
+  local label="$1"
+  local focus_observation
+  # This exact controller sequence is the installed Shift treaty previously
+  # proven on this device: Home navigation moves RIGHT to Library, then A opens
+  # it. DevTools may focus the exact rendered tile but may never activate it.
+  "${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_RIGHT
+  "${ADB[@]}" shell input -d 0 keyevent KEYCODE_BUTTON_A
+  focus_observation="$("$DEBUG_PORTAL_FOCUS_GAME_SH" \
+    "$SERIAL" "$KORRI_PACKAGE" wl4 'Wario Land 4')"
+  jq -e '
+    .view == "library" and .gameId == "wl4"
+    and .title == "Wario Land 4" and .focused == true
+  ' <<<"$focus_observation" >/dev/null
+  printf '%s\n' "$focus_observation" >"$PORTAL_EVIDENCE_DIR/$label.focus.json"
 }
 portal_shot_focuses_wario() {
   local label="$1"
@@ -791,40 +803,36 @@ portal_shot_focuses_wario() {
 }
 launch_wario_entry() {
   local label="$1"
-  local attempt
   local pid=""
-  # Storage access and session checks above remove the only entries that may
-  # precede local games. Reset retained selection to the semantic top, require
-  # OCR evidence for the one configured Wario route, then confirm it.
-  for attempt in $(seq 1 10); do
-    reset_portal_selection_to_top
-    sleep 1
-    if portal_shot_focuses_wario "$label-$attempt"; then
-      TARGET_STARTED_BY_GATE=true
-      "${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_CENTER
-      sleep 2
-      if ! pid="$(package_pid "$FORK_PACKAGE")"; then
-        return 1
-      fi
-      if [[ -n "$pid" ]]; then
-        local observed_session
-        local observed_controls
-        GATE_CURRENT_LAUNCH=""
-        observed_session="$(rpc '{"_tag":"app.session.status","payload":{}}')"
-        GATE_CURRENT_LAUNCH="$(jq -er '.outcome.payload.active.launchId' <<<"$observed_session")"
-        record_gate_launch "$GATE_CURRENT_LAUNCH"
-        record_gate_pid "$pid"
-        observed_controls="$(controls_for_launch "$GATE_CURRENT_LAUNCH")"
-        if grep -q 'KORRI_CONTROL_TOKEN' <<<"$observed_session$observed_controls"; then
-          echo 'private RetroArch control authority leaked into actual launch evidence' >&2
-          return 1
-        fi
-        return 0
-      fi
-    fi
-  done
-  echo "portal did not semantically select Wario; evidence is in $PORTAL_EVIDENCE_DIR" >&2
-  return 1
+  local observed_session
+  local observed_controls
+  focus_wario_in_installed_library "$label"
+  sleep 1
+  portal_shot_focuses_wario "$label" || {
+    echo "installed Library did not render focused Wario evidence; evidence is in $PORTAL_EVIDENCE_DIR" >&2
+    return 1
+  }
+
+  # DevTools only focused the exact tile. Activation remains a controller event
+  # through the normal installed UI launch path.
+  TARGET_STARTED_BY_GATE=true
+  "${ADB[@]}" shell input -d 0 keyevent KEYCODE_BUTTON_A
+  sleep 2
+  pid="$(package_pid "$FORK_PACKAGE")" || return 1
+  [[ -n "$pid" ]] || {
+    echo 'focused Wario tile did not launch Korri RetroArch through the portal' >&2
+    return 1
+  }
+  GATE_CURRENT_LAUNCH=""
+  observed_session="$(rpc '{"_tag":"app.session.status","payload":{}}')"
+  GATE_CURRENT_LAUNCH="$(jq -er '.outcome.payload.active.launchId' <<<"$observed_session")"
+  record_gate_launch "$GATE_CURRENT_LAUNCH"
+  record_gate_pid "$pid"
+  observed_controls="$(controls_for_launch "$GATE_CURRENT_LAUNCH")"
+  if grep -q 'KORRI_CONTROL_TOKEN' <<<"$observed_session$observed_controls"; then
+    echo 'private RetroArch control authority leaked into actual launch evidence' >&2
+    return 1
+  fi
 }
 
 enabled_accessibility_services="$("${ADB[@]}" shell settings get secure enabled_accessibility_services | tr -d '\r')"
@@ -916,6 +924,8 @@ fi
 # auto-state was loaded successfully rather than merely left on disk.
 AUTO_LOAD_LOG_MARKER="$(new_logcat_marker auto-load)"
 "${ADB[@]}" shell am start --display 0 -n "$KORRI_ACTIVITY" >/dev/null
+"$DEBUG_PORTAL_RELOAD_SH" "$SERIAL" "$KORRI_PACKAGE" \
+  --expect-game wl4 'Wario Land 4' >/dev/null
 launch_wario_entry second
 status_second="$(wait_playing)"
 assert_no_artemis_game_activity
