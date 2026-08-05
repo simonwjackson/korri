@@ -915,7 +915,9 @@ launch_wario_entry() {
   # DevTools only focused the exact tile. Activation remains a controller event
   # through the normal installed UI launch path.
   TARGET_STARTED_BY_GATE=true
-  "${ADB[@]}" shell input -d 0 keyevent KEYCODE_BUTTON_A
+  # DPAD_CENTER is the installed portal's platform-neutral confirm event. The
+  # physical A button is tested separately by the global overlay acceptance.
+  "${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_CENTER
   sleep 2
   pid="$(package_pid "$FORK_PACKAGE")" || return 1
   [[ -n "$pid" ]] || {
