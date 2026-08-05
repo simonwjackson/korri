@@ -114,6 +114,7 @@ cd "$CRATE"
 cargo ndk -t arm64-v8a -o "$ANDROID_LIBS" build --release --lib
 
 cd "$ROOT/clients/android"
+./gradlew testDebugUnitTest
 ./gradlew assembleDebug
 APK="$ROOT/clients/android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk"
 # grep must drain the whole listing: with pipefail, `grep -q` exiting at

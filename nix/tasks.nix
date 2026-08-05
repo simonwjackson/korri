@@ -119,6 +119,17 @@ let
       '';
     };
 
+    android-jvm-check = {
+      description = "Run the Android debug JVM/Robolectric test suite.";
+      runtimeInputs = androidInputs;
+      env = androidEnv;
+      script = ''
+        ${androidSetup}
+        cd "$KORRI_ROOT/clients/android"
+        exec ./gradlew testDebugUnitTest "$@"
+      '';
+    };
+
     korrid-check = {
       description = "Run the full host, contracts, portal, and Android check.";
       needsProseql = true;
