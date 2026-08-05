@@ -46,6 +46,8 @@ import java.util.Set;
 /** Production session scope, input edge, and global gameplay-overlay window. */
 public final class KorriOverlayService extends AccessibilityService {
     private static final ProcessRequests PROCESS_REQUESTS = new ProcessRequests();
+    private static final KorriOverlayHostExclusion PROCESS_HOSTS =
+            new KorriOverlayHostExclusion();
     private static final long LIVENESS_CHECK_DELAY_MS = 500;
     private static final int MAX_LIVENESS_CHECKS = 8;
     private static final long OVERLAY_READY_TIMEOUT_MS = 10_000;
@@ -60,6 +62,9 @@ public final class KorriOverlayService extends AccessibilityService {
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
+        // Accessibility callbacks and Game registration both run on the UI
+        // thread, so the exact current Activity host is closed synchronously.
+        PROCESS_HOSTS.globalConnected();
         state = new StateMachine(getPackageName());
         windowController = new WindowController(this::createOverlayWindow);
         Handler handler = new Handler(Looper.getMainLooper());
@@ -105,14 +110,25 @@ public final class KorriOverlayService extends AccessibilityService {
         });
     }
 
+    /** Process-local registration for the exact current temporary Game host. */
+    public static void registerLegacyHost(KorriOverlayHostExclusion.LegacyHost host) {
+        PROCESS_HOSTS.register(host);
+    }
+
+    public static void unregisterLegacyHost(KorriOverlayHostExclusion.LegacyHost host) {
+        PROCESS_HOSTS.unregister(host);
+    }
+
     /** Process-local request path for Korri-owned gameplay triggers. */
     public static RequestResult requestShow(String launchId) {
         return PROCESS_REQUESTS.requestShow(launchId);
     }
 
-    /** Process-local request path for Korri-owned gameplay dismissal. */
-    public static RequestResult requestDismiss(String launchId) {
-        return PROCESS_REQUESTS.requestDismiss(launchId);
+    /** Closes both temporary hosts, even when the global service is absent. */
+    public static void hideBoth(String launchId) {
+        PROCESS_HOSTS.hideBoth(() -> {
+            if (launchId != null) PROCESS_REQUESTS.requestDismiss(launchId);
+        });
     }
 
     private boolean requestVisibility(String launchId, boolean visible) {
@@ -224,7 +240,11 @@ public final class KorriOverlayService extends AccessibilityService {
 
     private void reconcileWindow() {
         if (state == null || windowController == null) return;
-        windowController.setVisible(state.isShowing());
+        if (state.isShowing() && !windowController.isVisible()) {
+            PROCESS_HOSTS.openGlobal(() -> windowController.setVisible(true));
+        } else {
+            windowController.setVisible(state.isShowing());
+        }
         // The state machine must know the actual window result before the
         // measured own-FrameLayout foreground event arrives.
         state.updateOverlayVisibility(windowController.isVisible());

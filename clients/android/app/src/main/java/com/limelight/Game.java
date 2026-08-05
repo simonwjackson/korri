@@ -1005,7 +1005,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
             }
         });
 
-        korriOverlay = new KorriGameOverlay(this);
+        createLegacyGameOverlay();
 
         floatingMenuButton = findViewById(R.id.floatingMenuButton);
         updateFloatingButtonVisibility(prefConfig.enableBackMenu && prefConfig.enableFloatingButton);
@@ -1762,6 +1762,11 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     @Override
     protected void onDestroy() {
         unregisterMoonlightExecutor();
+        if (korriOverlay != null) {
+            KorriOverlayService.unregisterLegacyHost(korriOverlay);
+            korriOverlay.closeAndDestroy();
+            korriOverlay = null;
+        }
         if (korriLaunchId != null && isFinishing()) {
             // Object identity prevents an old Activity's late teardown from
             // clearing a same-launch replacement that already claimed it.
@@ -4170,6 +4175,11 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         dialog.show();
     }
 
+    private void createLegacyGameOverlay() {
+        korriOverlay = new KorriGameOverlay(this);
+        KorriOverlayService.registerLegacyHost(korriOverlay);
+    }
+
     @Override
     public void showGameMenu() {
         if (korriLaunchId == null) return;
@@ -4177,21 +4187,16 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                 KorriOverlayService.requestShow(korriLaunchId);
         // Temporary pre-cutover fallback. Remove with KorriGameOverlay after
         // installed-device acceptance proves the accessibility host.
-        if (result == KorriOverlayService.RequestResult.UNAVAILABLE
-                && korriOverlay != null) {
+        if (result == KorriOverlayService.RequestResult.UNAVAILABLE) {
+            if (korriOverlay == null || korriOverlay.isDestroyed()) {
+                createLegacyGameOverlay();
+            }
             korriOverlay.show();
         }
     }
 
     public void hideGameMenu() {
-        if (korriLaunchId == null) return;
-        KorriOverlayService.RequestResult result =
-                KorriOverlayService.requestDismiss(korriLaunchId);
-        // Temporary pre-cutover fallback; a rejected scoped request fails closed.
-        if (result == KorriOverlayService.RequestResult.UNAVAILABLE
-                && korriOverlay != null) {
-            korriOverlay.hide();
-        }
+        KorriOverlayService.hideBoth(korriLaunchId);
     }
 
     @Override

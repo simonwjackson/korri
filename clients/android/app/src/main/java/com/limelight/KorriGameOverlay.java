@@ -10,6 +10,8 @@ import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
 
+import com.limelight.korri.overlay.KorriOverlayHostExclusion;
+
 /**
  * Web-rendered in-game overlay: a transparent WebView floated above the
  * stream surface, replacing the native AlertDialog menu.
@@ -19,11 +21,12 @@ import android.widget.FrameLayout;
  * narrow action bridge. Pairing material and protocol state never enter
  * JavaScript.
  */
-public class KorriGameOverlay {
+public class KorriGameOverlay implements KorriOverlayHostExclusion.LegacyHost {
 
     private final Game game;
     private WebView webView;
     private boolean showing;
+    private boolean destroyed;
 
     // Edge-detection state for translating gamepad hats/sticks to dpad nav.
     private int lastNavX = 0;
@@ -37,8 +40,17 @@ public class KorriGameOverlay {
         return showing;
     }
 
+    public boolean isDestroyed() {
+        return destroyed;
+    }
+
+    @Override
+    public boolean isVisible() {
+        return showing;
+    }
+
     public void show() {
-        if (showing) return;
+        if (showing || destroyed) return;
         ensureWebView();
         showing = true;
         webView.setVisibility(View.VISIBLE);
@@ -56,6 +68,20 @@ public class KorriGameOverlay {
         View streamContainer = game.findViewById(R.id.streamContainer);
         if (streamContainer != null) {
             streamContainer.requestFocus();
+        }
+    }
+
+    @Override
+    public void closeAndDestroy() {
+        if (destroyed) return;
+        hide();
+        destroyed = true;
+        if (webView != null) {
+            webView.stopLoading();
+            ViewGroup parent = (ViewGroup) webView.getParent();
+            if (parent != null) parent.removeView(webView);
+            webView.destroy();
+            webView = null;
         }
     }
 
