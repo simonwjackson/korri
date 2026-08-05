@@ -1573,7 +1573,10 @@ command = ["sh", "-c", "sleep 1"]
         let stale_enable =
             rpc_body_authorized(app.clone(), &stale_enable_request, Some("right-token")).await;
         assert_eq!(stale_enable["outcome"]["_tag"], "Err");
-        assert_eq!(stale_enable["outcome"]["payload"]["code"], "SettingsConflict");
+        assert_eq!(
+            stale_enable["outcome"]["payload"]["code"],
+            "SettingsConflict"
+        );
         let still_disabled = rpc_body_authorized(
             app.clone(),
             r#"{"_tag":"app.local-games.list","payload":{}}"#,
