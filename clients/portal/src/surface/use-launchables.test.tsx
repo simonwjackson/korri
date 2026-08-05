@@ -169,6 +169,27 @@ async function waitFor(
   throw new Error(`${label}: ${last instanceof Error ? last.message : String(last)}`)
 }
 
+async function waitForWithin(
+  assertReady: () => void,
+  label: string,
+  timeoutMs = 2_000,
+) {
+  let last: unknown
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      assertReady()
+      return
+    } catch (error) {
+      last = error
+      await act(async () => {
+        await sleep(10)
+      })
+    }
+  }
+  throw new Error(`${label}: ${last instanceof Error ? last.message : String(last)}`)
+}
+
 async function waitForReady(view: HookView) {
   await waitFor(
     () => expect(view.current().state._tag).toBe("Ready"),
@@ -583,32 +604,27 @@ describe("useLaunchables sequence guards", () => {
     expect(findGameEntry(view.current().state, "New Game")).toBeDefined()
   })
 
-  test("a load completion after unmount does not publish another state", async () => {
-    const deferred = new Deferred<CatalogSnapshotOutcome>()
+  test("unmount removes the shell resume listener", async () => {
+    let catalogReads = 0
     const view = await renderUseLaunchables(
       buildBridge(),
       buildKorrid({
         async catalogSnapshot() {
-          return deferred.promise
-        },
-        async localGames() {
-          return localGamesOk()
+          catalogReads += 1
+          return catalogOk()
         },
       }),
     )
-    await waitFor(
-      () => expect(view.states.length).toBeGreaterThan(0),
-      "expected initial render",
-    )
-    const stateCount = view.states.length
+    await waitForReady(view)
+    const readsBeforeUnmount = catalogReads
 
     await view.cleanup()
-    deferred.resolve(catalogOk([{ id: "late", title: "Late Game" }]))
     await act(async () => {
+      window.dispatchEvent(new Event(SHELL_RESUMED_EVENT))
       await sleep()
     })
 
-    expect(view.states).toHaveLength(stateCount)
+    expect(catalogReads).toBe(readsBeforeUnmount)
   })
 
   test("shell resume rereads storage access and background notice", async () => {
@@ -673,10 +689,21 @@ describe("useLaunchables sequence guards", () => {
     await waitFor(() => expect(bridgeCalls).toBe(1), "expected single bridge launch")
   })
 
-  test("same-frame setting changes issue one revisioned write", async () => {
+  test("same-frame setting changes issue one write and publish the refreshed result", async () => {
     const update = new Deferred<SettingsUpdateOutcome>()
     const updates: [string, string, string][] = []
+    let catalogReads = 0
+    const initialSettings = settingsOk()
+    if (initialSettings._tag !== "Ok") throw new Error("expected settings")
+    let currentSettings = initialSettings.payload
     const korrid = buildKorrid({
+      async catalogSnapshot() {
+        catalogReads += 1
+        return catalogOk()
+      },
+      async settingsSnapshot() {
+        return { _tag: "Ok", payload: currentSettings }
+      },
       async updateSetting(expectedRevision, settingId, value) {
         updates.push([expectedRevision, settingId, value])
         return update.promise
@@ -684,29 +711,32 @@ describe("useLaunchables sequence guards", () => {
     })
     const view = await renderUseLaunchables(buildBridge(), korrid)
     await waitForReady(view)
+    const readsBeforeUpdate = catalogReads
 
     await act(async () => {
       view.current().changeSetting("device-name", "Retroid")
       view.current().changeSetting("device-name", "Ignored")
     })
 
-    expect(updates).toEqual([["in-memory-0", "device-name", "Retroid"]])
+    expect(updates).toEqual([["settings-0", "device-name", "Retroid"]])
     expect(view.current().settingsStatus).toEqual({
       _tag: "Saving",
       settingId: "device-name",
     })
 
-    update.resolve({
-      _tag: "Ok",
-      payload: {
-        revision: "in-memory-1",
-        deviceName: "Retroid",
-        plugins: [],
-      },
-    })
+    currentSettings = {
+      revision: "settings-1",
+      deviceName: "Retroid",
+      plugins: [],
+    }
+    update.resolve({ _tag: "Ok", payload: currentSettings })
     await waitFor(
-      () => expect(view.current().settingsStatus).toEqual({ _tag: "Idle" }),
-      "expected idle settings status",
+      () => {
+        expect(view.current().settingsStatus).toEqual({ _tag: "Idle" })
+        expect(view.current().facts.settings).toEqual(currentSettings)
+        expect(catalogReads).toBeGreaterThan(readsBeforeUpdate)
+      },
+      "expected published settings and launchability reload",
     )
   })
 
@@ -782,13 +812,10 @@ describe("useLaunchables sequence guards", () => {
       () => expect(view.current().state._tag).toBe("Stopping"),
       "expected stopping publication",
     )
-    await waitFor(
-      () => expect(statusCalls).toBeGreaterThanOrEqual(2),
-      "expected status polling",
+    await waitForWithin(
+      () => expect(statusCalls).toBeGreaterThanOrEqual(3),
+      "expected status polling to observe idle",
     )
-    await act(async () => {
-      await sleep(550)
-    })
     await waitForReady(view)
     const finalState = view.current().state
     if (finalState._tag !== "Ready") throw new Error("expected Ready")

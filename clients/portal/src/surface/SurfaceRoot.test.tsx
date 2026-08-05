@@ -33,15 +33,14 @@ import { createSpatialFocusController } from "../input/spatial-focus"
 import type { LauncherBridge } from "../bridge/launcher-bridge"
 import type { KorridClient } from "../korrid/client"
 // The portal compiles Shift from source, but Bun resolves Shift's peer React
-// from the surface package once its dependencies are installed. Keep this
+// from the surface package once its dependencies are installed. Derive that
+// package location through the same alias the product imports, then keep this
 // cross-boundary test on one React instance without replacing Shift itself.
-const shiftReact = new URL(
-  "../../../../surfaces/shift/node_modules/react/index.js",
-  import.meta.url,
-).pathname
+const shiftPackageRoot = new URL("../", import.meta.resolve("@korri/shift"))
+const shiftReact = new URL("node_modules/react/index.js", shiftPackageRoot).pathname
 const shiftJsxRuntime = new URL(
-  "../../../../surfaces/shift/node_modules/react/jsx-runtime.js",
-  import.meta.url,
+  "node_modules/react/jsx-runtime.js",
+  shiftPackageRoot,
 ).pathname
 
 mock.module("react", () => React)
@@ -242,30 +241,35 @@ async function renderSurfaceRoot(sources: Sources, calls: Calls): Promise<Surfac
   const root: Root = createRoot(container)
   const bus = createInputBus()
   const stopSpatialFocus = createSpatialFocusController(bus)
-  const SurfaceRoot = await surfaceRootComponent()
-
-  await act(async () => {
-    root.render(
-      <SurfaceRoot
-        bus={bus}
-        bridge={buildBridge(sources, calls)}
-        korrid={buildKorrid(sources, calls)}
-      />,
-    )
-  })
-
-  const view: SurfaceRootView = {
-    container,
-    bus,
-    cleanup() {
-      act(() => root.unmount())
-      stopSpatialFocus()
-      bus.dispose()
-      container.remove()
-    },
+  let disposed = false
+  const cleanup = () => {
+    if (disposed) return
+    disposed = true
+    act(() => root.unmount())
+    stopSpatialFocus()
+    bus.dispose()
+    container.remove()
   }
-  mounted.push(view)
-  return view
+
+  try {
+    const SurfaceRoot = await surfaceRootComponent()
+    await act(async () => {
+      root.render(
+        <SurfaceRoot
+          bus={bus}
+          bridge={buildBridge(sources, calls)}
+          korrid={buildKorrid(sources, calls)}
+        />,
+      )
+    })
+
+    const view: SurfaceRootView = { container, bus, cleanup }
+    mounted.push(view)
+    return view
+  } catch (error) {
+    cleanup()
+    throw error
+  }
 }
 
 async function waitFor(assertReady: () => void, label: string, attempts = 80) {
@@ -362,6 +366,30 @@ describe("SurfaceRoot", () => {
       "expected exact remote launch path",
     )
     expect(calls.localLaunches).toEqual([])
+  })
+
+  test("selecting the local location dispatches the exact local route", async () => {
+    const calls: Calls = { localLaunches: [], prepared: [], streams: [] }
+    const sources: Sources = {
+      localGames: [localGame()],
+      remoteGames: [remoteGame("zao")],
+      streamHosts: [streamHost("zao", "zao-uuid")],
+      streamAppsByHost: { "zao-uuid": streamApps(77) },
+    }
+    await renderSurfaceRoot(sources, calls)
+
+    await waitFor(() => expect(buttonNamed("Library")).toBeDefined(), "expected loaded home")
+    await openWarioDetail()
+    await click(buttonNamed("▶ Play"))
+    const chooser = dialogNamed("Choose where to play Wario Land 4")
+    await click(buttonNamed("This device", chooser))
+
+    await waitFor(
+      () => expect(calls.localLaunches).toEqual(["wl4"]),
+      "expected exact local launch path",
+    )
+    expect(calls.prepared).toEqual([])
+    expect(calls.streams).toEqual([])
   })
 
   test("a shell-resume refresh lets the stable surface host act on the current route", async () => {

@@ -1,5 +1,12 @@
-import { describe, expect, test } from "bun:test"
-import { act, fireEvent, render, screen, within } from "@testing-library/react"
+import { afterEach, describe, expect, test } from "bun:test"
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react"
 import type { SurfaceModel } from "@contracts/surface/korri-surface"
 import {
   createFixtureHost,
@@ -15,6 +22,8 @@ const model = (overrides: Partial<SurfaceModel> = {}): SurfaceModel => ({
   ...fixtureModel,
   ...overrides,
 })
+
+afterEach(() => cleanup())
 
 describe("ShiftSurface", () => {
   test("keeps the full catalog in Library instead of pouring it onto Home", () => {

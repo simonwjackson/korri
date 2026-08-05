@@ -5,6 +5,9 @@ import { SessionScreen } from "./SessionScreen"
 import type { SessionLifecycleAdapter } from "./lifecycle-adapter"
 import type { SessionLifecycleState } from "./state"
 
+;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true
+
 interface DriverAdapter extends SessionLifecycleAdapter {
   emit(state: SessionLifecycleState): void
   readonly cleanupCount: number
