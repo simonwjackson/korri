@@ -18,6 +18,8 @@ use typeshare::typeshare;
 
 pub mod config;
 pub mod discovery;
+pub mod enrichment;
+mod game_assets;
 
 pub const VERSION: &str = "korrid-v0";
 const ANDROID_BUNDLED_PORTAL_ORIGIN: &str = "https://appassets.androidplatform.net";

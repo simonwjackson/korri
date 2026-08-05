@@ -330,6 +330,12 @@ struct OwnedRelease {
     fingerprint: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct DiscoveryOwnedGame {
+    pub playable_id: String,
+    pub title: String,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 struct RepairJournal {
     #[serde(default)]
@@ -418,6 +424,97 @@ impl PrivateState {
             owned.fingerprint == fingerprint_item(item)
         })
     }
+}
+
+pub(crate) fn owned_discovery_games(
+    readable_root: &Path,
+    private_root: &Path,
+) -> Result<Vec<DiscoveryOwnedGame>, DiscoveryError> {
+    let library_yaml = read_fixed(readable_root, LIBRARY_FILE_NAME)?;
+    let private = PrivateState::read(private_root)?;
+    let library_doc = parse_mapping(&library_yaml)?;
+    let Some(library) = library_doc
+        .get(Value::String("library".into()))
+        .and_then(Value::as_mapping)
+    else {
+        return Ok(Vec::new());
+    };
+    let mut games = Vec::new();
+    for (key, value) in library {
+        let Some(playable_id) = key.as_str() else {
+            continue;
+        };
+        let Some(item) = value.as_mapping() else {
+            continue;
+        };
+        if private.is_owned_current(playable_id, item, None) {
+            games.push(DiscoveryOwnedGame {
+                playable_id: playable_id.to_owned(),
+                title: mapping_string(item, "title").unwrap_or_else(|| playable_id.to_owned()),
+            });
+        }
+    }
+    games.sort_by(|left, right| left.playable_id.cmp(&right.playable_id));
+    Ok(games)
+}
+
+pub(crate) fn update_owned_discovery_title(
+    readable_root: &Path,
+    private_root: &Path,
+    write_lock: &Arc<Mutex<()>>,
+    playable_id: &str,
+    title: &str,
+) -> Result<bool, DiscoveryError> {
+    let _guard = write_lock.lock().expect("discovery write lock poisoned");
+    ensure_fixed_files(readable_root)?;
+    let config_yaml = read_fixed(readable_root, CONFIG_FILE_NAME)?;
+    let library_yaml = read_fixed(readable_root, LIBRARY_FILE_NAME)?;
+    let mut private = PrivateState::read(private_root)?;
+    apply_pending_ownership(&library_yaml, &mut private)?;
+    let mut library_doc = parse_mapping(&library_yaml)?;
+    let Some(library) = library_doc
+        .get_mut(Value::String("library".into()))
+        .and_then(Value::as_mapping_mut)
+    else {
+        return Ok(false);
+    };
+    let key = Value::String(playable_id.to_owned());
+    let Some(item) = library.get_mut(&key).and_then(Value::as_mapping_mut) else {
+        return Ok(false);
+    };
+    if !private.is_owned_current(playable_id, item, None) {
+        private.write(private_root)?;
+        return Ok(false);
+    }
+    if mapping_string(item, "title").as_deref() == Some(title) {
+        private.write(private_root)?;
+        return Ok(false);
+    }
+    item.insert(
+        Value::String("title".into()),
+        Value::String(title.to_owned()),
+    );
+    let new_fingerprint = fingerprint_item(item);
+    let release_ids: Vec<String> = item_releases(item)
+        .iter()
+        .filter_map(|release| mapping_string(release, "id"))
+        .collect();
+    let candidate_library = serialize_mapping(library_doc)?;
+    validate_pair(&config_yaml, &candidate_library)?;
+    commit_library_atomically(
+        readable_root,
+        &config_yaml,
+        &library_yaml,
+        &candidate_library,
+    )?;
+    for release_id in release_ids {
+        let key = ownership_key(playable_id, &release_id);
+        if let Some(owned) = private.ownership.releases.get_mut(&key) {
+            owned.fingerprint = new_fingerprint.clone();
+        }
+    }
+    private.write(private_root)?;
+    Ok(true)
 }
 
 fn reconcile_candidates(
@@ -572,10 +669,23 @@ fn reconcile_candidates(
             };
         let first_seen_at = existing_first_seen(library, &playable_id, &release_id)
             .unwrap_or_else(|| options.first_seen_at.clone());
-        let item = generated_item(candidate, &playable_id, &release_id, &first_seen_at);
-        let fingerprint = fingerprint_item(&item);
+        let mut item = generated_item(candidate, &playable_id, &release_id, &first_seen_at);
         let key = Value::String(playable_id.clone());
         let old = library.get(&key).cloned();
+        if old
+            .as_ref()
+            .and_then(Value::as_mapping)
+            .is_some_and(|current| private.is_owned_current(&playable_id, current, None))
+        {
+            if let Some(title) = old
+                .as_ref()
+                .and_then(Value::as_mapping)
+                .and_then(|current| mapping_string(current, "title"))
+            {
+                item.insert(Value::String("title".into()), Value::String(title));
+            }
+        }
+        let fingerprint = fingerprint_item(&item);
         let ownership = OwnedRelease {
             storage_id: candidate.storage_id.clone(),
             playable_id: playable_id.clone(),
@@ -1516,6 +1626,41 @@ mod tests {
             "edited generated record survives as user-owned"
         );
         assert!(read_library(readable.path()).contains("Hand Edited"));
+    }
+
+    #[test]
+    fn enriched_owned_title_updates_fingerprint_and_survives_rescan_until_removal() {
+        let readable = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("wl4.gba"), b"rom").unwrap();
+        let lock = Arc::new(Mutex::new(()));
+        let discovery =
+            DiscoveryCoordinator::with_write_lock(readable.path(), private.path(), lock.clone());
+        let add = discovery.add_location(root.path(), &options()).unwrap();
+
+        assert!(update_owned_discovery_title(
+            readable.path(),
+            private.path(),
+            &lock,
+            "wl4",
+            "Wario Land 4"
+        )
+        .unwrap());
+        discovery.rescan(&options()).unwrap();
+        assert!(read_library(readable.path()).contains("title: Wario Land 4"));
+
+        discovery
+            .remove_location(&add.storage_id.unwrap(), &options())
+            .unwrap();
+        assert_eq!(
+            ConfigSnapshotCoordinator::new(readable.path())
+                .reload()
+                .snapshot
+                .library
+                .len(),
+            0
+        );
     }
 
     #[test]

@@ -45,6 +45,23 @@ pub fn fallback_title(file_name: &str, extension: &str) -> String {
     }
 }
 
+pub fn normalized_match_name(title: &str) -> String {
+    title
+        .chars()
+        .flat_map(char::to_lowercase)
+        .map(|character| {
+            if character.is_alphanumeric() {
+                character
+            } else {
+                ' '
+            }
+        })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 pub fn slug_base(title: &str) -> String {
     let mut slug = String::new();
     let mut last_was_sep = false;
@@ -88,5 +105,14 @@ mod tests {
         assert_eq!(slug_base("Pokémon Emerald"), "pok-mon-emerald");
         assert_eq!(slug_base("🎮"), "game");
         assert_eq!(slug_base("007: GoldenEye"), "007-goldeneye");
+    }
+
+    #[test]
+    fn normalizes_provider_match_names_like_fallback_titles() {
+        assert_eq!(normalized_match_name("Wario-Land 4™"), "wario land 4");
+        assert_eq!(
+            normalized_match_name(" Pokémon: Emerald "),
+            "pokémon emerald"
+        );
     }
 }

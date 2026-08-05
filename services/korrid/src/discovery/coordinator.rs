@@ -12,6 +12,7 @@ use crate::{
         scanner::{DiscoveryDiagnostic, DiscoveryDiagnosticCode},
         DiscoveryError, DiscoveryOptions,
     },
+    enrichment::SteamGridDbEnricher,
 };
 use rand::RngCore;
 
@@ -131,6 +132,7 @@ fn canonical_directory(path: &Path) -> Result<PathBuf, FolderSelectionGrantError
 #[derive(Clone)]
 pub struct DiscoveryLifecycleCoordinator {
     reconciler: ReconcileCoordinator,
+    enricher: SteamGridDbEnricher,
     snapshot_reader: ConfigSnapshotCoordinator,
     grants: FolderSelectionGrantStore,
     options: DiscoveryOptions,
@@ -170,6 +172,7 @@ pub struct DiscoveryLifecycleDiagnostic {
 struct LifecycleState {
     generation: u64,
     active: bool,
+    enriching: bool,
     pending_rescan: bool,
     last_problem: Option<DiscoveryLifecycleDiagnostic>,
     diagnostics: Vec<DiscoveryLifecycleDiagnostic>,
@@ -183,16 +186,19 @@ impl DiscoveryLifecycleCoordinator {
         grants: FolderSelectionGrantStore,
     ) -> Self {
         let readable_root = readable_root.as_ref().to_owned();
+        let private_root = private_root.as_ref().to_owned();
         let reconciler = ReconcileCoordinator::with_write_lock(
             &readable_root,
-            private_root.as_ref(),
-            write_lock,
+            &private_root,
+            write_lock.clone(),
         );
+        let enricher = SteamGridDbEnricher::new(&readable_root, &private_root, write_lock);
         let snapshot_reader = ConfigSnapshotCoordinator::new(&readable_root);
         snapshot_reader.reload();
         Self {
             snapshot_reader,
             reconciler,
+            enricher,
             grants,
             options: DiscoveryOptions::default(),
             state: Arc::new(Mutex::new(LifecycleState::default())),
@@ -283,9 +289,15 @@ impl DiscoveryLifecycleCoordinator {
                 WorkRequest::RemoveLocation(ref id) => {
                     self.reconciler.remove_location(id, &self.options)
                 }
-                WorkRequest::Rescan => self.reconciler.rescan(&self.options),
+                WorkRequest::Rescan => {
+                    let _ = self.enricher.clear_retryable_attempts();
+                    self.reconciler.rescan(&self.options)
+                }
             };
-            self.record_result(result);
+            let scan_succeeded = self.record_result(result);
+            if scan_succeeded {
+                self.run_enrichment();
+            }
 
             let mut state = self
                 .state
@@ -304,7 +316,7 @@ impl DiscoveryLifecycleCoordinator {
         }
     }
 
-    fn record_result(&self, result: Result<DiscoveryMutationReport, DiscoveryError>) {
+    fn record_result(&self, result: Result<DiscoveryMutationReport, DiscoveryError>) -> bool {
         let mut state = self
             .state
             .lock()
@@ -319,6 +331,8 @@ impl DiscoveryLifecycleCoordinator {
                     .map(discovery_diagnostic)
                     .collect();
                 state.last_problem = None;
+                bump(&mut state);
+                return true;
             }
             Err(error) => {
                 let diagnostic = discovery_error_diagnostic(error);
@@ -326,6 +340,47 @@ impl DiscoveryLifecycleCoordinator {
                 state.last_problem = Some(diagnostic);
             }
         }
+        bump(&mut state);
+        false
+    }
+
+    fn run_enrichment(&self) {
+        {
+            let mut state = self
+                .state
+                .lock()
+                .expect("discovery lifecycle state poisoned");
+            state.enriching = true;
+            bump(&mut state);
+        }
+        let mut diagnostics = Vec::new();
+        loop {
+            let report = self.enricher.run();
+            let unauthorized = report
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "SteamGridDbCredentialUnauthorized");
+            diagnostics.extend(report.diagnostics);
+            if report.remaining == 0 || report.attempted == 0 || unauthorized {
+                break;
+            }
+        }
+        let mut state = self
+            .state
+            .lock()
+            .expect("discovery lifecycle state poisoned");
+        state.enriching = false;
+        for diagnostic in diagnostics
+            .into_iter()
+            .take(DEFAULT_MAX_SNAPSHOT_DIAGNOSTICS)
+        {
+            state.diagnostics.push(DiscoveryLifecycleDiagnostic {
+                code: diagnostic.code.into(),
+                message: diagnostic.message,
+                location_id: diagnostic.playable_id,
+            });
+        }
+        state.diagnostics.truncate(DEFAULT_MAX_SNAPSHOT_DIAGNOSTICS);
         bump(&mut state);
     }
 
@@ -338,9 +393,12 @@ impl DiscoveryLifecycleCoordinator {
         mutate(&mut state);
         let generation = state.generation;
         let active = state.active;
+        let enriching = state.enriching;
         let diagnostics = bounded_diagnostics(&state, &config_state.diagnostic);
-        let phase = if active {
+        let phase = if active && !enriching {
             DiscoveryPhase::Scanning
+        } else if enriching {
+            DiscoveryPhase::Enriching
         } else if state.last_problem.is_some() {
             DiscoveryPhase::Problem
         } else {

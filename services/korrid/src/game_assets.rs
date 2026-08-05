@@ -1,0 +1,302 @@
+use image::{GenericImageView, ImageFormat, ImageReader};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::{
+    collections::BTreeMap,
+    fs::{self, OpenOptions},
+    io::{Cursor, Write},
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+const STATE_DIR: &str = "game-assets";
+const BLOBS_DIR: &str = "blobs";
+const ASSIGNMENTS_FILE: &str = "assignments.json";
+const MAX_ASSET_BYTES: usize = 5 * 1024 * 1024;
+const MAX_DIMENSION: u32 = 4096;
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct AssetAssignment {
+    pub asset_id: String,
+    pub role: String,
+    pub source: SteamGridDbProvenance,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct SteamGridDbProvenance {
+    pub provider: String,
+    pub game_id: u64,
+    pub grid_id: u64,
+    pub sha256: String,
+    pub width: u32,
+    pub height: u32,
+    pub format: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct AssetCandidate {
+    pub bytes: Vec<u8>,
+    pub declared_width: Option<u32>,
+    pub declared_height: Option<u32>,
+    pub game_id: u64,
+    pub grid_id: u64,
+}
+
+#[derive(Debug, thiserror::Error, Eq, PartialEq)]
+pub(crate) enum AssetError {
+    #[error("asset bytes exceed the configured limit")]
+    Oversized,
+    #[error("asset format is unsupported")]
+    Unsupported,
+    #[error("asset bytes are malformed")]
+    Malformed,
+    #[error("asset dimensions are unsafe")]
+    UnsafeDimensions,
+    #[error("asset dimensions do not match provider declarations")]
+    InconsistentDimensions,
+    #[error("asset storage is unavailable")]
+    Storage,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct GameAssetRepository {
+    root: PathBuf,
+}
+
+impl GameAssetRepository {
+    pub(crate) fn new(private_root: impl AsRef<Path>) -> Self {
+        Self {
+            root: private_root.as_ref().join(STATE_DIR),
+        }
+    }
+
+    pub(crate) fn has_assignment(&self, playable_id: &str) -> Result<bool, AssetError> {
+        Ok(read_assignments(&self.root)?.contains_key(playable_id))
+    }
+
+    pub(crate) fn assign_tile(
+        &self,
+        playable_id: &str,
+        candidate: AssetCandidate,
+    ) -> Result<AssetAssignment, AssetError> {
+        let decoded = validate_image(&candidate)?;
+        fs::create_dir_all(self.root.join(BLOBS_DIR)).map_err(|_| AssetError::Storage)?;
+        let blob_name = format!("{}.{}", decoded.sha256, decoded.extension);
+        let blob_path = self.root.join(BLOBS_DIR).join(&blob_name);
+        let wrote_blob = if !blob_path.exists() {
+            write_atomically(&blob_path, &candidate.bytes)?;
+            true
+        } else {
+            false
+        };
+        let assignment = AssetAssignment {
+            asset_id: blob_name,
+            role: "tile".into(),
+            source: SteamGridDbProvenance {
+                provider: "steamgriddb".into(),
+                game_id: candidate.game_id,
+                grid_id: candidate.grid_id,
+                sha256: format!("sha256:{}", decoded.sha256),
+                width: decoded.width,
+                height: decoded.height,
+                format: decoded.extension,
+            },
+        };
+        let mut assignments = read_assignments(&self.root)?;
+        assignments.insert(playable_id.to_owned(), assignment.clone());
+        if let Err(error) = write_json_atomically(&self.root.join(ASSIGNMENTS_FILE), &assignments) {
+            if wrote_blob {
+                let _ = fs::remove_file(&blob_path);
+            }
+            return Err(error);
+        }
+        Ok(assignment)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct DecodedImage {
+    sha256: String,
+    extension: String,
+    width: u32,
+    height: u32,
+}
+
+fn validate_image(candidate: &AssetCandidate) -> Result<DecodedImage, AssetError> {
+    if candidate.bytes.len() > MAX_ASSET_BYTES {
+        return Err(AssetError::Oversized);
+    }
+    if looks_like_svg(&candidate.bytes)
+        || candidate.bytes.starts_with(b"GIF87a")
+        || candidate.bytes.starts_with(b"GIF89a")
+    {
+        return Err(AssetError::Unsupported);
+    }
+    if is_animated_webp(&candidate.bytes) {
+        return Err(AssetError::Unsupported);
+    }
+    let format = image::guess_format(&candidate.bytes).map_err(|_| AssetError::Unsupported)?;
+    let extension = match format {
+        ImageFormat::Png => "png",
+        ImageFormat::Jpeg => "jpg",
+        ImageFormat::WebP => "webp",
+        _ => return Err(AssetError::Unsupported),
+    };
+    let image = ImageReader::with_format(Cursor::new(&candidate.bytes), format)
+        .decode()
+        .map_err(|_| AssetError::Malformed)?;
+    let (width, height) = image.dimensions();
+    if width == 0
+        || height == 0
+        || width != height
+        || width > MAX_DIMENSION
+        || height > MAX_DIMENSION
+    {
+        return Err(AssetError::UnsafeDimensions);
+    }
+    if candidate
+        .declared_width
+        .is_some_and(|declared| declared != width)
+        || candidate
+            .declared_height
+            .is_some_and(|declared| declared != height)
+    {
+        return Err(AssetError::InconsistentDimensions);
+    }
+    let sha256 = hex::encode(Sha256::digest(&candidate.bytes));
+    Ok(DecodedImage {
+        sha256,
+        extension: extension.into(),
+        width,
+        height,
+    })
+}
+
+fn looks_like_svg(bytes: &[u8]) -> bool {
+    let prefix_len = bytes.len().min(256);
+    let prefix = String::from_utf8_lossy(&bytes[..prefix_len]).to_ascii_lowercase();
+    prefix.contains("<svg")
+}
+
+fn is_animated_webp(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"RIFF")
+        && bytes.get(8..12) == Some(b"WEBP")
+        && bytes.windows(4).any(|window| window == b"ANIM")
+}
+
+fn read_assignments(root: &Path) -> Result<BTreeMap<String, AssetAssignment>, AssetError> {
+    let path = root.join(ASSIGNMENTS_FILE);
+    match fs::read(&path) {
+        Ok(bytes) => serde_json::from_slice(&bytes).map_err(|_| AssetError::Storage),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
+        Err(_) => Err(AssetError::Storage),
+    }
+}
+
+fn write_json_atomically<T: Serialize>(path: &Path, value: &T) -> Result<(), AssetError> {
+    let bytes = serde_json::to_vec_pretty(value).map_err(|_| AssetError::Storage)?;
+    write_atomically(path, &bytes)
+}
+
+fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), AssetError> {
+    let parent = path.parent().ok_or(AssetError::Storage)?;
+    fs::create_dir_all(parent).map_err(|_| AssetError::Storage)?;
+    let temporary = parent.join(format!(
+        ".{}.{}.tmp",
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("asset"),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| AssetError::Storage)?
+            .as_nanos()
+    ));
+    {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+            .map_err(|_| AssetError::Storage)?;
+        file.write_all(bytes).map_err(|_| AssetError::Storage)?;
+        file.sync_all().map_err(|_| AssetError::Storage)?;
+    }
+    fs::rename(&temporary, path).map_err(|_| AssetError::Storage)?;
+    sync_directory(parent);
+    Ok(())
+}
+
+fn sync_directory(path: &Path) {
+    if let Ok(file) = fs::File::open(path) {
+        let _ = file.sync_all();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const PNG_1X1: &[u8] = &[
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 4,
+        0, 0, 0, 181, 28, 12, 2, 0, 0, 0, 11, 73, 68, 65, 84, 120, 156, 99, 250, 207, 0, 0, 2, 7,
+        1, 2, 154, 28, 49, 113, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ];
+
+    #[test]
+    fn assigns_valid_static_square_image_content_addressably() {
+        let private = tempfile::tempdir().unwrap();
+        let repo = GameAssetRepository::new(private.path());
+        let assignment = repo
+            .assign_tile(
+                "wl4",
+                AssetCandidate {
+                    bytes: PNG_1X1.to_vec(),
+                    declared_width: Some(1),
+                    declared_height: Some(1),
+                    game_id: 10,
+                    grid_id: 20,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(assignment.role, "tile");
+        assert!(assignment.asset_id.ends_with(".png"));
+        assert!(repo.has_assignment("wl4").unwrap());
+    }
+
+    #[test]
+    fn rejects_unsupported_malformed_and_inconsistent_assets_without_assignment() {
+        let private = tempfile::tempdir().unwrap();
+        let repo = GameAssetRepository::new(private.path());
+        for bytes in [
+            b"<svg></svg>".to_vec(),
+            b"GIF89a".to_vec(),
+            PNG_1X1[..20].to_vec(),
+        ] {
+            assert!(repo
+                .assign_tile(
+                    "wl4",
+                    AssetCandidate {
+                        bytes,
+                        declared_width: Some(1),
+                        declared_height: Some(1),
+                        game_id: 10,
+                        grid_id: 20,
+                    },
+                )
+                .is_err());
+        }
+        assert!(repo
+            .assign_tile(
+                "wl4",
+                AssetCandidate {
+                    bytes: PNG_1X1.to_vec(),
+                    declared_width: Some(2),
+                    declared_height: Some(1),
+                    game_id: 10,
+                    grid_id: 20,
+                },
+            )
+            .is_err());
+        assert!(!repo.has_assignment("wl4").unwrap());
+    }
+}

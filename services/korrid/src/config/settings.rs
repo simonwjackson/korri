@@ -10,7 +10,7 @@
 use sha2::{Digest, Sha256};
 use std::{
     fs::{self, OpenOptions},
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -139,6 +139,33 @@ pub fn set_steamgriddb_credential(
     }
     write_secret_atomically(&secret_path(private_root), token.as_bytes())?;
     Ok(SecretSettingStatus::Configured)
+}
+
+pub(crate) fn read_steamgriddb_credential(
+    private_root: &Path,
+) -> Result<Option<String>, SettingsError> {
+    let path = secret_path(private_root);
+    if !private_root.exists() {
+        return Ok(None);
+    }
+    if !private_root.is_dir() {
+        return Err(SettingsError::Storage(
+            "private state root is unavailable".into(),
+        ));
+    }
+    match fs::File::open(path) {
+        Ok(mut file) => {
+            let mut token = String::new();
+            file.read_to_string(&mut token)
+                .map_err(|_| SettingsError::Storage("private state root is unavailable".into()))?;
+            let token = token.trim().to_owned();
+            Ok((!token.is_empty()).then_some(token))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(_) => Err(SettingsError::Storage(
+            "private state root is unavailable".into(),
+        )),
+    }
 }
 
 pub fn clear_steamgriddb_credential(
