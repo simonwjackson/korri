@@ -9,35 +9,70 @@ public final class KorriOverlayHostExclusion {
         void closeAndDestroy();
     }
 
-    private LegacyHost currentLegacyHost;
+    /** Exact process-local Game/legacy-host generation. */
+    public static final class Owner {
+        private final LegacyHost host;
+        private final long generation;
 
-    public void register(LegacyHost host) {
-        currentLegacyHost = Objects.requireNonNull(host);
+        private Owner(LegacyHost host, long generation) {
+            this.host = host;
+            this.generation = generation;
+        }
     }
 
-    public void unregister(LegacyHost host) {
-        if (currentLegacyHost == host) currentLegacyHost = null;
+    private Owner current;
+    private long nextGeneration;
+
+    /**
+     * Called on Android's UI thread. A visible predecessor is synchronously
+     * retired before the replacement generation becomes current.
+     */
+    public Owner register(LegacyHost host) {
+        Objects.requireNonNull(host);
+        closeVisibleCurrent();
+        Owner owner = new Owner(host, ++nextGeneration);
+        current = owner;
+        return owner;
+    }
+
+    public void unregister(Owner owner) {
+        if (isCurrent(owner)) current = null;
+    }
+
+    public boolean isCurrent(Owner owner) {
+        return owner != null
+                && current != null
+                && current.host == owner.host
+                && current.generation == owner.generation;
     }
 
     public void globalConnected() {
-        closeVisibleLegacyHost();
+        closeVisibleCurrent();
     }
 
     public void openGlobal(Runnable open) {
-        closeVisibleLegacyHost();
-        open.run();
+        Owner owner = current;
+        openGlobal(owner, open);
     }
 
-    public void hideBoth(LegacyHost caller, Runnable dismissGlobal) {
-        if (currentLegacyHost != caller) return;
-        closeVisibleLegacyHost();
-        dismissGlobal.run();
+    public void openGlobal(Owner owner, Runnable open) {
+        if (!isCurrent(owner)) return;
+        closeVisibleCurrent();
+        // closeAndDestroy is application code and may synchronously install a
+        // replacement. Recheck before allowing the displaced Game to open.
+        if (isCurrent(owner)) open.run();
     }
 
-    private void closeVisibleLegacyHost() {
-        LegacyHost legacyHost = currentLegacyHost;
-        if (legacyHost != null && legacyHost.isVisible()) {
-            legacyHost.closeAndDestroy();
+    public void hideBoth(Owner owner, Runnable dismissGlobal) {
+        if (!isCurrent(owner)) return;
+        closeVisibleCurrent();
+        if (isCurrent(owner)) dismissGlobal.run();
+    }
+
+    private void closeVisibleCurrent() {
+        Owner owner = current;
+        if (owner != null && owner.host.isVisible()) {
+            owner.host.closeAndDestroy();
         }
     }
 }

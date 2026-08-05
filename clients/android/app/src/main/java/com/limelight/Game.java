@@ -31,6 +31,7 @@ import com.limelight.nvstream.input.MouseButtonPacket;
 import com.limelight.nvstream.jni.MoonBridge;
 import com.limelight.korri.moonlight.KorriMoonlightActionCoordinator;
 import com.limelight.korri.moonlight.KorriMoonlightActionExecutor;
+import com.limelight.korri.overlay.KorriOverlayHostExclusion;
 import com.limelight.korri.overlay.KorriOverlayService;
 import com.limelight.preferences.GlPreferences;
 import com.limelight.preferences.PreferenceConfiguration;
@@ -280,6 +281,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     private NvHTTP httpConn;
 
     private KorriGameOverlay korriOverlay;
+    private KorriOverlayHostExclusion.Owner korriOverlayOwner;
 
     // Korri-initiated sessions only (EXTRA_KORRI_SESSION): web lifecycle
     // overlay replacing the native spinner. Null for stock entry points.
@@ -1763,9 +1765,10 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     protected void onDestroy() {
         unregisterMoonlightExecutor();
         if (korriOverlay != null) {
-            KorriOverlayService.unregisterLegacyHost(korriOverlay);
+            KorriOverlayService.unregisterLegacyHost(korriOverlayOwner);
             korriOverlay.closeAndDestroy();
             korriOverlay = null;
+            korriOverlayOwner = null;
         }
         if (korriLaunchId != null && isFinishing()) {
             // Object identity prevents an old Activity's late teardown from
@@ -4177,14 +4180,14 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     private void createLegacyGameOverlay() {
         korriOverlay = new KorriGameOverlay(this);
-        KorriOverlayService.registerLegacyHost(korriOverlay);
+        korriOverlayOwner = KorriOverlayService.registerLegacyHost(korriOverlay);
     }
 
     @Override
     public void showGameMenu() {
         if (korriLaunchId == null) return;
         KorriOverlayService.RequestResult result =
-                KorriOverlayService.requestShow(korriLaunchId);
+                KorriOverlayService.requestShow(korriOverlayOwner, korriLaunchId);
         // Temporary pre-cutover fallback. Remove with KorriGameOverlay after
         // installed-device acceptance proves the accessibility host.
         if (result == KorriOverlayService.RequestResult.UNAVAILABLE) {
@@ -4196,8 +4199,8 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     }
 
     public void hideGameMenu() {
-        if (korriOverlay != null) {
-            KorriOverlayService.hideBoth(korriOverlay, korriLaunchId);
+        if (korriOverlayOwner != null) {
+            KorriOverlayService.hideBoth(korriOverlayOwner, korriLaunchId);
         }
     }
 

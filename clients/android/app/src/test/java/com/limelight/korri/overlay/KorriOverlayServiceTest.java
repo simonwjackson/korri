@@ -559,22 +559,24 @@ public class KorriOverlayServiceTest {
         state.updateSession(artemis(), true);
         state.updateForeground("com.simonwjackson.korri", "com.limelight.Game");
         RecordingRequestHost host = new RecordingRequestHost(state, windows);
+        KorriOverlayHostExclusion owners = new KorriOverlayHostExclusion();
+        KorriOverlayHostExclusion.Owner owner = owners.register(new InvisibleLegacyHost());
         KorriOverlayService.ProcessRequests requests =
-                new KorriOverlayService.ProcessRequests();
+                new KorriOverlayService.ProcessRequests(owners);
         requests.connect(host, new ImmediateDispatcher());
 
         assertEquals(KorriOverlayService.RequestResult.DELIVERED,
-                requests.requestShow(LAUNCH));
+                requests.requestShow(owner, LAUNCH));
         assertEquals(KorriOverlayService.RequestResult.DELIVERED,
-                requests.requestShow(LAUNCH));
+                requests.requestShow(owner, LAUNCH));
         assertTrue(windows.isVisible());
         assertEquals(1, factory.created.size());
 
         assertEquals(KorriOverlayService.RequestResult.REJECTED,
-                requests.requestDismiss(REPLACEMENT));
+                requests.requestDismiss(owner, REPLACEMENT));
         assertTrue(windows.isVisible());
         assertEquals(KorriOverlayService.RequestResult.DELIVERED,
-                requests.requestDismiss(LAUNCH));
+                requests.requestDismiss(owner, LAUNCH));
         assertFalse(windows.isVisible());
         assertEquals(1, factory.created.get(0).destroyCount);
     }
@@ -593,10 +595,12 @@ public class KorriOverlayServiceTest {
 
     @Test
     public void absentServiceIsUnavailableAndQueuedRequestCannotReachReplacement() {
+        KorriOverlayHostExclusion owners = new KorriOverlayHostExclusion();
+        KorriOverlayHostExclusion.Owner owner = owners.register(new InvisibleLegacyHost());
         KorriOverlayService.ProcessRequests requests =
-                new KorriOverlayService.ProcessRequests();
+                new KorriOverlayService.ProcessRequests(owners);
         assertEquals(KorriOverlayService.RequestResult.UNAVAILABLE,
-                requests.requestShow(LAUNCH));
+                requests.requestShow(owner, LAUNCH));
 
         QueuedDispatcher dispatcher = new QueuedDispatcher();
         RecordingRequestHost stale = new RecordingRequestHost(
@@ -607,7 +611,7 @@ public class KorriOverlayServiceTest {
                         new RecordingWindowFactory()));
         requests.connect(stale, dispatcher);
         assertEquals(KorriOverlayService.RequestResult.DELIVERED,
-                requests.requestShow(LAUNCH));
+                requests.requestShow(owner, LAUNCH));
         assertEquals(0, stale.showRequests);
 
         requests.disconnect(stale);
@@ -615,6 +619,78 @@ public class KorriOverlayServiceTest {
         dispatcher.runQueued();
         assertEquals(0, stale.showRequests);
         assertEquals(0, replacement.showRequests);
+    }
+
+    @Test
+    public void staleSameLaunchGameGenerationIsRejectedBeforeQueueForShowAndDismiss() {
+        KorriOverlayHostExclusion owners = new KorriOverlayHostExclusion();
+        KorriOverlayHostExclusion.Owner staleOwner =
+                owners.register(new InvisibleLegacyHost());
+        owners.register(new InvisibleLegacyHost());
+        QueuedDispatcher dispatcher = new QueuedDispatcher();
+        RecordingRequestHost host = new RecordingRequestHost(
+                armedState(artemis()), new KorriOverlayService.WindowController(
+                        new RecordingWindowFactory()));
+        KorriOverlayService.ProcessRequests requests =
+                new KorriOverlayService.ProcessRequests(owners);
+        requests.connect(host, dispatcher);
+
+        assertEquals(KorriOverlayService.RequestResult.REJECTED,
+                requests.requestShow(staleOwner, LAUNCH));
+        assertEquals(KorriOverlayService.RequestResult.REJECTED,
+                requests.requestDismiss(staleOwner, LAUNCH));
+        assertFalse(dispatcher.hasQueued());
+        assertEquals(0, host.showRequests);
+        assertEquals(0, host.dismissRequests);
+    }
+
+    @Test
+    public void gameReplacementAfterQueueRejectsRequestBeforeExecution() {
+        KorriOverlayHostExclusion owners = new KorriOverlayHostExclusion();
+        KorriOverlayHostExclusion.Owner owner = owners.register(new InvisibleLegacyHost());
+        QueuedDispatcher dispatcher = new QueuedDispatcher();
+        RecordingRequestHost host = new RecordingRequestHost(
+                armedState(artemis()), new KorriOverlayService.WindowController(
+                        new RecordingWindowFactory()));
+        KorriOverlayService.ProcessRequests requests =
+                new KorriOverlayService.ProcessRequests(owners);
+        requests.connect(host, dispatcher);
+
+        assertEquals(KorriOverlayService.RequestResult.DELIVERED,
+                requests.requestShow(owner, LAUNCH));
+        owners.register(new InvisibleLegacyHost());
+        dispatcher.runQueued();
+
+        assertEquals(0, host.showRequests);
+    }
+
+    @Test
+    public void launchOrForegroundReplacementAfterQueueRejectsAtExecution() {
+        for (boolean replaceLaunch : new boolean[] { false, true }) {
+            KorriOverlayHostExclusion owners = new KorriOverlayHostExclusion();
+            KorriOverlayHostExclusion.Owner owner =
+                    owners.register(new InvisibleLegacyHost());
+            KorriOverlayService.StateMachine state = armedState(artemis());
+            QueuedDispatcher dispatcher = new QueuedDispatcher();
+            RecordingRequestHost host = new RecordingRequestHost(
+                    state, new KorriOverlayService.WindowController(
+                            new RecordingWindowFactory()));
+            KorriOverlayService.ProcessRequests requests =
+                    new KorriOverlayService.ProcessRequests(owners);
+            requests.connect(host, dispatcher);
+
+            assertEquals(KorriOverlayService.RequestResult.DELIVERED,
+                    requests.requestShow(owner, LAUNCH));
+            if (replaceLaunch) {
+                state.updateSession(artemis(REPLACEMENT), true);
+            } else {
+                state.updateForeground(
+                        "com.simonwjackson.korri", "com.limelight.KorriShellActivity");
+            }
+            dispatcher.runQueued();
+
+            assertEquals(0, host.showRequests);
+        }
     }
 
     @Test
@@ -699,15 +775,17 @@ public class KorriOverlayServiceTest {
                 "com.simonwjackson.korri");
         state.updateSession(activeLaunch, true);
         state.updateForeground(foregroundPackage, foregroundClass);
+        KorriOverlayHostExclusion owners = new KorriOverlayHostExclusion();
+        KorriOverlayHostExclusion.Owner owner = owners.register(new InvisibleLegacyHost());
         KorriOverlayService.ProcessRequests requests =
-                new KorriOverlayService.ProcessRequests();
+                new KorriOverlayService.ProcessRequests(owners);
         requests.connect(
                 new RecordingRequestHost(state,
                         new KorriOverlayService.WindowController(factory)),
                 new ImmediateDispatcher());
 
         assertEquals(KorriOverlayService.RequestResult.REJECTED,
-                requests.requestShow(requestedLaunchId));
+                requests.requestShow(owner, requestedLaunchId));
         assertEquals(0, factory.created.size());
     }
 
@@ -730,6 +808,7 @@ public class KorriOverlayServiceTest {
         private Runnable queued;
         @Override public boolean isMainThread() { return false; }
         @Override public void post(Runnable request) { queued = request; }
+        boolean hasQueued() { return queued != null; }
         void runQueued() {
             Runnable request = queued;
             queued = null;
@@ -737,11 +816,18 @@ public class KorriOverlayServiceTest {
         }
     }
 
+    private static final class InvisibleLegacyHost
+            implements KorriOverlayHostExclusion.LegacyHost {
+        @Override public boolean isVisible() { return false; }
+        @Override public void closeAndDestroy() { }
+    }
+
     private static final class RecordingRequestHost
             implements KorriOverlayService.RequestHost {
         private final KorriOverlayService.StateMachine state;
         private final KorriOverlayService.WindowController windows;
         int showRequests;
+        int dismissRequests;
 
         RecordingRequestHost(
                 KorriOverlayService.StateMachine state,
@@ -751,7 +837,14 @@ public class KorriOverlayServiceTest {
         }
 
         @Override
-        public boolean requestShow(String launchId) {
+        public boolean accepts(
+                KorriOverlayHostExclusion.Owner owner, String launchId) {
+            return state.acceptsRequest(launchId);
+        }
+
+        @Override
+        public boolean requestShow(
+                KorriOverlayHostExclusion.Owner owner, String launchId) {
             showRequests++;
             boolean accepted = state.requestShow(launchId);
             windows.setVisible(state.isShowing());
@@ -760,7 +853,9 @@ public class KorriOverlayServiceTest {
         }
 
         @Override
-        public boolean requestDismiss(String launchId) {
+        public boolean requestDismiss(
+                KorriOverlayHostExclusion.Owner owner, String launchId) {
+            dismissRequests++;
             boolean accepted = state.requestDismiss(launchId);
             windows.setVisible(state.isShowing());
             state.updateOverlayVisibility(windows.isVisible());
