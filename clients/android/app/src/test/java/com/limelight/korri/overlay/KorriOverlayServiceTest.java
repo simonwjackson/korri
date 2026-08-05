@@ -223,6 +223,32 @@ public class KorriOverlayServiceTest {
     }
 
     @Test
+    public void guideOwnershipIsExactPerInputDevice() {
+        KorriOverlayService.StateMachine state = new KorriOverlayService.StateMachine(
+                "com.simonwjackson.korri");
+        state.updateSession(artemis(), true);
+        state.updateForeground("com.simonwjackson.korri", "com.limelight.Game");
+
+        assertFalse(state.onKey(
+                8, KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP, false));
+        assertTrue(state.onKey(
+                7, KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN, false));
+        assertFalse(state.onKey(
+                8, KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN, false));
+        assertFalse(state.onKey(
+                8, KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP, false));
+        assertFalse(state.onKey(
+                8, KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP, true));
+        assertTrue(state.onKey(
+                7, KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN, false));
+        assertTrue(state.onKey(
+                7, KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP, false));
+
+        assertTrue(state.isShowing());
+        assertEquals(1, state.toggleCount());
+    }
+
+    @Test
     public void interruptResetsTransientStateButDestroyIsTerminal() {
         KorriOverlayService.StateMachine state = new KorriOverlayService.StateMachine(
                 "com.simonwjackson.korri");

@@ -85,9 +85,10 @@ public final class KorriOverlayService extends AccessibilityService {
         if (event.getKeyCode() == KeyEvent.KEYCODE_BUTTON_MODE) {
             boolean wasShowing = state.isShowing();
             boolean consumed = state.onKey(
-                    event.getKeyCode(), event.getAction(), event.isCanceled());
-            if (wasShowing && event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()
-                    && windowController != null) {
+                    event.getDeviceId(), event.getKeyCode(),
+                    event.getAction(), event.isCanceled());
+            if (consumed && wasShowing && event.getAction() == KeyEvent.ACTION_UP
+                    && !event.isCanceled() && windowController != null) {
                 windowController.sendInput(
                         "{\"type\":\"system\",\"source\":\"gamepad\"}");
             }
@@ -685,7 +686,7 @@ public final class KorriOverlayService extends AccessibilityService {
         private boolean showing;
         private String matchedLaunchId;
         private String suspendedLaunchId;
-        private boolean guideOwned;
+        private Integer guideOwnerDeviceId;
         private int toggleCount;
         private boolean destroyed;
 
@@ -744,29 +745,39 @@ public final class KorriOverlayService extends AccessibilityService {
         }
 
         public boolean onKey(int keyCode, int action) {
-            return onKey(keyCode, action, false);
+            return onKey(-1, keyCode, action, false);
         }
 
         public boolean onKey(int keyCode, int action, boolean canceled) {
+            return onKey(-1, keyCode, action, canceled);
+        }
+
+        public boolean onKey(int deviceId, int keyCode, int action, boolean canceled) {
             if (destroyed || keyCode != KeyEvent.KEYCODE_BUTTON_MODE) return false;
+            boolean ownedByDevice = guideOwnerDeviceId != null
+                    && guideOwnerDeviceId == deviceId;
+            if (canceled) {
+                if (!ownedByDevice) return false;
+                guideOwnerDeviceId = null;
+                return true;
+            }
             boolean active = showing || isArmed();
             if (action == KeyEvent.ACTION_DOWN) {
-                if (!guideOwned && !active) return false;
-                guideOwned = true;
+                if (guideOwnerDeviceId != null) return ownedByDevice;
+                if (!active) return false;
+                guideOwnerDeviceId = deviceId;
                 return true;
             }
             if (action == KeyEvent.ACTION_UP) {
-                boolean consume = guideOwned || active;
-                if (guideOwned) {
-                    guideOwned = false;
-                    if (!canceled && active) {
-                        updateOverlayVisibility(!showing);
-                        toggleCount++;
-                    }
+                if (!ownedByDevice) return false;
+                guideOwnerDeviceId = null;
+                if (active) {
+                    updateOverlayVisibility(!showing);
+                    toggleCount++;
                 }
-                return consume;
+                return true;
             }
-            return guideOwned || active;
+            return ownedByDevice;
         }
 
         public boolean isShowing() {
@@ -783,7 +794,7 @@ public final class KorriOverlayService extends AccessibilityService {
 
         public void interrupt() {
             updateOverlayVisibility(false);
-            guideOwned = false;
+            guideOwnerDeviceId = null;
         }
 
         public void destroy() {
