@@ -1,5 +1,5 @@
 import type { SurfaceGameplayControl } from "@contracts/surface/korri-surface"
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 
 const DIRECTION_EVENT = "korri-semantic-direction"
 
@@ -25,9 +25,13 @@ export interface ShiftSheetRangeProps {
 export function ShiftSheetRange({ control, onChange }: ShiftSheetRangeProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const valueRef = useRef(control.interaction.value)
+  const [value, setValue] = useState(control.interaction.value)
   const unavailable = !control.enabled
+  const id = `gameplay-control-${control.id}`
+  const reasonId = control.disabledReason ? `${id}-reason` : undefined
   useEffect(() => {
     valueRef.current = control.interaction.value
+    setValue(control.interaction.value)
   }, [control.interaction.value])
   const adjust = (direction: "left" | "right") => {
     if (unavailable) return
@@ -39,6 +43,7 @@ export function ShiftSheetRange({ control, onChange }: ShiftSheetRangeProps) {
     )
     if (next !== current) {
       valueRef.current = next
+      setValue(next)
       onChange(next)
     }
   }
@@ -67,26 +72,37 @@ export function ShiftSheetRange({ control, onChange }: ShiftSheetRangeProps) {
           </span>
         ) : null}
         {control.disabledReason ? (
-          <span className="shift-sheet-control-description">
+          <span id={reasonId} className="shift-sheet-control-description">
             {control.disabledReason}
           </span>
         ) : null}
       </span>
-      <span className="shift-sheet-range-value">{control.interaction.value}</span>
+      <span className="shift-sheet-range-value">{value}</span>
       <input
+        id={id}
         ref={inputRef}
         className="shift-sheet-range-input"
         type="range"
         aria-label={control.label}
         aria-disabled={unavailable}
+        aria-describedby={reasonId}
         disabled={unavailable && control.disabledReason === undefined}
         data-korri-horizontal-control="range"
-        value={control.interaction.value}
+        value={value}
         min={control.interaction.min}
         max={control.interaction.max}
         step={control.interaction.step}
+        onPointerDown={event => {
+          if (unavailable) event.preventDefault()
+        }}
+        onKeyDown={event => {
+          if (unavailable) event.preventDefault()
+        }}
         onChange={event => {
-          if (!unavailable) onChange(event.currentTarget.valueAsNumber)
+          if (unavailable) return
+          valueRef.current = event.currentTarget.valueAsNumber
+          setValue(event.currentTarget.valueAsNumber)
+          onChange(event.currentTarget.valueAsNumber)
         }}
       />
     </label>

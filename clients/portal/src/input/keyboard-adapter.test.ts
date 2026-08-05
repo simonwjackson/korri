@@ -58,6 +58,52 @@ describe("createKeyboardAdapter", () => {
     stop()
   })
 
+  it("suppresses held confirm without allowing the native default", () => {
+    const target = new EventTarget()
+    const emitted: InputAction[] = []
+    const stop = createKeyboardAdapter({ target }).start(action => emitted.push(action))
+    const event = new KeyboardEvent("keydown", {
+      key: "Enter",
+      repeat: true,
+      cancelable: true,
+    })
+
+    target.dispatchEvent(event)
+
+    expect(emitted).toEqual([])
+    expect(event.defaultPrevented).toBe(true)
+    stop()
+  })
+
+  it("routes focused horizontal controls through semantic directions", () => {
+    const target = new EventTarget()
+    const emitted: InputAction[] = []
+    const select = document.createElement("select")
+    select.dataset.korriHorizontalControl = "choice"
+    document.body.append(select)
+    select.focus()
+    const stop = createKeyboardAdapter({ target }).start(action => emitted.push(action))
+    const left = new KeyboardEvent("keydown", {
+      key: "ArrowLeft",
+      cancelable: true,
+    })
+    const up = new KeyboardEvent("keydown", {
+      key: "ArrowUp",
+      cancelable: true,
+    })
+
+    target.dispatchEvent(left)
+    target.dispatchEvent(up)
+
+    expect(emitted).toEqual([
+      { type: "direction", direction: "left", source: "keyboard" },
+      { type: "direction", direction: "up", source: "keyboard" },
+    ])
+    expect(left.defaultPrevented).toBe(true)
+    expect(up.defaultPrevented).toBe(true)
+    stop()
+  })
+
   it("maps Enter and Space to confirm", () => {
     const target = new EventTarget()
     const emitted: InputAction[] = []

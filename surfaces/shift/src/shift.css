@@ -225,6 +225,10 @@
 	background-color: var(--shift-surface);
 }
 
+[data-shift-surface][data-shift-gameplay-overlay] {
+	background-color: transparent;
+}
+
 /*
  * Surface frame — owns the "fill the screen" height so [data-shift-home]
  * can be a self-measuring size container. In production this is the full
@@ -2713,6 +2717,8 @@
 	align-items: center;
 	gap: var(--shift-space-3);
 	width: 100%;
+	/* WCAG target floor: no fluid token may shrink an action below 48px. */
+	min-block-size: max(48px, calc(var(--intrinsic-base) * 3));
 	cursor: pointer;
 	font: inherit;
 	font-size: var(--shift-text-body);
@@ -2786,6 +2792,13 @@
 	height: 1.3em;
 }
 
+.shift-sheet-action-copy {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: var(--shift-space-1);
+}
+
 .shift-sheet-action-label {
 	min-width: 0;
 	overflow: hidden;
@@ -2802,6 +2815,8 @@
 	gap: var(--shift-space-3);
 	width: 100%;
 	min-width: 0;
+	/* WCAG target floor: value controls remain at least 48px tall. */
+	min-block-size: max(48px, calc(var(--intrinsic-base) * 3));
 	font: inherit;
 	font-size: var(--shift-text-body);
 	text-align: left;

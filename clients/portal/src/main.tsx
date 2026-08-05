@@ -51,6 +51,10 @@ const isSessionScreen =
   query.get(SESSION_SCREEN_PARAM) === SESSION_SCREEN_VALUE
 const isGameplayOverlay =
   query.get(GAMEPLAY_OVERLAY_SCREEN_PARAM) === GAMEPLAY_OVERLAY_SCREEN_VALUE
+if (isGameplayOverlay) {
+  // Window transparency must exist before React's first overlay frame.
+  document.documentElement.dataset.korriGameplayOverlay = ""
+}
 
 if (isSessionScreen) {
   const session = window.KorriSession

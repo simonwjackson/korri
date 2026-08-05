@@ -1,5 +1,5 @@
 import type { SurfaceGameplayControl } from "@contracts/surface/korri-surface"
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 
 const DIRECTION_EVENT = "korri-semantic-direction"
 
@@ -23,15 +23,22 @@ export interface ShiftSheetChoiceProps {
 export function ShiftSheetChoice({ control, onChange }: ShiftSheetChoiceProps) {
   const selectRef = useRef<HTMLSelectElement>(null)
   const unavailable = !control.enabled
+  const [value, setValue] = useState(control.interaction.value)
+  useEffect(() => setValue(control.interaction.value), [control.interaction.value])
+  const id = `gameplay-control-${control.id}`
+  const reasonId = control.disabledReason ? `${id}-reason` : undefined
   const chooseAdjacent = (direction: "left" | "right", repeat: boolean) => {
     if (unavailable || repeat) return
     const current = control.interaction.options.findIndex(
-      option => option.value === control.interaction.value,
+      option => option.value === value,
     )
     if (current < 0) return
     const offset = direction === "left" ? -1 : 1
     const next = control.interaction.options[current + offset]
-    if (next) onChange(next.value)
+    if (next) {
+      setValue(next.value)
+      onChange(next.value)
+    }
   }
 
   useEffect(() => {
@@ -58,21 +65,31 @@ export function ShiftSheetChoice({ control, onChange }: ShiftSheetChoiceProps) {
           </span>
         ) : null}
         {control.disabledReason ? (
-          <span className="shift-sheet-control-description">
+          <span id={reasonId} className="shift-sheet-control-description">
             {control.disabledReason}
           </span>
         ) : null}
       </span>
       <select
+        id={id}
         ref={selectRef}
         className="shift-sheet-choice-input"
         aria-label={control.label}
         aria-disabled={unavailable}
+        aria-describedby={reasonId}
         disabled={unavailable && control.disabledReason === undefined}
         data-korri-horizontal-control="choice"
-        value={control.interaction.value}
+        value={value}
+        onPointerDown={event => {
+          if (unavailable) event.preventDefault()
+        }}
+        onKeyDown={event => {
+          if (unavailable) event.preventDefault()
+        }}
         onChange={event => {
-          if (!unavailable) onChange(event.currentTarget.value)
+          if (unavailable) return
+          setValue(event.currentTarget.value)
+          onChange(event.currentTarget.value)
         }}
       >
         {control.interaction.options.map(option => (

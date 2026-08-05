@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { act, fireEvent, render, screen, within } from "@testing-library/react"
+import { readFileSync } from "node:fs"
 import type {
   SurfaceGameplayOverlayPresentation,
   SurfaceModel,
@@ -373,7 +374,11 @@ describe("Shift gameplay overlay", () => {
       'gameplay-control:sharpness:{"kind":"range","value":55}',
     ])
     expect(screen.getByRole("switch", { name: "Fill screen" }).getAttribute("aria-checked"))
-      .toBe("true")
+      .toBe("false")
+    expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Mouse mode" }).value)
+      .toBe("direct")
+    expect(screen.getByRole<HTMLInputElement>("slider", { name: "Sharpness" }).value)
+      .toBe("55")
     expect(screen.getByRole("slider", { name: "Sharpness" }).getAttribute("min")).toBe("0")
     expect(screen.getByRole("slider", { name: "Sharpness" }).getAttribute("max")).toBe("100")
     expect(screen.getByRole("slider", { name: "Sharpness" }).getAttribute("step")).toBe("5")
@@ -385,32 +390,75 @@ describe("Shift gameplay overlay", () => {
     const choice = screen.getByRole("combobox", { name: "Mouse mode" })
     const range = screen.getByRole("slider", { name: "Sharpness" })
 
-    choice.dispatchEvent(
-      new CustomEvent("korri-semantic-direction", {
-        detail: { direction: "right", repeat: false },
-      }),
-    )
-    choice.dispatchEvent(
-      new CustomEvent("korri-semantic-direction", {
-        detail: { direction: "right", repeat: true },
-      }),
-    )
-    range.dispatchEvent(
-      new CustomEvent("korri-semantic-direction", {
-        detail: { direction: "right", repeat: false },
-      }),
-    )
-    range.dispatchEvent(
-      new CustomEvent("korri-semantic-direction", {
-        detail: { direction: "right", repeat: true },
-      }),
-    )
+    act(() => {
+      choice.dispatchEvent(
+        new CustomEvent("korri-semantic-direction", {
+          detail: { direction: "right", repeat: false },
+        }),
+      )
+      choice.dispatchEvent(
+        new CustomEvent("korri-semantic-direction", {
+          detail: { direction: "right", repeat: true },
+        }),
+      )
+      range.dispatchEvent(
+        new CustomEvent("korri-semantic-direction", {
+          detail: { direction: "right", repeat: false },
+        }),
+      )
+      range.dispatchEvent(
+        new CustomEvent("korri-semantic-direction", {
+          detail: { direction: "right", repeat: true },
+        }),
+      )
+    })
 
     expect(host.calls).toEqual([
       'gameplay-control:mouse-mode:{"kind":"choice","value":"direct"}',
       'gameplay-control:sharpness:{"kind":"range","value":55}',
       'gameplay-control:sharpness:{"kind":"range","value":60}',
     ])
+  })
+
+  test("exposes stable described reasons and inert focus behavior for unavailable controls", () => {
+    const unavailablePresentation: SurfaceGameplayOverlayPresentation = {
+      ...presentation,
+      groups: presentation.groups.map(group => ({
+        ...group,
+        controls: group.controls.map(control =>
+          control.id === "fill"
+            ? { ...control, enabled: false, disabledReason: undefined }
+            : control.id === "mouse-mode"
+              ? { ...control, enabled: false, disabledReason: "Mouse input is disconnected." }
+              : control),
+      })),
+    }
+    const host = createFixtureHost()
+    render(<ShiftSurface model={overlayModel({ presentation: unavailablePresentation })} host={host} />)
+
+    const toggle = screen.getByRole("switch", { name: "Fill screen" })
+    expect(toggle.getAttribute("id")).toBe("gameplay-control-fill")
+    expect(toggle.hasAttribute("disabled")).toBe(true)
+
+    const choice = screen.getByRole("combobox", { name: "Mouse mode" })
+    expect(choice.getAttribute("id")).toBe("gameplay-control-mouse-mode")
+    expect(choice.getAttribute("aria-describedby"))
+      .toBe("gameplay-control-mouse-mode-reason")
+    expect(choice.hasAttribute("disabled")).toBe(false)
+    expect(screen.getByText("Mouse input is disconnected.").getAttribute("id"))
+      .toBe("gameplay-control-mouse-mode-reason")
+    fireEvent.change(choice, { target: { value: "direct" } })
+
+    const command = screen.getByRole("button", { name: /Open RetroArch menu/ })
+    expect(command.getAttribute("aria-describedby"))
+      .toBe("gameplay-control-retroarch-menu-reason")
+    expect(screen.getByText("The game menu is unavailable right now.")).toBeDefined()
+    expect(host.calls).toEqual([])
+  })
+
+  test("keeps all sheet actions and controls at the 48px accessibility floor", () => {
+    const css = readFileSync("src/shift.css", "utf8")
+    expect(css.match(/min-block-size: max\(48px/g)).toHaveLength(2)
   })
 
   test("Resume, Back, Guide, and scrim dismiss locally", () => {

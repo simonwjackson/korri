@@ -288,6 +288,9 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
       <div
         data-shift-surface
         data-shift-home-frame
+        data-shift-gameplay-overlay={
+          model.presentation.kind === "gameplay-overlay" ? "" : undefined
+        }
         className="shift-sheet-host intrinsic"
       >
         {body}

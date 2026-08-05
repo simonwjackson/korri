@@ -20,6 +20,7 @@ export type ShiftSheetActionTone = "default" | "danger"
 export interface ShiftSheetActionProps {
   readonly label: string
   readonly onSelect: () => void
+  readonly controlId?: string
   readonly icon?: ReactNode
   readonly tone?: ShiftSheetActionTone
   readonly disabled?: boolean
@@ -30,20 +31,25 @@ export interface ShiftSheetActionProps {
 export function ShiftSheetAction({
   label,
   onSelect,
+  controlId,
   icon,
   tone = "default",
   disabled = false,
   disabledReason,
 }: ShiftSheetActionProps) {
   const explainable = disabled && disabledReason !== undefined
+  const id = controlId === undefined ? undefined : `gameplay-control-${controlId}`
+  const reasonId = explainable && id ? `${id}-reason` : undefined
   return (
     <button
+      id={id}
       type="button"
       className="shift-sheet-action"
       data-tone={tone}
       disabled={disabled && !explainable}
+      aria-label={label}
       aria-disabled={disabled}
-      title={disabledReason}
+      aria-describedby={reasonId}
       onClick={() => {
         if (!disabled) onSelect()
       }}
@@ -54,7 +60,14 @@ export function ShiftSheetAction({
           {icon}
         </span>
       ) : null}
-      <span className="shift-sheet-action-label">{label}</span>
+      <span className="shift-sheet-action-copy">
+        <span className="shift-sheet-action-label">{label}</span>
+        {explainable ? (
+          <span id={reasonId} className="shift-sheet-control-description">
+            {disabledReason}
+          </span>
+        ) : null}
+      </span>
     </button>
   )
 }

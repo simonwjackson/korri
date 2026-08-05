@@ -53,11 +53,17 @@ export function createKeyboardAdapter(
       const handler = (event: Event) => {
         const ev = event as KeyboardEvent
         if (ev.defaultPrevented) return
-        if (ignoreWhenEditable && isEditableElement(document.activeElement))
-          return
-
         const action = matchAction(ev.key, keymap)
         if (!action) return
+        const active = document.activeElement
+        const horizontalControl = action.type === "direction" &&
+          active instanceof HTMLElement &&
+          active.hasAttribute("data-korri-horizontal-control")
+        if (ignoreWhenEditable && isEditableElement(active) && !horizontalControl) return
+        if (action.type === "confirm" && ev.repeat) {
+          ev.preventDefault()
+          return
+        }
 
         emit(
           action.type === "direction" && ev.repeat

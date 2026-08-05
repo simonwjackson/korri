@@ -24,3 +24,9 @@ body,
 body {
   overflow: hidden;
 }
+
+html[data-korri-gameplay-overlay],
+html[data-korri-gameplay-overlay] body,
+html[data-korri-gameplay-overlay] #app {
+  background-color: transparent;
+}
