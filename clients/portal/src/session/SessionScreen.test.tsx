@@ -224,13 +224,13 @@ function installTimerRecorder(): {
     callbacks.set(id, callback)
     scheduled.push({ id, delay: timeout ?? 0 })
     return id as unknown as ReturnType<typeof setTimeout>
-  }) as typeof setTimeout
+  }) as unknown as typeof setTimeout
 
   globalThis.clearTimeout = ((timer?: ReturnType<typeof setTimeout>) => {
     const id = Number(timer)
     callbacks.delete(id)
     cleared.push(id)
-  }) as typeof clearTimeout
+  }) as unknown as typeof clearTimeout
 
   return {
     scheduled,
