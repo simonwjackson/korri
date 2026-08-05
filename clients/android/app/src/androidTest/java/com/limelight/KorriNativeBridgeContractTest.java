@@ -116,28 +116,33 @@ public class KorriNativeBridgeContractTest {
     @Test
     public void activityKeyEventsReachTheWebViewAsSemanticInput() throws Exception {
         withReadyBridge((scenario, webView) -> {
-            assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_DPAD_UP,
-                    "direction", "direction", "up");
-            assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_DPAD_DOWN,
-                    "direction", "direction", "down");
-            assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_DPAD_LEFT,
-                    "direction", "direction", "left");
-            assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_DPAD_RIGHT,
-                    "direction", "direction", "right");
-            assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_DPAD_CENTER,
-                    "confirm", null, null);
-            assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_BUTTON_A,
-                    "confirm", null, null);
-            assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_BACK,
-                    "back", null, null);
-            assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_BUTTON_B,
-                    "back", null, null);
-            assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_MENU,
-                    "menu", null, null);
-            assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_BUTTON_START,
-                    "menu", null, null);
-            assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_BUTTON_SELECT,
-                    "options", null, null);
+            installSemanticInputReceiver(webView);
+            try {
+                assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_DPAD_UP,
+                        "direction", "direction", "up");
+                assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_DPAD_DOWN,
+                        "direction", "direction", "down");
+                assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_DPAD_LEFT,
+                        "direction", "direction", "left");
+                assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_DPAD_RIGHT,
+                        "direction", "direction", "right");
+                assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_DPAD_CENTER,
+                        "confirm", null, null);
+                assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_BUTTON_A,
+                        "confirm", null, null);
+                assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_BACK,
+                        "back", null, null);
+                assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_BUTTON_B,
+                        "back", null, null);
+                assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_MENU,
+                        "menu", null, null);
+                assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_BUTTON_START,
+                        "menu", null, null);
+                assertSemanticEvent(scenario, webView, KeyEvent.KEYCODE_BUTTON_SELECT,
+                        "options", null, null);
+            } finally {
+                restoreSemanticInputReceiver(webView);
+            }
         });
     }
 
@@ -153,12 +158,7 @@ public class KorriNativeBridgeContractTest {
                 assertEquals("up", event.getString("direction"));
                 assertEquals("gamepad", event.getString("source"));
                 assertNoAdditionalSemanticEvents(webView);
-            } finally {
-                restoreSemanticInputReceiver(webView);
-            }
 
-            installSemanticInputReceiver(webView);
-            try {
                 dispatchKeyEvent(scenario, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_UP);
                 assertNoAdditionalSemanticEvents(webView);
             } finally {
@@ -208,7 +208,7 @@ public class KorriNativeBridgeContractTest {
         long deadline = SystemClock.elapsedRealtime() + BRIDGE_READY_TIMEOUT_MS;
         String lastResult = null;
         while (SystemClock.elapsedRealtime() < deadline) {
-            lastResult = evaluateJavascript(webView,
+            lastResult = tryEvaluateJavascript(webView,
                     "typeof window.KorriNative === 'object' "
                             + "&& typeof window.KorriNative.bridgeVersion === 'function'");
             if ("true".equals(lastResult)) {
@@ -248,19 +248,14 @@ public class KorriNativeBridgeContractTest {
             String expectedType,
             String optionalField,
             String optionalValue) throws Exception {
-        installSemanticInputReceiver(webView);
-        try {
-            dispatchKeyEvent(scenario, KeyEvent.ACTION_DOWN, keyCode);
-            JSONObject event = waitForSemanticEvent(webView);
-            assertEquals(expectedType, event.getString("type"));
-            assertEquals("gamepad", event.getString("source"));
-            if (optionalField != null) {
-                assertEquals(optionalValue, event.getString(optionalField));
-            }
-            assertNoAdditionalSemanticEvents(webView);
-        } finally {
-            restoreSemanticInputReceiver(webView);
+        dispatchKeyEvent(scenario, KeyEvent.ACTION_DOWN, keyCode);
+        JSONObject event = waitForSemanticEvent(webView);
+        assertEquals(expectedType, event.getString("type"));
+        assertEquals("gamepad", event.getString("source"));
+        if (optionalField != null) {
+            assertEquals(optionalValue, event.getString(optionalField));
         }
+        assertNoAdditionalSemanticEvents(webView);
     }
 
     private static void installSemanticInputReceiver(WebView webView) throws Exception {
@@ -287,7 +282,7 @@ public class KorriNativeBridgeContractTest {
         long deadline = SystemClock.elapsedRealtime() + BRIDGE_READY_TIMEOUT_MS;
         String lastResult = null;
         while (SystemClock.elapsedRealtime() < deadline) {
-            lastResult = evaluateJavascript(webView,
+            lastResult = tryEvaluateJavascript(webView,
                     "typeof window.__korriInput === 'function'");
             if ("true".equals(lastResult)) {
                 return;
@@ -342,12 +337,20 @@ public class KorriNativeBridgeContractTest {
     }
 
     private static void assertNoAdditionalSemanticEvents(WebView webView) throws Exception {
-        Thread.sleep(POLL_INTERVAL_MS * 2);
+        // evaluateJavascript calls are ordered on this WebView. This no-op callback
+        // is therefore a deterministic barrier behind the key dispatch's script.
+        evaluateJavascript(webView, "void 0");
         assertEquals("0", evaluateJavascript(webView,
                 "window.__korriInputEventsForTest.length"));
     }
 
     private static String evaluateJavascript(WebView webView, String script) throws Exception {
+        String result = tryEvaluateJavascript(webView, script);
+        assertNotNull("Timed out waiting for JavaScript result: " + script, result);
+        return result;
+    }
+
+    private static String tryEvaluateJavascript(WebView webView, String script) throws Exception {
         CountDownLatch callback = new CountDownLatch(1);
         AtomicReference<String> result = new AtomicReference<>();
 
@@ -357,8 +360,9 @@ public class KorriNativeBridgeContractTest {
                     callback.countDown();
                 }));
 
-        assertTrue("Timed out waiting for JavaScript result: " + script,
-                callback.await(JAVASCRIPT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        if (!callback.await(JAVASCRIPT_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+            return null;
+        }
         return result.get();
     }
 

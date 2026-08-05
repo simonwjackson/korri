@@ -199,7 +199,6 @@ async function waitForReady(view: HookView) {
 
 interface HookView {
   current(): Launchables
-  states: LaunchablesState[]
   cleanup(): Promise<void>
 }
 
@@ -219,14 +218,12 @@ async function renderUseLaunchables(
   document.body.append(container)
   const root: Root = createRoot(container)
   let latest: Launchables | undefined
-  const states: LaunchablesState[] = []
   let disposed = false
 
   function Consumer() {
     const value = useLaunchables(bridge, korrid)
     useEffect(() => {
       latest = value
-      states.push(value.state)
     })
     return null
   }
@@ -240,7 +237,6 @@ async function renderUseLaunchables(
       if (latest === undefined) throw new Error("hook has not rendered")
       return latest
     },
-    states,
     async cleanup() {
       if (disposed) return
       disposed = true
