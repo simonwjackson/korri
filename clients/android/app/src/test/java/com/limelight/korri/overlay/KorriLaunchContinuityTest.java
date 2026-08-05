@@ -75,7 +75,7 @@ public class KorriLaunchContinuityTest {
     }
 
     @Test
-    public void cachedProcessAndDirectReturnNeverReplaceBoundIdentityOrStopDeathChecks() {
+    public void suspendedExactProcessPollingStopsAtMaxChecksWithoutClaimingEnd() {
         ConfigurableInspector inspector = new ConfigurableInspector();
         ManualScheduler scheduler = new ManualScheduler();
         RecordingEnd end = new RecordingEnd();
@@ -88,21 +88,47 @@ public class KorriLaunchContinuityTest {
         inspector.add(complete(original));
         scheduler.runNext();
         continuity.updateForeground("org.example.other", "org.example.other.Main");
-        continuity.updateForeground("org.example.game", "org.example.game.Game");
 
         inspector.add(complete(original));
-        scheduler.runNext();
+        inspector.add(complete(original));
         inspector.add(complete(original));
         scheduler.runNext();
-        inspector.add(complete(original));
+        assertEquals(1, scheduler.pending());
+        scheduler.runNext();
+        assertEquals(1, scheduler.pending());
         scheduler.runNext();
 
+        assertEquals(4, inspector.inspections);
         assertTrue(continuity.hasBoundIdentity(LAUNCH_A, 41));
         assertEquals(Collections.emptyList(), end.launchIds);
-        assertEquals(1, scheduler.pending());
+        assertEquals(0, scheduler.pending());
+    }
 
+    @Test
+    public void laterForegroundMismatchStartsFreshBoundedDeathObservation() {
+        ConfigurableInspector inspector = new ConfigurableInspector();
+        ManualScheduler scheduler = new ManualScheduler();
+        RecordingEnd end = new RecordingEnd();
+        KorriLaunchContinuity continuity = new KorriLaunchContinuity(inspector, scheduler, end, 2);
+        KorriLaunchContinuity.ProcessIdentity original =
+                process(41, 10041, "org.example.game", "org.example.game");
+
+        continuity.updateSession(external(LAUNCH_A, "org.example.game"));
+        continuity.updateForeground("org.example.game", "org.example.game.Game");
+        inspector.add(complete(original));
+        scheduler.runNext();
+        continuity.updateForeground("org.example.other", "org.example.other.Main");
+        inspector.add(complete(original));
+        inspector.add(complete(original));
+        scheduler.runAll();
+        assertEquals(0, scheduler.pending());
+        assertEquals(Collections.emptyList(), end.launchIds);
+
+        continuity.updateForeground("com.android.launcher", "com.android.launcher3.Launcher");
+        assertEquals(1, scheduler.pending());
         inspector.add(complete());
         scheduler.runNext();
+
         assertEquals(Collections.singletonList(LAUNCH_A), end.launchIds);
         assertEquals(0, scheduler.pending());
     }
@@ -135,20 +161,25 @@ public class KorriLaunchContinuityTest {
     }
 
     @Test
-    public void destructionCancelsPendingCallbackAndIdleSessionsDoNotPoll() {
+    public void destructionCancelsSuspendedObservationAndIdleSessionsDoNotPoll() {
         ConfigurableInspector inspector = new ConfigurableInspector();
         ManualScheduler scheduler = new ManualScheduler();
         RecordingEnd end = new RecordingEnd();
         KorriLaunchContinuity continuity = new KorriLaunchContinuity(inspector, scheduler, end, 3);
+        KorriLaunchContinuity.ProcessIdentity original =
+                process(41, 10041, "org.example.game", "org.example.game");
 
         continuity.updateForeground("org.example.game", "org.example.game.Game");
         continuity.updateSession(external(LAUNCH_A, "org.example.game"));
+        inspector.add(complete(original));
+        scheduler.runNext();
+        continuity.updateForeground("org.example.other", "org.example.other.Main");
         assertEquals(1, scheduler.pending());
         continuity.destroy();
 
         assertEquals(0, scheduler.pending());
         scheduler.runAll();
-        assertEquals(0, inspector.inspections);
+        assertEquals(1, inspector.inspections);
         assertEquals(Collections.emptyList(), end.launchIds);
         continuity.updateSession(null);
         continuity.updateForeground("org.example.game", "org.example.game.Game");
