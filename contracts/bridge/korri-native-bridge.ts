@@ -30,8 +30,9 @@ import type {
 // enumeration/launch and makes notification prompt semantics explicit. 11 adds
 // the shell-owned Android/app identity used by System information. 12 seals
 // Moonlight startup behind korrid's signed, one-use launch instruction. 13 adds
-// the honest gameplay-overlay accessibility grant/settings seam.
-export const BRIDGE_VERSION = 13
+// the honest gameplay-overlay accessibility grant/settings seam. 14 adds the
+// receipt-based asynchronous game-folder picker.
+export const BRIDGE_VERSION = 14
 
 // ── Local launches (JS -> Kotlin) ───────────────────────────────────────
 
@@ -267,9 +268,38 @@ export interface KorriNativeBridgeSurface {
   openNotificationSettings(): string
   /** Android and app identity for the read-only System information group. */
   systemInfo(): string
+  /** Open Android's asynchronous folder picker for game locations. */
+  openGameFolderPicker(): string
+  /** Re-read the generation-tagged picker result. */
+  gameFolderPickerSnapshot(): string
+  /** Acknowledge one definitive picker result generation. */
+  acknowledgeGameFolderPicker(generation: string): string
   /** Returns `BRIDGE_VERSION` of the shell build. */
   bridgeVersion(): number
 }
+
+// ── Game folder picker (v12) ────────────────────────────────────────
+
+export type OpenGameFolderPickerResult =
+  | { readonly _tag: "Opened"; readonly generation: string }
+  | { readonly _tag: "Unavailable"; readonly message: string }
+
+export type GameFolderPickerState =
+  | { readonly _tag: "Idle" }
+  | { readonly _tag: "Choosing" }
+  | { readonly _tag: "Selected"; readonly receipt: string }
+  | { readonly _tag: "Cancelled" }
+  | { readonly _tag: "Problem"; readonly code: string; readonly message: string }
+
+export interface GameFolderPickerSnapshot {
+  readonly version: 1
+  readonly generation: string
+  readonly state: GameFolderPickerState
+}
+
+export type AcknowledgeGameFolderPickerResult =
+  | { readonly _tag: "Acknowledged"; readonly generation: string }
+  | { readonly _tag: "Stale"; readonly generation: string }
 
 // ── System information (v11) ────────────────────────────────────────
 

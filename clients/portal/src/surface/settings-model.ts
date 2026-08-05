@@ -10,7 +10,11 @@ import type {
   StreamHost,
   SystemInfoResult,
 } from "@contracts/bridge/korri-native-bridge"
-import { SecretSettingStatus, type SettingsSnapshot } from "@contracts/generated/korrid"
+import {
+  SecretSettingStatus,
+  type DiscoverySnapshot,
+  type SettingsSnapshot,
+} from "@contracts/generated/korrid"
 
 export interface DeviceFacts {
   readonly version?: string
@@ -21,6 +25,7 @@ export interface DeviceFacts {
   readonly hosts?: readonly StreamHost[]
   readonly systemInfo?: SystemInfoResult
   readonly localGameCount?: number
+  readonly discovery?: DiscoverySnapshot
 }
 
 const storageValue = (result: StorageAccessResult): string => {
@@ -67,6 +72,21 @@ const onOff = [
 
 const secretStatusLabel = (status: SecretSettingStatus): string =>
   status === SecretSettingStatus.Configured ? "Configured" : "Not configured"
+
+const discoveryStateLabel = (snapshot: DiscoverySnapshot | undefined): string => {
+  switch (snapshot?.state._tag) {
+    case "Scanning":
+      return "Scanning…"
+    case "Enriching":
+      return "Adding details…"
+    case "Problem":
+      return "Needs attention"
+    case "Idle":
+      return "Ready"
+    default:
+      return "Not set up"
+  }
+}
 
 export function settingsFrom(facts: DeviceFacts): readonly SurfaceSettingGroup[] {
   const paired = facts.hosts?.filter(host => host.paired) ?? []
@@ -124,6 +144,49 @@ export function settingsFrom(facts: DeviceFacts): readonly SurfaceSettingGroup[]
             value: countLabel(facts.localGameCount, "game"),
             description: "Declared in library.yaml",
           },
+      facts.discovery === undefined
+        ? undefined
+        : {
+            id: "game-discovery-status",
+            label: "Folder scan",
+            value: discoveryStateLabel(facts.discovery),
+            description:
+              facts.discovery.diagnostics[0]?.message ??
+              "Games appear as soon as scanning finds them",
+          },
+      {
+        id: "game-folder-add",
+        label: "Add game folder",
+        description: "Choose a folder on this Android device",
+        interaction: { kind: "action" as const, actionId: "game-folder-add" },
+      },
+      facts.discovery === undefined
+        ? undefined
+        : {
+            id: "game-folder-rescan",
+            label: "Rescan game folders",
+            value: countLabel(facts.discovery.locations.length, "folder"),
+            interaction: {
+              kind: "action" as const,
+              actionId: "game-folder-rescan",
+            },
+          },
+      ...(facts.discovery?.locations.map(location => ({
+        id: `game-folder:${location.id}`,
+        label: location.label,
+        value: "Registered",
+        interaction: {
+          kind: "action" as const,
+          actionId: `game-folder-remove:${location.id}`,
+          destructive: true,
+          confirmation: {
+            title: "Remove game folder?",
+            message:
+              "Korri will remove games it added from this folder. Edited or hand-authored games stay.",
+            confirmLabel: "Remove folder",
+          },
+        },
+      })) ?? []),
     ]),
     group("Streaming", [
       facts.hosts === undefined

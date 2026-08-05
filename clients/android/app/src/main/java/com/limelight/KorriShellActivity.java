@@ -49,6 +49,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -66,6 +67,7 @@ import java.util.concurrent.TimeUnit;
 public class KorriShellActivity extends AppCompatActivity {
     private static final String NOTIFICATION_PREFS = "korri-notifications";
     private static final String PREF_NOTIFICATION_PERMISSION_ASKED = "notification-permission-asked";
+    private static final int REQUEST_GAME_FOLDER = 92;
 
     private WebView webView;
     private int korridPort = -1;
@@ -73,6 +75,7 @@ public class KorriShellActivity extends AppCompatActivity {
     private ComputerManagerService.ComputerManagerBinder managerBinder;
     private boolean computerManagerBound;
     private final CountDownLatch binderReady = new CountDownLatch(1);
+    private final KorriGameFolderPickerState gameFolderPicker = new KorriGameFolderPickerState();
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         public void onServiceConnected(ComponentName className, IBinder binder) {
@@ -315,12 +318,46 @@ public class KorriShellActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         // The launch may remain live, but Korri itself being foreground is
-        // never a gameplay-overlay target.
+        // never a gameplay-overlay target. Returning from a stream, Android
+        // picker, or settings lets the web surface refresh its state.
         KorriBrainService.setOverlayArmed(false);
-        // Returning from a stream: let the web surface refresh its state.
         if (webView != null) {
             webView.evaluateJavascript(
                     "window.dispatchEvent(new Event('korri-shell-resumed'))", null);
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_GAME_FOLDER) return;
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+            gameFolderPicker.cancelled();
+            return;
+        }
+        KorriExternalStorageTreeResolver.Result result =
+                KorriExternalStorageTreeResolver.resolve(
+                        data.getData().toString(), externalStorageVolumes());
+        if (!result.isOk()) {
+            gameFolderPicker.problem(result.code, result.message);
+            return;
+        }
+        try {
+            String receipt = KorridServer.issueFolderSelectionReceipt(
+                    result.canonicalDirectory.getPath());
+            if (receipt == null || receipt.isEmpty()) {
+                gameFolderPicker.problem(
+                        "FolderSelectionReceiptUnavailable",
+                        "Korri could not approve the selected folder");
+                return;
+            }
+            gameFolderPicker.selected(receipt);
+        } catch (Throwable error) {
+            gameFolderPicker.problem(
+                    "FolderSelectionReceiptUnavailable",
+                    error.getMessage() != null
+                            ? error.getMessage()
+                            : "Korri could not approve the selected folder");
         }
     }
 
@@ -332,6 +369,25 @@ public class KorriShellActivity extends AppCompatActivity {
         if (KorriBrainService.activeLaunch() != null) {
             KorriBrainService.setOverlayArmed(true);
         }
+    }
+
+    private List<KorriExternalStorageTreeResolver.Volume> externalStorageVolumes() {
+        List<KorriExternalStorageTreeResolver.Volume> volumes = new ArrayList<>();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            volumes.add(new KorriExternalStorageTreeResolver.Volume(
+                    "primary", Environment.getExternalStorageDirectory()));
+            return volumes;
+        }
+        StorageManager storageManager = getSystemService(StorageManager.class);
+        if (storageManager == null) return volumes;
+        for (StorageVolume volume : storageManager.getStorageVolumes()) {
+            File directory = volume.getDirectory();
+            if (directory == null) continue;
+            String id = volume.isPrimary() ? "primary" : volume.getUuid();
+            if (id == null || id.isEmpty()) continue;
+            volumes.add(new KorriExternalStorageTreeResolver.Volume(id, directory));
+        }
+        return volumes;
     }
 
     private interface ActivityStart {
@@ -352,7 +408,7 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public int bridgeVersion() {
             // Mirrors BRIDGE_VERSION in contracts/bridge/korri-native-bridge.ts.
-            return 13;
+            return 14;
         }
 
         @JavascriptInterface
@@ -512,6 +568,53 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public String openOverlaySettings() {
             return KorriOverlayPermission.openSettings(KorriShellActivity.this);
+        }
+
+        /** Open Android's asynchronous game-folder picker. */
+        @JavascriptInterface
+        public String openGameFolderPicker() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                    && !Environment.isExternalStorageManager()) {
+                try {
+                    requestAllFilesAccess();
+                } catch (Exception ignored) {
+                    // The snapshot below still tells the portal what is wrong.
+                }
+                gameFolderPicker.problem(
+                        "StorageAccessDenied",
+                        "Grant Korri file access, then choose a game folder");
+                return KorriGameFolderPickerState.unavailableJson(
+                        "Grant Korri file access, then choose a game folder");
+            }
+            String opened = gameFolderPicker.choose();
+            try {
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                        | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+                startActivityOnUiThread(
+                        () -> startActivityForResult(intent, REQUEST_GAME_FOLDER),
+                        "game folder picker start timed out");
+                return opened;
+            } catch (Exception error) {
+                String message = error.getMessage() != null
+                        ? error.getMessage()
+                        : "game folder picker is unavailable";
+                gameFolderPicker.problem("FolderSelectionUnavailable", message);
+                return KorriGameFolderPickerState.unavailableJson(message);
+            }
+        }
+
+        /** Re-readable result of Android's asynchronous game-folder picker. */
+        @JavascriptInterface
+        public String gameFolderPickerSnapshot() {
+            return gameFolderPicker.snapshotJson();
+        }
+
+        /** Acknowledge a definitive picker result so it cannot be applied twice. */
+        @JavascriptInterface
+        public String acknowledgeGameFolderPicker(String generation) {
+            return gameFolderPicker.acknowledgeJson(generation);
         }
 
         /** Port of the embedded korrid server, or -1 when it is not running. */

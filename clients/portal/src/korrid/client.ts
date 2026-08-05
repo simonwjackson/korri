@@ -702,6 +702,15 @@ export function createInMemoryKorridClient(
           },
         }
       }
+      if (!discovery.locations.some(location => location.id === receipt)) {
+        discovery = {
+          ...discovery,
+          locations: [
+            ...discovery.locations,
+            { id: receipt, label: `Selected folder ${discovery.locations.length + 1}` },
+          ],
+        }
+      }
       return { _tag: "Ok", payload: nextDiscovery({ _tag: "Scanning", payload: {} }) }
     },
     async removeDiscoveryLocation(locationId) {

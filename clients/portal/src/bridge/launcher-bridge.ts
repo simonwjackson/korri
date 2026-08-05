@@ -1,8 +1,11 @@
 import type {
+  AcknowledgeGameFolderPickerResult,
+  GameFolderPickerSnapshot,
   KorriNativeBridgeSurface,
   LaunchLocalResult,
   LocalLaunchSpec,
   MoonlightLaunchSpec,
+  OpenGameFolderPickerResult,
   OpenNotificationSettingsResult,
   BackgroundNoticeResult,
   RequestBackgroundNoticeResult,
@@ -55,6 +58,14 @@ export interface LauncherBridge {
   openPairing(): Promise<OpenPairingResult>
   /** Android and app identity for System information. */
   systemInfo(): Promise<SystemInfoResult>
+  /** Open Android's asynchronous folder picker. */
+  openGameFolderPicker(): Promise<OpenGameFolderPickerResult>
+  /** Re-read the last folder-picker outcome. */
+  gameFolderPickerSnapshot(): Promise<GameFolderPickerSnapshot>
+  /** Acknowledge one definitive folder-picker generation. */
+  acknowledgeGameFolderPicker(
+    generation: string,
+  ): Promise<AcknowledgeGameFolderPickerResult>
 }
 
 export interface ResolvedMoonlightStreamSource {
@@ -233,6 +244,37 @@ export function createKorriNativeLauncherBridge(
         return { _tag: "Unavailable", message: describe(error) }
       }
     },
+    async openGameFolderPicker() {
+      try {
+        return decodeOpenGameFolderPicker(
+          JSON.parse(surface.openGameFolderPicker()),
+        )
+      } catch (error) {
+        return { _tag: "Unavailable", message: describe(error) }
+      }
+    },
+    async gameFolderPickerSnapshot() {
+      try {
+        return decodeGameFolderPickerSnapshot(
+          JSON.parse(surface.gameFolderPickerSnapshot()),
+        )
+      } catch (error) {
+        return {
+          version: 1,
+          generation: "decode-failed",
+          state: { _tag: "Problem", code: "Malformed", message: describe(error) },
+        }
+      }
+    },
+    async acknowledgeGameFolderPicker(generation) {
+      try {
+        return decodeAcknowledgeGameFolderPicker(
+          JSON.parse(surface.acknowledgeGameFolderPicker(generation)),
+        )
+      } catch (error) {
+        return { _tag: "Stale", generation: describe(error) }
+      }
+    },
   }
 }
 
@@ -247,6 +289,10 @@ export interface InMemoryLauncherBridgeConfig {
   readonly streamHosts?: readonly StreamHost[]
   readonly streamApps?: Readonly<Record<string, readonly StreamApp[]>>
   readonly delayMs?: number
+  readonly gameFolderPicker?:
+    | { readonly _tag: "Selected"; readonly receipt: string }
+    | { readonly _tag: "Cancelled" }
+    | { readonly _tag: "Problem"; readonly code: string; readonly message: string }
 }
 
 const sampleHosts: readonly StreamHost[] = [
@@ -270,6 +316,21 @@ export function createInMemoryLauncherBridge(
   const delay = () => new Promise(resolve => setTimeout(resolve, delayMs))
   const storageAccessResult: StorageAccessResult =
     behavior === "storage-denied" ? { _tag: "Denied" } : { _tag: "Granted" }
+  let pickerRevision = 0
+  let pickerSnapshot: GameFolderPickerSnapshot = {
+    version: 1,
+    generation: "in-memory-picker-0",
+    state: { _tag: "Idle" },
+  }
+  const nextPicker = (state: GameFolderPickerSnapshot["state"]) => {
+    pickerRevision += 1
+    pickerSnapshot = {
+      version: 1,
+      generation: `in-memory-picker-${pickerRevision}`,
+      state,
+    }
+    return pickerSnapshot
+  }
 
   return {
     async launchLocal(spec) {
@@ -370,6 +431,42 @@ export function createInMemoryLauncherBridge(
           appVersion: "development",
         },
       }
+    },
+    async openGameFolderPicker() {
+      await delay()
+      if (behavior === "storage-denied") {
+        nextPicker({
+          _tag: "Problem",
+          code: "StorageAccessDenied",
+          message: "Grant Korri file access, then choose a game folder",
+        })
+        return { _tag: "Unavailable", message: "file access is not granted" }
+      }
+      const configured = config.gameFolderPicker ?? {
+        _tag: "Selected" as const,
+        receipt: "in-memory-folder-receipt",
+      }
+      nextPicker(configured)
+      return { _tag: "Opened", generation: pickerSnapshot.generation }
+    },
+    async gameFolderPickerSnapshot() {
+      await delay()
+      return pickerSnapshot
+    },
+    async acknowledgeGameFolderPicker(generation) {
+      await delay()
+      if (generation !== pickerSnapshot.generation) {
+        return { _tag: "Stale", generation: pickerSnapshot.generation }
+      }
+      if (
+        pickerSnapshot.state._tag === "Selected" ||
+        pickerSnapshot.state._tag === "Cancelled" ||
+        pickerSnapshot.state._tag === "Problem"
+      ) {
+        nextPicker({ _tag: "Idle" })
+        return { _tag: "Acknowledged", generation: pickerSnapshot.generation }
+      }
+      return { _tag: "Stale", generation: pickerSnapshot.generation }
     },
   }
 }
@@ -496,6 +593,69 @@ function decodeOpenPairing(value: unknown): OpenPairingResult {
       return { _tag: payload._tag, message: stringField(payload, "message") }
     default:
       throw new Error("malformed OpenPairingResult")
+  }
+}
+
+function decodeOpenGameFolderPicker(
+  value: unknown,
+): OpenGameFolderPickerResult {
+  const payload = record(value, "OpenGameFolderPickerResult")
+  switch (payload._tag) {
+    case "Opened":
+      return { _tag: "Opened", generation: stringField(payload, "generation") }
+    case "Unavailable":
+      return { _tag: "Unavailable", message: stringField(payload, "message") }
+    default:
+      throw new Error("malformed OpenGameFolderPickerResult")
+  }
+}
+
+function decodeGameFolderPickerSnapshot(
+  value: unknown,
+): GameFolderPickerSnapshot {
+  const payload = record(value, "GameFolderPickerSnapshot")
+  if (payload.version !== 1) throw new Error("unsupported picker version")
+  const state = record(payload.state, "GameFolderPickerState")
+  switch (state._tag) {
+    case "Idle":
+    case "Choosing":
+    case "Cancelled":
+      return {
+        version: 1,
+        generation: stringField(payload, "generation"),
+        state: { _tag: state._tag },
+      }
+    case "Selected":
+      return {
+        version: 1,
+        generation: stringField(payload, "generation"),
+        state: { _tag: "Selected", receipt: stringField(state, "receipt") },
+      }
+    case "Problem":
+      return {
+        version: 1,
+        generation: stringField(payload, "generation"),
+        state: {
+          _tag: "Problem",
+          code: stringField(state, "code"),
+          message: stringField(state, "message"),
+        },
+      }
+    default:
+      throw new Error("malformed GameFolderPickerState")
+  }
+}
+
+function decodeAcknowledgeGameFolderPicker(
+  value: unknown,
+): AcknowledgeGameFolderPickerResult {
+  const payload = record(value, "AcknowledgeGameFolderPickerResult")
+  switch (payload._tag) {
+    case "Acknowledged":
+    case "Stale":
+      return { _tag: payload._tag, generation: stringField(payload, "generation") }
+    default:
+      throw new Error("malformed AcknowledgeGameFolderPickerResult")
   }
 }
 

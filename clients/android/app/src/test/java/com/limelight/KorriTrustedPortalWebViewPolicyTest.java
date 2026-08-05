@@ -19,11 +19,14 @@ import static org.junit.Assert.assertTrue;
 @RunWith(RobolectricTestRunner.class)
 public class KorriTrustedPortalWebViewPolicyTest {
     private static final Set<String> TREATY_METHODS = new TreeSet<>(Arrays.asList(
+            "acknowledgeGameFolderPicker",
             "backgroundNotice",
             "bridgeVersion",
+            "gameFolderPickerSnapshot",
             "korridCapability",
             "korridPort",
             "launchLocal",
+            "openGameFolderPicker",
             "openNotificationSettings",
             "openPairing",
             "openStorageAccessSettings",

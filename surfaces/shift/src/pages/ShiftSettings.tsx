@@ -27,7 +27,14 @@ import { ShiftCineTitle } from "../ui/atoms/ShiftCineTitle"
 import { ShiftCineBackdrop } from "../ui/molecules/ShiftCineBackdrop"
 import { ShiftCineLegend } from "../ui/molecules/ShiftCineLegend"
 import { ShiftSettingRow } from "../ui/molecules/ShiftSettingRow"
+import { ShiftSheetAction } from "../ui/molecules/ShiftSheetAction"
 import { ShiftSettingSheet } from "../ui/organisms/ShiftSettingSheet"
+import { ShiftSheetBody } from "../ui/organisms/ShiftSheetBody"
+import { ShiftSheetGroup } from "../ui/organisms/ShiftSheetGroup"
+import { ShiftSheetHeader } from "../ui/organisms/ShiftSheetHeader"
+import { ShiftSheetPanel } from "../ui/organisms/ShiftSheetPanel"
+import { ShiftSheetRoot } from "../ui/organisms/ShiftSheetRoot"
+import { ShiftSheetTitle } from "../ui/organisms/ShiftSheetTitle"
 import {
   ShiftStatusBar,
   type ShiftStatusBarProps,
@@ -78,6 +85,7 @@ export function ShiftSettings({
 }: ShiftSettingsProps) {
   const [index, setIndex] = useState(0)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [trackY, setTrackY] = useState(0)
   const viewportRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
@@ -98,9 +106,16 @@ export function ShiftSettings({
   const focusedItem = items[index]
   const editingItem: SurfaceSettingItem | null =
     items.find(item => item.id === editingId) ?? null
+  const confirmingItem: SurfaceSettingItem | null =
+    items.find(item => item.id === confirmingId) ?? null
+  const confirmingAction =
+    confirmingItem?.interaction?.kind === "action"
+      ? confirmingItem.interaction
+      : null
 
   useSurfaceAction("back", () => {
-    if (editingId) closeEditor()
+    if (confirmingId) setConfirmingId(null)
+    else if (editingId) closeEditor()
     else onClose?.()
   })
 
@@ -194,7 +209,11 @@ export function ShiftSettings({
                           : {
                               onSelect: () => {
                                 if (item.interaction?.kind === "action") {
-                                  onAction(item.interaction.actionId)
+                                  if (item.interaction.confirmation) {
+                                    setConfirmingId(item.id)
+                                  } else {
+                                    onAction(item.interaction.actionId)
+                                  }
                                 } else {
                                   setEditingId(item.id)
                                 }
@@ -244,6 +263,37 @@ export function ShiftSettings({
         onDismissProblem={onDismissProblem}
         onClose={closeEditor}
       />
+
+      {confirmingAction?.confirmation ? (
+        <ShiftSheetRoot
+          open
+          onClose={() => setConfirmingId(null)}
+          label={confirmingAction.confirmation.title}
+        >
+          <ShiftSheetPanel>
+            <ShiftSheetHeader>
+              <ShiftSheetTitle>
+                {confirmingAction.confirmation.title}
+              </ShiftSheetTitle>
+            </ShiftSheetHeader>
+            <ShiftSheetBody>
+              <ShiftSheetGroup title="Confirm">
+                <p className="shift-setting-problem">
+                  {confirmingAction.confirmation.message}
+                </p>
+                <ShiftSheetAction
+                  label={confirmingAction.confirmation.confirmLabel}
+                  onSelect={() => {
+                    onAction(confirmingAction.actionId)
+                    setConfirmingId(null)
+                  }}
+                />
+                <ShiftSheetAction label="Cancel" onSelect={() => setConfirmingId(null)} />
+              </ShiftSheetGroup>
+            </ShiftSheetBody>
+          </ShiftSheetPanel>
+        </ShiftSheetRoot>
+      ) : null}
 
       {rows.length === 0 ? (
         <div className="shift-settings-empty">

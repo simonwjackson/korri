@@ -297,7 +297,17 @@ describe("createKorriNativeLauncherBridge", () => {
           appVersion: "1.0",
         },
       }),
-    bridgeVersion: () => 13,
+    openGameFolderPicker: () =>
+      JSON.stringify({ _tag: "Opened", generation: "picker-1" }),
+    gameFolderPickerSnapshot: () =>
+      JSON.stringify({
+        version: 1,
+        generation: "picker-1",
+        state: { _tag: "Selected", receipt: "receipt-1" },
+      }),
+    acknowledgeGameFolderPicker: () =>
+      JSON.stringify({ _tag: "Acknowledged", generation: "picker-2" }),
+    bridgeVersion: () => 14,
     ...overrides,
   })
 
@@ -432,6 +442,54 @@ describe("createKorriNativeLauncherBridge", () => {
       )
       expect(await bridge.openPairing()).toEqual(expected)
     }
+  })
+
+  it("decodes the receipt-based game folder picker contract", async () => {
+    const bridge = createKorriNativeLauncherBridge(surface({}))
+
+    expect(await bridge.openGameFolderPicker()).toEqual({
+      _tag: "Opened",
+      generation: "picker-1",
+    })
+    expect(await bridge.gameFolderPickerSnapshot()).toEqual({
+      version: 1,
+      generation: "picker-1",
+      state: { _tag: "Selected", receipt: "receipt-1" },
+    })
+    expect(await bridge.acknowledgeGameFolderPicker("picker-1")).toEqual({
+      _tag: "Acknowledged",
+      generation: "picker-2",
+    })
+  })
+
+  it("configures browser fixture picker outcomes with receipts, not paths", async () => {
+    const selected = createInMemoryLauncherBridge({
+      gameFolderPicker: { _tag: "Selected", receipt: "fixture-receipt" },
+    })
+    await selected.openGameFolderPicker()
+    expect(await selected.gameFolderPickerSnapshot()).toMatchObject({
+      state: { _tag: "Selected", receipt: "fixture-receipt" },
+    })
+
+    const cancelled = createInMemoryLauncherBridge({
+      gameFolderPicker: { _tag: "Cancelled" },
+    })
+    await cancelled.openGameFolderPicker()
+    expect((await cancelled.gameFolderPickerSnapshot()).state._tag).toBe(
+      "Cancelled",
+    )
+
+    const failed = createInMemoryLauncherBridge({
+      gameFolderPicker: {
+        _tag: "Problem",
+        code: "FolderSelectionUnresolvable",
+        message: "cloud folder",
+      },
+    })
+    await failed.openGameFolderPicker()
+    expect(await failed.gameFolderPickerSnapshot()).toMatchObject({
+      state: { _tag: "Problem", code: "FolderSelectionUnresolvable" },
+    })
   })
 
   it("decodes Android system information", async () => {

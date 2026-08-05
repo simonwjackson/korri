@@ -95,6 +95,52 @@ describe("ShiftSurface", () => {
     expect(container.querySelectorAll(".shift-monogram").length).toBe(2)
   })
 
+  test("confirms destructive setting actions before calling the host", () => {
+    const host = createFixtureHost()
+    render(
+      <ShiftSurface
+        model={model({
+          settings: [
+            {
+              title: "Games",
+              items: [
+                {
+                  id: "game-folder:loc-a",
+                  label: "GBA",
+                  value: "Registered",
+                  interaction: {
+                    kind: "action",
+                    actionId: "game-folder-remove:loc-a",
+                    destructive: true,
+                    confirmation: {
+                      title: "Remove game folder?",
+                      message: "Korri will remove games it added from this folder.",
+                      confirmLabel: "Remove folder",
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        })}
+        host={host}
+      />,
+    )
+
+    fireEvent.focus(screen.getByRole("button", { name: "Settings" }))
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }))
+    fireEvent.click(screen.getByRole("button", { name: /GBA/ }))
+
+    expect(host.calls).toEqual([])
+    expect(screen.getByRole("dialog", { name: "Remove game folder?" })).toBeDefined()
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+    expect(host.calls).toEqual([])
+
+    fireEvent.click(screen.getByRole("button", { name: /GBA/ }))
+    fireEvent.click(screen.getByRole("button", { name: "Remove folder" }))
+    expect(host.calls).toEqual(["action:game-folder-remove:loc-a"])
+  })
+
   test("opens configured sensitive settings with an empty password editor", () => {
     const host = createFixtureHost()
     render(

@@ -155,10 +155,71 @@ describe("settingsFrom", () => {
     ])
   })
 
-  it("explains that game count comes from library.yaml", () => {
-    const game = group({ localGameCount: 1 }, "Games")?.items[0]
-    expect(game?.value).toBe("1 game")
-    expect(game?.description).toBe("Declared in library.yaml")
+  it("composes game folder actions without exposing paths as contract fields", () => {
+    const games = group(
+      {
+        localGameCount: 1,
+        discovery: {
+          generation: "discovery-1",
+          state: { _tag: "Idle", payload: {} },
+          locations: [
+            { id: "loc-a", label: "GBA" },
+            { id: "loc-b", label: "More games" },
+          ],
+          diagnostics: [],
+        },
+      },
+      "Games",
+    )
+    expect(games?.items[0]).toMatchObject({
+      id: "local-games",
+      value: "1 game",
+      description: "Declared in library.yaml",
+    })
+    expect(games?.items.map(item => [item.label, item.value])).toEqual([
+      ["On this device", "1 game"],
+      ["Folder scan", "Ready"],
+      ["Add game folder", undefined],
+      ["Rescan game folders", "2 folders"],
+      ["GBA", "Registered"],
+      ["More games", "Registered"],
+    ])
+    expect(games?.items[4]?.interaction).toMatchObject({
+      kind: "action",
+      actionId: "game-folder-remove:loc-a",
+      destructive: true,
+      confirmation: { confirmLabel: "Remove folder" },
+    })
+  })
+
+  it("shows calm discovery progress and bounded problems", () => {
+    expect(
+      group(
+        {
+          discovery: {
+            generation: "discovery-1",
+            state: { _tag: "Scanning", payload: {} },
+            locations: [],
+            diagnostics: [],
+          },
+        },
+        "Games",
+      )?.items.find(item => item.id === "game-discovery-status")?.value,
+    ).toBe("Scanning…")
+
+    expect(
+      group(
+        {
+          discovery: {
+            generation: "discovery-2",
+            state: { _tag: "Problem", payload: {} },
+            locations: [],
+            diagnostics: [{ code: "Folder", message: "Folder is unavailable" }],
+          },
+        },
+        "Games",
+      )?.items.find(item => item.id === "game-discovery-status")?.description,
+    ).toBe("Folder is unavailable")
   })
 
   it("publishes Android, app, and korrid identity as read-only facts", () => {

@@ -8,8 +8,12 @@
  * decides what is focused and calls `confirmEntry` with the entry it means.
  * That is what lets Korri swap surfaces without moving this logic.
  */
-import { SHELL_RESUMED_EVENT } from "@contracts/bridge/korri-native-bridge"
+import {
+  SHELL_RESUMED_EVENT,
+  type GameFolderPickerSnapshot,
+} from "@contracts/bridge/korri-native-bridge"
 import type { SurfaceSettingsStatus } from "@contracts/surface/korri-surface"
+import type { DiscoverySnapshot } from "@contracts/generated/korrid"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   discoverResolvedMoonlight,
@@ -17,7 +21,10 @@ import {
   type LauncherBridge,
 } from "../bridge/launcher-bridge"
 import type { MoonlightResolveOutcome } from "@contracts/generated/korrid"
-import type { KorridClient } from "../korrid/client"
+import {
+  createDiscoverySnapshotPoller,
+  type KorridClient,
+} from "../korrid/client"
 import type { DeviceFacts } from "./settings-model"
 import {
   entryKey,
@@ -35,6 +42,10 @@ import {
 const SESSION_STATUS_TIMEOUT_MS = 3000
 const STOP_POLL_INTERVAL_MS = 500
 const STOP_POLL_DEADLINE_MS = 8000
+const DISCOVERY_POLL_INTERVAL_MS = 750
+
+const discoveryActive = (snapshot: DiscoverySnapshot | undefined): boolean =>
+  snapshot?.state._tag === "Scanning" || snapshot?.state._tag === "Enriching"
 
 export interface Launchables {
   readonly state: LaunchablesState
@@ -79,6 +90,14 @@ export function useLaunchables(
     },
   })
   const settingsBusyRef = useRef(false)
+  const folderReceiptSubmissions = useRef(new Set<string>())
+  const uncertainFolderReceipts = useRef(new Set<string>())
+  const discoveryWasActive = useRef(false)
+  const discoveryPoller = useRef(
+    createDiscoverySnapshotPoller(korrid, snapshot => {
+      setFacts(current => ({ ...current, discovery: snapshot }))
+    }),
+  )
 
   const loadSeq = useRef(0)
   const actionSeq = useRef(0)
@@ -96,6 +115,75 @@ export function useLaunchables(
     () => korrid.sessionStatus(SESSION_STATUS_TIMEOUT_MS),
     [korrid],
   )
+
+  const settingsProblem = useCallback((settingId: string, message: string) => {
+    setSettingsStatus({ _tag: "Problem", settingId, message })
+  }, [])
+
+  const acknowledgeFolderPicker = useCallback(
+    (generation: string) => {
+      void bridge.acknowledgeGameFolderPicker(generation)
+    },
+    [bridge],
+  )
+
+  const processFolderPickerSnapshot = useCallback(
+    (snapshot: GameFolderPickerSnapshot) => {
+      switch (snapshot.state._tag) {
+        case "Idle":
+          return
+        case "Choosing":
+          setSettingsStatus({ _tag: "Saving", settingId: "game-folder-add" })
+          return
+        case "Cancelled":
+          acknowledgeFolderPicker(snapshot.generation)
+          setSettingsStatus({ _tag: "Idle" })
+          return
+        case "Problem":
+          acknowledgeFolderPicker(snapshot.generation)
+          settingsProblem("game-folder-add", snapshot.state.message)
+          return
+        case "Selected": {
+          if (folderReceiptSubmissions.current.has(snapshot.generation)) return
+          folderReceiptSubmissions.current.add(snapshot.generation)
+          setSettingsStatus({ _tag: "Saving", settingId: "game-folder-add" })
+          void korrid.registerDiscoveryReceipt(snapshot.state.receipt).then(result => {
+            if (!mountedRef.current) return
+            if (result._tag === "Ok") {
+              acknowledgeFolderPicker(snapshot.generation)
+              uncertainFolderReceipts.current.delete(snapshot.generation)
+              setSettingsStatus({ _tag: "Idle" })
+              setFacts(current => ({ ...current, discovery: result.payload }))
+              return
+            }
+            folderReceiptSubmissions.current.delete(snapshot.generation)
+            if (result.payload.code === "BrainUnreachable") {
+              uncertainFolderReceipts.current.add(snapshot.generation)
+              settingsProblem("game-folder-add", result.payload.message)
+              return
+            }
+            if (
+              result.payload.code === "FolderSelectionReceiptUnknown" &&
+              uncertainFolderReceipts.current.has(snapshot.generation)
+            ) {
+              acknowledgeFolderPicker(snapshot.generation)
+              uncertainFolderReceipts.current.delete(snapshot.generation)
+              setSettingsStatus({ _tag: "Idle" })
+              void discoveryPoller.current.pollNow()
+              return
+            }
+            acknowledgeFolderPicker(snapshot.generation)
+            settingsProblem("game-folder-add", result.payload.message)
+          })
+        }
+      }
+    },
+    [acknowledgeFolderPicker, korrid, settingsProblem],
+  )
+
+  const checkFolderPicker = useCallback(async () => {
+    processFolderPickerSnapshot(await bridge.gameFolderPickerSnapshot())
+  }, [bridge, processFolderPickerSnapshot])
 
   const load = useCallback(async (preserveAction = false) => {
     const preservingStop = stateRef.current._tag === "Stopping"
@@ -120,6 +208,7 @@ export function useLaunchables(
       health,
       settings,
       systemInfo,
+      discovery,
     ] = await Promise.all([
         korrid.catalogSnapshot(),
         korrid.localGames(),
@@ -139,6 +228,7 @@ export function useLaunchables(
         korrid.health(),
         korrid.settingsSnapshot(),
         bridge.systemInfo(),
+        korrid.discoverySnapshot(),
       ])
     const streams: readonly StreamSource[] = moonlightDiscovery.streams
     const hostsResult = moonlightDiscovery.hostsResult ?? {
@@ -168,6 +258,7 @@ export function useLaunchables(
       ...(localGames._tag === "Ok"
         ? { localGameCount: localGames.payload.games.length }
         : {}),
+      ...(discovery._tag === "Ok" ? { discovery: discovery.payload } : {}),
     })
     const current = stateRef.current
     // Recovery reads must not replace a newer launch operation's visible lock.
@@ -201,19 +292,43 @@ export function useLaunchables(
   useEffect(() => {
     mountedRef.current = true
     void load()
+    void checkFolderPicker()
     return () => {
       mountedRef.current = false
       actionSeq.current += 1
       stopPollSeq.current += 1
     }
-  }, [load])
+  }, [checkFolderPicker, load])
 
-  // Returning from a stream (or any shell resume): state may be stale.
+  // Returning from a stream, Android picker, or settings: state may be stale.
   useEffect(() => {
-    const onResumed = () => void load()
+    const onResumed = () => {
+      void load()
+      void checkFolderPicker()
+    }
     window.addEventListener(SHELL_RESUMED_EVENT, onResumed)
     return () => window.removeEventListener(SHELL_RESUMED_EVENT, onResumed)
-  }, [load])
+  }, [checkFolderPicker, load])
+
+  useEffect(() => {
+    discoveryPoller.current = createDiscoverySnapshotPoller(korrid, snapshot => {
+      setFacts(current => ({ ...current, discovery: snapshot }))
+    })
+  }, [korrid])
+
+  useEffect(() => {
+    const active = discoveryActive(facts.discovery)
+    if (discoveryWasActive.current && !active) {
+      void load()
+    }
+    discoveryWasActive.current = active
+    if (!active) return
+    const timer = setInterval(
+      () => void discoveryPoller.current.pollNow(),
+      DISCOVERY_POLL_INTERVAL_MS,
+    )
+    return () => clearInterval(timer)
+  }, [facts.discovery, load])
 
   /** Locate the plugin-owned app, constrained to the prepared game's host. */
   const findKorriStreamTarget = useCallback((hostName?: string) => {
@@ -245,10 +360,6 @@ export function useLaunchables(
     [publish],
   )
 
-  const settingsProblem = useCallback((settingId: string, message: string) => {
-    setSettingsStatus({ _tag: "Problem", settingId, message })
-  }, [])
-
   const runDeviceAction = useCallback(
     (actionId: string) => {
       if (actionId === "pairing") {
@@ -275,6 +386,59 @@ export function useLaunchables(
         })
         return
       }
+      if (actionId === "game-folder-add") {
+        void (async () => {
+          const storage = await bridge.storageAccess()
+          if (storage._tag === "Denied") {
+            const opened = await bridge.openStorageAccessSettings()
+            return opened._tag === "Unavailable"
+              ? opened
+              : ({ _tag: "Opened" } as const)
+          }
+          if (storage._tag === "QueryFailed") {
+            return { _tag: "Unavailable" as const, message: storage.message }
+          }
+          const opened = await bridge.openGameFolderPicker()
+          if (opened._tag === "Opened") {
+            setSettingsStatus({ _tag: "Saving", settingId: actionId })
+            await checkFolderPicker()
+          }
+          return opened
+        })().then(result => {
+          if (result._tag === "Unavailable") {
+            settingsProblem(actionId, result.message)
+          }
+        })
+        return
+      }
+      if (actionId === "game-folder-rescan") {
+        if (discoveryActive(factsRef.current.discovery)) return
+        setSettingsStatus({ _tag: "Saving", settingId: actionId })
+        void korrid.rescanDiscovery().then(result => {
+          if (!mountedRef.current) return
+          if (result._tag === "Err") {
+            settingsProblem(actionId, result.payload.message)
+            return
+          }
+          setSettingsStatus({ _tag: "Idle" })
+          setFacts(current => ({ ...current, discovery: result.payload }))
+        })
+        return
+      }
+      if (actionId.startsWith("game-folder-remove:")) {
+        const locationId = actionId.slice("game-folder-remove:".length)
+        setSettingsStatus({ _tag: "Saving", settingId: actionId })
+        void korrid.removeDiscoveryLocation(locationId).then(result => {
+          if (!mountedRef.current) return
+          if (result._tag === "Err") {
+            settingsProblem(actionId, result.payload.message)
+            return
+          }
+          setSettingsStatus({ _tag: "Idle" })
+          setFacts(current => ({ ...current, discovery: result.payload }))
+        })
+        return
+      }
       if (actionId === "background-notice") {
         void (async () => {
           if (factsRef.current.notice?._tag === "Visible") {
@@ -293,7 +457,7 @@ export function useLaunchables(
       }
       settingsProblem(actionId, "This setting is not available")
     },
-    [bridge, settingsProblem],
+    [bridge, checkFolderPicker, korrid, settingsProblem],
   )
 
   const changeSetting = useCallback(

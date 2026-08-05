@@ -96,6 +96,13 @@ export type SurfaceSettingInteraction =
       readonly kind: "action"
       /** Device action from `SurfaceModel.actions`. */
       readonly actionId: string
+      /** Destructive actions should be confirmed by the surface before firing. */
+      readonly destructive?: boolean
+      readonly confirmation?: {
+        readonly title: string
+        readonly message: string
+        readonly confirmLabel: string
+      }
     }
   | {
       readonly kind: "choice"
