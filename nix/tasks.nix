@@ -163,6 +163,7 @@ let
 
     android-bridge-contract-check = {
       description = "Run the native bridge contract check in an isolated API 34 x86_64 emulator.";
+      needsProseql = true;
       runtimeInputs = androidBridgeInputs;
       env = androidBridgeEnv // {
         KORRI_PORTAL_BUNDLE = "${packages.portal-bundle}/bin/portal-bundle";
