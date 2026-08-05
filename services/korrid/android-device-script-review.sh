@@ -81,6 +81,22 @@ grep -F 'PREFS_SEMANTIC_AFTER=' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'required materialized SharedPreferences keys are absent' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'KORRI_STREAM_CONNECTION_LOSS_PROBE' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'GATE_LAUNCH_IDS' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'discover_live_korri_authority' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'assert_pristine_gate_state' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'assert_session_idle' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'revalidate_gate_state_after_mutation' "$OVERLAY_ACCEPTANCE" >/dev/null
+overlay_discovery_line="$(grep -nF 'discover_live_korri_authority ||' "$OVERLAY_ACCEPTANCE" | head -1 | cut -d: -f1)"
+overlay_pristine_line="$(grep -nF 'assert_pristine_gate_state' "$OVERLAY_ACCEPTANCE" | tail -1 | cut -d: -f1)"
+overlay_idle_line="$(grep -nF 'assert_session_idle' "$OVERLAY_ACCEPTANCE" | tail -1 | cut -d: -f1)"
+overlay_mutation_line="$(grep -nF 'backup_before_mutation' "$OVERLAY_ACCEPTANCE" | tail -1 | cut -d: -f1)"
+[[ -n "$overlay_discovery_line" && -n "$overlay_pristine_line" \
+  && -n "$overlay_idle_line" && -n "$overlay_mutation_line" \
+  && "$overlay_discovery_line" -lt "$overlay_mutation_line" \
+  && "$overlay_pristine_line" -lt "$overlay_mutation_line" \
+  && "$overlay_idle_line" -lt "$overlay_mutation_line" ]] || {
+  echo 'overlay acceptance must prove live RPC, idle session, activities, processes, and foreground before mutation' >&2
+  exit 1
+}
 if sed '/^[[:space:]]*#/d' "$OVERLAY_ACCEPTANCE" | grep -Eq 'settings[[:space:]]+(put|delete)'; then
   echo 'overlay acceptance must not rewrite Android settings during grant-sensitive acceptance' >&2
   exit 1
@@ -92,8 +108,19 @@ grep -F 'value: .interaction.payload.value' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'close_exact_acceptance_paths' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'recovery: restore every changed control through the Korri gameplay overlay' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'capture_evidence' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'required_top_activity' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'required_window_records' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'required_active_controls' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'required_lifecycle_records' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'expected_event=' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'expected_reason=' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F '[rpc responses]' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F '[structured lifecycle records]' "$OVERLAY_ACCEPTANCE" >/dev/null
+capture_evidence_source="$(sed -n '/^capture_evidence() {/,/^}/p' "$OVERLAY_ACCEPTANCE")"
+if grep -F '|| true' <<<"$capture_evidence_source" >/dev/null; then
+  echo 'overlay acceptance must not mask a required structured evidence probe' >&2
+  exit 1
+fi
 grep -F 'SessionStopUnsupported' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F '"KorriGameLifecycle"' "$ANDROID_GAME" >/dev/null
 grep -F '"KorriOverlay"' "$OVERLAY_SERVICE" >/dev/null
@@ -130,8 +157,14 @@ fi
 grep -F 'EXPECTED_MODEL="$2"' "$RETROARCH_ACCEPTANCE" >/dev/null
 # shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F 'EXPECTED_HARDWARE_SERIAL="$3"' "$RETROARCH_ACCEPTANCE" >/dev/null
-grep -F 'unauthenticated UDP probe must time out with rc=124 and no response' "$RETROARCH_ACCEPTANCE" >/dev/null
+grep -F 'unauthenticated UDP probe must report exact remote rc=124 and no response' "$RETROARCH_ACCEPTANCE" >/dev/null
+grep -F 'UDP probe transport failed before its remote completion marker' "$RETROARCH_ACCEPTANCE" >/dev/null
 grep -F 'assert_no_artemis_game_activity' "$RETROARCH_ACCEPTANCE" >/dev/null
+grep -F 'assert_pristine_gate_state' "$RETROARCH_ACCEPTANCE" >/dev/null
+grep -F 'assert_session_idle' "$RETROARCH_ACCEPTANCE" >/dev/null
+grep -F 'revalidate_gate_state_after_mutation' "$RETROARCH_ACCEPTANCE" >/dev/null
+grep -F 'BACKUP_CREATED=false' "$RETROARCH_ACCEPTANCE" >/dev/null
+grep -F 'remove_owned_backup' "$RETROARCH_ACCEPTANCE" >/dev/null
 grep -F 'assert_korri_process_unchanged' "$RETROARCH_ACCEPTANCE" >/dev/null
 if grep -Eq 'launch_spec=|udp_unauthenticated.*\|\| true|pull /sdcard/korri-acceptance.png|rm -f /sdcard/korri-acceptance.png' "$RETROARCH_ACCEPTANCE"; then
   echo 'RetroArch acceptance contains speculative launch, masked UDP, or generic screenshot handling' >&2
