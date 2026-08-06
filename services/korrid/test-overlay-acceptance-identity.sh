@@ -19,6 +19,12 @@ for needle in \
   grep -F "$needle" "$ACCEPTANCE" >/dev/null
 done
 grep -F '<exact-hardware-serial>' "$TASKS" >/dev/null
+grep -F ": \"''\${2:?usage: overlay-accept" "$TASKS" >/dev/null
+grep -F "\"''\${3:?usage: overlay-accept" "$TASKS" >/dev/null
+if grep -Eq 'expected_(model|hardware_serial)=' "$TASKS"; then
+  echo 'overlay-accept wrapper must not create unused validation-only assignments' >&2
+  exit 1
+fi
 
 cat >"$TMP/adb" <<'MOCK'
 #!/usr/bin/env bash
