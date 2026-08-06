@@ -391,8 +391,10 @@ recover_rpc_details() {
 restart_portal_after_registration() {
   local label="$1"
   clear_rpc_forward
-  # Preserve the scan metric emitted by the instrumentation process. RPC
-  # recovery selects the latest server entries without clearing logcat.
+  # Preserve the scan metric emitted by instrumentation, but do not reuse its
+  # process while Android is tearing the test runner down. A fresh production
+  # process gives recovery a stable RPC server to discover.
+  adb_target -s "$SERIAL" shell "am force-stop '$PKG'"
   adb_target -s "$SERIAL" shell "am start -n '$PKG/com.limelight.KorriShellActivity'" >/dev/null
   recover_rpc_details "$label"
 }
