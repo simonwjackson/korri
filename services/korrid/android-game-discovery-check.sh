@@ -129,13 +129,39 @@ adb_shell_capture() {
   adb_capture shell "$@"
 }
 
+clear_rpc_forward() {
+  if [[ "$FORWARD_ACTIVE" == true ]]; then
+    adb_target -s "$SERIAL" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
+    FORWARD_ACTIVE=false
+  fi
+}
+
 rpc() {
-  local body="$1"
+  local stage="$1"
+  local body="$2"
+  local output_file=""
+  local status=0
+  output_file="$(mktemp)"
+  set +e
   "${CURL[@]}" --fail --silent \
     -H 'content-type: application/json' \
     -H "authorization: Bearer $RPC_CAPABILITY" \
     -d "$body" \
-    "http://127.0.0.1:$HOST_PORT/rpc"
+    "http://127.0.0.1:$HOST_PORT/rpc" >"$output_file"
+  status=$?
+  set -e
+  if [[ "$status" -ne 0 ]]; then
+    echo "RPC transport failed during $stage (curl exit $status, host tcp:$HOST_PORT -> device tcp:${RPC_PORT:-unknown}); restart/recover may be required" >&2
+    if [[ -s "$output_file" ]]; then
+      printf 'RPC partial response during %s: ' "$stage" >&2
+      head -c 400 "$output_file" >&2 || true
+      printf '\n' >&2
+    fi
+    rm -f "$output_file"
+    return "$status"
+  fi
+  cat "$output_file"
+  rm -f "$output_file"
 }
 
 cleanup() {
@@ -144,9 +170,7 @@ cleanup() {
   trap - EXIT INT TERM
   set +e
 
-  if [[ "$FORWARD_ACTIVE" == true ]]; then
-    adb_target -s "$SERIAL" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
-  fi
+  clear_rpc_forward
   adb_target -s "$SERIAL" shell "am force-stop '$PKG'; am force-stop '$TEST_PKG'; am force-stop '$RETROARCH_PKG'" >/dev/null 2>&1 || true
   adb_target -s "$SERIAL" shell "rm -rf '$FIXTURE_A' '$FIXTURE_B'" >/dev/null 2>&1 || cleanup_failed=true
   restore_checkpoint_files || cleanup_failed=true
@@ -336,26 +360,40 @@ launch_local_spec() {
 }
 
 recover_rpc_details() {
+  local label="${1:-embedded korrid RPC}"
   local port=""
   local capability=""
+  local portal_ready=""
   for _ in $(seq 1 20); do
-    local logcat_output=""
-    logcat_output="$(adb_capture logcat -d -s KorridServer:I 2>/dev/null || true)"
-    port="$(printf '%s\n' "$logcat_output" | grep 'listening on 127.0.0.1:' | tail -1 | sed -n 's/.*127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p')"
-    capability="$(printf '%s\n' "$logcat_output" | grep 'debug capability=' | tail -1 | sed -n 's/.*debug capability=\([0-9a-f][0-9a-f]*\).*/\1/p')"
-    if [[ -n "$port" && -n "$capability" ]]; then
+    local server_logcat_output=""
+    local portal_logcat_output=""
+    server_logcat_output="$(adb_capture logcat -d -s KorridServer:I 2>/dev/null || true)"
+    portal_logcat_output="$(adb_capture logcat -d -s KorriPortal:I 2>/dev/null || true)"
+    port="$(printf '%s\n' "$server_logcat_output" | grep 'listening on 127.0.0.1:' | tail -1 | sed -n 's/.*127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p' || true)"
+    capability="$(printf '%s\n' "$server_logcat_output" | grep 'debug capability=' | tail -1 | sed -n 's/.*debug capability=\([0-9a-f][0-9a-f]*\).*/\1/p' || true)"
+    portal_ready="$(printf '%s\n' "$portal_logcat_output" | grep 'title="Korri"' | tail -1 || true)"
+    if [[ -n "$port" && -n "$capability" && -n "$portal_ready" ]]; then
       RPC_PORT="$port"
       RPC_CAPABILITY="$capability"
-      adb_target -s "$SERIAL" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
+      clear_rpc_forward
       adb_target -s "$SERIAL" forward "tcp:$HOST_PORT" "tcp:$RPC_PORT"
       FORWARD_ACTIVE=true
+      printf 'Recovered %s: host tcp:%s -> device tcp:%s; portal=%s\n' "$label" "$HOST_PORT" "$RPC_PORT" "$portal_ready"
       return 0
     fi
     sleep 1
   done
-  echo "Could not recover embedded korrid RPC details" >&2
+  echo "Could not recover embedded korrid RPC details during $label (port='$port', capability=${capability:+present}, portal=${portal_ready:+ready})" >&2
   adb_capture logcat -d -t 300 >&2 || true
   exit 1
+}
+
+restart_portal_after_registration() {
+  local label="$1"
+  clear_rpc_forward
+  adb_target -s "$SERIAL" logcat -c
+  adb_target -s "$SERIAL" shell "am start -n '$PKG/com.limelight.KorriShellActivity'" >/dev/null
+  recover_rpc_details "$label"
 }
 
 wait_discovery_idle() {
@@ -363,7 +401,7 @@ wait_discovery_idle() {
   local response=""
   local state=""
   for _ in $(seq 1 60); do
-    response="$(rpc '{"_tag":"app.discovery.snapshot","payload":{}}')"
+    response="$(rpc "$label snapshot" '{"_tag":"app.discovery.snapshot","payload":{}}')"
     state="$(jq -r '.outcome.payload.state._tag // empty' <<<"$response")"
     if [[ "$state" == "Enriching" ]]; then
       assert_two_u9_games_listable "while Enriching"
@@ -381,7 +419,7 @@ wait_discovery_idle() {
 assert_two_u9_games_listable() {
   local label="$1"
   local response
-  response="$(rpc '{"_tag":"app.local-games.list","payload":{}}')"
+  response="$(rpc "$label local-games list" '{"_tag":"app.local-games.list","payload":{}}')"
   if ! jq -e '
     .outcome._tag == "Ok"
     and ([.outcome.payload.games[] | select(.title == "U9 First" or .title == "U9 Second")] | length) == 2
@@ -393,7 +431,7 @@ assert_two_u9_games_listable() {
 }
 
 u9_game_id() {
-  rpc '{"_tag":"app.local-games.list","payload":{}}' \
+  rpc "lookup U9 game id" '{"_tag":"app.local-games.list","payload":{}}' \
     | jq -r '.outcome.payload.games[] | select(.title == "U9 First") | .id' \
     | head -1
 }
@@ -438,7 +476,7 @@ assert_latest_hashed_bytes_nonzero() {
 }
 
 rescan() {
-  rpc '{"_tag":"app.discovery.rescan","payload":{}}' >/dev/null
+  rpc "$1 rescan" '{"_tag":"app.discovery.rescan","payload":{}}' >/dev/null
   wait_discovery_idle "$1"
 }
 
@@ -467,8 +505,8 @@ build_and_install_instrumentation
 # and prove the protected RPC surface for this explicit device.
 set_appop_and_require_effective_mode allow allow
 "$CRATE/android-smoke.sh" "$SERIAL"
-recover_rpc_details
-settings_response="$(rpc '{"_tag":"system.settings.snapshot","payload":{}}')"
+recover_rpc_details "initial smoke launch"
+settings_response="$(rpc "settings snapshot" '{"_tag":"system.settings.snapshot","payload":{}}')"
 if ! jq -e '.outcome.payload.steamGridDbCredential == "NotConfigured"' <<<"$settings_response" >/dev/null; then
   echo "SteamGridDB credential was not isolated for the offline device gate: $settings_response" >&2
   exit 1
@@ -477,9 +515,11 @@ printf 'SteamGridDB credential status during gate: NotConfigured\n'
 
 adb_target -s "$SERIAL" logcat -c
 register_folder "$FIXTURE_A"
+restart_portal_after_registration "after first folder registration"
 wait_discovery_idle "after first folder registration"
 assert_latest_hashed_bytes_nonzero "after first folder registration"
 register_folder "$FIXTURE_B"
+restart_portal_after_registration "after second folder registration"
 wait_discovery_idle "after second folder registration"
 assert_two_u9_games_listable "after two folder registrations"
 assert_latest_hashed_bytes_nonzero "after second folder registration"
@@ -504,7 +544,7 @@ if [[ -z "$game_id" ]]; then
   echo "Could not find discovered U9 First game id" >&2
   exit 1
 fi
-launch_response="$(rpc "{\"_tag\":\"app.local-games.launch\",\"payload\":{\"gameId\":$(jq -n --arg id "$game_id" '$id')}}")"
+launch_response="$(rpc "launch discovered U9 First" "{\"_tag\":\"app.local-games.launch\",\"payload\":{\"gameId\":$(jq -n --arg id "$game_id" '$id')}}")"
 if ! jq -e '
   .outcome._tag == "Ok"
   and .outcome.payload.launcherId == "retroarch"
@@ -524,7 +564,7 @@ if ! grep -F "$RETROARCH_PKG/" <<<"$top_after_launch" >/dev/null; then
   exit 1
 fi
 
-selected_location_ids="$(rpc '{"_tag":"app.discovery.snapshot","payload":{}}' \
+selected_location_ids="$(rpc "selected locations snapshot" '{"_tag":"app.discovery.snapshot","payload":{}}' \
   | jq -c '.outcome.payload.locations | map(.id)')"
 if ! jq -e 'length > 0' <<<"$selected_location_ids" >/dev/null; then
   echo "No selected discovery locations were available before all-files denial" >&2
@@ -532,7 +572,7 @@ if ! jq -e 'length > 0' <<<"$selected_location_ids" >/dev/null; then
 fi
 set_appop_and_require_effective_mode deny deny ignore
 rescan "with all-files denied"
-denied_snapshot="$(rpc '{"_tag":"app.discovery.snapshot","payload":{}}')"
+denied_snapshot="$(rpc "denied all-files snapshot" '{"_tag":"app.discovery.snapshot","payload":{}}')"
 if ! jq -e --argjson selectedLocationIds "$selected_location_ids" '
   .outcome._tag == "Ok"
   and any(.outcome.payload.diagnostics[];

@@ -615,6 +615,26 @@ if ! grep -F 'adb_target_once -s "$SERIAL" shell am instrument -w' "$ANDROID_GAM
   echo 'android-game-discovery-check.sh must not blindly retry non-idempotent instrumentation RPC mutations' >&2
   exit 1
 fi
+if ! grep -F 'restart_portal_after_registration()' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! sed -n '/restart_portal_after_registration()/,/^}/p' "$ANDROID_GAME_DISCOVERY" | grep -F 'clear_rpc_forward' >/dev/null \
+  || ! sed -n '/restart_portal_after_registration()/,/^}/p' "$ANDROID_GAME_DISCOVERY" | grep -F 'logcat -c' >/dev/null \
+  || ! sed -n '/restart_portal_after_registration()/,/^}/p' "$ANDROID_GAME_DISCOVERY" | grep -F "am start -n '\$PKG/com.limelight.KorriShellActivity'" >/dev/null \
+  || ! sed -n '/restart_portal_after_registration()/,/^}/p' "$ANDROID_GAME_DISCOVERY" | grep -F 'recover_rpc_details "$label"' >/dev/null; then
+  echo 'android-game-discovery-check.sh must restart KorriShellActivity and recover fresh RPC details after registration invalidates the target process' >&2
+  exit 1
+fi
+if ! awk '
+  /register_folder "\$FIXTURE_A"/ { saw_a = NR }
+  /restart_portal_after_registration "after first folder registration"/ { if (saw_a && !wait_a) restart_a = NR }
+  /wait_discovery_idle "after first folder registration"/ { wait_a = NR }
+  /register_folder "\$FIXTURE_B"/ { saw_b = NR }
+  /restart_portal_after_registration "after second folder registration"/ { if (saw_b && !wait_b) restart_b = NR }
+  /wait_discovery_idle "after second folder registration"/ { wait_b = NR }
+  END { exit !(saw_a && restart_a > saw_a && wait_a > restart_a && saw_b && restart_b > saw_b && wait_b > restart_b) }
+' "$ANDROID_GAME_DISCOVERY"; then
+  echo 'android-game-discovery-check.sh must recover portal/RPC after each registration before polling discovery idle' >&2
+  exit 1
+fi
 if ! grep -F 'local log_file="$RUN_DIR/instrument-$action.log"' "$ANDROID_GAME_DISCOVERY" >/dev/null \
   || ! grep -F 'output="$(adb_target_once -s "$SERIAL" shell am instrument -w' "$ANDROID_GAME_DISCOVERY" >/dev/null \
   || ! grep -F "OK \\([[:space:]]*1 test[s]?\\)" "$ANDROID_GAME_DISCOVERY" >/dev/null \
