@@ -50,7 +50,7 @@ frames before and after the sheet, physical controller routing, Disconnect
 leaving the host game alive, reconnect, and host Quit terminating it.
 
 The production gate is `nix run .#overlay-accept -- <serial> <exact-model>
-<direct-package> <unrelated-package>`. It must pass local, stream, negative, and
-permission checkpoints and restore device state. Until that evidence is
-reviewed, the historical “stream survived” result remains provisional and does
+<exact-hardware-serial> <direct-package> <unrelated-package>`. It must pass
+local, stream, negative, and permission checkpoints and restore device state.
+Until that evidence is reviewed, the historical “stream survived” result remains provisional and does
 not permit deleting the old gameplay host.

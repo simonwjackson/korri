@@ -267,7 +267,7 @@ let
 
     overlay-accept = {
       description = "Run the human-led, state-restoring unified Android gameplay-overlay acceptance gate.";
-      usageSuffix = " -- <adb-serial> <exact-device-model> <direct-launch-package> <unrelated-package> [evidence-dir]";
+      usageSuffix = " -- <adb-serial> <exact-device-model> <exact-hardware-serial> <direct-launch-package> <unrelated-package> [evidence-dir]";
       runtimeInputs = [
         pkgs.android-tools
         pkgs.coreutils
@@ -281,8 +281,9 @@ let
         pkgs.websocat
       ];
       script = ''
-        serial="''${1:?usage: overlay-accept <adb-serial> <exact-device-model> <direct-launch-package> <unrelated-package> [evidence-dir]}"
-        expected_model="''${2:?usage: overlay-accept <adb-serial> <exact-device-model> <direct-launch-package> <unrelated-package> [evidence-dir]}"
+        serial="''${1:?usage: overlay-accept <adb-serial> <exact-device-model> <exact-hardware-serial> <direct-launch-package> <unrelated-package> [evidence-dir]}"
+        expected_model="''${2:?usage: overlay-accept <adb-serial> <exact-device-model> <exact-hardware-serial> <direct-launch-package> <unrelated-package> [evidence-dir]}"
+        expected_hardware_serial="''${3:?usage: overlay-accept <adb-serial> <exact-device-model> <exact-hardware-serial> <direct-launch-package> <unrelated-package> [evidence-dir]}"
         ${adbPreflight}
         exec "$KORRI_ROOT/clients/android/overlay-acceptance.sh" "$@"
       '';

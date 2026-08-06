@@ -182,7 +182,7 @@ The gate is:
 ```sh
 KORRI_STREAM_CONNECTION_LOSS_PROBE=/path/to/approved-probe \
   nix run .#overlay-accept -- <adb-serial> <exact-device-model> \
-    <direct-launch-package> <unrelated-package> [evidence-dir]
+    <exact-hardware-serial> <direct-launch-package> <unrelated-package> [evidence-dir]
 ```
 
 A successful script run records evidence for review; it does not by itself

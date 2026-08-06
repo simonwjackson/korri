@@ -57,10 +57,10 @@ control path. Current production architecture is:
 
 The SM-F966U1/MG-X spike is provisional for the RG405M gate. Before cutover,
 `KORRI_STREAM_CONNECTION_LOSS_PROBE=/path/to/approved-probe nix run
-.#overlay-accept -- <serial> <exact-model> <direct-package>
-<unrelated-package>` must record paired evidence for a Korri local RetroArch
-session, a live Moonlight stream, direct-launch and unrelated-app negatives,
-and human-owned permission loss/recovery. Physical Guide, D-pad, A, B/Back,
+.#overlay-accept -- <serial> <exact-model> <exact-hardware-serial>
+<direct-package> <unrelated-package>` must record paired evidence for a Korri
+local RetroArch session, a live Moonlight stream, direct-launch and unrelated-app
+negatives, and human-owned permission loss/recovery. Physical Guide, D-pad, A, B/Back,
 and supported stick/hat behavior must be observed; adb input is not a
 substitute. Until that gate passes, `KorriGameOverlay` and `overlay.html` remain
 pre-cutover fallback fixtures.

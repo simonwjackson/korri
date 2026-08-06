@@ -57,10 +57,12 @@ bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$JOURNEY_RESUME" \
   "$CRATE/android-debug-reload-portal.sh" "$CRATE/android-debug-focus-portal-game.sh" \
   "$CRATE/test-android-debug-capability.sh" \
   "$CRATE/test-android-debug-reload-portal.sh" \
-  "$CRATE/test-android-debug-focus-portal-game.sh"
+  "$CRATE/test-android-debug-focus-portal-game.sh" \
+  "$CRATE/test-overlay-acceptance-identity.sh"
 "$CRATE/test-android-debug-capability.sh"
 "$CRATE/test-android-debug-reload-portal.sh"
 "$CRATE/test-android-debug-focus-portal-game.sh"
+"$CRATE/test-overlay-acceptance-identity.sh"
 grep -F "https://appassets.androidplatform.net/assets/portal/index.html" "$DEBUG_AUTHORITY" >/dev/null
 grep -F '({port: KorriNative.korridPort(), capability: KorriNative.korridCapability()})' "$DEBUG_AUTHORITY" >/dev/null
 grep -F 'keys == ["capability", "port"]' "$DEBUG_AUTHORITY" >/dev/null
@@ -148,14 +150,24 @@ grep -F 'Physical A activation is retained by the human unified-overlay gate' \
 # source contracts deliberately do not substitute for the device gate.
 # shellcheck disable=SC2016 # Literal source-contract needles.
 grep -F 'EXPECTED_MODEL="$2"' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'EXPECTED_HARDWARE_SERIAL="$3"' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'DIRECT_PACKAGE="$4"' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'UNRELATED_PACKAGE="$5"' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'ACTUAL_MODEL=' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'ACTUAL_HARDWARE_SERIAL=' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'getprop ro.serialno' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'expected_hardware_serial=%s' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'actual_hardware_serial=%s' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'ANDROID_PACKAGE_PATTERN=' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'DIRECT_PACKAGE must be exactly com.korri.retroarch' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'TARGET_SERIAL=' "$OVERLAY_ACCEPTANCE" >/dev/null
 model_check_line="$(grep -nF 'device model mismatch:' "$OVERLAY_ACCEPTANCE" | cut -d: -f1)"
+hardware_check_line="$(grep -nF 'hardware serial mismatch:' "$OVERLAY_ACCEPTANCE" | cut -d: -f1)"
 trap_line="$(grep -nF 'trap cleanup EXIT' "$OVERLAY_ACCEPTANCE" | cut -d: -f1)"
-[[ -n "$model_check_line" && -n "$trap_line" && "$trap_line" -gt "$model_check_line" ]] || {
-  echo 'overlay acceptance must verify exact serial/model before installing its EXIT trap' >&2
+[[ -n "$model_check_line" && -n "$hardware_check_line" && -n "$trap_line" \
+  && "$trap_line" -gt "$model_check_line" \
+  && "$trap_line" -gt "$hardware_check_line" ]] || {
+  echo 'overlay acceptance must verify exact ADB endpoint, model, and hardware serial before installing its EXIT trap' >&2
   exit 1
 }
 if grep -F '/sdcard/korri-overlay-acceptance.png' "$OVERLAY_ACCEPTANCE" >/dev/null; then

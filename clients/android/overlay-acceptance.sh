@@ -5,17 +5,19 @@
 set -euo pipefail
 
 usage() {
-  echo 'usage: overlay-acceptance.sh <adb-serial> <exact-device-model> <direct-launch-package> <unrelated-package> [evidence-dir]' >&2
+  echo 'usage: overlay-acceptance.sh <adb-serial> <exact-device-model> <exact-hardware-serial> <direct-launch-package> <unrelated-package> [evidence-dir]' >&2
   exit 2
 }
 
-[[ $# -ge 4 && $# -le 5 ]] || usage
+[[ $# -ge 5 && $# -le 6 ]] || usage
 SERIAL="$1"
 EXPECTED_MODEL="$2"
-DIRECT_PACKAGE="$3"
-UNRELATED_PACKAGE="$4"
-EVIDENCE_DIR="${5:-$PWD/overlay-acceptance-evidence-$(date -u +%Y%m%dT%H%M%SZ)}"
-[[ -n "$SERIAL" && -n "$EXPECTED_MODEL" && -n "$DIRECT_PACKAGE" && -n "$UNRELATED_PACKAGE" ]] || usage
+EXPECTED_HARDWARE_SERIAL="$3"
+DIRECT_PACKAGE="$4"
+UNRELATED_PACKAGE="$5"
+EVIDENCE_DIR="${6:-$PWD/overlay-acceptance-evidence-$(date -u +%Y%m%dT%H%M%SZ)}"
+[[ -n "$SERIAL" && -n "$EXPECTED_MODEL" && -n "$EXPECTED_HARDWARE_SERIAL" \
+  && -n "$DIRECT_PACKAGE" && -n "$UNRELATED_PACKAGE" ]] || usage
 
 ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
 ADB_BIN="${KORRI_ADB_BIN:-$(command -v adb)}"
@@ -835,8 +837,10 @@ capture_evidence() {
 
   adb_target -s "$SERIAL" exec-out screencap -p >"$image"
   {
-    printf 'label=%s\nserial=%s\nexpected_model=%s\ncaptured_utc=%s\nevidence_predicate=%s\n' \
-      "$label" "$SERIAL" "$EXPECTED_MODEL" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$evidence_predicate"
+    printf 'label=%s\nserial=%s\nexpected_model=%s\nactual_model=%s\nexpected_hardware_serial=%s\nactual_hardware_serial=%s\ncaptured_utc=%s\nevidence_predicate=%s\n' \
+      "$label" "$SERIAL" "$EXPECTED_MODEL" "$ACTUAL_MODEL" \
+      "$EXPECTED_HARDWARE_SERIAL" "$ACTUAL_HARDWARE_SERIAL" \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$evidence_predicate"
     printf '\n[top activity]\n%s\n' "$required_top_activity"
     printf '\n[pids]\n'
     for package in "$KORRI_PACKAGE" "$RETROARCH_PACKAGE" "$STOCK_RETROARCH_PACKAGE" "$DIRECT_PACKAGE" "$UNRELATED_PACKAGE"; do
@@ -911,6 +915,11 @@ TARGET_SERIAL="$(adb_capture get-serialno | tr -d '\r\n')"
 ACTUAL_MODEL="$(adb_shell getprop ro.product.model | tr -d '\r\n')"
 [[ "$ACTUAL_MODEL" == "$EXPECTED_MODEL" ]] || {
   echo "device model mismatch: expected '$EXPECTED_MODEL', got '$ACTUAL_MODEL'" >&2
+  exit 1
+}
+ACTUAL_HARDWARE_SERIAL="$(adb_shell getprop ro.serialno | tr -d '\r\n')"
+[[ "$ACTUAL_HARDWARE_SERIAL" == "$EXPECTED_HARDWARE_SERIAL" ]] || {
+  echo "hardware serial mismatch: expected '$EXPECTED_HARDWARE_SERIAL', got '$ACTUAL_HARDWARE_SERIAL'" >&2
   exit 1
 }
 # Cleanup is armed only after the exact target identity has been proven. A
