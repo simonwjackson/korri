@@ -74,6 +74,7 @@ public class KorriShellActivity extends AppCompatActivity {
     private String korridCapability = "";
     private ComputerManagerService.ComputerManagerBinder managerBinder;
     private boolean computerManagerBound;
+    private KorriGameAssetPathHandler gameAssetPathHandler;
     private final CountDownLatch binderReady = new CountDownLatch(1);
     private final KorriGameFolderPickerState gameFolderPicker = new KorriGameFolderPickerState();
 
@@ -105,6 +106,7 @@ public class KorriShellActivity extends AppCompatActivity {
                 new KorriTrustedPortalWebViewPolicy();
         final String portalUrl = portalPolicy.portalUrl();
         final File privateStateRoot = new File(KorriBrainService.privateStateRoot(this));
+        gameAssetPathHandler = new KorriGameAssetPathHandler(privateStateRoot);
         korridPort = KorriBrainService.ensureRunning(
                 this, portalPolicy.portalOrigin(), localStorageRoot());
         korridCapability = KorridServer.capability();
@@ -124,7 +126,7 @@ public class KorriShellActivity extends AppCompatActivity {
                 .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
                 .addPathHandler(
                         KorriGameAssetPathHandler.ROUTE_PREFIX,
-                        new KorriGameAssetPathHandler(privateStateRoot))
+                        gameAssetPathHandler)
                 .build();
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -641,9 +643,8 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public String localGameAssetUrl(String assetId) {
             String url = KorriGameAssetPathHandler.trustedUrlForAssetId(assetId);
-            if (url == null || KorriGameAssetPathHandler.resolveKnownBlob(
-                    new File(KorriBrainService.privateStateRoot(KorriShellActivity.this)),
-                    assetId) == null) {
+            if (url == null || gameAssetPathHandler == null
+                    || gameAssetPathHandler.resolveKnownBlob(assetId) == null) {
                 return "{\"_tag\":\"Absent\"}";
             }
             try {

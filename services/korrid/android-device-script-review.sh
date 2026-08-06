@@ -605,6 +605,46 @@ if ! sed -n '/android-game-discovery-check = {/,/^    };/p' "$ROOT/nix/tasks.nix
   echo 'android-game-discovery-check task must put jq on PATH for structured RPC/log assertions' >&2
   exit 1
 fi
+if ! grep -F 'adb_failure_is_transient()' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'adb_reconnect_and_wait()' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'adb_command true' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must retry safe adb commands through bounded reconnect/wait handling' >&2
+  exit 1
+fi
+if ! grep -F 'adb_target_once -s "$SERIAL" shell am instrument -w' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must not blindly retry non-idempotent instrumentation RPC mutations' >&2
+  exit 1
+fi
+if grep -F -- '--retry' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must not apply blind curl retries to RPC mutations' >&2
+  exit 1
+fi
+if ! grep -F 'set_appop_and_require_effective_mode deny deny ignore' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must require effective MANAGE_EXTERNAL_STORAGE denial before the denial rescan' >&2
+  exit 1
+fi
+if ! grep -F 'set_appop_and_require_effective_mode allow allow' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must require effective MANAGE_EXTERNAL_STORAGE allow before normal discovery scans' >&2
+  exit 1
+fi
+if ! grep -F 'selectedLocationIds' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'StorageUnavailable' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'EntryUnavailable' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'DiscoveryStorageUnavailable' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'index($locationId)' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must assert selected-location storage diagnostics under all-files denial' >&2
+  exit 1
+fi
+if ! grep -F 'Primary Android game discovery check status was' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'cleanup also failed; preserving primary status' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must keep primary failure and cleanup diagnostics distinct' >&2
+  exit 1
+fi
+# shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
+if ! grep -F 'appops set '\''$PKG'\'' MANAGE_EXTERNAL_STORAGE '\''$PRIOR_APPOP_MODE'\''' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must restore the captured MANAGE_EXTERNAL_STORAGE app-op mode on exit' >&2
+  exit 1
+fi
 
 for resumed_activity_script in \
   "$ANDROID_APP_ROUTE" \

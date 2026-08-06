@@ -29,7 +29,7 @@ CONFIG_REMOTE="$ANDROID_STORAGE_ROOT/config.yaml"
 LIBRARY_REMOTE="$ANDROID_STORAGE_ROOT/library.yaml"
 APK="$ROOT/clients/android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk"
 TEST_APK="$ROOT/clients/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
-CURL=(curl --connect-timeout 2 --max-time 5 --retry 2 --retry-connrefused)
+CURL=(curl --connect-timeout 2 --max-time 5)
 FORWARD_ACTIVE=false
 LOCK_ACQUIRED=false
 CONFIG_WAS_PRESENT=false
@@ -65,15 +65,64 @@ if [[ -z "$SERIAL" ]]; then
   exit 1
 fi
 
-adb_target() {
-  if ! timeout 20 "$ADB_BIN" "$@"; then
-    echo "adb command failed or timed out: $*" >&2
-    return 1
+adb_failure_is_transient() {
+  grep -Eiq '(error: closed|device offline|offline|connection reset|connection refused|protocol fault|no devices/emulators found|device .* not found|transport.*closed)' "$1"
+}
+
+adb_reconnect_and_wait() {
+  if [[ "$SERIAL" == *:* ]]; then
+    timeout 15 "$ADB_BIN" connect "$SERIAL" >/dev/null 2>&1 || true
   fi
+  timeout 20 "$ADB_BIN" -s "$SERIAL" wait-for-device >/dev/null 2>&1
+}
+
+adb_command() {
+  local retry_safe="$1"
+  shift
+  local attempt=1
+  local max_attempts=3
+  local stdout_file=""
+  local stderr_file=""
+  local combined_file=""
+  local status=0
+  while true; do
+    stdout_file="$(mktemp)"
+    stderr_file="$(mktemp)"
+    combined_file="$(mktemp)"
+    if timeout 20 "$ADB_BIN" "$@" >"$stdout_file" 2>"$stderr_file"; then
+      cat "$stdout_file"
+      rm -f "$stdout_file" "$stderr_file" "$combined_file"
+      return 0
+    fi
+    status=$?
+    cat "$stdout_file" "$stderr_file" >"$combined_file"
+    if [[ "$retry_safe" == true && "$attempt" -lt "$max_attempts" ]] \
+      && { [[ "$status" -eq 124 ]] || adb_failure_is_transient "$combined_file"; }; then
+      echo "adb transient failure for safe command (attempt $attempt/$max_attempts): $*" >&2
+      cat "$stderr_file" >&2
+      adb_reconnect_and_wait || true
+      attempt=$((attempt + 1))
+      rm -f "$stdout_file" "$stderr_file" "$combined_file"
+      continue
+    fi
+    cat "$stdout_file"
+    cat "$stderr_file" >&2
+    echo "adb command failed or timed out: $*" >&2
+    rm -f "$stdout_file" "$stderr_file" "$combined_file"
+    return "$status"
+  done
+}
+
+adb_target() {
+  adb_command true "$@"
+}
+
+adb_target_once() {
+  adb_command false "$@"
 }
 
 adb_capture() {
-  timeout 20 "$ADB_BIN" -s "$SERIAL" "$@"
+  adb_command true -s "$SERIAL" "$@"
 }
 
 adb_shell_capture() {
@@ -111,6 +160,7 @@ cleanup() {
     exit 1
   fi
   if [[ "$cleanup_failed" == true ]]; then
+    echo "Primary Android game discovery check status was $status" >&2
     echo "Android game discovery check cleanup also failed; preserving primary status $status" >&2
   fi
   exit "$status"
@@ -187,19 +237,44 @@ restore_private_state() {
   }
 }
 
-capture_appop() {
+current_appop_mode() {
   local line
+  local mode
   line="$(adb_shell_capture "appops get '$PKG' MANAGE_EXTERNAL_STORAGE 2>/dev/null || true" | tr -d '\r' || true)"
-  PRIOR_APPOP_MODE="$(printf '%s\n' "$line" | sed -nE 's/.*MANAGE_EXTERNAL_STORAGE: ([a-z_]+).*/\1/p' | tail -1)"
-  printf 'Prior MANAGE_EXTERNAL_STORAGE app-op: %s\n' "${PRIOR_APPOP_MODE:-default}"
+  mode="$(printf '%s\n' "$line" | sed -nE 's/.*MANAGE_EXTERNAL_STORAGE: ([a-z_]+).*/\1/p' | tail -1)"
+  printf '%s\n' "${mode:-default}"
+}
+
+capture_appop() {
+  PRIOR_APPOP_MODE="$(current_appop_mode)"
+  printf 'Prior MANAGE_EXTERNAL_STORAGE app-op: %s\n' "$PRIOR_APPOP_MODE"
 }
 
 restore_appop() {
-  if [[ -n "$PRIOR_APPOP_MODE" ]]; then
-    adb_target -s "$SERIAL" shell "appops set '$PKG' MANAGE_EXTERNAL_STORAGE '$PRIOR_APPOP_MODE'" >/dev/null 2>&1 || return 1
-  else
-    adb_target -s "$SERIAL" shell "appops set '$PKG' MANAGE_EXTERNAL_STORAGE default" >/dev/null 2>&1 || true
+  if [[ -z "$PRIOR_APPOP_MODE" ]]; then
+    return 0
   fi
+  adb_target -s "$SERIAL" shell "appops set '$PKG' MANAGE_EXTERNAL_STORAGE '$PRIOR_APPOP_MODE'" >/dev/null 2>&1 || {
+    echo "Android game discovery check failed to restore MANAGE_EXTERNAL_STORAGE app-op to $PRIOR_APPOP_MODE" >&2
+    return 1
+  }
+}
+
+set_appop_and_require_effective_mode() {
+  local requested="$1"
+  shift
+  local expected_modes=("$@")
+  local effective=""
+  adb_target -s "$SERIAL" shell "appops set '$PKG' MANAGE_EXTERNAL_STORAGE '$requested'" >/dev/null
+  effective="$(current_appop_mode)"
+  for mode in "${expected_modes[@]}"; do
+    if [[ "$effective" == "$mode" ]]; then
+      printf 'MANAGE_EXTERNAL_STORAGE app-op after %s: %s\n' "$requested" "$effective"
+      return 0
+    fi
+  done
+  echo "Expected MANAGE_EXTERNAL_STORAGE app-op after $requested to be one of: ${expected_modes[*]}; got $effective" >&2
+  exit 1
 }
 
 write_controlled_config() {
@@ -229,7 +304,7 @@ build_and_install_instrumentation() {
 run_discovery_instrumentation() {
   local action="$1"
   shift
-  adb_target -s "$SERIAL" shell am instrument -w \
+  adb_target_once -s "$SERIAL" shell am instrument -w \
     -e class com.limelight.KorriGameDiscoveryDebugTest \
     -e korriDebugDiscoveryAction "$action" \
     "$@" \
@@ -381,7 +456,7 @@ build_and_install_instrumentation
 
 # Start from an allowed state, then let the existing smoke gate install, open,
 # and prove the protected RPC surface for this explicit device.
-adb_target -s "$SERIAL" shell "appops set '$PKG' MANAGE_EXTERNAL_STORAGE allow" >/dev/null 2>&1 || true
+set_appop_and_require_effective_mode allow allow
 "$CRATE/android-smoke.sh" "$SERIAL"
 recover_rpc_details
 settings_response="$(rpc '{"_tag":"system.settings.snapshot","payload":{}}')"
@@ -440,15 +515,29 @@ if ! grep -F "$RETROARCH_PKG/" <<<"$top_after_launch" >/dev/null; then
   exit 1
 fi
 
-adb_target -s "$SERIAL" shell "appops set '$PKG' MANAGE_EXTERNAL_STORAGE deny" >/dev/null 2>&1 || true
+selected_location_ids="$(rpc '{"_tag":"app.discovery.snapshot","payload":{}}' \
+  | jq -c '.outcome.payload.locations | map(.id)')"
+if ! jq -e 'length > 0' <<<"$selected_location_ids" >/dev/null; then
+  echo "No selected discovery locations were available before all-files denial" >&2
+  exit 1
+fi
+set_appop_and_require_effective_mode deny deny ignore
 rescan "with all-files denied"
 denied_snapshot="$(rpc '{"_tag":"app.discovery.snapshot","payload":{}}')"
-if ! jq -e '.outcome._tag == "Ok" and (.outcome.payload.diagnostics | length) > 0' <<<"$denied_snapshot" >/dev/null; then
-  echo "Denied all-files access did not yield a recoverable discovery diagnostic: $denied_snapshot" >&2
+if ! jq -e --argjson selectedLocationIds "$selected_location_ids" '
+  .outcome._tag == "Ok"
+  and any(.outcome.payload.diagnostics[];
+    (.code == "StorageUnavailable"
+      or .code == "EntryUnavailable"
+      or .code == "DiscoveryStorageUnavailable")
+    and (.locationId as $locationId
+      | $locationId != null and ($selectedLocationIds | index($locationId))))
+' <<<"$denied_snapshot" >/dev/null; then
+  echo "Denied all-files access did not yield a selected-location storage diagnostic: $denied_snapshot selectedLocationIds=$selected_location_ids" >&2
   exit 1
 fi
 assert_two_u9_games_listable "while all-files access is denied"
-adb_target -s "$SERIAL" shell "appops set '$PKG' MANAGE_EXTERNAL_STORAGE allow" >/dev/null 2>&1 || true
+set_appop_and_require_effective_mode allow allow
 rescan "after all-files recovery"
 assert_two_u9_games_listable "after all-files recovery"
 
