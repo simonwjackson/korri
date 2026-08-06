@@ -181,6 +181,9 @@ function gameFromEntry(entry: PortalEntry): SurfaceGame | null {
           alternative === undefined
             ? entry.game.system
             : `${entry.game.system} · ${alternative}`,
+        ...(entry.game.coverArtUrl === undefined
+          ? {}
+          : { coverArtUrl: entry.game.coverArtUrl }),
         ...(launchLocations.length < 2 ? {} : { launchLocations }),
       }
     }

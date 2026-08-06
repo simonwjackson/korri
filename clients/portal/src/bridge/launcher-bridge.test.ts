@@ -57,6 +57,24 @@ describe("createInMemoryLauncherBridge", () => {
     expect(await bridge.launchLocal(spec)).toEqual({ _tag: "Launched" })
   })
 
+  it("resolves configured local game asset URLs in browser fixtures", async () => {
+    const bridge = createInMemoryLauncherBridge({
+      localGameAssetUrls: {
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png":
+          "data:image/png;base64,fixture",
+      },
+    })
+
+    expect(
+      await bridge.localGameAssetUrl(
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",
+      ),
+    ).toEqual({ _tag: "Resolved", url: "data:image/png;base64,fixture" })
+    expect(await bridge.localGameAssetUrl("missing.png")).toEqual({
+      _tag: "Absent",
+    })
+  })
+
   it("fails local launches when configured to", async () => {
     const bridge = createInMemoryLauncherBridge({ behavior: "local-launch-fail" })
     const result = await bridge.launchLocal({
@@ -265,6 +283,7 @@ describe("createKorriNativeLauncherBridge", () => {
     overrides: Partial<KorriNativeBridgeSurface>,
   ): KorriNativeBridgeSurface => ({
     launchLocal: () => JSON.stringify({ _tag: "Launched" }),
+    localGameAssetUrl: () => JSON.stringify({ _tag: "Absent" }),
     queryStreamHosts: () =>
       JSON.stringify({
         _tag: "StreamHosts",
@@ -307,7 +326,7 @@ describe("createKorriNativeLauncherBridge", () => {
       }),
     acknowledgeGameFolderPicker: () =>
       JSON.stringify({ _tag: "Acknowledged", generation: "picker-2" }),
-    bridgeVersion: () => 14,
+    bridgeVersion: () => 15,
     ...overrides,
   })
 
@@ -334,6 +353,27 @@ describe("createKorriNativeLauncherBridge", () => {
     }
     expect(await bridge.launchLocal(spec)).toEqual({ _tag: "Launched" })
     expect(JSON.parse(received)).toEqual(spec)
+  })
+
+  it("decodes local game asset URL results from the native surface", async () => {
+    const bridge = createKorriNativeLauncherBridge(
+      surface({
+        localGameAssetUrl: () =>
+          JSON.stringify({
+            _tag: "Resolved",
+            url: "https://appassets.androidplatform.net/game-assets/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",
+          }),
+      }),
+    )
+
+    expect(
+      await bridge.localGameAssetUrl(
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",
+      ),
+    ).toEqual({
+      _tag: "Resolved",
+      url: "https://appassets.androidplatform.net/game-assets/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",
+    })
   })
 
   it("serializes the signed Moonlight launch spec to the native surface", async () => {

@@ -68,6 +68,28 @@ describe("surfaceModelFrom", () => {
     expect(game.subtitle).toBe("GBA")
   })
 
+  test("publishes trusted local cover art resolved by the host", () => {
+    const model = surfaceModelFrom(
+      ready([
+        {
+          kind: "local-game",
+          game: {
+            id: "wl4",
+            title: "Wario Land 4",
+            system: "GBA",
+            coverArtUrl:
+              "https://appassets.androidplatform.net/game-assets/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",
+          },
+        },
+      ]),
+    )
+
+    if (model.catalog._tag !== "Ready") throw new Error("expected Ready")
+    expect(model.catalog.games[0]?.coverArtUrl).toBe(
+      "https://appassets.androidplatform.net/game-assets/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",
+    )
+  })
+
   test("reports retained host copies without adding another game", () => {
     const model = surfaceModelFrom(
       ready([

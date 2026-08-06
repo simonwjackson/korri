@@ -104,6 +104,7 @@ public class KorriShellActivity extends AppCompatActivity {
         final KorriTrustedPortalWebViewPolicy portalPolicy =
                 new KorriTrustedPortalWebViewPolicy();
         final String portalUrl = portalPolicy.portalUrl();
+        final File privateStateRoot = new File(KorriBrainService.privateStateRoot(this));
         korridPort = KorriBrainService.ensureRunning(
                 this, portalPolicy.portalOrigin(), localStorageRoot());
         korridCapability = KorridServer.capability();
@@ -121,6 +122,9 @@ public class KorriShellActivity extends AppCompatActivity {
         // assets with a real https origin.
         final WebViewAssetLoader assetLoader = new WebViewAssetLoader.Builder()
                 .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                .addPathHandler(
+                        KorriGameAssetPathHandler.ROUTE_PREFIX,
+                        new KorriGameAssetPathHandler(privateStateRoot))
                 .build();
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -143,7 +147,8 @@ public class KorriShellActivity extends AppCompatActivity {
                     // script/image/subframe resource loading.
                     return null;
                 }
-                if (!portalPolicy.isTrustedPortalAsset(request.getUrl())) {
+                if (!portalPolicy.isTrustedPortalAsset(request.getUrl())
+                        && !portalPolicy.isTrustedLocalGameAsset(request.getUrl())) {
                     return blockedWebResource();
                 }
                 WebResourceResponse response = assetLoader.shouldInterceptRequest(request.getUrl());
@@ -419,7 +424,7 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public int bridgeVersion() {
             // Mirrors BRIDGE_VERSION in contracts/bridge/korri-native-bridge.ts.
-            return 14;
+            return 15;
         }
 
         @JavascriptInterface
@@ -625,6 +630,25 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public String acknowledgeGameFolderPicker(String generation) {
             return gameFolderPicker.acknowledgeJson(generation);
+        }
+
+        /** Resolve one opaque local cover asset id to its trusted WebView URL. */
+        @JavascriptInterface
+        public String localGameAssetUrl(String assetId) {
+            String url = KorriGameAssetPathHandler.trustedUrlForAssetId(assetId);
+            if (url == null || KorriGameAssetPathHandler.resolveKnownBlob(
+                    new File(KorriBrainService.privateStateRoot(KorriShellActivity.this)),
+                    assetId) == null) {
+                return "{\"_tag\":\"Absent\"}";
+            }
+            try {
+                JSONObject result = new JSONObject();
+                result.put("_tag", "Resolved");
+                result.put("url", url);
+                return result.toString();
+            } catch (Exception error) {
+                return "{\"_tag\":\"Absent\"}";
+            }
         }
 
         /** Port of the embedded korrid server, or -1 when it is not running. */

@@ -10,7 +10,6 @@ import type {
   ActiveSession,
   CatalogSnapshotOutcome,
   Game,
-  LocalGame,
   LocalGameLaunchOutcome,
   LocalGamesListOutcome,
   ResolvedMoonlight,
@@ -18,7 +17,7 @@ import type {
   SessionStatusOutcome,
   SessionStopOutcome,
 } from "@contracts/generated/korrid"
-import { foldGameCopies, type PortalGameCopy } from "./fold-games"
+import { foldGameCopies, type PortalGameCopy, type PortalLocalGame } from "./fold-games"
 
 /**
  * Launchables screen state. Raw bridge results are converted into this ADT
@@ -51,7 +50,7 @@ export type PortalEntry =
   | { readonly kind: "now-playing"; readonly session: ActiveSession }
   | {
       readonly kind: "local-game"
-      readonly game: LocalGame
+      readonly game: PortalLocalGame
       readonly alternatives?: readonly PortalGameCopy[]
     }
   | {

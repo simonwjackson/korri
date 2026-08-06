@@ -1807,7 +1807,12 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                         ));
                     }
                 };
-                let catalog = launcher::local_games(&config_state, &registry);
+                let catalog = launcher::local_games_with_cover_assets(
+                    Some(&brain.local_storage_root),
+                    Some(&brain.private_state_root),
+                    &config_state,
+                    &registry,
+                );
                 let mut failures = Vec::new();
                 if let Some(diagnostic) = &config_state.diagnostic {
                     failures.push(snapshot_diagnostic_failure(diagnostic));
@@ -3246,6 +3251,11 @@ mod tests {
         include_str!("../../../docs/research/android-app-plugin-schema-checkpoint/config.yaml");
     const CHECKPOINT_ANDROID_LIBRARY: &str =
         include_str!("../../../docs/research/android-app-plugin-schema-checkpoint/library.yaml");
+    const PNG_1X1: &[u8] = &[
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 4,
+        0, 0, 0, 181, 28, 12, 2, 0, 0, 0, 11, 73, 68, 65, 84, 120, 156, 99, 250, 207, 0, 0, 2, 7,
+        1, 2, 154, 28, 49, 113, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ];
 
     /// The embedded server is a process singleton, so the tests that start it
     /// must not overlap. Poisoning is irrelevant here: the guard only orders
@@ -3973,6 +3983,72 @@ mod tests {
         )
         .await;
         assert_eq!(games["outcome"]["payload"]["games"][0]["id"], "game");
+    }
+
+    #[tokio::test]
+    async fn local_games_rpc_projects_current_discovery_cover_asset_identity_only() {
+        let readable = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        let folder = tempfile::tempdir().unwrap();
+        std::fs::write(folder.path().join("game.gba"), b"rom").unwrap();
+        let grants = discovery::FolderSelectionGrantStore::default();
+        let receipt = grants.issue_approved_path(folder.path()).unwrap().token;
+        let app = discovery_test_router(readable.path(), private.path(), grants);
+        rpc_body_authorized(
+            app.clone(),
+            &serde_json::json!({"_tag":"app.discovery.registerReceipt","payload":{"receipt": receipt}}).to_string(),
+            Some("right-token"),
+        )
+        .await;
+        wait_for_discovery_idle(app.clone()).await;
+        let game = discovery::reconcile::owned_discovery_games(readable.path(), private.path())
+            .unwrap()
+            .pop()
+            .unwrap();
+        let assignment = game_assets::GameAssetRepository::new(private.path())
+            .assign_tile(
+                game_assets::AssetOwnerIdentity {
+                    playable_id: game.playable_id,
+                    release_id: game.release_id,
+                    release_fingerprint: game.release_fingerprint,
+                    rom_identity: game.rom_identity,
+                },
+                game_assets::AssetCandidate {
+                    bytes: PNG_1X1.to_vec(),
+                    declared_width: Some(1),
+                    declared_height: Some(1),
+                    game_id: 10,
+                    grid_id: 20,
+                },
+            )
+            .unwrap();
+
+        let games = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"app.local-games.list","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(
+            games["outcome"]["payload"]["games"][0]["coverAssetId"],
+            assignment.asset_id
+        );
+
+        let edited = std::fs::read_to_string(readable.path().join("library.yaml"))
+            .unwrap()
+            .replace("title: game", "title: Player Edited");
+        std::fs::write(readable.path().join("library.yaml"), edited).unwrap();
+        let stale = rpc_body_authorized(
+            app,
+            r#"{"_tag":"app.local-games.list","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert!(stale["outcome"]["payload"]["games"][0]
+            .as_object()
+            .unwrap()
+            .get("coverAssetId")
+            .is_none());
     }
 
     #[tokio::test]

@@ -9,9 +9,11 @@ use crate::{
         resolver::{self, ResolvedRoute, RouteDiagnostic},
         snapshot::{ConfigSnapshotState, SnapshotAuthorization},
     },
+    discovery,
+    game_assets::{AssetOwnerIdentity, GameAssetRepository},
     plugin::PluginRegistry,
 };
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
 
 pub(crate) use types::derive_retroarch_control_port;
 
@@ -60,8 +62,21 @@ pub fn local_games(
     config_state: &ConfigSnapshotState,
     registry: &PluginRegistry,
 ) -> LocalGameCatalog {
+    local_games_with_cover_assets(None, None, config_state, registry)
+}
+
+pub fn local_games_with_cover_assets(
+    readable_root: Option<&Path>,
+    private_root: Option<&Path>,
+    config_state: &ConfigSnapshotState,
+    registry: &PluginRegistry,
+) -> LocalGameCatalog {
     let mut diagnostics = Vec::new();
     let mut games = Vec::new();
+    let cover_asset_ids = match (readable_root, private_root) {
+        (Some(readable_root), Some(private_root)) => cover_asset_ids(readable_root, private_root),
+        _ => BTreeMap::new(),
+    };
 
     if config_state.authorization == SnapshotAuthorization::Authorized {
         let catalog = resolver::resolve_launchable_routes(
@@ -81,7 +96,7 @@ pub fn local_games(
                 other => Err(format!("unsupported launcher kind {other}")),
             };
             match validation {
-                Ok(()) => games.push(local_game_from_route(route)),
+                Ok(()) => games.push(local_game_from_route(route, &cover_asset_ids)),
                 Err(message) => diagnostics.push(RouteDiagnostic {
                     code: resolver::RouteDiagnosticCode::LocalRouteUnavailable,
                     message,
@@ -190,13 +205,40 @@ fn local_launch_context(route: &ResolvedRoute) -> LaunchContext {
     }
 }
 
-fn local_game_from_route(route: ResolvedRoute) -> LocalGame {
+fn local_game_from_route(
+    route: ResolvedRoute,
+    cover_asset_ids: &BTreeMap<String, String>,
+) -> LocalGame {
+    let cover_asset_id = cover_asset_ids.get(&route.playable_id).cloned();
     LocalGame {
         id: route.playable_id,
         title: route.title.unwrap_or(route.release_id),
         system: route.system_title.unwrap_or(route.system_id),
         identity: route.identity,
+        cover_asset_id,
     }
+}
+
+fn cover_asset_ids(readable_root: &Path, private_root: &Path) -> BTreeMap<String, String> {
+    let Ok(games) = discovery::reconcile::owned_discovery_games(readable_root, private_root) else {
+        return BTreeMap::new();
+    };
+    let repo = GameAssetRepository::new(private_root);
+    games
+        .into_iter()
+        .filter_map(|game| {
+            let owner = AssetOwnerIdentity {
+                playable_id: game.playable_id.clone(),
+                release_id: game.release_id,
+                release_fingerprint: game.release_fingerprint,
+                rom_identity: game.rom_identity,
+            };
+            repo.matching_tile_asset_id(&owner)
+                .ok()
+                .flatten()
+                .map(|asset_id| (game.playable_id, asset_id))
+        })
+        .collect()
 }
 
 fn launch_error_from_route_diagnostic(diagnostic: RouteDiagnostic) -> LaunchError {
@@ -221,6 +263,7 @@ mod tests {
             },
             ConfigSnapshot,
         },
+        game_assets::{AssetCandidate, GameAssetRepository},
         plugin::PluginRegistry,
         plugin_policy::{
             bundled_plugin_policy_layer, bundled_plugins, resolve_enabled_plugin_ids,
@@ -234,6 +277,11 @@ mod tests {
         include_str!("../../../../docs/research/android-app-plugin-schema-checkpoint/config.yaml");
     const CHECKPOINT_LIBRARY: &str =
         include_str!("../../../../docs/research/retroarch-plugin-route/library.yaml");
+    const PNG_1X1: &[u8] = &[
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 4,
+        0, 0, 0, 181, 28, 12, 2, 0, 0, 0, 11, 73, 68, 65, 84, 120, 156, 99, 250, 207, 0, 0, 2, 7,
+        1, 2, 154, 28, 49, 113, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ];
 
     fn registry() -> PluginRegistry {
         android_registry(true)
@@ -322,6 +370,64 @@ mod tests {
             ))
         );
         assert!(catalog.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn projects_cover_asset_only_for_current_discovery_owned_assignment() {
+        let readable = tempdir().unwrap();
+        let private = tempdir().unwrap();
+        let folder = tempdir().unwrap();
+        std::fs::write(folder.path().join("wl4.gba"), b"rom").unwrap();
+        crate::discovery::DiscoveryCoordinator::new(readable.path(), private.path())
+            .add_location(
+                folder.path(),
+                &crate::discovery::DiscoveryOptions::default(),
+            )
+            .unwrap();
+        let game =
+            crate::discovery::reconcile::owned_discovery_games(readable.path(), private.path())
+                .unwrap()
+                .pop()
+                .unwrap();
+        let assignment = GameAssetRepository::new(private.path())
+            .assign_tile(
+                AssetOwnerIdentity {
+                    playable_id: game.playable_id.clone(),
+                    release_id: game.release_id,
+                    release_fingerprint: game.release_fingerprint,
+                    rom_identity: game.rom_identity,
+                },
+                AssetCandidate {
+                    bytes: PNG_1X1.to_vec(),
+                    declared_width: Some(1),
+                    declared_height: Some(1),
+                    game_id: 10,
+                    grid_id: 20,
+                },
+            )
+            .unwrap();
+        let state = ConfigSnapshotCoordinator::new(readable.path()).reload();
+
+        let catalog = local_games_with_cover_assets(
+            Some(readable.path()),
+            Some(private.path()),
+            &state,
+            &registry(),
+        );
+        assert_eq!(catalog.games[0].cover_asset_id, Some(assignment.asset_id));
+
+        let edited = std::fs::read_to_string(readable.path().join("library.yaml"))
+            .unwrap()
+            .replace("title: wl4", "title: Curated Wario");
+        std::fs::write(readable.path().join("library.yaml"), edited).unwrap();
+        let edited_state = ConfigSnapshotCoordinator::new(readable.path()).reload();
+        let edited_catalog = local_games_with_cover_assets(
+            Some(readable.path()),
+            Some(private.path()),
+            &edited_state,
+            &registry(),
+        );
+        assert_eq!(edited_catalog.games[0].cover_asset_id, None);
     }
 
     #[test]

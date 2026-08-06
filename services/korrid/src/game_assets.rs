@@ -9,6 +9,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+const SUPPORTED_ASSET_EXTENSIONS: &[&str] = &["png", "jpg", "webp"];
+
 const STATE_DIR: &str = "game-assets";
 const BLOBS_DIR: &str = "blobs";
 const ASSIGNMENTS_FILE: &str = "assignments.json";
@@ -94,6 +96,27 @@ impl GameAssetRepository {
             .cloned())
     }
 
+    pub(crate) fn matching_tile_asset_id(
+        &self,
+        owner: &AssetOwnerIdentity,
+    ) -> Result<Option<String>, AssetError> {
+        let Some(assignment) = self.matching_assignment(owner)? else {
+            return Ok(None);
+        };
+        if assignment.role != "tile" || !valid_asset_id(&assignment.asset_id) {
+            return Ok(None);
+        }
+        if !self
+            .root
+            .join(BLOBS_DIR)
+            .join(&assignment.asset_id)
+            .is_file()
+        {
+            return Ok(None);
+        }
+        Ok(Some(assignment.asset_id))
+    }
+
     pub(crate) fn assign_tile(
         &self,
         owner: AssetOwnerIdentity,
@@ -141,6 +164,17 @@ struct DecodedImage {
     extension: String,
     width: u32,
     height: u32,
+}
+
+fn valid_asset_id(asset_id: &str) -> bool {
+    let Some((hash, extension)) = asset_id.split_once('.') else {
+        return false;
+    };
+    hash.len() == 64
+        && hash
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        && SUPPORTED_ASSET_EXTENSIONS.contains(&extension)
 }
 
 fn validate_image(candidate: &AssetCandidate) -> Result<DecodedImage, AssetError> {
@@ -326,6 +360,20 @@ mod tests {
         assert_eq!(assignment.role, "tile");
         assert!(assignment.asset_id.ends_with(".png"));
         assert!(repo.has_assignment("wl4").unwrap());
+        assert_eq!(
+            repo.matching_tile_asset_id(&owner()).unwrap(),
+            Some(assignment.asset_id.clone())
+        );
+
+        fs::remove_file(
+            private
+                .path()
+                .join(STATE_DIR)
+                .join(BLOBS_DIR)
+                .join(&assignment.asset_id),
+        )
+        .unwrap();
+        assert_eq!(repo.matching_tile_asset_id(&owner()).unwrap(), None);
     }
 
     fn png_with_dimensions(width: u32, height: u32) -> Vec<u8> {

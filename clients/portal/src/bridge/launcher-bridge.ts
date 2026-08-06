@@ -3,6 +3,7 @@ import type {
   GameFolderPickerSnapshot,
   KorriNativeBridgeSurface,
   LaunchLocalResult,
+  LocalGameAssetUrlResult,
   LocalLaunchSpec,
   MoonlightLaunchSpec,
   OpenGameFolderPickerResult,
@@ -37,6 +38,7 @@ import type {
  */
 export interface LauncherBridge {
   launchLocal(spec: LocalLaunchSpec): Promise<LaunchLocalResult>
+  localGameAssetUrl(assetId: string): Promise<LocalGameAssetUrlResult>
   queryStreamHosts(): Promise<QueryStreamHostsResult>
   queryStreamApps(hostUuid: string): Promise<QueryStreamAppsResult>
   startStream(spec: MoonlightLaunchSpec): Promise<StartStreamResult>
@@ -141,6 +143,13 @@ export function createKorriNativeLauncherBridge(
           reason: "StartFailed",
           message: describe(error),
         }
+      }
+    },
+    async localGameAssetUrl(assetId) {
+      try {
+        return decodeLocalGameAssetUrl(JSON.parse(surface.localGameAssetUrl(assetId)))
+      } catch {
+        return { _tag: "Absent" }
       }
     },
     async queryStreamHosts() {
@@ -289,6 +298,7 @@ export interface InMemoryLauncherBridgeConfig {
   readonly streamHosts?: readonly StreamHost[]
   readonly streamApps?: Readonly<Record<string, readonly StreamApp[]>>
   readonly delayMs?: number
+  readonly localGameAssetUrls?: Readonly<Record<string, string>>
   readonly gameFolderPicker?:
     | { readonly _tag: "Selected"; readonly receipt: string }
     | { readonly _tag: "Cancelled" }
@@ -313,6 +323,7 @@ export function createInMemoryLauncherBridge(
   const streamHosts = config.streamHosts ?? sampleHosts
   const streamApps = config.streamApps ?? sampleApps
   const delayMs = config.delayMs ?? 0
+  const localGameAssetUrls = config.localGameAssetUrls ?? {}
   const delay = () => new Promise(resolve => setTimeout(resolve, delayMs))
   const storageAccessResult: StorageAccessResult =
     behavior === "storage-denied" ? { _tag: "Denied" } : { _tag: "Granted" }
@@ -343,6 +354,11 @@ export function createInMemoryLauncherBridge(
         }
       }
       return { _tag: "Launched" }
+    },
+    async localGameAssetUrl(assetId) {
+      await delay()
+      const url = localGameAssetUrls[assetId]
+      return url === undefined ? { _tag: "Absent" } : { _tag: "Resolved", url }
     },
     async queryStreamHosts() {
       await delay()
@@ -468,6 +484,18 @@ export function createInMemoryLauncherBridge(
       }
       return { _tag: "Stale", generation: pickerSnapshot.generation }
     },
+  }
+}
+
+function decodeLocalGameAssetUrl(value: unknown): LocalGameAssetUrlResult {
+  const payload = record(value, "LocalGameAssetUrlResult")
+  switch (payload._tag) {
+    case "Resolved":
+      return { _tag: "Resolved", url: stringField(payload, "url") }
+    case "Absent":
+      return { _tag: "Absent" }
+    default:
+      throw new Error("malformed LocalGameAssetUrlResult")
   }
 }
 

@@ -48,6 +48,27 @@ final class KorriTrustedPortalWebViewPolicy {
         return origin != null && trustedOrigin.equals(origin) && isTrustedAssetPath(uri);
     }
 
+    boolean isTrustedLocalGameAsset(Uri uri) {
+        Origin origin = Origin.from(uri);
+        if (origin == null || !trustedOrigin.equals(origin) || uri == null || uri.isOpaque()) {
+            return false;
+        }
+        if (uri.getQuery() != null || uri.getFragment() != null) {
+            return false;
+        }
+        String encodedPath = uri.getEncodedPath();
+        if (encodedPath == null || encodedPath.contains("%")) {
+            return false;
+        }
+        if (uri.getPathSegments().size() != 2
+                || !"game-assets".equals(uri.getPathSegments().get(0))) {
+            return false;
+        }
+        String assetId = uri.getPathSegments().get(1);
+        return KorriGameAssetPathHandler.isWellFormedAssetId(assetId)
+                && encodedPath.equals(KorriGameAssetPathHandler.ROUTE_PREFIX + assetId);
+    }
+
     NavigationAction navigationAction(Uri uri, boolean mainFrame) {
         if (isTrustedPortalAsset(uri)) {
             return NavigationAction.ALLOW_IN_WEBVIEW;

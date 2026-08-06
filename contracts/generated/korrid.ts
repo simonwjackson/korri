@@ -173,6 +173,7 @@ export interface LocalGame {
 	title: string;
 	system: string;
 	identity?: GameIdentity;
+	coverAssetId?: string;
 }
 
 export interface LocalGameLaunchRequest {

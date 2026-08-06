@@ -37,6 +37,12 @@ pub struct LocalGame {
     pub system: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity: Option<GameIdentity>,
+    #[serde(
+        default,
+        rename = "coverAssetId",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub cover_asset_id: Option<String>,
 }
 
 #[typeshare]

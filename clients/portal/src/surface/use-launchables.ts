@@ -13,7 +13,12 @@ import {
   type GameFolderPickerSnapshot,
 } from "@contracts/bridge/korri-native-bridge"
 import type { SurfaceSettingsStatus } from "@contracts/surface/korri-surface"
-import type { DiscoverySnapshot } from "@contracts/generated/korrid"
+import type {
+  DiscoverySnapshot,
+  LocalGame,
+  LocalGamesListOutcome,
+  RpcFailure,
+} from "@contracts/generated/korrid"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   discoverResolvedMoonlight,
@@ -63,6 +68,38 @@ export interface Launchables {
   dismissNotice(): void
   /** Re-read every source. */
   reload(): void
+}
+
+export type LocalGamesListOutcomeWithCoverUrls =
+  | {
+      readonly _tag: "Ok"
+      readonly payload: {
+        readonly games: (LocalGame & { readonly coverArtUrl?: string })[]
+        readonly failures?: RpcFailure[]
+      }
+    }
+  | { readonly _tag: "Err"; readonly payload: RpcFailure }
+
+export async function resolveLocalGameCoverUrls(
+  bridge: Pick<LauncherBridge, "localGameAssetUrl">,
+  localGames: LocalGamesListOutcome,
+): Promise<LocalGamesListOutcomeWithCoverUrls> {
+  if (localGames._tag !== "Ok") return localGames
+  return {
+    ...localGames,
+    payload: {
+      ...localGames.payload,
+      games: await Promise.all(
+        localGames.payload.games.map(async game => {
+          if (game.coverAssetId === undefined) return game
+          const resolved = await bridge.localGameAssetUrl(game.coverAssetId)
+          return resolved._tag === "Resolved"
+            ? { ...game, coverArtUrl: resolved.url }
+            : game
+        }),
+      ),
+    },
+  }
 }
 
 export function useLaunchables(
@@ -238,6 +275,10 @@ export function useLaunchables(
         bridge.systemInfo(),
         korrid.discoverySnapshot(),
       ])
+    const localGamesWithCoverUrls = await resolveLocalGameCoverUrls(
+      bridge,
+      localGames,
+    )
     const streams: readonly StreamSource[] = moonlightDiscovery.streams
     const hostsResult = moonlightDiscovery.hostsResult ?? {
       _tag: "QueryFailed" as const,
@@ -263,8 +304,8 @@ export function useLaunchables(
       ...(hostsResult._tag === "StreamHosts"
         ? { hosts: hostsResult.items }
         : {}),
-      ...(localGames._tag === "Ok"
-        ? { localGameCount: localGames.payload.games.length }
+      ...(localGamesWithCoverUrls._tag === "Ok"
+        ? { localGameCount: localGamesWithCoverUrls.payload.games.length }
         : {}),
       ...(discovery._tag === "Ok" ? { discovery: discovery.payload } : {}),
     })
@@ -280,7 +321,7 @@ export function useLaunchables(
       games,
       hostsResult._tag === "QueryFailed" ? hostsResult.message : undefined,
       session,
-      localGames,
+      localGamesWithCoverUrls,
       storage,
       notice,
     )

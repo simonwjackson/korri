@@ -31,8 +31,9 @@ import type {
 // the shell-owned Android/app identity used by System information. 12 seals
 // Moonlight startup behind korrid's signed, one-use launch instruction. 13 adds
 // the honest gameplay-overlay accessibility grant/settings seam. 14 adds the
-// receipt-based asynchronous game-folder picker.
-export const BRIDGE_VERSION = 14
+// receipt-based asynchronous game-folder picker. 15 adds opaque local cover
+// asset URL resolution.
+export const BRIDGE_VERSION = 15
 
 // ── Local launches (JS -> Kotlin) ───────────────────────────────────────
 
@@ -55,6 +56,10 @@ export type LaunchLocalResult =
         | "StartFailed"
       readonly message: string
     }
+
+export type LocalGameAssetUrlResult =
+  | { readonly _tag: "Resolved"; readonly url: string }
+  | { readonly _tag: "Absent" }
 
 // ── Streaming (JS -> Kotlin) ────────────────────────────────────────────
 
@@ -187,6 +192,8 @@ export interface KorriOverlayMessageSurface {
 export interface KorriNativeBridgeSurface {
   /** Returns JSON-encoded `LaunchLocalResult`. */
   launchLocal(specJson: string): string
+  /** Returns JSON-encoded `LocalGameAssetUrlResult`. */
+  localGameAssetUrl(assetId: string): string
   /** Returns JSON-encoded `QueryStreamHostsResult`. */
   queryStreamHosts(): string
   /** Returns JSON-encoded `QueryStreamAppsResult`. */

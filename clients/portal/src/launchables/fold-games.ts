@@ -4,8 +4,10 @@ import type {
   LocalGame,
 } from "@contracts/generated/korrid"
 
+export type PortalLocalGame = LocalGame & { readonly coverArtUrl?: string }
+
 export type PortalGameCopy =
-  | { readonly kind: "local"; readonly game: LocalGame }
+  | { readonly kind: "local"; readonly game: PortalLocalGame }
   | { readonly kind: "remote"; readonly game: Game }
 
 export interface FoldedPortalGame {
@@ -19,7 +21,7 @@ export interface FoldedPortalGame {
  * remote-only groups use stable host/id ordering.
  */
 export function foldGameCopies(
-  localGames: readonly LocalGame[],
+  localGames: readonly PortalLocalGame[],
   remoteGames: readonly Game[],
 ): readonly FoldedPortalGame[] {
   const copies: readonly PortalGameCopy[] = [
