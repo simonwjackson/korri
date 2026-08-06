@@ -21,8 +21,11 @@ EVIDENCE_DIR="${6:-$PWD/overlay-acceptance-evidence-$(date -u +%Y%m%dT%H%M%SZ)}"
 
 ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
 LOCAL_LAUNCH_PUBLICATION_SH="$ROOT/clients/android/local-launch-publication.sh"
+OVERLAY_EVIDENCE_PREDICATES_SH="$ROOT/clients/android/overlay-evidence-predicates.sh"
 # shellcheck source=local-launch-publication.sh disable=SC1091
 source "$LOCAL_LAUNCH_PUBLICATION_SH"
+# shellcheck source=overlay-evidence-predicates.sh disable=SC1091
+source "$OVERLAY_EVIDENCE_PREDICATES_SH"
 ADB_BIN="${KORRI_ADB_BIN:-$(command -v adb)}"
 KORRI_PACKAGE="${KORRI_PACKAGE:-com.simonwjackson.korri.debug}"
 KORRI_ACTIVITY="$KORRI_PACKAGE/com.limelight.KorriShellActivity"
@@ -819,9 +822,12 @@ capture_evidence() {
   case "$evidence_predicate" in
     positive-overlay)
       assert_overlay_window present
-      exact_checkpoint_predicate="$(grep -E \
-        "launchId=$expected_launch_id generation=[^[:space:]]+ event=request-show reason=accepted" \
-        <<<"$required_lifecycle_records" | tail -1)"
+      # Physical Guide is the production global-overlay path. Exact active
+      # controls and the visible window bind identity; these two bounded native
+      # events prove accepted Guide-up and successful window creation.
+      exact_checkpoint_predicate="$(
+        korri_positive_overlay_predicate "$required_lifecycle_records" || true
+      )"
       ;;
     stale-rpc)
       assert_overlay_window absent
@@ -837,7 +843,7 @@ capture_evidence() {
       assert_overlay_window absent
       exact_checkpoint_predicate="$(grep -E \
         "launchId=$expected_launch_id generation=[^[:space:]]+ event=foreground-mismatch reason=suspended" \
-        <<<"$required_lifecycle_records" | tail -1)"
+        <<<"$required_lifecycle_records" | tail -1 || true)"
       ;;
     suspended-no-show)
       assert_overlay_window absent
@@ -854,7 +860,7 @@ capture_evidence() {
       assert_overlay_window absent
       exact_checkpoint_predicate="$(grep -E \
         "launchId=$expected_launch_id generation=[^[:space:]]+ event=(connection-terminated|stage-failed) reason=(code-[0-9-]+|retryable|terminal)" \
-        <<<"$required_lifecycle_records" | tail -1)"
+        <<<"$required_lifecycle_records" | tail -1 || true)"
       ;;
     idle-no-window)
       assert_overlay_window absent

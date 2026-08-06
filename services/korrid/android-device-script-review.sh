@@ -60,12 +60,15 @@ bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$JOURNEY_RESUME" \
   "$CRATE/test-android-debug-focus-portal-game.sh" \
   "$CRATE/test-overlay-acceptance-identity.sh" \
   "$CRATE/test-overlay-local-publication.sh" \
-  "$ROOT/clients/android/local-launch-publication.sh"
+  "$CRATE/test-overlay-evidence-predicates.sh" \
+  "$ROOT/clients/android/local-launch-publication.sh" \
+  "$ROOT/clients/android/overlay-evidence-predicates.sh"
 "$CRATE/test-android-debug-capability.sh"
 "$CRATE/test-android-debug-reload-portal.sh"
 "$CRATE/test-android-debug-focus-portal-game.sh"
 "$CRATE/test-overlay-acceptance-identity.sh"
 "$CRATE/test-overlay-local-publication.sh"
+"$CRATE/test-overlay-evidence-predicates.sh"
 local_overlay_discovery="$(sed -n '/begin_evidence_checkpoint local-overlay-open/,/begin_evidence_checkpoint local-mid-overlay-end/p' "$OVERLAY_ACCEPTANCE")"
 # shellcheck disable=SC2016 # Literal source-contract needles.
 for needle in \
