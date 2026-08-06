@@ -700,7 +700,13 @@ assert_overlay_window() {
 assert_top_package() {
   local package="$1"
   local observed
-  observed="$(adb_shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'")" || return 1
+  # An empty observation means no resumed activity at all, usually a sleeping
+  # display. Say so rather than failing closed without a reason.
+  observed="$(adb_shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]' || true")" || return 1
+  [[ -n "$observed" ]] || {
+    echo 'no resumed Android activity was observed; the display may be asleep' >&2
+    return 1
+  }
   grep -F "$package/" <<<"$observed" >/dev/null || {
     echo "expected foreground package $package; observed: $observed" >&2
     return 1
@@ -710,7 +716,13 @@ assert_top_package() {
 assert_top_component() {
   local component="$1"
   local observed
-  observed="$(adb_shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'")" || return 1
+  # An empty observation means no resumed activity at all, usually a sleeping
+  # display. Say so rather than failing closed without a reason.
+  observed="$(adb_shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]' || true")" || return 1
+  [[ -n "$observed" ]] || {
+    echo 'no resumed Android activity was observed; the display may be asleep' >&2
+    return 1
+  }
   grep -F "$component" <<<"$observed" >/dev/null || {
     echo "expected foreground component $component; observed: $observed" >&2
     return 1
