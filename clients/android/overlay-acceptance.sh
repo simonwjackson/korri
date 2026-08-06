@@ -20,6 +20,9 @@ EVIDENCE_DIR="${6:-$PWD/overlay-acceptance-evidence-$(date -u +%Y%m%dT%H%M%SZ)}"
   && -n "$DIRECT_PACKAGE" && -n "$UNRELATED_PACKAGE" ]] || usage
 
 ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
+LOCAL_LAUNCH_PUBLICATION_SH="$ROOT/clients/android/local-launch-publication.sh"
+# shellcheck source=local-launch-publication.sh disable=SC1091
+source "$LOCAL_LAUNCH_PUBLICATION_SH"
 ADB_BIN="${KORRI_ADB_BIN:-$(command -v adb)}"
 KORRI_PACKAGE="${KORRI_PACKAGE:-com.simonwjackson.korri.debug}"
 KORRI_ACTIVITY="$KORRI_PACKAGE/com.limelight.KorriShellActivity"
@@ -111,6 +114,7 @@ PREFS_BACKUP_READY=false
 KORRI_PID=''
 CAPABILITY=''
 ACTIVE_EVIDENCE_CHECKPOINT=''
+LOCAL_PUBLICATION_COLLECTOR_PID=''
 declare -A GATE_LAUNCH_IDS=()
 declare -A GATE_RETROARCH_PIDS=()
 
@@ -562,6 +566,12 @@ cleanup() {
   local safe=true
   trap - EXIT
 
+  if [[ -n "$LOCAL_PUBLICATION_COLLECTOR_PID" ]]; then
+    kill "$LOCAL_PUBLICATION_COLLECTOR_PID" >/dev/null 2>&1 || true
+    wait "$LOCAL_PUBLICATION_COLLECTOR_PID" >/dev/null 2>&1 || true
+    LOCAL_PUBLICATION_COLLECTOR_PID=''
+  fi
+
   if [[ "$BACKUP_CLASSIFIED" == true ]] && ! close_exact_acceptance_paths; then
     safe=false
   fi
@@ -690,6 +700,50 @@ assert_session_idle() {
 revalidate_gate_state_after_mutation() {
   assert_pristine_gate_state
   assert_session_idle
+}
+
+new_checkpoint_log_marker() {
+  local label="$1"
+  printf 'korri-overlay-acceptance-%s-%s' "$label" "$RUN_NONCE"
+}
+
+start_local_publication_capture() {
+  local marker="$1"
+  local destination="$2"
+  [[ -z "$LOCAL_PUBLICATION_COLLECTOR_PID" ]] || {
+    echo 'local publication capture is already active' >&2
+    return 1
+  }
+  : >"$destination"
+  (
+    best_count=0
+    deadline=$((SECONDS + 1800))
+    while (( SECONDS < deadline )); do
+      current="$(
+        timeout 15 "$ADB_BIN" -s "$SERIAL" logcat -d -v raw \
+          -s KorriAcceptance:I KorriLocalLifecycle:I '*:S' 2>/dev/null \
+          | awk -v marker="$marker" 'index($0, marker) { found = 1; next } found'
+      )"
+      current="$(sed '/^[[:space:]]*$/d' <<<"$current")"
+      current_count="$(grep -c . <<<"$current" || true)"
+      if (( current_count > best_count )); then
+        printf '%s\n' "$current" >"$destination"
+        best_count="$current_count"
+      fi
+      sleep 0.25
+    done
+  ) &
+  LOCAL_PUBLICATION_COLLECTOR_PID=$!
+  # Start bounded polling before publishing its action boundary marker.
+  sleep 0.25
+  adb_shell "log -t KorriAcceptance '$marker'" >/dev/null
+}
+
+stop_local_publication_capture() {
+  [[ -n "$LOCAL_PUBLICATION_COLLECTOR_PID" ]] || return 0
+  kill "$LOCAL_PUBLICATION_COLLECTOR_PID" >/dev/null 2>&1 || true
+  wait "$LOCAL_PUBLICATION_COLLECTOR_PID" >/dev/null 2>&1 || true
+  LOCAL_PUBLICATION_COLLECTOR_PID=''
 }
 
 begin_evidence_checkpoint() {
@@ -967,19 +1021,79 @@ assert_accessibility_service_enabled
 revalidate_gate_state_after_mutation
 
 begin_evidence_checkpoint local-overlay-open
+local_publication_marker="$(new_checkpoint_log_marker local-overlay-publication)"
+local_publication_capture="$PREFS_WORK_DIR/local-overlay-publication.log"
+start_local_publication_capture "$local_publication_marker" "$local_publication_capture"
 checkpoint 'LOCAL OVERLAY VERIFIED' \
   'Using only the physical controller, launch Wario Land 4 from Korri.' \
   'After gameplay is visible, press physical Guide. Verify one Shift sheet opens.' \
   'Verify D-pad, A/confirm, B/Back, and supported stick/hat navigation work.' \
   'Verify no input reaches gameplay while the sheet is open; leave it open.'
-local_launch="$(rpc '{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}')"
-local_launch_id="$(jq -er '.outcome.payload | select(.disposition == "resume") | .launchId' <<<"$local_launch")"
-record_gate_launch "$local_launch_id"
-local_pid="$(package_pid "$RETROARCH_PACKAGE")"
+# The stream captures the publication immediately even when verbose emulator
+# logging would evict it while the human completes the interaction checks.
+for _ in $(seq 1 20); do
+  [[ -s "$local_publication_capture" ]] && break
+  sleep 0.1
+done
+sleep 0.25
+stop_local_publication_capture
+
+# This is the first process observed after the physical installed-UI action.
+# Record it before fallible RPC evidence so cleanup can reject replacements.
+local_pid="$(package_pid "$RETROARCH_PACKAGE")" || {
+  echo 'local-overlay publication stage could not inspect the RetroArch process' >&2
+  exit 1
+}
+[[ "$local_pid" =~ ^[0-9]+$ ]] || {
+  echo 'local-overlay publication stage did not observe exactly one RetroArch process' >&2
+  exit 1
+}
 record_gate_retroarch_pid "$local_pid"
-local_controls="$(controls_for_launch "$local_launch_id")"
-jq -e '.outcome._tag == "Ok" and ([.outcome.payload.groups[].controls[]] | length >= 2) and .outcome.payload.retroarchTelemetry' <<<"$local_controls" >/dev/null
-assert_overlay_window present
+
+local_publication_lines="$(sed '/^[[:space:]]*$/d' "$local_publication_capture")"
+if grep -qE 'KORRI_CONTROL_TOKEN|control(Token|Port)|capability|authorization([: ]|$)' \
+    <<<"$local_publication_lines"; then
+  echo 'local-overlay publication stage rejected secret-bearing lifecycle evidence' >&2
+  exit 1
+fi
+local_publication_count="$(grep -c . <<<"$local_publication_lines" || true)"
+[[ "$local_publication_count" -gt 0 ]] || {
+  echo 'local-overlay publication stage found no action-bounded lifecycle publication' >&2
+  exit 1
+}
+[[ "$local_publication_count" -eq 1 ]] || {
+  echo 'local-overlay publication stage found multiple action-bounded lifecycle publications' >&2
+  exit 1
+}
+if ! local_launch_id="$(korri_parse_wario_retroarch_publication "$local_publication_lines")"; then
+  echo 'local-overlay publication stage found malformed or mismatched lifecycle evidence' >&2
+  exit 1
+fi
+record_gate_launch "$local_launch_id"
+
+local_controls=''
+local_controls_ready=false
+for _ in $(seq 1 40); do
+  local_controls="$(controls_for_launch "$local_launch_id" 2>/dev/null || true)"
+  if jq -e --arg launchId "$local_launch_id" '
+    .outcome._tag == "Ok"
+    and .outcome.payload.launchId == $launchId
+    and ([.outcome.payload.groups[].controls[]] | length >= 2)
+    and .outcome.payload.retroarchTelemetry
+  ' <<<"$local_controls" >/dev/null 2>&1; then
+    local_controls_ready=true
+    break
+  fi
+  sleep 0.25
+done
+[[ "$local_controls_ready" == true ]] || {
+  echo 'local-overlay controls stage did not expose authenticated RetroArch telemetry' >&2
+  exit 1
+}
+assert_overlay_window present || {
+  echo 'local-overlay window stage did not retain exactly one visible Shift overlay' >&2
+  exit 1
+}
 capture_evidence local-overlay-open "$local_controls" \
   "$local_launch_id" 'positive-overlay' active
 

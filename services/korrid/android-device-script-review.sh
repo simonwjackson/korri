@@ -58,11 +58,31 @@ bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$JOURNEY_RESUME" \
   "$CRATE/test-android-debug-capability.sh" \
   "$CRATE/test-android-debug-reload-portal.sh" \
   "$CRATE/test-android-debug-focus-portal-game.sh" \
-  "$CRATE/test-overlay-acceptance-identity.sh"
+  "$CRATE/test-overlay-acceptance-identity.sh" \
+  "$CRATE/test-overlay-local-publication.sh" \
+  "$ROOT/clients/android/local-launch-publication.sh"
 "$CRATE/test-android-debug-capability.sh"
 "$CRATE/test-android-debug-reload-portal.sh"
 "$CRATE/test-android-debug-focus-portal-game.sh"
 "$CRATE/test-overlay-acceptance-identity.sh"
+"$CRATE/test-overlay-local-publication.sh"
+local_overlay_discovery="$(sed -n '/begin_evidence_checkpoint local-overlay-open/,/begin_evidence_checkpoint local-mid-overlay-end/p' "$OVERLAY_ACCEPTANCE")"
+# shellcheck disable=SC2016 # Literal source-contract needles.
+for needle in \
+  'new_checkpoint_log_marker local-overlay-publication' \
+  'start_local_publication_capture' \
+  'korri_parse_wario_retroarch_publication' \
+  'record_gate_retroarch_pid "$local_pid"' \
+  'record_gate_launch "$local_launch_id"'; do
+  grep -F "$needle" <<<"$local_overlay_discovery" >/dev/null || {
+    echo "overlay local discovery is missing publication-bound step: $needle" >&2
+    exit 1
+  }
+done
+if grep -F 'app.local-games.launch' <<<"$local_overlay_discovery" >/dev/null; then
+  echo 'overlay local discovery must not issue a second launch RPC' >&2
+  exit 1
+fi
 grep -F "https://appassets.androidplatform.net/assets/portal/index.html" "$DEBUG_AUTHORITY" >/dev/null
 grep -F '({port: KorriNative.korridPort(), capability: KorriNative.korridCapability()})' "$DEBUG_AUTHORITY" >/dev/null
 grep -F 'keys == ["capability", "port"]' "$DEBUG_AUTHORITY" >/dev/null
@@ -148,10 +168,13 @@ grep -F 'Physical A activation is retained by the human unified-overlay gate' \
 
 # Unified-overlay acceptance remains human-led and state restoring. These
 # source contracts deliberately do not substitute for the device gate.
-# shellcheck disable=SC2016 # Literal source-contract needles.
+# shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F 'EXPECTED_MODEL="$2"' "$OVERLAY_ACCEPTANCE" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F 'EXPECTED_HARDWARE_SERIAL="$3"' "$OVERLAY_ACCEPTANCE" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F 'DIRECT_PACKAGE="$4"' "$OVERLAY_ACCEPTANCE" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F 'UNRELATED_PACKAGE="$5"' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'ACTUAL_MODEL=' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'ACTUAL_HARDWARE_SERIAL=' "$OVERLAY_ACCEPTANCE" >/dev/null
