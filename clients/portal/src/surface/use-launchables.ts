@@ -30,6 +30,13 @@ import {
   createDiscoverySnapshotPoller,
   type KorridClient,
 } from "../korrid/client"
+import {
+  completeFolderReceiptRegistration,
+  initialFolderReceiptState,
+  releaseUnknownFolderReceipt,
+  selectFolderReceipt,
+  type FolderReceiptRegistrationKind,
+} from "./folder-receipt-state"
 import type { DeviceFacts } from "./settings-model"
 import {
   entryKey,
@@ -131,11 +138,7 @@ export function useLaunchables(
   const settingsBusyRef = useRef(false)
   const folderAddOpeningRef = useRef(false)
   const folderPickerSeq = useRef(0)
-  const folderReceiptSubmissions = useRef(new Set<string>())
-  const completedFolderReceiptGenerations = useRef(new Set<string>())
-  const uncertainFolderReceipts = useRef(new Set<string>())
-  const unknownFolderReceipts = useRef(new Set<string>())
-  const reportedUnknownFolderReceipts = useRef(new Set<string>())
+  const folderReceipts = useRef(initialFolderReceiptState())
   const discoveryWasActive = useRef(false)
   const discoveryPoller = useRef(
     createDiscoverySnapshotPoller(korrid, snapshot => {
@@ -196,59 +199,56 @@ export function useLaunchables(
           settingsProblem("game-folder-add", snapshot.state.message)
           return
         case "Selected": {
-          if (unknownFolderReceipts.current.has(snapshot.generation)) {
-            if (!reportedUnknownFolderReceipts.current.has(snapshot.generation)) {
-              reportedUnknownFolderReceipts.current.add(snapshot.generation)
-              settingsProblem(
-                "game-folder-add",
-                "Korri could not confirm that folder after reconnecting. Choose it again.",
-              )
-            }
-            return
+          const selected = selectFolderReceipt(
+            folderReceipts.current,
+            snapshot.generation,
+          )
+          folderReceipts.current = selected.state
+          switch (selected._tag) {
+            case "AcknowledgeCompleted":
+              acknowledgeFolderPicker(selected.generation)
+              return
+            case "ReportUnknown":
+              settingsProblem("game-folder-add", selected.message)
+              return
+            case "Ignore":
+              return
+            case "Submit":
+              break
           }
-          if (completedFolderReceiptGenerations.current.has(snapshot.generation)) {
-            acknowledgeFolderPicker(snapshot.generation)
-            return
-          }
-          if (folderReceiptSubmissions.current.has(snapshot.generation)) return
-          folderReceiptSubmissions.current.add(snapshot.generation)
           publishSettingsStatus({ _tag: "Saving", settingId: "game-folder-add" })
           void korrid.registerDiscoveryReceipt(snapshot.state.receipt).then(result => {
             if (!mountedRef.current) return
-            if (result._tag === "Ok") {
-              completedFolderReceiptGenerations.current.add(snapshot.generation)
-              acknowledgeFolderPicker(snapshot.generation)
-              uncertainFolderReceipts.current.delete(snapshot.generation)
-              unknownFolderReceipts.current.delete(snapshot.generation)
-              reportedUnknownFolderReceipts.current.delete(snapshot.generation)
-              publishSettingsStatus({ _tag: "Idle" })
-              setFacts(current => ({ ...current, discovery: result.payload }))
-              return
+            const kind: FolderReceiptRegistrationKind =
+              result._tag === "Ok"
+                ? "Accepted"
+                : result.payload.code === "BrainUnreachable"
+                  ? "BrainUnreachable"
+                  : result.payload.code === "FolderSelectionReceiptUnknown"
+                    ? "ReceiptUnknown"
+                    : "Rejected"
+            const registered = completeFolderReceiptRegistration(
+              folderReceipts.current,
+              snapshot.generation,
+              kind,
+              result._tag === "Ok" ? "" : result.payload.message,
+            )
+            folderReceipts.current = registered.state
+            switch (registered._tag) {
+              case "Acknowledge":
+                acknowledgeFolderPicker(registered.generation)
+                if (result._tag === "Ok") {
+                  publishSettingsStatus({ _tag: "Idle" })
+                  setFacts(current => ({ ...current, discovery: result.payload }))
+                } else {
+                  settingsProblem("game-folder-add", result.payload.message)
+                }
+                return
+              case "ReportProblem":
+              case "ReportUnknown":
+                settingsProblem("game-folder-add", registered.message)
+                return
             }
-            folderReceiptSubmissions.current.delete(snapshot.generation)
-            if (result.payload.code === "BrainUnreachable") {
-              uncertainFolderReceipts.current.add(snapshot.generation)
-              settingsProblem("game-folder-add", result.payload.message)
-              return
-            }
-            if (
-              result.payload.code === "FolderSelectionReceiptUnknown" &&
-              uncertainFolderReceipts.current.has(snapshot.generation)
-            ) {
-              uncertainFolderReceipts.current.delete(snapshot.generation)
-              unknownFolderReceipts.current.add(snapshot.generation)
-              if (!reportedUnknownFolderReceipts.current.has(snapshot.generation)) {
-                reportedUnknownFolderReceipts.current.add(snapshot.generation)
-                settingsProblem(
-                  "game-folder-add",
-                  "Korri could not confirm that folder after reconnecting. Choose it again.",
-                )
-              }
-              return
-            }
-            completedFolderReceiptGenerations.current.add(snapshot.generation)
-            acknowledgeFolderPicker(snapshot.generation)
-            settingsProblem("game-folder-add", result.payload.message)
           })
         }
       }
@@ -494,15 +494,15 @@ export function useLaunchables(
             return { _tag: "Opened" as const }
           }
           if (snapshot.state._tag === "Selected") {
-            if (unknownFolderReceipts.current.has(snapshot.generation)) {
+            if (folderReceipts.current.unknown.has(snapshot.generation)) {
               await bridge.acknowledgeGameFolderPicker(snapshot.generation)
               if (!mountedRef.current || seq !== folderPickerSeq.current) {
                 return { _tag: "Opened" as const }
               }
-              unknownFolderReceipts.current.delete(snapshot.generation)
-              reportedUnknownFolderReceipts.current.delete(snapshot.generation)
-              uncertainFolderReceipts.current.delete(snapshot.generation)
-              folderReceiptSubmissions.current.delete(snapshot.generation)
+              folderReceipts.current = releaseUnknownFolderReceipt(
+                folderReceipts.current,
+                snapshot.generation,
+              )
             } else {
               processFolderPickerSnapshot(snapshot)
               return { _tag: "Opened" as const }

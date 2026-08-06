@@ -46,8 +46,18 @@ describe("settingsFrom", () => {
       id: "steamgriddb-credential",
       label: "SteamGridDB API key",
       value: "Configured",
-      interaction: { kind: "sensitiveText", placeholder: "Paste API key" },
+      interaction: {
+        kind: "sensitiveText",
+        placeholder: "Paste API key",
+        clearLabel: "Clear saved key",
+      },
     })
+  })
+
+  it("exposes sensitive clearability only for configured credentials", () => {
+    const notConfigured = group({ settings: configuration }, "Metadata")?.items[0]
+    expect(notConfigured?.value).toBe("Not configured")
+    expect(notConfigured?.interaction).not.toHaveProperty("clearLabel")
   })
 
   it("makes plugin enablement an On/Off choice", () => {

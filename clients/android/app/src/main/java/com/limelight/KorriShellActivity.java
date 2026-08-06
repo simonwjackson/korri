@@ -831,7 +831,8 @@ public class KorriShellActivity extends AppCompatActivity {
 
         private boolean containsKnownStorageVolume(String canonicalPath) throws Exception {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-                return false;
+                return KorriLocalLaunchSpec.containsCanonicalPath(
+                        Environment.getExternalStorageDirectory(), canonicalPath);
             }
             StorageManager storageManager = getSystemService(StorageManager.class);
             if (storageManager == null) {

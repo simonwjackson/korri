@@ -123,7 +123,9 @@ export function settingsFrom(facts: DeviceFacts): readonly SurfaceSettingGroup[]
               kind: "sensitiveText" as const,
               placeholder: "Paste API key",
               maxLength: 256,
-              clearLabel: "Clear saved key",
+              ...(facts.settings.steamGridDbCredential === SecretSettingStatus.Configured
+                ? { clearLabel: "Clear saved key" }
+                : {}),
             },
           },
     ]),

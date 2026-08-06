@@ -1,12 +1,15 @@
 package com.limelight;
 
 import android.content.Intent;
+import android.os.Environment;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
+import org.robolectric.shadows.ShadowEnvironment;
 
 import java.io.File;
 
@@ -200,6 +203,50 @@ public class KorriLocalLaunchSpecTest {
     }
 
     @Test
+    @Config(sdk = 29)
+    public void sdk29AcceptsRetroarchContentUnderPrimaryExternalStorage() throws Exception {
+        ShadowEnvironment.setExternalStorageDirectory(new File("/storage/emulated/0").toPath());
+        File external = Environment.getExternalStorageDirectory().getCanonicalFile();
+        File korriRoot = new File(external, "korri");
+        JSONObject spec = validSpec()
+                .put("authorizedContentRoot", new File(external, "Games/GBA").getPath());
+        moveProvisioningTo(spec, korriRoot);
+        spec.getJSONObject("extras")
+                .put("ROM", new File(external, "Games/GBA/wl4.gba").getPath());
+
+        KorriLocalLaunchSpec.Parsed parsed = KorriLocalLaunchSpec.parse(
+                spec.toString(),
+                korriRoot,
+                path -> KorriLocalLaunchSpec.containsCanonicalPath(external, path));
+
+        assertEquals(new File(external, "Games/GBA/wl4.gba").getPath(),
+                parsed.extras.get("ROM"));
+    }
+
+    @Test
+    @Config(sdk = 29)
+    public void sdk29RejectsRetroarchRomEscapingAuthorizedContentRoot() throws Exception {
+        ShadowEnvironment.setExternalStorageDirectory(new File("/storage/emulated/0").toPath());
+        File external = Environment.getExternalStorageDirectory().getCanonicalFile();
+        File korriRoot = new File(external, "korri");
+        JSONObject spec = validSpec()
+                .put("authorizedContentRoot", new File(external, "Games/GBA").getPath());
+        moveProvisioningTo(spec, korriRoot);
+        spec.getJSONObject("extras")
+                .put("ROM", new File(external, "Games/GBA/../Other/wl4.gba").getPath());
+
+        try {
+            KorriLocalLaunchSpec.parse(
+                    spec.toString(),
+                    korriRoot,
+                    path -> KorriLocalLaunchSpec.containsCanonicalPath(external, path));
+            fail("expected invalid spec");
+        } catch (KorriLocalLaunchSpec.Invalid error) {
+            assertEquals("InvalidSpec", error.reason);
+        }
+    }
+
+    @Test
     public void rejectsPathsOutsideTheLauncherTemplate() throws Exception {
         JSONObject rom = validSpec();
         rom.getJSONObject("extras").put("ROM", "/storage/emulated/0/other.gba");
@@ -217,6 +264,19 @@ public class KorriLocalLaunchSpecTest {
         file.getJSONArray("files").getJSONObject(0)
                 .put("path", "/storage/emulated/0/other.cfg");
         assertInvalid(file, "InvalidSpec");
+    }
+
+    private static void moveProvisioningTo(JSONObject spec, File korriRoot) throws Exception {
+        spec.getJSONObject("extras")
+                .put("CONFIGFILE", new File(korriRoot, "retroarch.cfg").getPath());
+        spec.put("directories", new JSONArray()
+                .put(new File(korriRoot, "system").getPath())
+                .put(new File(korriRoot, "saves").getPath())
+                .put(new File(korriRoot, "states").getPath())
+                .put(new File(korriRoot, "screenshots").getPath()));
+        spec.put("files", new JSONArray().put(new JSONObject()
+                .put("path", new File(korriRoot, "retroarch.cfg").getPath())
+                .put("content", "video_driver = \"gl\"")));
     }
 
     private static void assertInvalid(JSONObject spec, String reason) throws Exception {

@@ -85,9 +85,9 @@ export function ShiftSettingSheet({
                 disabled={saving || text.trim().length === 0}
                 onSelect={() => onChange(text)}
               />
-              {isSensitive && item.value === "Configured" ? (
+              {isSensitive && item.interaction.clearLabel !== undefined ? (
                 <ShiftSheetAction
-                  label={item.interaction.clearLabel ?? "Clear"}
+                  label={item.interaction.clearLabel}
                   disabled={saving}
                   onSelect={() => onChange("")}
                 />

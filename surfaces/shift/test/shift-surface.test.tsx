@@ -177,6 +177,43 @@ describe("ShiftSurface", () => {
     expect(input.getAttribute("type")).toBe("password")
     expect(input.value).toBe("")
     expect(screen.queryByDisplayValue("Configured")).toBeNull()
+    expect(screen.queryByRole("button", { name: "Clear" })).toBeNull()
+  })
+
+  test("renders sensitive Clear only from the host clear capability", () => {
+    const host = createFixtureHost()
+    render(
+      <ShiftSurface
+        model={model({
+          settings: [
+            {
+              title: "Metadata",
+              items: [
+                {
+                  id: "steamgriddb-credential",
+                  label: "SteamGridDB API key",
+                  value: "Configurado",
+                  interaction: {
+                    kind: "sensitiveText",
+                    placeholder: "Paste API key",
+                    clearLabel: "Clear saved key",
+                  },
+                },
+              ],
+            },
+          ],
+        })}
+        host={host}
+      />,
+    )
+
+    const settings = screen.getByRole("button", { name: "Settings" })
+    fireEvent.focus(settings)
+    fireEvent.click(settings)
+    fireEvent.click(screen.getByRole("button", { name: /SteamGridDB API key/ }))
+    fireEvent.click(screen.getByRole("button", { name: "Clear saved key" }))
+
+    expect(host.calls).toEqual(["setting:steamgriddb-credential:"])
   })
 
   test("setup actions do not pollute the game rail", () => {

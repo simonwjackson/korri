@@ -242,8 +242,13 @@ final class KorriLocalLaunchSpec {
         }
     }
 
-    private static boolean isUnderOrEqual(String canonicalPath, String canonicalRoot) {
+    static boolean isUnderOrEqual(String canonicalPath, String canonicalRoot) {
         return canonicalPath.equals(canonicalRoot)
                 || canonicalPath.startsWith(canonicalRoot + File.separator);
+    }
+
+    static boolean containsCanonicalPath(File volumeRoot, String canonicalPath) throws Exception {
+        File root = volumeRoot.getCanonicalFile();
+        return isUnderOrEqual(canonicalPath, root.getPath());
     }
 }
