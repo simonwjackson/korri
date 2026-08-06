@@ -161,7 +161,7 @@ describe("LaunchablesState.fromSources", () => {
     )
     expect(state).toMatchObject({
       _tag: "Ready",
-      notice: "local games: LocalStorageUnavailable",
+      notice: { message: "local games: LocalStorageUnavailable" },
     })
   })
 
@@ -188,7 +188,7 @@ describe("LaunchablesState.fromSources", () => {
     )
     expect(state).toMatchObject({
       _tag: "Ready",
-      notice: "local games: LocalConfigReloadFailed",
+      notice: { message: "local games: LocalConfigReloadFailed" },
     })
     if (state._tag !== "Ready") throw new Error("unreachable")
     expect(state.entries[0]).toMatchObject({
@@ -201,7 +201,7 @@ describe("LaunchablesState.fromSources", () => {
     const state = LaunchablesState.fromSources([officeApps], gamesErr)
     expect(state).toMatchObject({
       _tag: "Ready",
-      notice: "games: UpstreamUnreachable",
+      notice: { message: "games: UpstreamUnreachable" },
     })
   })
 
@@ -221,7 +221,7 @@ describe("LaunchablesState.fromSources", () => {
     })
     expect(state).toMatchObject({
       _tag: "Ready",
-      notice: "zao: UpstreamUnreachable",
+      notice: { message: "zao: UpstreamUnreachable" },
     })
   })
 
@@ -256,7 +256,7 @@ describe("LaunchablesState.fromSources", () => {
       "pairing",
       "background-notice",
     ])
-    expect(state.notice).toBe("games: UpstreamUnreachable")
+    expect(state.notice?.message).toBe("games: UpstreamUnreachable")
   })
 })
 
@@ -343,7 +343,7 @@ describe("LaunchablesState action results", () => {
         _tag: "Err",
         payload: { code: "LocalRomMissing", message: "ROM absent" },
       }),
-    ).toMatchObject({ _tag: "Ready", notice: "LocalRomMissing: ROM absent" })
+    ).toMatchObject({ _tag: "Ready", notice: { message: "LocalRomMissing: ROM absent" } })
     expect(
       LaunchablesState.withLocalLaunchResult(launching, {
         _tag: "LaunchFailed",
@@ -352,7 +352,7 @@ describe("LaunchablesState action results", () => {
       }),
     ).toMatchObject({
       _tag: "Ready",
-      notice: "NotInstalled: RetroArch absent",
+      notice: { message: "NotInstalled: RetroArch absent" },
     })
   })
 
@@ -365,7 +365,7 @@ describe("LaunchablesState action results", () => {
       message: "pair first",
       },
     )
-    expect(streamFailed).toMatchObject({ notice: "NotPaired: pair first" })
+    expect(streamFailed).toMatchObject({ notice: { message: "NotPaired: pair first" } })
 
     const prepareFailed = LaunchablesState.withPrepareOutcome(
       LaunchablesState.beginPreparing(ready, "Skate 3"),
@@ -375,7 +375,7 @@ describe("LaunchablesState action results", () => {
       },
     )
     expect(prepareFailed).toMatchObject({
-      notice: "UpstreamFailure: no such game",
+      notice: { message: "UpstreamFailure: no such game" },
     })
   })
 
@@ -505,7 +505,7 @@ describe("LaunchablesState now playing", () => {
       payload: { code: "HostUnavailable", message: "host is unavailable" },
     })
     if (failed._tag !== "Ready") throw new Error("unreachable")
-    expect(failed.notice).toBe("HostUnavailable: host is unavailable")
+    expect(failed.notice?.message).toBe("HostUnavailable: host is unavailable")
   })
 
   it("returns to the list with a truthful notice when pending stop times out", () => {
@@ -525,7 +525,7 @@ describe("LaunchablesState now playing", () => {
     const timedOut = LaunchablesState.stopTimedOut(stopping)
     expect(timedOut).toMatchObject({
       _tag: "Ready",
-      notice: "StopPending: session is still stopping",
+      notice: { message: "StopPending: session is still stopping" },
     })
   })
 })
@@ -544,7 +544,7 @@ describe("LaunchablesState preparing", () => {
       payload: { code: "UpstreamUnreachable", message: "host offline" },
     })
     if (failed._tag !== "Ready") throw new Error("unreachable")
-    expect(failed.notice).toBe("UpstreamUnreachable: host offline")
+    expect(failed.notice?.message).toBe("UpstreamUnreachable: host offline")
   })
 
   it("prepare Ok keeps preparing visible until the activity swap", () => {
@@ -565,7 +565,7 @@ describe("LaunchablesState preparing", () => {
       message: "no route",
     })
     if (failed._tag !== "Ready") throw new Error("unreachable")
-    expect(failed.notice).toBe("HostUnreachable: no route")
+    expect(failed.notice?.message).toBe("HostUnreachable: no route")
   })
 })
 

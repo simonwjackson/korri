@@ -135,6 +135,29 @@ describe("ShiftSurface", () => {
     expect(host.calls).toEqual(["dismiss"])
   })
 
+  test("a failure is shown against its own game, not the focused hero", () => {
+    render(
+      <ShiftSurface
+        model={model({
+          status: {
+            _tag: "Problem",
+            kicker: "Couldn't start Wario Land 4",
+            reason: "ActiveSessionConflict: a session must end",
+            canRetry: false,
+            gameId: "local-game:wl4",
+            gameTitle: "Wario Land 4",
+          },
+        })}
+        host={createFixtureHost()}
+      />,
+    )
+
+    // Home focuses Skate 3 first, so an unattributed failure would name it.
+    const hero = document.querySelector("[data-korri-part='shift.cine-hero']")
+    expect(hero?.getAttribute("data-korri-instance-id")).toBe("local-game:wl4")
+    expect(screen.getByText("Couldn't start Wario Land 4")).toBeDefined()
+  })
+
   test("a retryable problem routes A to retry", () => {
     const host = createFixtureHost()
     render(

@@ -263,6 +263,12 @@ export function ShiftCinematicHome({
   )
   const showActions =
     status?.tone === "failed" || status?.tone === "unavailable"
+  // A status names the game it belongs to. Showing it against the focused
+  // hero would attribute one game's failure to another game's title.
+  const statusGame = useMemo(() => {
+    if (status?.gameId === undefined) return game
+    return games.find(candidate => candidate.id === status.gameId) ?? game
+  }, [status, games, game])
 
   const confirm = useCallback(() => {
     // An affordance slot owns its confirm regardless of any lingering launch
@@ -390,8 +396,8 @@ export function ShiftCinematicHome({
           ? { description: activeAffordance.action.description }
           : {})}
       />
-    ) : game ? (
-      <ShiftCineHero game={game} status={status} resuming={resuming} />
+    ) : statusGame ? (
+      <ShiftCineHero game={statusGame} status={status} resuming={resuming} />
     ) : null
   const legend = legendHints ? <ShiftCineLegend hints={legendHints} /> : null
 

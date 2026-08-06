@@ -155,6 +155,8 @@ export type SurfaceStatus =
       readonly kicker: string
       /** Optional progress detail. Never an error code or raw output. */
       readonly detail?: string
+      /** The game this work belongs to, when it belongs to exactly one. */
+      readonly gameId?: string
     }
   /** A launch is live. `gameId` is present when Korri knows which one. */
   | {
@@ -171,6 +173,14 @@ export type SurfaceStatus =
       readonly kicker: string
       readonly reason: string
       readonly canRetry: boolean
+      /**
+       * The game the failure belongs to, when it belongs to exactly one. A
+       * surface must state the problem against this game rather than whatever
+       * it happens to be showing.
+       */
+      readonly gameId?: string
+      /** That game's title, so the surface can name it without a lookup. */
+      readonly gameTitle?: string
     }
 
 /** Presentation-safe gameplay interaction. Integration effects and protected

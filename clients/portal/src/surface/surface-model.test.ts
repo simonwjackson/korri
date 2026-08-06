@@ -10,10 +10,14 @@ import {
 const ready = (
   entries: readonly PortalEntry[],
   notice: string | null = null,
+  subject?: { readonly id: string; readonly title: string },
 ): LaunchablesState => ({
   _tag: "Ready",
   entries,
-  notice,
+  notice:
+    notice === null
+      ? null
+      : { message: notice, ...(subject ? { subject } : {}) },
 })
 
 const localGame: PortalEntry = {
@@ -153,6 +157,45 @@ describe("surfaceModelFrom", () => {
       reason: "local ROM is missing",
       canRetry: false,
     })
+  })
+
+  test("a failure names the game it belongs to, not the focused one", () => {
+    const model = surfaceModelFrom(
+      ready([localGame], "ActiveSessionConflict: a session must end", {
+        id: "wl4",
+        title: "Wario Land 4",
+      }),
+    )
+
+    expect(model.status).toEqual({
+      _tag: "Problem",
+      kicker: "Couldn't start Wario Land 4",
+      reason: "ActiveSessionConflict: a session must end",
+      canRetry: false,
+      gameId: "wl4",
+      gameTitle: "Wario Land 4",
+    })
+  })
+
+  test("a failed local start keeps its own game through the state change", () => {
+    const launching = LaunchablesState.beginLaunching(
+      ready([localGame]),
+      "Wario Land 4",
+      { id: "wl4", title: "Wario Land 4" },
+    )
+    const failed = LaunchablesState.withLocalLaunchOutcome(launching, {
+      _tag: "Err",
+      payload: {
+        code: "ActiveSessionConflict",
+        message: "An active RetroArch session must end",
+      },
+    })
+    const model = surfaceModelFrom(failed)
+
+    expect(model.status._tag).toBe("Problem")
+    if (model.status._tag !== "Problem") return
+    expect(model.status.gameId).toBe("wl4")
+    expect(model.status.kicker).toBe("Couldn't start Wario Land 4")
   })
 
   test("in-flight work is busy, never an error", () => {

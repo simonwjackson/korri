@@ -39,6 +39,11 @@ export interface LaunchStatusView {
   readonly reason?: string
   /** Whether the scene should offer "A = Retry". */
   readonly canRetry: boolean
+  /**
+   * The game this status belongs to, when Korri states one. The scene must
+   * show the status against this game rather than whatever is focused.
+   */
+  readonly gameId?: string
 }
 
 /**
@@ -55,6 +60,7 @@ export function launchStatusView(
         kicker: status.kicker,
         ...(status.detail ? { reason: status.detail } : {}),
         canRetry: false,
+        ...(status.gameId ? { gameId: status.gameId } : {}),
       }
     case "Running":
       return { tone: "launched", kicker: status.kicker, canRetry: false }
@@ -64,6 +70,7 @@ export function launchStatusView(
         kicker: status.kicker,
         reason: status.reason,
         canRetry: status.canRetry,
+        ...(status.gameId ? { gameId: status.gameId } : {}),
       }
     default:
       return null

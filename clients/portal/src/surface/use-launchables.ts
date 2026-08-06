@@ -394,6 +394,10 @@ export function useLaunchables(
         const launching = LaunchablesState.beginLaunching(
           current,
           entryLabel(entry),
+          // A resume names its own session; Korri may not know the game id.
+          entry.session.gameId === undefined
+            ? undefined
+            : { id: entry.session.gameId, title: entryLabel(entry) },
         )
         publish(launching)
         const target = findKorriStreamTarget(entry.session.host)
@@ -451,6 +455,7 @@ export function useLaunchables(
         const launching = LaunchablesState.beginLaunching(
           current,
           entryLabel(entry),
+          { id: entry.game.id, title: entry.game.title },
         )
         publish(launching)
         void korrid.localGameLaunch(entry.game.id).then(async outcome => {
@@ -474,6 +479,7 @@ export function useLaunchables(
       const preparing = LaunchablesState.beginPreparing(
         current,
         entry.game.title,
+        { id: entry.game.id, title: entry.game.title },
       )
       if (target._tag === "None") {
         publish(

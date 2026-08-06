@@ -66,19 +66,37 @@ export interface StreamSource {
   readonly apps: QueryStreamAppsResult
 }
 
+/** The exact game an in-flight start belongs to, so a later failure keeps it. */
+export interface LaunchSubject {
+  readonly id: string
+  readonly title: string
+}
+
+/**
+ * A notice always states what it is about. Attributing a launch failure to
+ * whatever the surface happens to be showing would name the wrong game.
+ */
+export interface LaunchNotice {
+  readonly message: string
+  /** Absent only for notices that belong to no single game. */
+  readonly subject?: LaunchSubject
+}
+
 interface LaunchablesContent {
   readonly entries: readonly PortalEntry[]
-  readonly notice: string | null
+  readonly notice: LaunchNotice | null
 }
 
 type ReadyState = { readonly _tag: "Ready" } & LaunchablesContent
 type PreparingState = {
   readonly _tag: "Preparing"
   readonly title: string
+  readonly subject?: LaunchSubject
 } & LaunchablesContent
 type LaunchingState = {
   readonly _tag: "Launching"
   readonly title: string
+  readonly subject?: LaunchSubject
 } & LaunchablesContent
 type StoppingState = {
   readonly _tag: "Stopping"
@@ -102,13 +120,20 @@ interface StreamTarget {
   readonly appId: number
 }
 
+/**
+ * Return to browsing while keeping the failed start's own identity, so the
+ * surface can state which game could not start.
+ */
 const readyFrom = (
-  state: LaunchablesContent,
-  notice: string | null,
+  state: PreparingState | LaunchingState | StoppingState,
+  message: string,
 ): ReadyState => ({
   _tag: "Ready",
   entries: state.entries,
-  notice,
+  notice: {
+    message,
+    ...("subject" in state && state.subject ? { subject: state.subject } : {}),
+  },
 })
 
 export const entryKey = (entry: PortalEntry): string => {
@@ -229,14 +254,15 @@ export const LaunchablesState = {
     return {
       _tag: "Ready",
       entries,
-      notice: failures.length > 0 ? failures.join(" · ") : null,
+      notice:
+        failures.length > 0 ? { message: failures.join(" · ") } : null,
     }
   },
 
   /** Replace the notice on a Ready state, leaving its entries alone. */
-  withNotice: (state: ReadyState, notice: string): ReadyState => ({
+  withNotice: (state: ReadyState, message: string): ReadyState => ({
     ...state,
-    notice,
+    notice: { message },
   }),
 
   /** Select the plugin-owned Sunshine app, constrained to a game's origin host. */
@@ -265,15 +291,35 @@ export const LaunchablesState = {
   },
 
   /** Confirm on a game: enter an input-locked case until activity swap. */
-  beginPreparing: (state: LaunchablesState, title: string): LaunchablesState =>
+  beginPreparing: (
+    state: LaunchablesState,
+    title: string,
+    subject?: LaunchSubject,
+  ): LaunchablesState =>
     state._tag === "Ready"
-      ? { ...state, _tag: "Preparing", title, notice: null }
+      ? {
+          ...state,
+          _tag: "Preparing",
+          title,
+          ...(subject ? { subject } : {}),
+          notice: null,
+        }
       : state,
 
   /** Lock all direct local/stream/resume starts before their Promise runs. */
-  beginLaunching: (state: LaunchablesState, title: string): LaunchablesState =>
+  beginLaunching: (
+    state: LaunchablesState,
+    title: string,
+    subject?: LaunchSubject,
+  ): LaunchablesState =>
     state._tag === "Ready"
-      ? { ...state, _tag: "Launching", title, notice: null }
+      ? {
+          ...state,
+          _tag: "Launching",
+          title,
+          ...(subject ? { subject } : {}),
+          notice: null,
+        }
       : state,
 
   withLocalLaunchOutcome: (
@@ -371,7 +417,8 @@ export const LaunchablesState = {
       return state
     }
     return {
-      ...readyFrom(state, null),
+      _tag: "Ready",
+      notice: null,
       entries: state.entries.filter(entry => entry.kind !== "now-playing"),
     }
   },

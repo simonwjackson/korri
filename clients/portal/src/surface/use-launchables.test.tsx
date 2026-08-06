@@ -348,7 +348,7 @@ describe("Moonlight launch orchestration", () => {
     await waitFor(() => harness.current().state._tag === "Ready")
 
     expect(calls).toEqual(["sign"])
-    expect(harness.current().state).toMatchObject({ notice: "StartFailed: cannot sign" })
+    expect(harness.current().state).toMatchObject({ notice: { message: "StartFailed: cannot sign" } })
   })
 
   it("invalidates the signed reservation when host preparation fails", async () => {
@@ -383,7 +383,7 @@ describe("Moonlight launch orchestration", () => {
     expect(calls).toEqual(["sign", "host-prepare", "cancel:launch-a"])
     expect(harness.current().state).toMatchObject({
       _tag: "Ready",
-      notice: "UpstreamFailure: host prepare failed",
+      notice: { message: "UpstreamFailure: host prepare failed" },
     })
   })
 

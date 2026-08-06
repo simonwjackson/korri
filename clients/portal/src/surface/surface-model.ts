@@ -224,12 +224,14 @@ function statusFrom(state: LaunchablesState): SurfaceStatus {
         _tag: "Busy",
         kicker: `Preparing ${state.title}…`,
         detail: "Your stream will start in a moment",
+        ...(state.subject ? { gameId: state.subject.id } : {}),
       }
     case "Launching":
       return {
         _tag: "Busy",
         kicker: `Starting ${state.title}…`,
         detail: "Opening your session",
+        ...(state.subject ? { gameId: state.subject.id } : {}),
       }
     case "Stopping":
       return {
@@ -242,11 +244,21 @@ function statusFrom(state: LaunchablesState): SurfaceStatus {
         ? { _tag: "Browsing" }
         : {
             _tag: "Problem",
-            kicker: "Couldn't start",
-            reason: state.notice,
+            // A failure that knows its game names that game, so the surface
+            // can never attribute it to whatever is currently in view.
+            kicker: state.notice.subject
+              ? `Couldn't start ${state.notice.subject.title}`
+              : "Couldn't start",
+            reason: state.notice.message,
             // Nothing about the failure changed, so an immediate second
             // attempt would fail identically; the user acknowledges instead.
             canRetry: false,
+            ...(state.notice.subject
+              ? {
+                  gameId: state.notice.subject.id,
+                  gameTitle: state.notice.subject.title,
+                }
+              : {}),
           }
   }
 }
