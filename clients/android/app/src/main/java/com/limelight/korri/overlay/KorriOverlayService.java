@@ -51,7 +51,12 @@ public final class KorriOverlayService extends AccessibilityService {
     private static final ProcessRequests PROCESS_REQUESTS =
             new ProcessRequests(PROCESS_HOSTS);
     private static final long LIVENESS_CHECK_DELAY_MS = 500;
-    private static final int MAX_LIVENESS_CHECKS = 8;
+    private static final int ACTIVE_SESSION_PUBLICATION_MAX_CHECKS = 8;
+    // External emulators may remain alive while Android completes the acceptance
+    // save-on-pause path (up to five seconds). Twenty seconds preserves a strong
+    // margin for observing the exact bound process disappear without rearming a
+    // suspended launch from package identity alone.
+    private static final int EXTERNAL_PROCESS_CONTINUITY_MAX_CHECKS = 40;
     private static final long OVERLAY_READY_TIMEOUT_MS = 10_000;
 
     private StateMachine state;
@@ -78,7 +83,7 @@ public final class KorriOverlayService extends AccessibilityService {
                     return () -> handler.removeCallbacks(callback);
                 },
                 KorriBrainService::clearActiveLaunchOnEnd,
-                MAX_LIVENESS_CHECKS);
+                EXTERNAL_PROCESS_CONTINUITY_MAX_CHECKS);
         sessionMonitor = new KorriActiveSessionMonitor(
                 KorriBrainService::activeLaunch,
                 launch -> syncSession(),
@@ -86,7 +91,7 @@ public final class KorriOverlayService extends AccessibilityService {
                     handler.postDelayed(callback, LIVENESS_CHECK_DELAY_MS);
                     return () -> handler.removeCallbacks(callback);
                 },
-                MAX_LIVENESS_CHECKS);
+                ACTIVE_SESSION_PUBLICATION_MAX_CHECKS);
         syncSession();
         processRequestHost = new RequestHost() {
             @Override

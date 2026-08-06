@@ -1740,7 +1740,13 @@ done
   echo 'Android pause did not synchronously refresh the auto-state' >&2
   exit 1
 }
+paused_launch_id="$GATE_CURRENT_LAUNCH"
 "${ADB[@]}" shell am force-stop "$FORK_PACKAGE"
+# Relaunch is forbidden until process teardown and policy-level retirement are
+# paired for this exact launch. A new publication resets the quiesced flag.
+wait_stopped
+wait_old_launch_stale "$paused_launch_id"
+GATE_CURRENT_LAUNCH_QUIESCED=true
 pause_error_logs="$(logcat_since "$ACCEPTANCE_LOG_MARKER" -s KorriAcceptance:I DEBUG:E AndroidRuntime:E)"
 if grep -qE 'Fatal signal|FATAL EXCEPTION' <<<"$pause_error_logs"; then
   echo 'runtime emitted a fatal process error during pause acceptance' >&2

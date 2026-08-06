@@ -28,6 +28,38 @@ for stage in \
     exit 1
   }
 done
+save_pause_source="$(sed -n '/^STAGE="save-pause"/,/^STAGE="relaunch"/p' "$ACCEPTANCE")"
+# shellcheck disable=SC2016 # Literal source-contract needles.
+paused_launch_line="$(grep -nF 'paused_launch_id="$GATE_CURRENT_LAUNCH"' <<<"$save_pause_source" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal source-contract needles.
+force_stop_pause_line="$(grep -nF 'shell am force-stop "$FORK_PACKAGE"' <<<"$save_pause_source" | cut -d: -f1)"
+wait_stopped_pause_line="$(grep -nF 'wait_stopped' <<<"$save_pause_source" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal source-contract needles.
+wait_stale_pause_line="$(grep -nF 'wait_old_launch_stale "$paused_launch_id"' <<<"$save_pause_source" | cut -d: -f1)"
+quiesced_pause_line="$(grep -nF 'GATE_CURRENT_LAUNCH_QUIESCED=true' <<<"$save_pause_source" | cut -d: -f1)"
+relaunch_stage_line="$(grep -nF 'STAGE="relaunch"' <<<"$save_pause_source" | cut -d: -f1)"
+[[ -n "$paused_launch_line" && -n "$force_stop_pause_line" \
+  && -n "$wait_stopped_pause_line" && -n "$wait_stale_pause_line" \
+  && -n "$quiesced_pause_line" && -n "$relaunch_stage_line" \
+  && "$paused_launch_line" -lt "$force_stop_pause_line" \
+  && "$force_stop_pause_line" -lt "$wait_stopped_pause_line" \
+  && "$wait_stopped_pause_line" -lt "$wait_stale_pause_line" \
+  && "$wait_stale_pause_line" -lt "$quiesced_pause_line" \
+  && "$quiesced_pause_line" -lt "$relaunch_stage_line" ]] || {
+  echo 'RetroArch save-pause must bind the old launch, prove stop/stale, then mark it quiesced before relaunch' >&2
+  exit 1
+}
+if grep -Eq 'DEBUG_PORTAL_RELOAD_SH|launch_wario_entry' <<<"$save_pause_source"; then
+  echo 'RetroArch save-pause must not reload or relaunch before paired retirement proof' >&2
+  exit 1
+fi
+launch_flow_source_for_quiescence="$(sed -n '/^launch_wario_entry() {/,/^}/p' "$ACCEPTANCE")"
+grep -F 'GATE_CURRENT_LAUNCH_QUIESCED=false' \
+  <<<"$launch_flow_source_for_quiescence" >/dev/null || {
+  echo 'A newly published local launch must reset the quiesced marker' >&2
+  exit 1
+}
+
 stage_report_source="$(sed -n '/^report_stage_failure() {/,/^}/p' "$ACCEPTANCE")"
 grep -F "printf 'RetroArch acceptance failed: stage=%s line=%s\\n'" \
   <<<"$stage_report_source" >/dev/null
