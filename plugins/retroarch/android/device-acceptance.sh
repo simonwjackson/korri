@@ -1741,17 +1741,22 @@ done
   exit 1
 }
 paused_launch_id="$GATE_CURRENT_LAUNCH"
-"${ADB[@]}" shell am force-stop "$FORK_PACKAGE"
-# Relaunch is forbidden until process teardown and policy-level retirement are
-# paired for this exact launch. A new publication resets the quiesced flag.
+# Pause persistence is proved above independently of terminal retirement. End
+# this exact authority through the authenticated effect before relaunching.
+# Abrupt external-emulator death remains deferred to 01KZBYHCA4R9C8QK131HK0VWSA;
+# a control timeout alone must never become automatic retirement evidence.
+pause_quit="$(invoke_control "$paused_launch_id" '@korri:retroarch/quit')"
+if ! jq -e '
+  .outcome._tag == "Ok" and .outcome.payload._tag == "Completed"
+' <<<"$pause_quit" >/dev/null; then
+  echo 'authenticated pause cleanup Quit was not acknowledged as Completed' >&2
+  exit 1
+fi
+# Relaunch is forbidden until acknowledged process teardown and policy-level
+# retirement are paired for this exact launch. A publication resets the flag.
 wait_stopped
 wait_old_launch_stale "$paused_launch_id"
 GATE_CURRENT_LAUNCH_QUIESCED=true
-pause_error_logs="$(logcat_since "$ACCEPTANCE_LOG_MARKER" -s KorriAcceptance:I DEBUG:E AndroidRuntime:E)"
-if grep -qE 'Fatal signal|FATAL EXCEPTION' <<<"$pause_error_logs"; then
-  echo 'runtime emitted a fatal process error during pause acceptance' >&2
-  exit 1
-fi
 
 STAGE="relaunch"
 # Relaunch through Korri again; verbose runtime logging proves the non-empty

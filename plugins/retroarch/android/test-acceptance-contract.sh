@@ -30,25 +30,39 @@ for stage in \
 done
 save_pause_source="$(sed -n '/^STAGE="save-pause"/,/^STAGE="relaunch"/p' "$ACCEPTANCE")"
 # shellcheck disable=SC2016 # Literal source-contract needles.
+pause_mtime_proof_line="$(grep -nF '[[ "${after_mtime:-0}" -gt "$before_mtime" && "${state_size:-0}" -gt 0 ]]' <<<"$save_pause_source" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal source-contract needles.
 paused_launch_line="$(grep -nF 'paused_launch_id="$GATE_CURRENT_LAUNCH"' <<<"$save_pause_source" | cut -d: -f1)"
 # shellcheck disable=SC2016 # Literal source-contract needles.
-force_stop_pause_line="$(grep -nF 'shell am force-stop "$FORK_PACKAGE"' <<<"$save_pause_source" | cut -d: -f1)"
+pause_quit_line="$(grep -nF 'pause_quit="$(invoke_control "$paused_launch_id" '\''@korri:retroarch/quit'\'')"' <<<"$save_pause_source" | cut -d: -f1)"
+pause_completed_line="$(grep -nF '.outcome._tag == "Ok" and .outcome.payload._tag == "Completed"' <<<"$save_pause_source" | cut -d: -f1)"
 wait_stopped_pause_line="$(grep -nF 'wait_stopped' <<<"$save_pause_source" | cut -d: -f1)"
 # shellcheck disable=SC2016 # Literal source-contract needles.
 wait_stale_pause_line="$(grep -nF 'wait_old_launch_stale "$paused_launch_id"' <<<"$save_pause_source" | cut -d: -f1)"
 quiesced_pause_line="$(grep -nF 'GATE_CURRENT_LAUNCH_QUIESCED=true' <<<"$save_pause_source" | cut -d: -f1)"
 relaunch_stage_line="$(grep -nF 'STAGE="relaunch"' <<<"$save_pause_source" | cut -d: -f1)"
-[[ -n "$paused_launch_line" && -n "$force_stop_pause_line" \
+[[ -n "$pause_mtime_proof_line" && -n "$paused_launch_line" \
+  && -n "$pause_quit_line" && -n "$pause_completed_line" \
   && -n "$wait_stopped_pause_line" && -n "$wait_stale_pause_line" \
   && -n "$quiesced_pause_line" && -n "$relaunch_stage_line" \
-  && "$paused_launch_line" -lt "$force_stop_pause_line" \
-  && "$force_stop_pause_line" -lt "$wait_stopped_pause_line" \
+  && "$pause_mtime_proof_line" -lt "$paused_launch_line" \
+  && "$paused_launch_line" -lt "$pause_quit_line" \
+  && "$pause_quit_line" -lt "$pause_completed_line" \
+  && "$pause_completed_line" -lt "$wait_stopped_pause_line" \
   && "$wait_stopped_pause_line" -lt "$wait_stale_pause_line" \
   && "$wait_stale_pause_line" -lt "$quiesced_pause_line" \
   && "$quiesced_pause_line" -lt "$relaunch_stage_line" ]] || {
-  echo 'RetroArch save-pause must bind the old launch, prove stop/stale, then mark it quiesced before relaunch' >&2
+  echo 'RetroArch save-pause must prove pause persistence, receive authenticated Quit Completed, then prove stop/stale before relaunch' >&2
   exit 1
 }
+if grep -F 'shell am force-stop "$FORK_PACKAGE"' <<<"$save_pause_source" >/dev/null; then
+  echo 'RetroArch save-pause main path must not force-stop the emulator' >&2
+  exit 1
+fi
+if ! grep -F '01KZBYHCA4R9C8QK131HK0VWSA' <<<"$save_pause_source" >/dev/null; then
+  echo 'RetroArch save-pause must document the deferred abrupt-death lifecycle gate' >&2
+  exit 1
+fi
 if grep -Eq 'DEBUG_PORTAL_RELOAD_SH|launch_wario_entry' <<<"$save_pause_source"; then
   echo 'RetroArch save-pause must not reload or relaunch before paired retirement proof' >&2
   exit 1
