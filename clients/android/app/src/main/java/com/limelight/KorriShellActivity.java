@@ -105,6 +105,7 @@ public class KorriShellActivity extends AppCompatActivity {
         final KorriTrustedPortalWebViewPolicy portalPolicy =
                 new KorriTrustedPortalWebViewPolicy();
         final String portalUrl = portalPolicy.portalUrl();
+        final KorriNativeBridgeLifecycle nativeBridgeLifecycle = new KorriNativeBridgeLifecycle();
         final File privateStateRoot = new File(KorriBrainService.privateStateRoot(this));
         gameAssetPathHandler = new KorriGameAssetPathHandler(privateStateRoot);
         korridPort = KorriBrainService.ensureRunning(
@@ -159,12 +160,15 @@ public class KorriShellActivity extends AppCompatActivity {
 
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
-                syncNativeBridgeForUrl(view, Uri.parse(url), portalPolicy);
+                nativeBridgeLifecycle.onMainFramePageStarted(
+                        Uri.parse(url),
+                        portalPolicy,
+                        new KorriNativeBridgeOperations(view));
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                syncNativeBridgeForUrl(view, Uri.parse(url), portalPolicy);
+                nativeBridgeLifecycle.onMainFramePageFinished();
                 view.evaluateJavascript("document.title", title ->
                         Log.i("KorriPortal", "title=" + title));
             }
@@ -189,7 +193,10 @@ public class KorriShellActivity extends AppCompatActivity {
             WebView.setWebContentsDebuggingEnabled(true);
         }
 
-        syncNativeBridgeForUrl(webView, Uri.parse(portalUrl), portalPolicy);
+        nativeBridgeLifecycle.installBeforeInitialLoad(
+                Uri.parse(portalUrl),
+                portalPolicy,
+                new KorriNativeBridgeOperations(webView));
         webView.loadUrl(portalUrl);
         setContentView(webView);
     }
@@ -224,13 +231,24 @@ public class KorriShellActivity extends AppCompatActivity {
                 new ByteArrayInputStream(new byte[0]));
     }
 
-    private void syncNativeBridgeForUrl(
-            WebView view,
-            Uri uri,
-            KorriTrustedPortalWebViewPolicy portalPolicy) {
-        view.removeJavascriptInterface("KorriNative");
-        if (portalPolicy.isTrustedPortalAsset(uri)) {
-            view.addJavascriptInterface(new KorriNativeBridge(), "KorriNative");
+    private final class KorriNativeBridgeOperations
+            implements KorriNativeBridgeLifecycle.Operations {
+        private final WebView view;
+
+        private KorriNativeBridgeOperations(WebView view) {
+            this.view = view;
+        }
+
+        @Override
+        public void addJavascriptInterface() {
+            view.addJavascriptInterface(
+                    new KorriNativeBridge(),
+                    KorriNativeBridgeLifecycle.BRIDGE_NAME);
+        }
+
+        @Override
+        public void removeJavascriptInterface() {
+            view.removeJavascriptInterface(KorriNativeBridgeLifecycle.BRIDGE_NAME);
         }
     }
 

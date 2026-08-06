@@ -304,12 +304,21 @@ build_and_install_instrumentation() {
 run_discovery_instrumentation() {
   local action="$1"
   shift
-  adb_target_once -s "$SERIAL" shell am instrument -w \
+  local log_file="$RUN_DIR/instrument-$action.log"
+  local output=""
+  local status=0
+  set +e
+  output="$(adb_target_once -s "$SERIAL" shell am instrument -w \
     -e class com.limelight.KorriGameDiscoveryDebugTest \
     -e korriDebugDiscoveryAction "$action" \
     "$@" \
-    "$TEST_PKG/androidx.test.runner.AndroidJUnitRunner" | tee "$RUN_DIR/instrument-$action.log"
-  if grep -E 'FAILURES!!!|INSTRUMENTATION_CODE: -?[1-9]' "$RUN_DIR/instrument-$action.log" >/dev/null; then
+    "$TEST_PKG/androidx.test.runner.AndroidJUnitRunner" 2>&1)"
+  status=$?
+  set -e
+  printf '%s\n' "$output" | tee "$log_file"
+  if [[ "$status" -ne 0 ]] \
+    || grep -E 'FAILURES!!!|INSTRUMENTATION_FAILED' "$log_file" >/dev/null \
+    || ! grep -E 'OK \([[:space:]]*1 test[s]?\)' "$log_file" >/dev/null; then
     echo "Android game discovery instrumentation action failed: $action" >&2
     exit 1
   fi

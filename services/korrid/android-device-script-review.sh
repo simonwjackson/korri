@@ -615,6 +615,14 @@ if ! grep -F 'adb_target_once -s "$SERIAL" shell am instrument -w' "$ANDROID_GAM
   echo 'android-game-discovery-check.sh must not blindly retry non-idempotent instrumentation RPC mutations' >&2
   exit 1
 fi
+if ! grep -F 'local log_file="$RUN_DIR/instrument-$action.log"' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'output="$(adb_target_once -s "$SERIAL" shell am instrument -w' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F "OK \\([[:space:]]*1 test[s]?\\)" "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'INSTRUMENTATION_FAILED' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || grep -F 'INSTRUMENTATION_CODE: -?[1-9]' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must capture instrumentation output and require the JUnit success line instead of trusting adb exit status' >&2
+  exit 1
+fi
 if grep -F -- '--retry' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
   echo 'android-game-discovery-check.sh must not apply blind curl retries to RPC mutations' >&2
   exit 1
