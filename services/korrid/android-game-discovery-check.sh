@@ -13,6 +13,8 @@ set -euo pipefail
 
 ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
 CRATE="$ROOT/services/korrid"
+# shellcheck source=services/korrid/android-instrumentation-result.sh
+source "$CRATE/android-instrumentation-result.sh"
 SERIAL=""
 ADB_BIN="${KORRI_ADB_BIN:-$(command -v adb)}"
 PKG="com.simonwjackson.korri.debug"
@@ -340,9 +342,7 @@ run_discovery_instrumentation() {
   status=$?
   set -e
   printf '%s\n' "$output" | tee "$log_file"
-  if [[ "$status" -ne 0 ]] \
-    || grep -E 'FAILURES!!!|INSTRUMENTATION_FAILED' "$log_file" >/dev/null \
-    || ! grep -E 'OK \([[:space:]]*1 test[s]?\)' "$log_file" >/dev/null; then
+  if ! korri_android_instrumentation_passed "$status" "$log_file"; then
     echo "Android game discovery instrumentation action failed: $action" >&2
     exit 1
   fi

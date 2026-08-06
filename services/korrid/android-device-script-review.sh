@@ -9,6 +9,7 @@ CRATE="$ROOT/services/korrid"
 ANDROID_SMOKE="$CRATE/android-smoke.sh"
 ANDROID_APP_ROUTE="$CRATE/android-app-route-check.sh"
 ANDROID_GAME_DISCOVERY="$CRATE/android-game-discovery-check.sh"
+ANDROID_INSTRUMENTATION_RESULT="$CRATE/android-instrumentation-result.sh"
 JOURNEY_RESUME="$CRATE/journey-resume.sh"
 OVERLAY_ACCEPTANCE="$ROOT/clients/android/overlay-acceptance.sh"
 RETROARCH_ACCEPTANCE="$ROOT/plugins/retroarch/android/device-acceptance.sh"
@@ -54,7 +55,7 @@ unset \
 export KORRI_ANDROID_DEBUG_AUTHORITY_JSON='{"port":43210,"capability":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
 export KORRI_ANDROID_DEBUG_CAPABILITY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
-bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$JOURNEY_RESUME" \
+bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$ANDROID_INSTRUMENTATION_RESULT" "$JOURNEY_RESUME" \
   "$OVERLAY_ACCEPTANCE" "$RETROARCH_ACCEPTANCE" \
   "$CRATE/android-debug-capability.sh" "$CRATE/android-debug-portal-target.sh" \
   "$CRATE/android-debug-reload-portal.sh" "$CRATE/android-debug-focus-portal-game.sh" \
@@ -72,6 +73,57 @@ bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$JOURNEY_RESUME" \
 "$CRATE/test-overlay-acceptance-identity.sh"
 "$CRATE/test-overlay-local-publication.sh"
 "$CRATE/test-overlay-evidence-predicates.sh"
+
+# shellcheck source=services/korrid/android-instrumentation-result.sh
+source "$ANDROID_INSTRUMENTATION_RESULT"
+
+assert_instrumentation_decision() {
+  local name="$1"
+  local expected="$2"
+  local status="$3"
+  local output="$4"
+  local log_file=""
+  local actual=""
+  log_file="$(mktemp)"
+  printf '%s\n' "$output" >"$log_file"
+  if korri_android_instrumentation_passed "$status" "$log_file"; then
+    actual=pass
+  else
+    actual=fail
+  fi
+  rm -f "$log_file"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "instrumentation decision case failed: $name expected $expected got $actual" >&2
+    exit 1
+  fi
+}
+
+assert_instrumentation_decision \
+  'status 0 with JUnit completion' \
+  pass \
+  0 \
+  $'INSTRUMENTATION_STATUS: ok\nOK (1 test)'
+assert_instrumentation_decision \
+  'status 0 with JUnit failures' \
+  fail \
+  0 \
+  $'INSTRUMENTATION_STATUS: ok\nFAILURES!!!\nTests run: 1, Failures: 1'
+assert_instrumentation_decision \
+  'instrumentation failed marker' \
+  fail \
+  0 \
+  $'INSTRUMENTATION_FAILED: com.limelight.KorriGameDiscoveryDebugTest\nOK (1 test)'
+assert_instrumentation_decision \
+  'nonzero adb status' \
+  fail \
+  1 \
+  $'OK (1 test)'
+assert_instrumentation_decision \
+  'missing JUnit completion' \
+  fail \
+  0 \
+  $'INSTRUMENTATION_STATUS: ok\nINSTRUMENTATION_CODE: 0'
+
 local_overlay_discovery="$(sed -n '/begin_evidence_checkpoint local-overlay-open/,/begin_evidence_checkpoint local-mid-overlay-end/p' "$OVERLAY_ACCEPTANCE")"
 # shellcheck disable=SC2016 # Literal source-contract needles.
 for needle in \
@@ -543,7 +595,7 @@ if grep -F 'debug capability=' "$KORRI_SHELL" "$ANDROID_SMOKE" "$ANDROID_APP_ROU
   exit 1
 fi
 
-bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$ANDROID_GAME_DISCOVERY" "$JOURNEY_RESUME"
+bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$ANDROID_GAME_DISCOVERY" "$ANDROID_INSTRUMENTATION_RESULT" "$JOURNEY_RESUME"
 
 if ! grep -F 'usage: android-game-discovery-check.sh --serial <adb-serial>' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
   echo 'android-game-discovery-check.sh must require an explicit --serial argument' >&2
@@ -637,10 +689,12 @@ if ! awk '
 fi
 if ! grep -F 'local log_file="$RUN_DIR/instrument-$action.log"' "$ANDROID_GAME_DISCOVERY" >/dev/null \
   || ! grep -F 'output="$(adb_target_once -s "$SERIAL" shell am instrument -w' "$ANDROID_GAME_DISCOVERY" >/dev/null \
-  || ! grep -F "OK \\([[:space:]]*1 test[s]?\\)" "$ANDROID_GAME_DISCOVERY" >/dev/null \
-  || ! grep -F 'INSTRUMENTATION_FAILED' "$ANDROID_GAME_DISCOVERY" >/dev/null \
-  || grep -F 'INSTRUMENTATION_CODE: -?[1-9]' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
-  echo 'android-game-discovery-check.sh must capture instrumentation output and require the JUnit success line instead of trusting adb exit status' >&2
+  || ! grep -F 'source "$CRATE/android-instrumentation-result.sh"' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'korri_android_instrumentation_passed "$status" "$log_file"' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F "OK \\([[:space:]]*1 test[s]?\\)" "$ANDROID_INSTRUMENTATION_RESULT" >/dev/null \
+  || ! grep -F 'INSTRUMENTATION_FAILED' "$ANDROID_INSTRUMENTATION_RESULT" >/dev/null \
+  || grep -F 'INSTRUMENTATION_CODE: -?[1-9]' "$ANDROID_GAME_DISCOVERY" "$ANDROID_INSTRUMENTATION_RESULT" >/dev/null; then
+  echo 'android-game-discovery-check.sh must capture instrumentation output and require the shared JUnit success decision instead of trusting adb exit status' >&2
   exit 1
 fi
 if grep -F -- '--retry' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
