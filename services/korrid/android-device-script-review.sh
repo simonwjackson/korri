@@ -43,6 +43,7 @@ unset \
   KORRI_ANDROID_UPSTREAMS_CONFIG \
   KORRI_JOURNEY_EXPECTED_TITLE \
   KORRI_MAGICK_BIN \
+  KORRI_OVERLAY_ACCEPT_SCOPE \
   KORRI_TESSERACT_BIN \
   SHOTS
 
@@ -293,6 +294,113 @@ if grep -A2 -E 'capture_evidence (unrelated-active-session-negative|direct-launc
   echo 'negative overlay checkpoints must not require a stale prior positive event' >&2
   exit 1
 fi
+
+# Scope must be explicit, fail-closed, and recorded, so a narrowed run can never
+# read as full unified coverage.
+# shellcheck disable=SC2016 # Literal source-contract needles.
+for needle in \
+  'ACCEPT_SCOPE="${KORRI_OVERLAY_ACCEPT_SCOPE:-full}"' \
+  'unknown KORRI_OVERLAY_ACCEPT_SCOPE:' \
+  'STREAM_SCOPE_SKIPPED_STAGES=(' \
+  'announce_scope' \
+  'scope_runs_local_stages' \
+  'acceptance_scope=%s' \
+  'acceptance-scope.txt'; do
+  grep -F "$needle" "$OVERLAY_ACCEPTANCE" >/dev/null || {
+    echo "overlay acceptance is missing scope contract: $needle" >&2
+    exit 1
+  }
+done
+# Both the per-checkpoint sidecar and the final summary must attribute local
+# parity to ra-accept, so neither artifact alone can imply full coverage.
+overlay_sidecar_source="$(sed -n '/^capture_evidence() {/,/^}/p' "$OVERLAY_ACCEPTANCE")"
+overlay_summary_end_line="$(grep -nF '} >"$EVIDENCE_DIR/acceptance-scope.txt"' "$OVERLAY_ACCEPTANCE" | cut -d: -f1)"
+[[ -n "$overlay_summary_end_line" ]] || {
+  echo 'overlay acceptance must write a final acceptance-scope summary artifact' >&2
+  exit 1
+}
+overlay_summary_source="$(awk -v stop="$overlay_summary_end_line" '
+  NR <= stop { buffer = buffer $0 "\n" }
+  /^\{$/ && NR <= stop { buffer = $0 "\n" }
+  END { printf "%s", buffer }
+' "$OVERLAY_ACCEPTANCE")"
+for scope_artifact in sidecar summary; do
+  case "$scope_artifact" in
+    sidecar) scope_artifact_source="$overlay_sidecar_source" ;;
+    summary) scope_artifact_source="$overlay_summary_source" ;;
+  esac
+  grep -F 'acceptance_scope=' <<<"$scope_artifact_source" >/dev/null || {
+    echo "overlay acceptance $scope_artifact must record its acceptance scope" >&2
+    exit 1
+  }
+  grep -F 'local_parity_source=ra-accept' <<<"$scope_artifact_source" >/dev/null || {
+    echo "overlay acceptance $scope_artifact must attribute narrowed-scope local parity to ra-accept" >&2
+    exit 1
+  }
+  grep -F 'skipped_stages=' <<<"$scope_artifact_source" >/dev/null || {
+    echo "overlay acceptance $scope_artifact must record which stages were skipped" >&2
+    exit 1
+  }
+done
+overlay_scope_case="$(sed -n '/^ACCEPT_SCOPE="\${KORRI_OVERLAY_ACCEPT_SCOPE:-full}"$/,/^esac$/p' "$OVERLAY_ACCEPTANCE")"
+grep -E '^[[:space:]]*full\|stream\)' <<<"$overlay_scope_case" >/dev/null || {
+  echo 'overlay acceptance must accept exactly the full and stream scopes' >&2
+  exit 1
+}
+grep -F 'exit 2' <<<"$overlay_scope_case" >/dev/null || {
+  echo 'overlay acceptance must reject unknown scopes before device contact' >&2
+  exit 1
+}
+overlay_scope_declaration_line="$(grep -nF 'ACCEPT_SCOPE="${KORRI_OVERLAY_ACCEPT_SCOPE:-full}"' "$OVERLAY_ACCEPTANCE" | cut -d: -f1)"
+overlay_connect_line="$(grep -nF 'timeout 15 "$ADB_BIN" connect "$SERIAL"' "$OVERLAY_ACCEPTANCE" | head -1 | cut -d: -f1)"
+[[ -n "$overlay_scope_declaration_line" && -n "$overlay_connect_line" \
+  && "$overlay_scope_declaration_line" -lt "$overlay_connect_line" ]] || {
+  echo 'overlay acceptance must validate its scope before contacting the device' >&2
+  exit 1
+}
+overlay_local_gate_line="$(grep -nF 'if scope_runs_local_stages; then' "$OVERLAY_ACCEPTANCE" | head -1 | cut -d: -f1)"
+overlay_local_open_line="$(grep -nF 'begin_evidence_checkpoint local-overlay-open' "$OVERLAY_ACCEPTANCE" | cut -d: -f1)"
+overlay_direct_line="$(grep -nF 'begin_evidence_checkpoint direct-launch-negative' "$OVERLAY_ACCEPTANCE" | cut -d: -f1)"
+[[ -n "$overlay_local_gate_line" && -n "$overlay_local_open_line" && -n "$overlay_direct_line" \
+  && "$overlay_local_gate_line" -lt "$overlay_local_open_line" \
+  && "$overlay_local_open_line" -lt "$overlay_direct_line" ]] || {
+  echo 'overlay acceptance must gate the local RetroArch stages before the direct-launch negative' >&2
+  exit 1
+}
+for skipped_stage in \
+  local-overlay-open \
+  local-mid-overlay-end \
+  unrelated-active-session-negative \
+  old-game-still-disarmed \
+  fresh-publication-rearmed; do
+  awk -v stage="$skipped_stage" -v start="$overlay_local_gate_line" -v stop="$overlay_direct_line" '
+    NR > start && NR < stop && index($0, "capture_evidence " stage) == 1 { found = 1 }
+    END { exit(found ? 0 : 1) }
+  ' "$OVERLAY_ACCEPTANCE" || {
+    echo "stream scope must skip local stage evidence: $skipped_stage" >&2
+    exit 1
+  }
+  grep -F "  $skipped_stage" "$OVERLAY_ACCEPTANCE" >/dev/null || {
+    echo "stream scope must name its skipped stage in the banner list: $skipped_stage" >&2
+    exit 1
+  }
+done
+for retained_stage in \
+  direct-launch-negative \
+  stream-overlay-open \
+  stream-connection-loss-narrated \
+  stream-graceful-return \
+  stream-host-stop-unsupported \
+  permission-disabled \
+  permission-recovered; do
+  awk -v stage="$retained_stage" -v stop="$overlay_direct_line" '
+    NR >= stop && index($0, "capture_evidence " stage) == 1 { found = 1 }
+    END { exit(found ? 0 : 1) }
+  ' "$OVERLAY_ACCEPTANCE" || {
+    echo "stream scope must retain stage: $retained_stage" >&2
+    exit 1
+  }
+done
 grep -F 'SessionStopUnsupported' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F '"KorriGameLifecycle"' "$ANDROID_GAME" >/dev/null
 grep -F '"KorriOverlay"' "$OVERLAY_SERVICE" >/dev/null

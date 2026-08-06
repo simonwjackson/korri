@@ -266,7 +266,7 @@ let
     };
 
     overlay-accept = {
-      description = "Run the human-led, state-restoring unified Android gameplay-overlay acceptance gate.";
+      description = "Run the human-led, state-restoring unified Android gameplay-overlay acceptance gate. Set KORRI_OVERLAY_ACCEPT_SCOPE=full (default) or stream; stream skips the local RetroArch stages already proven by ra-accept and records that narrowed scope in its evidence.";
       usageSuffix = " -- <adb-serial> <exact-device-model> <exact-hardware-serial> <direct-launch-package> <unrelated-package> [evidence-dir]";
       runtimeInputs = [
         pkgs.android-tools

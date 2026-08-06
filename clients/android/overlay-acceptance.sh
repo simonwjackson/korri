@@ -52,6 +52,27 @@ done
   echo 'direct-launch and unrelated negative packages must be distinct' >&2
   exit 2
 }
+# Scope is explicit and fail-closed: an unknown value can never silently widen
+# or narrow what a recorded run claims. Validation happens before any device
+# contact so a typo cannot reach hardware.
+ACCEPT_SCOPE="${KORRI_OVERLAY_ACCEPT_SCOPE:-full}"
+case "$ACCEPT_SCOPE" in
+  full|stream) ;;
+  *)
+    echo "unknown KORRI_OVERLAY_ACCEPT_SCOPE: $ACCEPT_SCOPE (expected exactly 'full' or 'stream')" >&2
+    exit 2
+    ;;
+esac
+# Stages that require a Korri-launched local RetroArch session. In stream scope
+# they are skipped because their parity is proven by the RetroArch device gate,
+# never because this run observed them.
+STREAM_SCOPE_SKIPPED_STAGES=(
+  local-overlay-open
+  local-mid-overlay-end
+  unrelated-active-session-negative
+  old-game-still-disarmed
+  fresh-publication-rearmed
+)
 STORAGE_ROOT="/storage/emulated/0/korri"
 CONFIG_REMOTE="$STORAGE_ROOT/config.yaml"
 LIBRARY_REMOTE="$STORAGE_ROOT/library.yaml"
@@ -618,6 +639,22 @@ checkpoint() {
   }
 }
 
+announce_scope() {
+  printf '\nOVERLAY ACCEPTANCE SCOPE — %s\n' "$ACCEPT_SCOPE"
+  if [[ "$ACCEPT_SCOPE" == full ]]; then
+    printf 'Every unified overlay stage runs in this scope.\n'
+    return 0
+  fi
+  printf 'SKIPPED STAGES (not observed, not claimed by this run):\n'
+  printf '  %s\n' "${STREAM_SCOPE_SKIPPED_STAGES[@]}"
+  printf 'Local RetroArch overlay parity evidence comes from the separate ra-accept gate.\n'
+  printf 'This run therefore does not by itself establish full unified overlay coverage.\n'
+}
+
+scope_runs_local_stages() {
+  [[ "$ACCEPT_SCOPE" == full ]]
+}
+
 accessibility_snapshot() {
   printf 'accessibility_enabled=%s\n' "$(adb_shell settings get secure accessibility_enabled | tr -d '\r')"
   printf 'enabled_accessibility_services=%s\n' "$(adb_shell settings get secure enabled_accessibility_services | tr -d '\r')"
@@ -897,10 +934,14 @@ capture_evidence() {
 
   adb_target -s "$SERIAL" exec-out screencap -p >"$image"
   {
-    printf 'label=%s\nserial=%s\nexpected_model=%s\nactual_model=%s\nexpected_hardware_serial=%s\nactual_hardware_serial=%s\ncaptured_utc=%s\nevidence_predicate=%s\n' \
+    printf 'label=%s\nserial=%s\nexpected_model=%s\nactual_model=%s\nexpected_hardware_serial=%s\nactual_hardware_serial=%s\ncaptured_utc=%s\nevidence_predicate=%s\nacceptance_scope=%s\n' \
       "$label" "$SERIAL" "$EXPECTED_MODEL" "$ACTUAL_MODEL" \
       "$EXPECTED_HARDWARE_SERIAL" "$ACTUAL_HARDWARE_SERIAL" \
-      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$evidence_predicate"
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$evidence_predicate" "$ACCEPT_SCOPE"
+    if ! scope_runs_local_stages; then
+      printf 'skipped_stages=%s\n' "${STREAM_SCOPE_SKIPPED_STAGES[*]}"
+      printf 'local_parity_source=ra-accept\n'
+    fi
     printf '\n[top activity]\n%s\n' "$required_top_activity"
     printf '\n[pids]\n'
     for package in "$KORRI_PACKAGE" "$RETROARCH_PACKAGE" "$STOCK_RETROARCH_PACKAGE" "$DIRECT_PACKAGE" "$UNRELATED_PACKAGE"; do
@@ -958,6 +999,8 @@ assert_ended_launch_unavailable() {
       return 1
     }
 }
+
+announce_scope
 
 if [[ "$SERIAL" == *:* ]]; then
   timeout 15 "$ADB_BIN" connect "$SERIAL" >/dev/null || true
@@ -1026,6 +1069,7 @@ adb_target -s "$SERIAL" exec-out cat "$LIBRARY_REMOTE" | cmp -s "$CHECKPOINT_LIB
 assert_accessibility_service_enabled
 revalidate_gate_state_after_mutation
 
+if scope_runs_local_stages; then
 begin_evidence_checkpoint local-overlay-open
 local_publication_marker="$(new_checkpoint_log_marker local-overlay-publication)"
 local_publication_capture="$PREFS_WORK_DIR/local-overlay-publication.log"
@@ -1191,6 +1235,7 @@ capture_evidence fresh-publication-rearmed "$rearmed_controls" \
 rearmed_quit="$(invoke_control "$rearmed_launch_id" '@korri:retroarch/quit')"
 jq -e '.outcome._tag == "Ok" and .outcome.payload._tag == "Completed"' <<<"$rearmed_quit" >/dev/null
 wait_for_local_session_end
+fi
 
 begin_evidence_checkpoint direct-launch-negative
 checkpoint 'DIRECT NEGATIVE VERIFIED' \
@@ -1387,5 +1432,26 @@ jq -e '.outcome._tag == "Ok" and .outcome.payload._tag == "Completed"' \
   <<<"$permission_recovered_quit" >/dev/null
 wait_for_local_session_end
 
+{
+  printf 'acceptance_scope=%s\n' "$ACCEPT_SCOPE"
+  printf 'serial=%s\nexpected_model=%s\nactual_model=%s\n' \
+    "$SERIAL" "$EXPECTED_MODEL" "$ACTUAL_MODEL"
+  printf 'expected_hardware_serial=%s\nactual_hardware_serial=%s\n' \
+    "$EXPECTED_HARDWARE_SERIAL" "$ACTUAL_HARDWARE_SERIAL"
+  printf 'completed_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if scope_runs_local_stages; then
+    printf 'skipped_stages=\n'
+    printf 'local_parity_source=this-run\n'
+  else
+    printf 'skipped_stages=%s\n' "${STREAM_SCOPE_SKIPPED_STAGES[*]}"
+    printf 'local_parity_source=ra-accept\n'
+  fi
+} >"$EVIDENCE_DIR/acceptance-scope.txt"
+
 printf '\nPre-cutover overlay acceptance evidence captured at %s\n' "$EVIDENCE_DIR"
+printf 'acceptance scope: %s\n' "$ACCEPT_SCOPE"
+if ! scope_runs_local_stages; then
+  printf 'skipped stages (not claimed by this run): %s\n' "${STREAM_SCOPE_SKIPPED_STAGES[*]}"
+  printf 'local RetroArch overlay parity evidence comes from the separate ra-accept gate.\n'
+fi
 printf 'This run records evidence; it does not authorize cutover or claim parity by itself.\n'
