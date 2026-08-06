@@ -24,6 +24,11 @@ set -euo pipefail
 shift
 exec "$@"
 SH
+cat >"$TMP/sleep" <<'SH'
+#!/usr/bin/env bash
+# Keep intentionally rejected fake-probe cases fast.
+exit 0
+SH
 cat >"$TMP/websocat" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -45,15 +50,21 @@ elif [[ "$socket" != */main ]]; then
   echo 'reload/probe evaluation reached non-shell target' >&2
   exit 14
 elif grep -Fq 'setTimeout(() => location.reload(), 100)' <<<"$expression"; then
-  value='{"requested":true,"href":"https://appassets.androidplatform.net/assets/portal/index.html","beforeTimeOrigin":1000}'
+  value='{"requested":true,"href":"https://appassets.androidplatform.net/assets/portal/index.html","markerSet":true}'
 elif grep -Fq 'gameMatches' <<<"$expression"; then
-  value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","exactPortal":true,"readyState":"complete","timeOrigin":2000,"navigationType":"reload","mounted":true,"homeMatches":1,"libraryMatches":0,"loadError":false,"gameMatches":1}'
+  if [[ "${FAKE_RELOAD_MARKER_PRESENT:-false}" == true ]]; then
+    marker_present=true
+  else
+    marker_present=false
+  fi
+  value="{\"href\":\"https://appassets.androidplatform.net/assets/portal/index.html\",\"exactPortal\":true,\"readyState\":\"complete\",\"reloadMarkerPresent\":$marker_present,\"navigationType\":\"reload\",\"mounted\":true,\"homeMatches\":1,\"libraryMatches\":0,\"loadError\":false,\"gameMatches\":1}"
 else
-  value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","exactPortal":true,"readyState":"complete","timeOrigin":1000}'
+  value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","exactPortal":true,"readyState":"complete"}'
 fi
 jq -cn --argjson id "$id" --argjson value "$value" '{id:$id,result:{result:{value:$value}}}'
 SH
-chmod +x "$TMP/adb" "$TMP/curl" "$TMP/timeout" "$TMP/websocat"
+chmod +x "$TMP/adb" "$TMP/curl" "$TMP/timeout" "$TMP/sleep" "$TMP/websocat"
+export PATH="$TMP:$PATH"
 
 export FAKE_ADB_LOG="$TMP/adb.log"
 export FAKE_EVAL_LOG="$TMP/eval.log"
@@ -85,18 +96,44 @@ if jq -e 'select((.socket | endswith("/overlay")) and (.expression | contains("h
   echo 'reload/probe evaluation reached same-URL overlay target' >&2
   exit 1
 fi
-grep -F 'setTimeout(() => location.reload(), 100)' \
-  < <(jq -r 'select(.socket | endswith("/main")) | .expression' "$FAKE_EVAL_LOG") >/dev/null
+main_expressions="$(jq -r 'select(.socket | endswith("/main")) | .expression' "$FAKE_EVAL_LOG")"
+grep -F 'setTimeout(() => location.reload(), 100)' <<<"$main_expressions" >/dev/null
+grep -F 'Object.defineProperty(globalThis, markerKey' <<<"$main_expressions" >/dev/null
+grep -F 'reloadMarkerPresent: Object.prototype.hasOwnProperty.call(globalThis, markerKey)' \
+  <<<"$main_expressions" >/dev/null
+marker_one="$(grep -Eo '__korriReloadProbe_[0-9a-f]{32}' <<<"$main_expressions" | sort -u)"
+[[ "$marker_one" =~ ^__korriReloadProbe_[0-9a-f]{32}$ ]] || {
+  echo 'reload helper did not use exactly one host-random marker key' >&2
+  exit 1
+}
+if grep -Fq 'timeOrigin' "$HELPER"; then
+  echo 'reload helper still relies on performance.timeOrigin' >&2
+  exit 1
+fi
 grep -F 'forward --remove tcp:43121' "$FAKE_ADB_LOG" >/dev/null
 
 : >"$FAKE_EVAL_LOG"
 output="$($HELPER fake-device com.simonwjackson.korri.debug --expect-portal)"
 jq -e '.mode == "--expect-portal" and .gameId == "" and .reloaded == true' <<<"$output" >/dev/null
+marker_two="$(jq -r 'select(.socket | endswith("/main")) | .expression' "$FAKE_EVAL_LOG" \
+  | grep -Eo '__korriReloadProbe_[0-9a-f]{32}' | sort -u)"
+[[ "$marker_two" =~ ^__korriReloadProbe_[0-9a-f]{32}$ && "$marker_two" != "$marker_one" ]] || {
+  echo 'reload helper reused its invocation marker key' >&2
+  exit 1
+}
 if jq -e 'select((.socket | endswith("/overlay")) and (.expression | contains("hasCapability:") | not))' \
   "$FAKE_EVAL_LOG" >/dev/null; then
   echo 'generic reload evaluated overlay target beyond classification' >&2
   exit 1
 fi
+
+export FAKE_RELOAD_MARKER_PRESENT=true
+if "$HELPER" fake-device com.simonwjackson.korri.debug --expect-portal \
+  >"$TMP/marker-present.out" 2>"$TMP/marker-present.err"; then
+  echo 'reload helper accepted a document that retained its old Window marker' >&2
+  exit 1
+fi
+unset FAKE_RELOAD_MARKER_PRESENT
 
 jq -cn --arg url "$trusted" \
   '[{type:"page",url:$url,webSocketDebuggerUrl:"ws://127.0.0.1:43121/devtools/page/shell-a"},

@@ -70,6 +70,16 @@ json_targets() {
 url_js="$("$JQ_BIN" -Rn --arg value "$TRUSTED_PORTAL_URL" '$value')"
 game_id_js="$("$JQ_BIN" -Rn --arg value "$expected_game_id" '$value')"
 title_js="$("$JQ_BIN" -Rn --arg value "$expected_title" '$value')"
+# Android WebView may preserve its navigation timing origin across a real reload.
+# A random property on the old Window is a direct fresh-document witness: the
+# property must be absent after the target returns. The key is generated on the
+# host for every helper invocation and JSON encoded before entering JavaScript.
+reload_marker_key="__korriReloadProbe_$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+[[ "$reload_marker_key" =~ ^__korriReloadProbe_[0-9a-f]{32}$ ]] || {
+  echo 'could not generate a random portal reload marker' >&2
+  exit 1
+}
+reload_marker_key_js="$("$JQ_BIN" -Rn --arg value "$reload_marker_key" '$value')"
 
 socket=''
 for _ in $(seq 1 20); do
@@ -90,30 +100,39 @@ before_expression="(() => {
   return {
     href: location.href,
     exactPortal: location.href === expectedUrl,
-    readyState: document.readyState,
-    timeOrigin: performance.timeOrigin
+    readyState: document.readyState
   };
 })()"
 before="$(korri_debug_evaluate "$socket" "$before_expression")"
 "$JQ_BIN" -e --arg url "$TRUSTED_PORTAL_URL" '
-  .exactPortal == true and .href == $url and (.timeOrigin | type == "number")
+  .exactPortal == true and .href == $url
 ' <<<"$before" >/dev/null
-before_time_origin="$("$JQ_BIN" -er '.timeOrigin' <<<"$before")"
 
 reload_expression="(() => {
   const expectedUrl = $url_js;
+  const markerKey = $reload_marker_key_js;
   if (location.href !== expectedUrl) throw new Error('not the trusted main portal');
-  const beforeTimeOrigin = performance.timeOrigin;
+  if (Object.prototype.hasOwnProperty.call(globalThis, markerKey)) {
+    throw new Error('reload marker collision');
+  }
+  Object.defineProperty(globalThis, markerKey, {
+    value: true,
+    configurable: true,
+    enumerable: false,
+    writable: false
+  });
+  const markerSet = Object.prototype.hasOwnProperty.call(globalThis, markerKey);
   setTimeout(() => location.reload(), 100);
-  return {requested: true, href: location.href, beforeTimeOrigin};
+  return {requested: true, href: location.href, markerSet};
 })()"
 reload_result="$(korri_debug_evaluate "$socket" "$reload_expression")"
-"$JQ_BIN" -e --arg url "$TRUSTED_PORTAL_URL" --argjson before "$before_time_origin" '
-  .requested == true and .href == $url and .beforeTimeOrigin == $before
+"$JQ_BIN" -e --arg url "$TRUSTED_PORTAL_URL" '
+  .requested == true and .href == $url and .markerSet == true
 ' <<<"$reload_result" >/dev/null
 
 probe_expression="(() => {
   const expectedUrl = $url_js;
+  const markerKey = $reload_marker_key_js;
   const gameId = $game_id_js;
   const title = $title_js;
   const gameMatches = Array.from(document.querySelectorAll('[data-shift-game-id]'))
@@ -123,7 +142,7 @@ probe_expression="(() => {
     href: location.href,
     exactPortal: location.href === expectedUrl,
     readyState: document.readyState,
-    timeOrigin: performance.timeOrigin,
+    reloadMarkerPresent: Object.prototype.hasOwnProperty.call(globalThis, markerKey),
     navigationType: performance.getEntriesByType('navigation')[0]?.type ?? null,
     mounted: document.querySelector('[data-shift-surface]') !== null,
     homeMatches: document.querySelectorAll('[data-shift-home]').length,
@@ -144,10 +163,10 @@ for _ in $(seq 1 80); do
     # app.local-games.list after this verified reload; this helper proves only
     # that the trusted portal performed a fresh, error-free mount.
     predicate='.exactPortal == true and .href == $url and .readyState == "complete"
-      and .timeOrigin > $before and .navigationType == "reload"
+      and .reloadMarkerPresent == false and .navigationType == "reload"
       and .mounted == true and .homeMatches == 1 and .libraryMatches == 0
       and .loadError == false'
-    if "$JQ_BIN" -e --arg url "$TRUSTED_PORTAL_URL" --argjson before "$before_time_origin" \
+    if "$JQ_BIN" -e --arg url "$TRUSTED_PORTAL_URL" \
       "$predicate" <<<"$candidate" >/dev/null; then
       verified="$candidate"
       break
