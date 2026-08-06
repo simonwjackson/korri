@@ -120,6 +120,13 @@ case "$mode" in
       if (matches.length !== 1) throw new Error('expected exactly one visible focusable Library tile');
       const target = matches[0];
       target.focus();
+      const rect = target.getBoundingClientRect();
+      const rectValues = [rect.left, rect.top, rect.width, rect.height, rect.right, rect.bottom];
+      const rectFinitePositive = rectValues.every(Number.isFinite)
+        && rect.width > 0 && rect.height > 0;
+      const fullyOnScreen = rectFinitePositive
+        && rect.left >= 0 && rect.top >= 0
+        && rect.right <= window.innerWidth && rect.bottom <= window.innerHeight;
       return {
         href: location.href,
         view: 'home',
@@ -127,12 +134,26 @@ case "$mode" in
         title: target.getAttribute('aria-label'),
         visibleFocusableMatches: matches.length,
         activeExact: document.activeElement === target
-          && document.activeElement.matches(selector)
+          && document.activeElement.matches(selector),
+        bounds: {left: rect.left, top: rect.top, width: rect.width, height: rect.height},
+        viewport: {width: window.innerWidth, height: window.innerHeight},
+        rectFinitePositive,
+        fullyOnScreen
       };
     })()"
     predicate='.href == $url and .view == "home"
       and .part == "shift.cine-library-tile" and .title == "Library"
-      and .visibleFocusableMatches == 1 and .activeExact == true'
+      and .visibleFocusableMatches == 1 and .activeExact == true
+      and .rectFinitePositive == true and .fullyOnScreen == true
+      and (.bounds | type == "object") and (.viewport | type == "object")
+      and (.bounds.left | type == "number") and (.bounds.top | type == "number")
+      and (.bounds.width | type == "number") and .bounds.width > 0
+      and (.bounds.height | type == "number") and .bounds.height > 0
+      and (.viewport.width | type == "number") and .viewport.width > 0
+      and (.viewport.height | type == "number") and .viewport.height > 0
+      and .bounds.left >= 0 and .bounds.top >= 0
+      and (.bounds.left + .bounds.width) <= .viewport.width
+      and (.bounds.top + .bounds.height) <= .viewport.height'
     failure='trusted main portal did not expose exactly one visible focusable Library tile'
     ;;
   --verify-library)
@@ -303,8 +324,9 @@ done
 
 case "$mode" in
   --library)
-    "$JQ_BIN" -cn --arg url "$TRUSTED_PORTAL_URL" \
-      '{url:$url,view:"home",part:"shift.cine-library-tile",title:"Library",focused:true}'
+    "$JQ_BIN" -c \
+      '{url:.href,view,part,title,focused:.activeExact,bounds,viewport,
+        rectFinitePositive,fullyOnScreen}' <<<"$verified"
     ;;
   --verify-library)
     "$JQ_BIN" -cn --arg url "$TRUSTED_PORTAL_URL" \

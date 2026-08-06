@@ -33,8 +33,9 @@ id="$(jq -r '.id' <<<"$request")"
 expression="$(jq -r '.params.expression' <<<"$request")"
 if grep -Fq 'shift.cine-library-tile' <<<"$expression"; then
   case "${FAKE_LIBRARY_RESULT:-ok}" in
-    ok) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"home","part":"shift.cine-library-tile","title":"Library","visibleFocusableMatches":1,"activeExact":true}' ;;
-    ambiguous) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"home","part":"shift.cine-library-tile","title":"Library","visibleFocusableMatches":2,"activeExact":false}' ;;
+    ok) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"home","part":"shift.cine-library-tile","title":"Library","visibleFocusableMatches":1,"activeExact":true,"bounds":{"left":407.25,"top":352.5,"width":56,"height":80},"viewport":{"width":640,"height":480},"rectFinitePositive":true,"fullyOnScreen":true}' ;;
+    ambiguous) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"home","part":"shift.cine-library-tile","title":"Library","visibleFocusableMatches":2,"activeExact":false,"bounds":{"left":0,"top":0,"width":0,"height":0},"viewport":{"width":640,"height":480},"rectFinitePositive":false,"fullyOnScreen":false}' ;;
+    offscreen) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"home","part":"shift.cine-library-tile","title":"Library","visibleFocusableMatches":1,"activeExact":true,"bounds":{"left":620,"top":352,"width":56,"height":80},"viewport":{"width":640,"height":480},"rectFinitePositive":true,"fullyOnScreen":false}' ;;
     *) exit 2 ;;
   esac
 elif grep -Fq 'visibleLibraryRoots' <<<"$expression"; then
@@ -83,6 +84,9 @@ library="$($HELPER fake-device com.simonwjackson.korri.debug --library)"
 jq -e --arg url "$trusted" '
   .url == $url and .view == "home" and .part == "shift.cine-library-tile"
   and .title == "Library" and .focused == true
+  and .bounds == {left:407.25,top:352.5,width:56,height:80}
+  and .viewport == {width:640,height:480}
+  and .rectFinitePositive == true and .fullyOnScreen == true
 ' <<<"$library" >/dev/null
 view="$($HELPER fake-device com.simonwjackson.korri.debug --verify-library)"
 jq -e --arg url "$trusted" '.url == $url and .view == "library" and .verified == true' <<<"$view" >/dev/null
@@ -127,6 +131,14 @@ if "$HELPER" fake-device com.simonwjackson.korri.debug --library >"$TMP/library.
   exit 1
 fi
 grep -F 'exactly one visible focusable Library tile' "$TMP/library.err" >/dev/null
+export FAKE_LIBRARY_RESULT=offscreen
+if "$HELPER" fake-device com.simonwjackson.korri.debug --library \
+  >"$TMP/library-offscreen.out" 2>"$TMP/library-offscreen.err"; then
+  echo 'debug focus helper accepted an off-screen Library tile' >&2
+  exit 1
+fi
+grep -F 'did not expose exactly one visible focusable Library tile' \
+  "$TMP/library-offscreen.err" >/dev/null
 unset FAKE_LIBRARY_RESULT
 
 export FAKE_GAME_RESULT=ambiguous

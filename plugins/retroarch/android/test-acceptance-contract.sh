@@ -35,10 +35,10 @@ grep -F 'traverse_library_to_final_viewport' "$ACCEPTANCE" >/dev/null
 grep -F 'DEBUG_PORTAL_FOCUS_GAME_SH=' "$ACCEPTANCE" >/dev/null
 grep -F 'portal_shot_focuses_wario' "$ACCEPTANCE" >/dev/null
 grep -F 'render_focused_wario_crop_evidence' "$ACCEPTANCE" >/dev/null
-grep -F 'focused_tile_center' "$ACCEPTANCE" >/dev/null
+grep -F 'verified_element_center' "$ACCEPTANCE" >/dev/null
 # shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F '"${ADB[@]}" shell input tap "$tap_x" "$tap_y"' "$ACCEPTANCE" >/dev/null
-[[ "$(grep -Fc 'shell input tap' "$ACCEPTANCE")" -eq 2 ]]
+[[ "$(grep -Fc 'shell input tap' "$ACCEPTANCE")" -eq 3 ]]
 # shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F -- '"$SERIAL" "$KORRI_PACKAGE" --detail-play' "$ACCEPTANCE" >/dev/null
 grep -F 'detail-play.focus.json' "$ACCEPTANCE" >/dev/null
@@ -75,7 +75,12 @@ grep -F -- '"$SERIAL" "$KORRI_PACKAGE" --library' "$ACCEPTANCE" >/dev/null
 # shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F -- '"$SERIAL" "$KORRI_PACKAGE" --verify-library' "$ACCEPTANCE" >/dev/null
 grep -F -- "--game 'local-game:wl4' 'Wario Land 4'" "$ACCEPTANCE" >/dev/null
-grep -F 'KEYCODE_BUTTON_A' "$ACCEPTANCE" >/dev/null
+# A DevTools-focused element must be activated only through its validated
+# installed-pointer bounds. Physical A remains in the human overlay gate.
+if grep -F 'KEYCODE_BUTTON_A' "$ACCEPTANCE" >/dev/null; then
+  echo 'RetroArch acceptance must not assume controller A after DevTools focus' >&2
+  exit 1
+fi
 grep -F 'KEYCODE_DPAD_CENTER' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_BUTTON_MODE' "$ACCEPTANCE" >/dev/null
 grep -F 'invoke_overlay_row 1' "$ACCEPTANCE" >/dev/null
@@ -122,7 +127,8 @@ grep -F 'runtime: "@korri:mgba/mgba"' "$WL4_LIBRARY" >/dev/null
 library_focus_source="$(sed -n '/^focus_wario_in_installed_library() {/,/^}/p' "$ACCEPTANCE")"
 # shellcheck disable=SC2016 # Literal source-contract needles.
 nav_focus_line="$(grep -nF -- '"$SERIAL" "$KORRI_PACKAGE" --library' <<<"$library_focus_source" | head -1 | cut -d: -f1)"
-open_library_line="$(grep -nF 'KEYCODE_BUTTON_A' <<<"$library_focus_source" | head -1 | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+open_library_line="$(grep -nF 'shell input tap "$tap_x" "$tap_y"' <<<"$library_focus_source" | head -1 | cut -d: -f1)"
 # shellcheck disable=SC2016 # Literal source-contract needle.
 verify_library_line="$(grep -nF -- '"$SERIAL" "$KORRI_PACKAGE" --verify-library' <<<"$library_focus_source" | head -1 | cut -d: -f1)"
 traversal_line="$(grep -nF 'traverse_library_to_final_viewport' <<<"$library_focus_source" | head -1 | cut -d: -f1)"
@@ -140,6 +146,11 @@ if grep -F 'KEYCODE_DPAD_RIGHT' <<<"$library_focus_source" >/dev/null; then
   echo 'RetroArch acceptance must not assume retained Home focus before opening Library' >&2
   exit 1
 fi
+[[ "$(grep -Fc 'shell input tap' <<<"$library_focus_source")" -eq 1 ]]
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F 'verified_element_center "$navigation_json"' <<<"$library_focus_source" >/dev/null
+grep -F 'Physical A activation is retained by the human unified-overlay gate' \
+  <<<"$library_focus_source" >/dev/null
 traversal_source="$(sed -n '/^traverse_library_to_final_viewport() {/,/^}/p' "$ACCEPTANCE")"
 traversal_max="$(sed -n 's/^[[:space:]]*local max_steps=\([0-9][0-9]*\)$/\1/p' <<<"$traversal_source")"
 [[ "$traversal_max" =~ ^[0-9]+$ && "$traversal_max" -ge 1 && "$traversal_max" -le 64 ]] || {
@@ -266,8 +277,8 @@ FOCUS_RENDERER="$TMP/focus-renderer.sh"
 sed -n '/^render_focused_wario_crop_evidence() {/,/^}/p' "$ACCEPTANCE" >"$FOCUS_RENDERER"
 # shellcheck source=/dev/null
 source "$FOCUS_RENDERER"
-CENTER_EXTRACTOR="$TMP/focused-tile-center.sh"
-sed -n '/^focused_tile_center() {/,/^}/p' "$ACCEPTANCE" >"$CENTER_EXTRACTOR"
+CENTER_EXTRACTOR="$TMP/verified-element-center.sh"
+sed -n '/^verified_element_center() {/,/^}/p' "$ACCEPTANCE" >"$CENTER_EXTRACTOR"
 # shellcheck source=/dev/null
 source "$CENTER_EXTRACTOR"
 cat >"$TMP/focused-wario.svg" <<'SVG'
@@ -287,21 +298,24 @@ magick "$TMP/focused-wario.svg" "$TMP/focused-wario-full.png"
 cat >"$TMP/focused-wario.json" <<'JSON'
 {"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":548,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480}}
 JSON
-[[ "$(focused_tile_center "$TMP/focused-wario.json")" == '589 290' ]]
+[[ "$(verified_element_center "$TMP/focused-wario.json")" == '589 290' ]]
 cat >"$TMP/focused-play.json" <<'JSON'
 {"gameId":"local-game:wl4","title":"Wario Land 4","label":"Play","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":342.5,"top":287.25,"width":130,"height":52},"viewport":{"width":640,"height":480}}
 JSON
-[[ "$(focused_tile_center "$TMP/focused-play.json")" == '407 313' ]]
+[[ "$(verified_element_center "$TMP/focused-play.json")" == '407 313' ]]
+cat >"$TMP/focused-library.json" <<'JSON'
+{"view":"home","part":"shift.cine-library-tile","title":"Library","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":407.25,"top":352.5,"width":56,"height":80},"viewport":{"width":640,"height":480}}
+JSON
+[[ "$(verified_element_center "$TMP/focused-library.json")" == '435 392' ]]
 for invalid in \
   '{"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":-1,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480}}' \
   '{"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":600,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480}}' \
   '{"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":548,"top":470,"width":82,"height":120},"viewport":{"width":640,"height":480}}' \
   '{"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":548,"top":230,"width":0,"height":120},"viewport":{"width":640,"height":480}}' \
-  '{"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":1e999,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480}}' \
-  '{"gameId":"wrong","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":548,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480}}'; do
+  '{"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":1e999,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480}}'; do
   printf '%s\n' "$invalid" >"$TMP/invalid-center.json"
-  if focused_tile_center "$TMP/invalid-center.json" >/dev/null 2>&1; then
-    echo "unsafe focused-tile bounds produced a tap center: $invalid" >&2
+  if verified_element_center "$TMP/invalid-center.json" >/dev/null 2>&1; then
+    echo "unsafe focused-element bounds produced a tap center: $invalid" >&2
     exit 1
   fi
 done

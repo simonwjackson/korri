@@ -780,16 +780,32 @@ focus_wario_in_installed_library() {
   local navigation_observation
   local library_observation
   local focus_observation
-  # A reload may restore focus anywhere on curated Home. DevTools may focus
-  # only the exact visible Library tile; controller A performs the activation.
+  local navigation_json="$PORTAL_EVIDENCE_DIR/$label.library-navigation.json"
+  local tap_x tap_y
+  # A reload may restore focus anywhere on curated Home. DevTools may focus and
+  # measure only the exact visible Library tile; activation remains one bounded
+  # pointer event through the installed UI, never a click/RPC/native shortcut.
   navigation_observation="$("$DEBUG_PORTAL_FOCUS_GAME_SH" \
     "$SERIAL" "$KORRI_PACKAGE" --library)"
   jq -e '
     .view == "home" and .part == "shift.cine-library-tile"
     and .title == "Library" and .focused == true
+    and .rectFinitePositive == true and .fullyOnScreen == true
+    and (.bounds.width > 0) and (.bounds.height > 0)
+    and (.viewport.width > 0) and (.viewport.height > 0)
   ' <<<"$navigation_observation" >/dev/null
-  printf '%s\n' "$navigation_observation" >"$PORTAL_EVIDENCE_DIR/$label.library-navigation.json"
-  "${ADB[@]}" shell input -d 0 keyevent KEYCODE_BUTTON_A
+  printf '%s\n' "$navigation_observation" >"$navigation_json"
+  if ! read -r tap_x tap_y < <(verified_element_center "$navigation_json"); then
+    echo 'focused Library bounds did not produce a safe on-screen tap coordinate' >&2
+    return 1
+  fi
+  [[ "$tap_x" =~ ^[0-9]+$ && "$tap_y" =~ ^[0-9]+$ ]] || {
+    echo 'focused Library center was not an integer coordinate' >&2
+    return 1
+  }
+  "${ADB[@]}" shell input tap "$tap_x" "$tap_y"
+  # Physical A activation is retained by the human unified-overlay gate; this
+  # automated gate verifies the resulting installed Shift Library explicitly.
   library_observation="$("$DEBUG_PORTAL_FOCUS_GAME_SH" \
     "$SERIAL" "$KORRI_PACKAGE" --verify-library)"
   jq -e '.view == "library" and .verified == true' <<<"$library_observation" >/dev/null
@@ -900,13 +916,14 @@ portal_shot_focuses_wario() {
   render_focused_wario_crop_evidence \
     "$image" "$focus_json" "$crop" "$scaled" "$text" "$observation"
 }
-focused_tile_center() {
+verified_element_center() {
   local focus_json="$1"
+  # Identity and role are checked by each strict helper/caller before this
+  # common coordinate reducer accepts a center from validated on-screen bounds.
   jq -er '
     def bounded_number:
       type == "number" and . > -100000 and . < 100000;
-    select(.gameId == "local-game:wl4" and .title == "Wario Land 4")
-    | select(.focused == true and .rectFinitePositive == true
+    select(.focused == true and .rectFinitePositive == true
         and .fullyOnScreen == true)
     | .bounds as $bounds | .viewport as $viewport
     | select($bounds.left | bounded_number)
@@ -947,7 +964,7 @@ launch_wario_entry() {
   # DevTools only focused and measured the exact tile. Activate that already
   # verified installed-UI element through the normal pointer path: never click
   # through DevTools and never call a launch RPC/native shortcut.
-  if ! read -r tap_x tap_y < <(focused_tile_center "$focus_json"); then
+  if ! read -r tap_x tap_y < <(verified_element_center "$focus_json"); then
     echo 'focused Wario bounds did not produce a safe on-screen tap coordinate' >&2
     return 1
   fi
@@ -972,7 +989,7 @@ launch_wario_entry() {
     echo 'Wario Library card bypassed detail and launched before Play confirmation' >&2
     return 1
   }
-  if ! read -r tap_x tap_y < <(focused_tile_center "$detail_focus_json"); then
+  if ! read -r tap_x tap_y < <(verified_element_center "$detail_focus_json"); then
     echo 'focused Wario Play bounds did not produce a safe on-screen tap coordinate' >&2
     return 1
   fi

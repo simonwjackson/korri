@@ -121,12 +121,20 @@ grep -F -- '"$SERIAL" "$KORRI_PACKAGE" --library' "$RETROARCH_ACCEPTANCE" >/dev/
 # shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F -- '"$SERIAL" "$KORRI_PACKAGE" --verify-library' "$RETROARCH_ACCEPTANCE" >/dev/null
 grep -F -- "--game 'local-game:wl4' 'Wario Land 4'" "$RETROARCH_ACCEPTANCE" >/dev/null
-grep -F 'KEYCODE_BUTTON_A' "$RETROARCH_ACCEPTANCE" >/dev/null
+if grep -F 'KEYCODE_BUTTON_A' "$RETROARCH_ACCEPTANCE" >/dev/null; then
+  echo 'RetroArch acceptance must not assume physical A after DevTools focus' >&2
+  exit 1
+fi
 library_focus_source="$(sed -n '/^focus_wario_in_installed_library() {/,/^}/p' "$RETROARCH_ACCEPTANCE")"
 if grep -F 'KEYCODE_DPAD_RIGHT' <<<"$library_focus_source" >/dev/null; then
   echo 'RetroArch acceptance must not assume retained Home focus before opening Library' >&2
   exit 1
 fi
+[[ "$(grep -Fc 'shell input tap' <<<"$library_focus_source")" -eq 1 ]]
+# shellcheck disable=SC2016 # Literal source-contract needles.
+grep -F 'verified_element_center "$navigation_json"' <<<"$library_focus_source" >/dev/null
+grep -F 'Physical A activation is retained by the human unified-overlay gate' \
+  <<<"$library_focus_source" >/dev/null
 
 # Unified-overlay acceptance remains human-led and state restoring. These
 # source contracts deliberately do not substitute for the device gate.
