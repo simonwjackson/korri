@@ -119,7 +119,17 @@ for acceptance in "$OVERLAY_ACCEPTANCE" "$RETROARCH_ACCEPTANCE"; do
 done
 grep -F "https://appassets.androidplatform.net/assets/portal/index.html" "$DEBUG_PORTAL_RELOAD" >/dev/null
 grep -F 'korri_debug_select_main_portal_socket' "$DEBUG_PORTAL_RELOAD" >/dev/null
-grep -F "performance.timeOrigin" "$DEBUG_PORTAL_RELOAD" >/dev/null
+# Android WebView may preserve performance.timeOrigin across a real reload, so
+# the reload proof must be a random own-Window marker that cannot survive a
+# fresh document. Timing-origin comparison must never come back as the witness.
+grep -E '__korriReloadProbe_|reload_marker_key' "$DEBUG_PORTAL_RELOAD" >/dev/null
+grep -F 'od -An -N16 -tx1 /dev/urandom' "$DEBUG_PORTAL_RELOAD" >/dev/null
+grep -F '.markerSet == true' "$DEBUG_PORTAL_RELOAD" >/dev/null
+grep -F '.reloadMarkerPresent == false' "$DEBUG_PORTAL_RELOAD" >/dev/null
+if grep -F "performance.timeOrigin" "$DEBUG_PORTAL_RELOAD" >/dev/null; then
+  echo 'debug portal reload must not prove a fresh document with performance.timeOrigin' >&2
+  exit 1
+fi
 grep -F "navigationType" "$DEBUG_PORTAL_RELOAD" >/dev/null
 grep -F "data-shift-game-id" "$DEBUG_PORTAL_RELOAD" >/dev/null
 if grep -Eq 'KorriNative|korridCapability|surface=overlay' "$DEBUG_PORTAL_RELOAD"; then
