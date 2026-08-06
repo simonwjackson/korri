@@ -633,6 +633,12 @@ if ! grep -F 'app.discovery.registerReceipt' "$ROOT/clients/android/app/src/andr
   echo 'KorriGameDiscoveryDebugTest must register through the production registerReceipt RPC' >&2
   exit 1
 fi
+if ! grep -F 'app.discovery.snapshot' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null \
+  || ! grep -F 'app.local-games.list' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null \
+  || ! grep -F 'Discovery should finish Idle before instrumentation returns' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null; then
+  echo 'KorriGameDiscoveryDebugTest must wait for Idle discovery and visible local games before register instrumentation exits' >&2
+  exit 1
+fi
 if ! grep -F 'issueFolderSelectionReceipt' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null; then
   echo 'KorriGameDiscoveryDebugTest must use the same JNI receipt issuer as the picker' >&2
   exit 1

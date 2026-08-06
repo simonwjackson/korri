@@ -11,17 +11,22 @@ import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.simonwjackson.korri.korrid.KorridServer;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -37,6 +42,7 @@ public class KorriGameDiscoveryDebugTest {
     private static final String FOLDER_PATH_ARGUMENT = "gameFolderPath";
     private static final String LAUNCH_SPEC_ARGUMENT = "launchSpecJson";
     private static final long BRIDGE_READY_TIMEOUT_MS = 15_000;
+    private static final long DISCOVERY_SETTLE_TIMEOUT_MS = 60_000;
     private static final long JAVASCRIPT_TIMEOUT_MS = 5_000;
     private static final long POLL_INTERVAL_MS = 100;
 
@@ -80,6 +86,103 @@ public class KorriGameDiscoveryDebugTest {
         JSONObject envelope = new JSONObject(response);
         assertEquals("app.discovery.registerReceipt", envelope.getString("_tag"));
         assertEquals("Ok", envelope.getJSONObject("outcome").getString("_tag"));
+
+        JSONObject snapshot = waitForDiscoveryTerminal(port, capability);
+        String state = stateTag(snapshot);
+        assertEquals("Discovery should finish Idle before instrumentation returns; generation="
+                + snapshot.getString("generation") + " snapshot=" + snapshot,
+                "Idle", state);
+        assertRegisteredLocation(snapshot, folderPath);
+        assertLocalGameFromFolder(port, capability, folderPath);
+    }
+
+    private static JSONObject waitForDiscoveryTerminal(int port, String capability)
+            throws Exception {
+        long deadline = SystemClock.elapsedRealtime() + DISCOVERY_SETTLE_TIMEOUT_MS;
+        JSONObject lastSnapshot = null;
+        while (SystemClock.elapsedRealtime() < deadline) {
+            lastSnapshot = discoverySnapshot(port, capability);
+            String state = stateTag(lastSnapshot);
+            if ("Idle".equals(state) || "Problem".equals(state)) {
+                return lastSnapshot;
+            }
+            Thread.sleep(POLL_INTERVAL_MS);
+        }
+        String lastGeneration = lastSnapshot == null ? "unknown" : lastSnapshot.optString("generation");
+        String lastState = lastSnapshot == null ? "unknown" : stateTag(lastSnapshot);
+        fail("Discovery did not settle within " + DISCOVERY_SETTLE_TIMEOUT_MS
+                + "ms after registerReceipt; last generation=" + lastGeneration
+                + " state=" + lastState + " snapshot=" + lastSnapshot);
+        throw new AssertionError("unreachable");
+    }
+
+    private static JSONObject discoverySnapshot(int port, String capability) throws Exception {
+        JSONObject request = new JSONObject();
+        request.put("_tag", "app.discovery.snapshot");
+        request.put("payload", new JSONObject());
+        JSONObject envelope = new JSONObject(postRpc(port, capability, request.toString()));
+        assertEquals("app.discovery.snapshot", envelope.getString("_tag"));
+        assertEquals("Ok", envelope.getJSONObject("outcome").getString("_tag"));
+        return envelope.getJSONObject("outcome").getJSONObject("payload");
+    }
+
+    private static String stateTag(JSONObject snapshot) throws Exception {
+        return snapshot.getJSONObject("state").getString("_tag");
+    }
+
+    private static void assertRegisteredLocation(JSONObject snapshot, String folderPath)
+            throws Exception {
+        String expectedPath = new File(folderPath).getCanonicalPath();
+        JSONArray locations = snapshot.getJSONArray("locations");
+        for (int index = 0; index < locations.length(); index++) {
+            String label = locations.getJSONObject(index).getString("label");
+            if (folderPath.equals(label) || expectedPath.equals(new File(label).getCanonicalPath())) {
+                return;
+            }
+        }
+        fail("Discovery Idle snapshot generation=" + snapshot.getString("generation")
+                + " did not include registered folder " + expectedPath
+                + " in locations=" + locations);
+    }
+
+    private static void assertLocalGameFromFolder(int port, String capability, String folderPath)
+            throws Exception {
+        List<String> expectedTitles = fixtureGameTitles(folderPath);
+        assertTrue("Selected fixture folder should contain at least one .gba game: " + folderPath,
+                expectedTitles.size() > 0);
+
+        JSONObject request = new JSONObject();
+        request.put("_tag", "app.local-games.list");
+        request.put("payload", new JSONObject());
+        JSONObject envelope = new JSONObject(postRpc(port, capability, request.toString()));
+        assertEquals("app.local-games.list", envelope.getString("_tag"));
+        assertEquals("Ok", envelope.getJSONObject("outcome").getString("_tag"));
+        JSONArray games = envelope.getJSONObject("outcome").getJSONObject("payload")
+                .getJSONArray("games");
+        for (int gameIndex = 0; gameIndex < games.length(); gameIndex++) {
+            String title = games.getJSONObject(gameIndex).getString("title");
+            if (expectedTitles.contains(title)) {
+                return;
+            }
+        }
+        fail("No local game from selected fixture folder " + folderPath
+                + " was visible through app.local-games.list; expected titles=" + expectedTitles
+                + " response=" + envelope);
+    }
+
+    private static List<String> fixtureGameTitles(String folderPath) {
+        List<String> titles = new ArrayList<>();
+        File[] files = new File(folderPath).listFiles();
+        if (files == null) {
+            return titles;
+        }
+        for (File file : files) {
+            String name = file.getName();
+            if (file.isFile() && name.toLowerCase(Locale.ROOT).endsWith(".gba")) {
+                titles.add(name.substring(0, name.length() - ".gba".length()));
+            }
+        }
+        return titles;
     }
 
     private static void launchLocalThroughNativeBridge(WebView webView, String launchSpecJson)
