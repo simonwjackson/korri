@@ -429,6 +429,11 @@ public final class KorriOverlayService extends AccessibilityService {
                 motionInput.reset();
             });
             web.setWebViewClient(new LockedWebViewClient(assets, bootstrap));
+            // Android view focus is distinct from the DOM focus that the portal owns.
+            // The focused WebView receives controller generic-motion events; the portal
+            // still decides which semantic row is focused.
+            web.setFocusable(true);
+            web.setFocusableInTouchMode(true);
             root.addView(web, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
@@ -447,6 +452,11 @@ public final class KorriOverlayService extends AccessibilityService {
                 } catch (RuntimeException ignored) {
                 }
             });
+            // addView() is synchronous. Request focus only after attachment so the
+            // first physical hat/stick event is delivered without a touch primer.
+            if (!web.requestFocus()) {
+                throw new IllegalStateException("overlay WebView could not claim Android focus");
+            }
             web.loadUrl(KorriOverlayBridge.OVERLAY_URL);
             bootstrap.start();
             if (fatalDuringCreate[0]) {
@@ -490,7 +500,7 @@ public final class KorriOverlayService extends AccessibilityService {
                         params.flags &= ~(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                                 | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
                         root.setVisibility(View.VISIBLE);
-                        web.requestFocus();
+                        if (!web.requestFocus()) fatal.run();
                         return false;
                     }
                 }
@@ -503,7 +513,7 @@ public final class KorriOverlayService extends AccessibilityService {
                             | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
                     windows.updateViewLayout(root, params);
                     root.setVisibility(View.VISIBLE);
-                    web.requestFocus();
+                    if (!web.requestFocus()) fatal.run();
                 }
 
                 @Override

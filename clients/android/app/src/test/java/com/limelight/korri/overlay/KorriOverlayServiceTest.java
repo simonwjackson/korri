@@ -740,6 +740,37 @@ public class KorriOverlayServiceTest {
     }
 
     @Test
+    public void productionOverlayClaimsAndroidFocusOnlyAfterAttachmentAndOnRestore()
+            throws Exception {
+        String source = new String(java.nio.file.Files.readAllBytes(
+                java.nio.file.Path.of(
+                        "src/main/java/com/limelight/korri/overlay/KorriOverlayService.java")),
+                java.nio.charset.StandardCharsets.UTF_8);
+
+        int focusable = source.indexOf("web.setFocusable(true);");
+        int focusableInTouchMode = source.indexOf("web.setFocusableInTouchMode(true);");
+        int addView = source.indexOf("windows.addView(root, params);");
+        int cleanup = source.indexOf("resources.add(() -> {", addView);
+        int initialFocus = source.indexOf("if (!web.requestFocus())", cleanup);
+        int initialFailure = source.indexOf(
+                "throw new IllegalStateException(\"overlay WebView could not claim Android focus\")",
+                initialFocus);
+        int loadUrl = source.indexOf("web.loadUrl(KorriOverlayBridge.OVERLAY_URL);", initialFailure);
+
+        assertOrdered(focusable, focusableInTouchMode, addView, cleanup,
+                initialFocus, initialFailure, loadUrl);
+        assertFalse(source.substring(0, addView).contains("web.requestFocus()"));
+
+        int restore = source.indexOf("public void restoreAfterFailure()", initialFocus);
+        int restoreEnd = source.indexOf("public void destroy()", restore);
+        String restoreBody = source.substring(restore, restoreEnd);
+        assertOrdered(
+                restoreBody.indexOf("windows.updateViewLayout(root, params);"),
+                restoreBody.indexOf("root.setVisibility(View.VISIBLE);"),
+                restoreBody.indexOf("if (!web.requestFocus()) fatal.run();"));
+    }
+
+    @Test
     public void windowLifecycleAddsRemovesRefreshesAndDestroysIdempotently() {
         RecordingWindowFactory factory = new RecordingWindowFactory();
         KorriOverlayService.WindowController windows =
@@ -795,6 +826,14 @@ public class KorriOverlayServiceTest {
         assertTrue(decision.consumed());
         assertEquals(json, decision.inputJson());
         assertEquals(dismiss, decision.dismiss());
+    }
+
+    private static void assertOrdered(int... positions) {
+        int previous = -1;
+        for (int position : positions) {
+            assertTrue("missing or out-of-order source contract step", position > previous);
+            previous = position;
+        }
     }
 
     private static void assertRequestRejected(
