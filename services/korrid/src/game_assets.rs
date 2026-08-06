@@ -90,31 +90,39 @@ impl GameAssetRepository {
         &self,
         owner: &AssetOwnerIdentity,
     ) -> Result<Option<AssetAssignment>, AssetError> {
-        Ok(read_assignments(&self.root)?
-            .get(&owner.playable_id)
-            .filter(|assignment| &assignment.owner == owner)
-            .cloned())
+        Ok(matching_assignment(&read_assignments(&self.root)?, owner).cloned())
     }
 
+    #[cfg(test)]
     pub(crate) fn matching_tile_asset_id(
         &self,
         owner: &AssetOwnerIdentity,
     ) -> Result<Option<String>, AssetError> {
-        let Some(assignment) = self.matching_assignment(owner)? else {
-            return Ok(None);
-        };
-        if assignment.role != "tile" || !valid_asset_id(&assignment.asset_id) {
-            return Ok(None);
+        Ok(self
+            .matching_tile_asset_ids(std::iter::once(owner))?
+            .remove(&owner.playable_id))
+    }
+
+    pub(crate) fn matching_tile_asset_ids<'a>(
+        &self,
+        owners: impl IntoIterator<Item = &'a AssetOwnerIdentity>,
+    ) -> Result<BTreeMap<String, String>, AssetError> {
+        let assignments = read_assignments(&self.root)?;
+        let blob_root = self.root.join(BLOBS_DIR);
+        let mut asset_ids = BTreeMap::new();
+        for owner in owners {
+            let Some(assignment) = matching_assignment(&assignments, owner) else {
+                continue;
+            };
+            if assignment.role != "tile" || !valid_asset_id(&assignment.asset_id) {
+                continue;
+            }
+            if !blob_root.join(&assignment.asset_id).is_file() {
+                continue;
+            }
+            asset_ids.insert(owner.playable_id.clone(), assignment.asset_id.clone());
         }
-        if !self
-            .root
-            .join(BLOBS_DIR)
-            .join(&assignment.asset_id)
-            .is_file()
-        {
-            return Ok(None);
-        }
-        Ok(Some(assignment.asset_id))
+        Ok(asset_ids)
     }
 
     pub(crate) fn assign_tile(
@@ -164,6 +172,15 @@ struct DecodedImage {
     extension: String,
     width: u32,
     height: u32,
+}
+
+fn matching_assignment<'a>(
+    assignments: &'a BTreeMap<String, AssetAssignment>,
+    owner: &AssetOwnerIdentity,
+) -> Option<&'a AssetAssignment> {
+    assignments
+        .get(&owner.playable_id)
+        .filter(|assignment| &assignment.owner == owner)
 }
 
 fn valid_asset_id(asset_id: &str) -> bool {

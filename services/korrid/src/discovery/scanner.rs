@@ -35,13 +35,9 @@ pub struct DiscoveryDiagnostic {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ScanCandidate {
-    pub storage_rank: usize,
     pub storage_id: String,
-    pub storage_root: PathBuf,
     pub canonical_path: PathBuf,
     pub relative_path: String,
-    pub file_name: String,
-    pub extension: String,
     pub title: String,
     pub hash: String,
     pub size: u64,
@@ -69,6 +65,19 @@ struct HashCacheEntry {
     size: u64,
     modified_nanos: Option<u128>,
     hash: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct HashFileSnapshot {
+    size: u64,
+    modified_nanos: Option<u128>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct HashOutcome {
+    value: String,
+    read_bytes: u64,
+    snapshot: HashFileSnapshot,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -135,7 +144,7 @@ impl<'a> FolderScanner<'a> {
     pub fn scan(&self, storages: &[(String, PathBuf)], cache: &mut HashCache) -> ScanReport {
         let mut report = ScanReport::default();
         let mut state = TraversalState::default();
-        for (storage_rank, (storage_id, root)) in storages.iter().enumerate() {
+        for (storage_id, root) in storages {
             let canonical_root = match root.canonicalize() {
                 Ok(path) => path,
                 Err(_) => {
@@ -163,7 +172,6 @@ impl<'a> FolderScanner<'a> {
                 }
             }
             self.scan_directory(
-                storage_rank,
                 storage_id,
                 &canonical_root,
                 &canonical_root,
@@ -178,7 +186,6 @@ impl<'a> FolderScanner<'a> {
 
     fn scan_directory(
         &self,
-        storage_rank: usize,
         storage_id: &str,
         root: &Path,
         directory: &Path,
@@ -291,7 +298,6 @@ impl<'a> FolderScanner<'a> {
             };
             if metadata.is_dir() {
                 self.scan_directory(
-                    storage_rank,
                     storage_id,
                     root,
                     &canonical,
@@ -305,25 +311,15 @@ impl<'a> FolderScanner<'a> {
             if !metadata.is_file() {
                 continue;
             }
-            self.scan_file(
-                storage_rank,
-                storage_id,
-                root,
-                &canonical,
-                metadata.len(),
-                cache,
-                report,
-            );
+            self.scan_file(storage_id, root, &canonical, cache, report);
         }
     }
 
     fn scan_file(
         &self,
-        storage_rank: usize,
         storage_id: &str,
         root: &Path,
         path: &Path,
-        size: u64,
         cache: &mut HashCache,
         report: &mut ScanReport,
     ) {
@@ -402,7 +398,7 @@ impl<'a> FolderScanner<'a> {
             return;
         }
         let claim = claims[0];
-        let (hash, read_bytes) = match cache.hash_for(path, size) {
+        let hash = match cache.hash_for(path) {
             Ok(value) => value,
             Err(_) => {
                 self.push_diag(
@@ -415,18 +411,14 @@ impl<'a> FolderScanner<'a> {
                 return;
             }
         };
-        report.hashed_bytes += read_bytes;
+        report.hashed_bytes += hash.read_bytes;
         report.candidates.push(ScanCandidate {
-            storage_rank,
             storage_id: storage_id.to_owned(),
-            storage_root: root.to_owned(),
             canonical_path: path.to_owned(),
             relative_path,
-            file_name: file_name.clone(),
-            extension: extension.to_ascii_lowercase(),
             title: title::fallback_title(&file_name, &extension),
-            hash,
-            size,
+            hash: hash.value,
+            size: hash.snapshot.size,
             claim_id: claim.id.clone(),
             system: claim.system.clone(),
             launcher: claim.launcher.clone(),
@@ -489,17 +481,16 @@ impl<'a> FolderScanner<'a> {
 }
 
 impl HashCache {
-    fn hash_for(&mut self, path: &Path, size: u64) -> Result<(String, u64), std::io::Error> {
-        let metadata = fs::metadata(path)?;
-        let modified_nanos = metadata.modified().ok().and_then(|time| {
-            time.duration_since(UNIX_EPOCH)
-                .ok()
-                .map(|duration| duration.as_nanos())
-        });
+    fn hash_for(&mut self, path: &Path) -> Result<HashOutcome, std::io::Error> {
+        let snapshot = hash_file_snapshot(path)?;
         let key = path.to_string_lossy().into_owned();
         if let Some(entry) = self.entries.get(&key) {
-            if entry.size == size && entry.modified_nanos == modified_nanos {
-                return Ok((entry.hash.clone(), 0));
+            if entry.size == snapshot.size && entry.modified_nanos == snapshot.modified_nanos {
+                return Ok(HashOutcome {
+                    value: entry.hash.clone(),
+                    read_bytes: 0,
+                    snapshot,
+                });
             }
         }
         let mut file = File::open(path)?;
@@ -518,13 +509,29 @@ impl HashCache {
         self.entries.insert(
             key,
             HashCacheEntry {
-                size,
-                modified_nanos,
+                size: snapshot.size,
+                modified_nanos: snapshot.modified_nanos,
                 hash: hash.clone(),
             },
         );
-        Ok((hash, total))
+        Ok(HashOutcome {
+            value: hash,
+            read_bytes: total,
+            snapshot,
+        })
     }
+}
+
+fn hash_file_snapshot(path: &Path) -> Result<HashFileSnapshot, std::io::Error> {
+    let metadata = fs::metadata(path)?;
+    Ok(HashFileSnapshot {
+        size: metadata.len(),
+        modified_nanos: metadata.modified().ok().and_then(|time| {
+            time.duration_since(UNIX_EPOCH)
+                .ok()
+                .map(|duration| duration.as_nanos())
+        }),
+    })
 }
 
 fn safe_relative(root: &Path, path: &Path) -> Option<String> {

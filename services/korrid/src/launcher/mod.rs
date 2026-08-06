@@ -224,21 +224,16 @@ fn cover_asset_ids(readable_root: &Path, private_root: &Path) -> BTreeMap<String
         return BTreeMap::new();
     };
     let repo = GameAssetRepository::new(private_root);
-    games
+    let owners: Vec<_> = games
         .into_iter()
-        .filter_map(|game| {
-            let owner = AssetOwnerIdentity {
-                playable_id: game.playable_id.clone(),
-                release_id: game.release_id,
-                release_fingerprint: game.release_fingerprint,
-                rom_identity: game.rom_identity,
-            };
-            repo.matching_tile_asset_id(&owner)
-                .ok()
-                .flatten()
-                .map(|asset_id| (game.playable_id, asset_id))
+        .map(|game| AssetOwnerIdentity {
+            playable_id: game.playable_id,
+            release_id: game.release_id,
+            release_fingerprint: game.release_fingerprint,
+            rom_identity: game.rom_identity,
         })
-        .collect()
+        .collect();
+    repo.matching_tile_asset_ids(&owners).unwrap_or_default()
 }
 
 fn launch_error_from_route_diagnostic(diagnostic: RouteDiagnostic) -> LaunchError {
