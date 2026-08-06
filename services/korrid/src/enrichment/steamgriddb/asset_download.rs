@@ -3,6 +3,8 @@ use std::{
     collections::BTreeSet,
     io::Read,
     net::{IpAddr, SocketAddr, ToSocketAddrs},
+    sync::{mpsc, Arc},
+    thread,
     time::Duration,
 };
 
@@ -10,8 +12,19 @@ use std::{
 use super::AssetDownloadPolicy;
 use super::EnrichmentDiagnostic;
 
+type AssetResolver =
+    dyn Fn(&str, u16) -> Result<SocketAddr, EnrichmentDiagnostic> + Send + Sync + 'static;
+
+pub(super) const ASSET_RESOLUTION_TIMEOUT: Duration = Duration::from_secs(2);
+
 pub(super) fn download_image(url: &Url, max_bytes: u64) -> Result<Vec<u8>, EnrichmentDiagnostic> {
-    download_image_checked(url, max_bytes, &resolve_public_address, false)
+    download_image_checked(
+        url,
+        max_bytes,
+        Arc::new(resolve_public_address),
+        false,
+        ASSET_RESOLUTION_TIMEOUT,
+    )
 }
 
 #[cfg(test)]
@@ -23,16 +36,18 @@ pub(super) fn download_image_with_policy(
     download_image_checked(
         url,
         max_bytes,
-        &*policy.resolver,
+        policy.resolver.clone(),
         policy.allow_http_loopback,
+        policy.resolver_timeout,
     )
 }
 
 fn download_image_checked(
     url: &Url,
     max_bytes: u64,
-    resolver: &(dyn Fn(&str, u16) -> Result<SocketAddr, EnrichmentDiagnostic> + Send + Sync),
+    resolver: Arc<AssetResolver>,
     allow_http_loopback: bool,
+    resolver_timeout: Duration,
 ) -> Result<Vec<u8>, EnrichmentDiagnostic> {
     if url.scheme() != "https" {
         if !(allow_http_loopback
@@ -53,7 +68,12 @@ fn download_image_checked(
         message: "SteamGridDB asset URL has no host".into(),
         playable_id: None,
     })?;
-    let approved = resolver(host, url.port_or_known_default().unwrap_or(443))?;
+    let approved = resolve_with_deadline(
+        host,
+        url.port_or_known_default().unwrap_or(443),
+        resolver,
+        resolver_timeout,
+    )?;
     let client = Client::builder()
         .redirect(Policy::none())
         .timeout(Duration::from_secs(10))
@@ -119,6 +139,32 @@ fn download_image_checked(
         }
     }
     Ok(bytes)
+}
+
+fn resolve_with_deadline(
+    host: &str,
+    port: u16,
+    resolver: Arc<AssetResolver>,
+    timeout: Duration,
+) -> Result<SocketAddr, EnrichmentDiagnostic> {
+    let host = host.to_owned();
+    let (sender, receiver) = mpsc::sync_channel(1);
+    let _resolver = thread::spawn(move || {
+        let _ = sender.send(resolver(&host, port));
+    });
+    match receiver.recv_timeout(timeout) {
+        Ok(result) => result,
+        Err(mpsc::RecvTimeoutError::Timeout) => Err(EnrichmentDiagnostic {
+            code: "AssetDownloadFailed",
+            message: "asset host resolution timed out".into(),
+            playable_id: None,
+        }),
+        Err(mpsc::RecvTimeoutError::Disconnected) => Err(EnrichmentDiagnostic {
+            code: "AssetDownloadFailed",
+            message: "asset host could not be resolved".into(),
+            playable_id: None,
+        }),
+    }
 }
 
 pub(super) fn resolve_public_address(

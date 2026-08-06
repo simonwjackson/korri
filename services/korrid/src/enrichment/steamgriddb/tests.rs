@@ -1,10 +1,10 @@
-use super::asset_download::{download_image, is_public_ip};
+use super::asset_download::{download_image, download_image_with_policy, is_public_ip};
 use super::*;
 use crate::{config::settings, discovery::reconcile::DiscoveryCoordinator};
 use std::{
     io::{Read, Write},
     net::TcpListener,
-    sync::{Arc, Mutex},
+    sync::{Arc, Condvar, Mutex},
     thread,
 };
 
@@ -149,6 +149,7 @@ fn options_with_local_assets(base: Url, batch_limit: usize) -> EnrichmentOptions
                         playable_id: None,
                     })
             }),
+            resolver_timeout: asset_download::ASSET_RESOLUTION_TIMEOUT,
         },
         ..options_with_base(base, batch_limit)
     }
@@ -283,6 +284,46 @@ fn rejects_private_and_ipv4_mapped_asset_destinations_before_request() {
     assert_eq!(error.code, "AssetUrlRejected");
     assert!(!is_public_ip("::ffff:127.0.0.1".parse().unwrap()));
     assert!(!is_public_ip("::ffff:10.0.0.1".parse().unwrap()));
+}
+
+#[test]
+fn asset_resolver_timeout_returns_sanitized_transient_download_diagnostic() {
+    let release = Arc::new((Mutex::new(false), Condvar::new()));
+    let resolver_release = release.clone();
+    let policy = AssetDownloadPolicy {
+        allow_http_loopback: false,
+        resolver: Arc::new(move |_, _| {
+            let (lock, condition) = &*resolver_release;
+            let mut released = lock.lock().unwrap();
+            while !*released {
+                released = condition.wait(released).unwrap();
+            }
+            Ok("93.184.216.34:443".parse().unwrap())
+        }),
+        resolver_timeout: Duration::from_millis(10),
+    };
+    let started = std::time::Instant::now();
+
+    let error = download_image_with_policy(
+        &Url::parse("https://slow-resolver.invalid/asset.png").unwrap(),
+        1024,
+        &policy,
+    )
+    .unwrap_err();
+
+    {
+        let (lock, condition) = &*release;
+        let mut released = lock.lock().unwrap();
+        *released = true;
+        condition.notify_all();
+    }
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "asset resolution did not return at the resolver deadline"
+    );
+    assert_eq!(error.code, "AssetDownloadFailed");
+    assert_eq!(error.message, "asset host resolution timed out");
+    assert_eq!(error.playable_id, None);
 }
 
 #[test]

@@ -47,8 +47,13 @@ pub(crate) struct EnrichmentOptions {
 #[derive(Clone)]
 pub(crate) struct AssetDownloadPolicy {
     pub allow_http_loopback: bool,
-    pub resolver:
-        Arc<dyn Fn(&str, u16) -> Result<std::net::SocketAddr, EnrichmentDiagnostic> + Send + Sync>,
+    pub resolver: Arc<
+        dyn Fn(&str, u16) -> Result<std::net::SocketAddr, EnrichmentDiagnostic>
+            + Send
+            + Sync
+            + 'static,
+    >,
+    pub resolver_timeout: Duration,
 }
 
 #[cfg(test)]
@@ -57,6 +62,7 @@ impl Default for AssetDownloadPolicy {
         Self {
             allow_http_loopback: false,
             resolver: Arc::new(asset_download::resolve_public_address),
+            resolver_timeout: asset_download::ASSET_RESOLUTION_TIMEOUT,
         }
     }
 }
@@ -67,6 +73,7 @@ impl std::fmt::Debug for AssetDownloadPolicy {
         formatter
             .debug_struct("AssetDownloadPolicy")
             .field("allow_http_loopback", &self.allow_http_loopback)
+            .field("resolver_timeout", &self.resolver_timeout)
             .finish_non_exhaustive()
     }
 }
