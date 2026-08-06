@@ -38,11 +38,15 @@ grep -F 'render_focused_wario_crop_evidence' "$ACCEPTANCE" >/dev/null
 grep -F 'verified_element_center' "$ACCEPTANCE" >/dev/null
 # shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F '"${ADB[@]}" shell input tap "$tap_x" "$tap_y"' "$ACCEPTANCE" >/dev/null
-[[ "$(grep -Fc 'shell input tap' "$ACCEPTANCE")" -eq 3 ]]
+[[ "$(grep -Fc 'shell input tap' "$ACCEPTANCE")" -eq 4 ]]
 # shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F -- '"$SERIAL" "$KORRI_PACKAGE" --detail-play' "$ACCEPTANCE" >/dev/null
 grep -F 'detail-play.focus.json' "$ACCEPTANCE" >/dev/null
 grep -F 'detail-play.png' "$ACCEPTANCE" >/dev/null
+grep -F -- '--launch-location' "$ACCEPTANCE" >/dev/null
+grep -F 'local-location.focus.json' "$ACCEPTANCE" >/dev/null
+grep -F 'local-location.png' "$ACCEPTANCE" >/dev/null
+grep -F "local local_location_id='[\"local\",null,\"wl4\"]'" "$ACCEPTANCE" >/dev/null
 grep -F 'Physical controller confirm remains mandatory' "$ACCEPTANCE" >/dev/null
 launch_flow_source="$(sed -n '/^launch_wario_entry() {/,/^}/p' "$ACCEPTANCE")"
 # shellcheck disable=SC2016 # Literal source-contract needles.
@@ -51,10 +55,16 @@ card_tap_line="$(grep -nF 'shell input tap "$tap_x" "$tap_y"' <<<"$launch_flow_s
 detail_focus_line="$(grep -nF -- '"$SERIAL" "$KORRI_PACKAGE" --detail-play' <<<"$launch_flow_source" | cut -d: -f1)"
 # shellcheck disable=SC2016 # Literal source-contract needle.
 play_tap_line="$(grep -nF 'shell input tap "$tap_x" "$tap_y"' <<<"$launch_flow_source" | sed -n '2s/:.*//p')"
+location_focus_line="$(grep -nF -- '--launch-location' <<<"$launch_flow_source" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+location_tap_line="$(grep -nF 'shell input tap "$tap_x" "$tap_y"' <<<"$launch_flow_source" | sed -n '3s/:.*//p')"
 [[ -n "$card_tap_line" && -n "$detail_focus_line" && -n "$play_tap_line" \
+  && -n "$location_focus_line" && -n "$location_tap_line" \
   && "$card_tap_line" -lt "$detail_focus_line" \
-  && "$detail_focus_line" -lt "$play_tap_line" ]] || {
-  echo 'RetroArch acceptance must open exact Wario detail before tapping verified Play' >&2
+  && "$detail_focus_line" -lt "$play_tap_line" \
+  && "$play_tap_line" -lt "$location_focus_line" \
+  && "$location_focus_line" -lt "$location_tap_line" ]] || {
+  echo 'RetroArch acceptance must verify detail and explicit local choice before launch' >&2
   exit 1
 }
 if grep -Eq '\.click\(|app\.local-games\.launch' "$ACCEPTANCE"; then

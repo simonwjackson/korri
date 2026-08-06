@@ -953,7 +953,11 @@ launch_wario_entry() {
   local focus_json="$PORTAL_EVIDENCE_DIR/$label.focus.json"
   local detail_focus_json="$PORTAL_EVIDENCE_DIR/$label.detail-play.focus.json"
   local detail_image="$PORTAL_EVIDENCE_DIR/$label.detail-play.png"
+  local location_focus_json="$PORTAL_EVIDENCE_DIR/$label.local-location.focus.json"
+  local location_image="$PORTAL_EVIDENCE_DIR/$label.local-location.png"
+  local local_location_id='["local",null,"wl4"]'
   local detail_observation
+  local location_observation
   focus_wario_in_installed_library "$label"
   sleep 1
   portal_shot_focuses_wario "$label" || {
@@ -998,15 +1002,45 @@ launch_wario_entry() {
     return 1
   }
 
+  "${ADB[@]}" shell input tap "$tap_x" "$tap_y"
+
+  # A folded game never silently chooses a host. Prove the exact chooser and
+  # select the opaque local copy identity through its verified installed row;
+  # labels are presentation only and are never used for routing.
+  location_observation="$("$DEBUG_PORTAL_FOCUS_GAME_SH" \
+    "$SERIAL" "$KORRI_PACKAGE" --launch-location \
+    "$local_location_id" 'Wario Land 4')" || {
+      echo 'installed portal did not expose exact Wario local launch location' >&2
+      return 1
+    }
+  printf '%s\n' "$location_observation" >"$location_focus_json"
+  "${ADB[@]}" exec-out screencap -p >"$location_image"
+  pid="$(package_pid "$FORK_PACKAGE")" || return 1
+  [[ -z "$pid" ]] || {
+    echo 'Wario detail Play bypassed explicit location selection' >&2
+    return 1
+  }
+  if ! read -r tap_x tap_y < <(verified_element_center "$location_focus_json"); then
+    echo 'focused local launch-location bounds did not produce a safe tap coordinate' >&2
+    return 1
+  fi
+  [[ "$tap_x" =~ ^[0-9]+$ && "$tap_y" =~ ^[0-9]+$ ]] || {
+    echo 'focused local launch-location center was not an integer coordinate' >&2
+    return 1
+  }
+
   TARGET_STARTED_BY_GATE=true
   "${ADB[@]}" shell input tap "$tap_x" "$tap_y"
-  sleep 2
   # Physical controller confirm remains mandatory in the unified-overlay human
   # gate; this automated RetroArch gate proves the normal installed pointer UI.
-
-  pid="$(package_pid "$FORK_PACKAGE")" || return 1
+  pid=""
+  for _ in $(seq 1 40); do
+    pid="$(package_pid "$FORK_PACKAGE")" || return 1
+    [[ -n "$pid" ]] && break
+    sleep 0.25
+  done
   [[ -n "$pid" ]] || {
-    echo 'verified Wario detail Play action did not launch Korri RetroArch' >&2
+    echo 'verified Wario local launch location did not start Korri RetroArch' >&2
     return 1
   }
   GATE_CURRENT_LAUNCH=""

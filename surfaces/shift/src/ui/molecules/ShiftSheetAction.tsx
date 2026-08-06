@@ -21,6 +21,8 @@ export interface ShiftSheetActionProps {
   readonly label: string
   readonly onSelect: () => void
   readonly controlId?: string
+  /** Stable opaque launch-location identity for presentation-safe device proof. */
+  readonly launchLocationId?: string
   readonly description?: string
   readonly icon?: ReactNode
   readonly tone?: ShiftSheetActionTone
@@ -33,6 +35,7 @@ export function ShiftSheetAction({
   label,
   onSelect,
   controlId,
+  launchLocationId,
   description,
   icon,
   tone = "default",
@@ -50,6 +53,7 @@ export function ShiftSheetAction({
       type="button"
       className="shift-sheet-action"
       data-tone={tone}
+      data-launch-location-id={launchLocationId}
       disabled={disabled && !explainable}
       aria-label={label}
       aria-disabled={disabled}

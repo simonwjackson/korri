@@ -86,9 +86,11 @@ describe("surfaceModelFrom", () => {
     if (model.catalog._tag !== "Ready") throw new Error("expected Ready")
     expect(model.catalog.games).toHaveLength(1)
     expect(model.catalog.games[0]?.subtitle).toBe("GBA · Also on aka, zao")
-    expect(
-      model.catalog.games[0]?.launchLocations?.map(location => location.label),
-    ).toEqual(["This device", "aka", "zao"])
+    expect(model.catalog.games[0]?.launchLocations).toEqual([
+      { id: '["local",null,"wl4"]', label: "This device" },
+      { id: '["remote","aka","wl4-aka"]', label: "aka" },
+      { id: '["remote","zao","wl4"]', label: "zao" },
+    ])
   })
 
   test("a host choice resolves to exactly that copy", () => {

@@ -40,6 +40,14 @@ if grep -Fq 'shift.cine-library-tile' <<<"$expression"; then
   esac
 elif grep -Fq 'visibleLibraryRoots' <<<"$expression"; then
   value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"library","visibleLibraryRoots":1}'
+elif grep -Fq 'enabledFocusableRows' <<<"$expression"; then
+  case "${FAKE_LOCATION_RESULT:-ok}" in
+    ok) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"launch-location","dialogLabel":"Choose where to play Wario Land 4","title":"Wario Land 4","locationId":"[\"local\",null,\"wl4\"]","label":"This device","visibleDialogs":1,"exactDialogs":1,"visibleTitles":1,"exactTitles":1,"enabledFocusableRows":2,"identityMatches":1,"activeExact":true,"bounds":{"left":329.5,"top":191.25,"width":280,"height":52},"viewport":{"width":640,"height":480},"rectFinitePositive":true,"fullyOnScreen":true}' ;;
+    ambiguous) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"launch-location","dialogLabel":"Choose where to play Wario Land 4","title":"Wario Land 4","locationId":"[\"local\",null,\"wl4\"]","label":"This device","visibleDialogs":1,"exactDialogs":1,"visibleTitles":1,"exactTitles":1,"enabledFocusableRows":3,"identityMatches":2,"activeExact":false,"bounds":{"left":0,"top":0,"width":0,"height":0},"viewport":{"width":640,"height":480},"rectFinitePositive":false,"fullyOnScreen":false}' ;;
+    wrong-dialog) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"launch-location","dialogLabel":"Choose where to play Other Game","title":"Other Game","locationId":"[\"local\",null,\"wl4\"]","label":"This device","visibleDialogs":1,"exactDialogs":0,"visibleTitles":1,"exactTitles":0,"enabledFocusableRows":2,"identityMatches":1,"activeExact":true,"bounds":{"left":329,"top":191,"width":280,"height":52},"viewport":{"width":640,"height":480},"rectFinitePositive":true,"fullyOnScreen":true}' ;;
+    disabled) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"launch-location","dialogLabel":"Choose where to play Wario Land 4","title":"Wario Land 4","locationId":"[\"local\",null,\"wl4\"]","label":"This device","visibleDialogs":1,"exactDialogs":1,"visibleTitles":1,"exactTitles":1,"enabledFocusableRows":1,"identityMatches":0,"activeExact":false,"bounds":{"left":0,"top":0,"width":0,"height":0},"viewport":{"width":640,"height":480},"rectFinitePositive":false,"fullyOnScreen":false}' ;;
+    *) exit 2 ;;
+  esac
 elif grep -Fq 'visibleDetailRoots' <<<"$expression"; then
   case "${FAKE_DETAIL_RESULT:-ok}" in
     ok) value='{"href":"https://appassets.androidplatform.net/assets/portal/index.html","view":"detail","gameId":"local-game:wl4","title":"Wario Land 4","label":"Play","visibleDetailRoots":1,"exactDetailRoots":1,"visibleTitles":1,"exactTitles":1,"primaryCandidates":1,"exactActions":1,"activeExact":true,"bounds":{"left":342.5,"top":287.25,"width":130,"height":52},"viewport":{"width":640,"height":480},"rectFinitePositive":true,"fullyOnScreen":true}' ;;
@@ -106,6 +114,19 @@ jq -e --arg url "$trusted" '
   and .viewport == {width:640,height:480}
   and .rectFinitePositive == true and .fullyOnScreen == true
 ' <<<"$detail" >/dev/null
+location_id='["local",null,"wl4"]'
+location="$($HELPER fake-device com.simonwjackson.korri.debug \
+  --launch-location "$location_id" 'Wario Land 4')"
+jq -e --arg url "$trusted" --arg locationId "$location_id" '
+  .url == $url and .view == "launch-location"
+  and .dialogLabel == "Choose where to play Wario Land 4"
+  and .title == "Wario Land 4" and .locationId == $locationId
+  and .label == "This device" and .focused == true
+  and .enabledFocusableRows == 2
+  and .bounds == {left:329.5,top:191.25,width:280,height:52}
+  and .viewport == {width:640,height:480}
+  and .rectFinitePositive == true and .fullyOnScreen == true
+' <<<"$location" >/dev/null
 
 grep -F 'forward tcp:43123 localabstract:webview_devtools_remote_4242' "$FAKE_ADB_LOG" >/dev/null
 grep -F 'forward --remove tcp:43123' "$FAKE_ADB_LOG" >/dev/null
@@ -118,6 +139,9 @@ grep -F 'fullyOnScreen' "$FAKE_EVAL_LOG" >/dev/null
 grep -F "element.getAttribute('data-shift-detail-game-id') === gameId" "$FAKE_EVAL_LOG" >/dev/null
 grep -F "root.querySelectorAll('button.shift-detail-btn.primary')" "$FAKE_EVAL_LOG" >/dev/null
 grep -F "label === 'Play' || label === 'Continue'" "$FAKE_EVAL_LOG" >/dev/null
+grep -F "button[data-launch-location-id]" "$FAKE_EVAL_LOG" >/dev/null
+grep -F "element.getAttribute('data-launch-location-id') === locationId" "$FAKE_EVAL_LOG" >/dev/null
+grep -F "element.getAttribute('aria-label') === expectedDialogLabel" "$FAKE_EVAL_LOG" >/dev/null
 for forbidden in '.click(' 'dispatchEvent(' KorriNative korridCapability 'fetch(' XMLHttpRequest surface=overlay example.invalid; do
   if grep -F "$forbidden" "$FAKE_EVAL_LOG" >/dev/null; then
     echo "debug focus evaluated forbidden content: $forbidden" >&2
@@ -170,6 +194,20 @@ for detail_failure in ambiguous wrong-game offscreen; do
     "$TMP/detail-$detail_failure.err" >/dev/null
 done
 unset FAKE_DETAIL_RESULT
+
+for location_failure in ambiguous wrong-dialog disabled; do
+  export FAKE_LOCATION_RESULT="$location_failure"
+  if "$HELPER" fake-device com.simonwjackson.korri.debug \
+    --launch-location "$location_id" 'Wario Land 4' \
+    >"$TMP/location-$location_failure.out" 2>"$TMP/location-$location_failure.err"; then
+    echo "debug focus helper accepted invalid launch-location state: $location_failure" >&2
+    exit 1
+  fi
+  grep -F 'exact Wario chooser with one focusable local identity' \
+    "$TMP/location-$location_failure.err" >/dev/null
+done
+unset FAKE_LOCATION_RESULT
+
 if "$HELPER" fake-device com.simonwjackson.korri.debug \
   --detail-play game:other 'Other Game' >"$TMP/detail-broad.out" 2>"$TMP/detail-broad.err"; then
   echo 'debug focus helper allowed detail Play identity broadening' >&2

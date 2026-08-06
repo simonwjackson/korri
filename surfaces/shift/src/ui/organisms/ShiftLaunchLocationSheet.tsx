@@ -39,6 +39,7 @@ export function ShiftLaunchLocationSheet({
               <ShiftSheetAction
                 key={location.id}
                 label={location.label}
+                launchLocationId={location.id}
                 onSelect={() => onSelect(location.id)}
               />
             ))}

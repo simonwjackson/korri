@@ -13,6 +13,7 @@ usage:
   android-debug-focus-portal-game.sh <adb-serial> <package> --verify-library [devtools-port]
   android-debug-focus-portal-game.sh <adb-serial> <package> --game <game-id> <exact-title> [devtools-port]
   android-debug-focus-portal-game.sh <adb-serial> <package> --detail-play [devtools-port]
+  android-debug-focus-portal-game.sh <adb-serial> <package> --launch-location <location-id> <exact-game-title> [devtools-port]
 USAGE
   exit 2
 }
@@ -23,6 +24,7 @@ package="$2"
 mode="$3"
 shift 3
 game_id=''
+location_id=''
 title=''
 case "$mode" in
   --library | --verify-library)
@@ -39,6 +41,13 @@ case "$mode" in
     [[ $# -le 1 ]] || usage
     game_id='local-game:wl4'
     title='Wario Land 4'
+    ;;
+  --launch-location)
+    [[ $# -ge 2 && $# -le 3 ]] || usage
+    location_id="$1"
+    title="$2"
+    shift 2
+    [[ -n "$location_id" && -n "$title" ]] || usage
     ;;
   *) usage ;;
 esac
@@ -102,6 +111,7 @@ evaluate() {
 
 url_js="$("$JQ_BIN" -Rn --arg value "$TRUSTED_PORTAL_URL" '$value')"
 game_id_js="$("$JQ_BIN" -Rn --arg value "$game_id" '$value')"
+location_id_js="$("$JQ_BIN" -Rn --arg value "$location_id" '$value')"
 title_js="$("$JQ_BIN" -Rn --arg value "$title" '$value')"
 common_js="
   const expectedUrl = $url_js;
@@ -303,6 +313,88 @@ case "$mode" in
       and (.bounds.top + .bounds.height) <= .viewport.height'
     failure='trusted main portal did not expose exact Wario detail with one focusable Play action'
     ;;
+  --launch-location)
+    expression="(() => {$common_js
+      const locationId = $location_id_js;
+      const title = $title_js;
+      const rendered = (element) => {
+        const style = getComputedStyle(element);
+        return element instanceof HTMLElement && element.getClientRects().length > 0
+          && style.display !== 'none' && style.visibility !== 'hidden';
+      };
+      const expectedDialogLabel = 'Choose where to play ' + title;
+      const dialogs = Array.from(document.querySelectorAll('[role=\"dialog\"]'))
+        .filter(rendered);
+      const exactDialogs = dialogs.filter((element) =>
+        element.getAttribute('aria-label') === expectedDialogLabel);
+      if (dialogs.length !== 1 || exactDialogs.length !== 1) {
+        throw new Error('expected one exact visible launch-location chooser');
+      }
+      const dialog = exactDialogs[0];
+      const visibleTitles = Array.from(dialog.querySelectorAll('.shift-sheet-title'))
+        .filter(rendered);
+      const exactTitles = visibleTitles.filter((element) => element.textContent?.trim() === title);
+      if (visibleTitles.length !== 1 || exactTitles.length !== 1) {
+        throw new Error('expected one exact launch-location chooser title');
+      }
+      const rows = Array.from(dialog.querySelectorAll('button[data-launch-location-id]'))
+        .filter(renderedFocusable)
+        .filter((element) => element.getAttribute('aria-disabled') !== 'true');
+      const identityMatches = rows.filter((element) =>
+        element.getAttribute('data-launch-location-id') === locationId);
+      if (identityMatches.length !== 1) {
+        throw new Error('expected exactly one enabled focusable launch-location identity');
+      }
+      const target = identityMatches[0];
+      const label = target.getAttribute('aria-label')?.trim() || '';
+      if (label.length === 0) throw new Error('launch-location row has no accessible label');
+      target.focus();
+      const rect = target.getBoundingClientRect();
+      const rectValues = [rect.left, rect.top, rect.width, rect.height, rect.right, rect.bottom];
+      const rectFinitePositive = rectValues.every(Number.isFinite)
+        && rect.width > 0 && rect.height > 0;
+      const fullyOnScreen = rectFinitePositive
+        && rect.left >= 0 && rect.top >= 0
+        && rect.right <= window.innerWidth && rect.bottom <= window.innerHeight;
+      return {
+        href: location.href,
+        view: 'launch-location',
+        dialogLabel: dialog.getAttribute('aria-label'),
+        title: exactTitles[0].textContent?.trim(),
+        locationId: target.getAttribute('data-launch-location-id'),
+        label,
+        visibleDialogs: dialogs.length,
+        exactDialogs: exactDialogs.length,
+        visibleTitles: visibleTitles.length,
+        exactTitles: exactTitles.length,
+        enabledFocusableRows: rows.length,
+        identityMatches: identityMatches.length,
+        activeExact: document.activeElement === target
+          && target.getAttribute('data-launch-location-id') === locationId,
+        bounds: {left: rect.left, top: rect.top, width: rect.width, height: rect.height},
+        viewport: {width: window.innerWidth, height: window.innerHeight},
+        rectFinitePositive,
+        fullyOnScreen
+      };
+    })()"
+    predicate='.href == $url and .view == "launch-location"
+      and .dialogLabel == ("Choose where to play " + $title) and .title == $title
+      and .locationId == $locationId and (.label | type == "string") and (.label | length > 0)
+      and .visibleDialogs == 1 and .exactDialogs == 1
+      and .visibleTitles == 1 and .exactTitles == 1
+      and .enabledFocusableRows >= 1 and .identityMatches == 1 and .activeExact == true
+      and .rectFinitePositive == true and .fullyOnScreen == true
+      and (.bounds | type == "object") and (.viewport | type == "object")
+      and (.bounds.left | type == "number") and (.bounds.top | type == "number")
+      and (.bounds.width | type == "number") and .bounds.width > 0
+      and (.bounds.height | type == "number") and .bounds.height > 0
+      and (.viewport.width | type == "number") and .viewport.width > 0
+      and (.viewport.height | type == "number") and .viewport.height > 0
+      and .bounds.left >= 0 and .bounds.top >= 0
+      and (.bounds.left + .bounds.width) <= .viewport.width
+      and (.bounds.top + .bounds.height) <= .viewport.height'
+    failure='trusted main portal did not expose exact Wario chooser with one focusable local identity'
+    ;;
 esac
 
 verified=''
@@ -310,7 +402,8 @@ for _ in $(seq 1 80); do
   if targets="$(json_targets 2>/dev/null)" \
     && socket="$(select_trusted_portal_socket "$targets" 2>/dev/null)" \
     && candidate="$(evaluate "$socket" "$expression" 2>/dev/null)" \
-    && "$JQ_BIN" -e --arg url "$TRUSTED_PORTAL_URL" --arg gameId "$game_id" --arg title "$title" \
+    && "$JQ_BIN" -e --arg url "$TRUSTED_PORTAL_URL" --arg gameId "$game_id" \
+      --arg locationId "$location_id" --arg title "$title" \
       "$predicate" <<<"$candidate" >/dev/null; then
     verified="$candidate"
     break
@@ -341,5 +434,11 @@ case "$mode" in
     "$JQ_BIN" -c \
       '{url:.href,view,gameId,title,label,focused:.activeExact,bounds,viewport,
         rectFinitePositive,fullyOnScreen}' <<<"$verified"
+    ;;
+  --launch-location)
+    "$JQ_BIN" -c \
+      '{url:.href,view,dialogLabel,title,locationId,label,focused:.activeExact,
+        enabledFocusableRows,bounds,viewport,rectFinitePositive,fullyOnScreen}' \
+      <<<"$verified"
     ;;
 esac

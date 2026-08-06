@@ -726,6 +726,8 @@ describe("Shift library", () => {
       "This device",
       "zao",
     ])
+    expect(choices.map(button => button.getAttribute("data-launch-location-id")))
+      .toEqual(["local-wl4", "zao-wl4"])
     expect(document.activeElement).toBe(choices[0]!)
     expect(host.calls).toEqual([])
 
