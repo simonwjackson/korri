@@ -1008,14 +1008,61 @@ assert_menu_status() {
 }
 assert_selection_advanced() {
   local before="$1"
+  local target
   local status
-  local after
-  status="$(authenticated_retroarch_status "$GATE_CURRENT_LAUNCH")"
-  after="$(jq -r '.menuSelection' <<<"$status")"
-  [[ "$before" =~ ^[0-9]+$ && "$after" -eq $((before + 1)) ]] || {
-    echo "RetroArch menu selection did not advance exactly once: before=$before after=$after" >&2
+  local menu_alive
+  local after="unavailable"
+  local attempt
+
+  if [[ ! "$before" =~ ^[0-9]+$ ]]; then
+    echo 'RetroArch menu selection baseline is invalid: before=invalid after=unavailable' >&2
     return 1
-  }
+  fi
+  target=$((before + 1))
+
+  for attempt in $(seq 1 20); do
+    if ! status="$(authenticated_retroarch_status "$GATE_CURRENT_LAUNCH")"; then
+      echo "RetroArch menu selection status was unavailable: before=$before after=unavailable" >&2
+      return 1
+    fi
+    menu_alive="$(jq -r '
+      if (.menuAlive | type) != "boolean" then "invalid"
+      elif .menuAlive then "true"
+      else "false"
+      end
+    ' <<<"$status" 2>/dev/null || printf invalid)"
+    after="$(jq -r '
+      if ((.menuSelection | type) == "number"
+          and (.menuSelection >= 0)
+          and (.menuSelection == (.menuSelection | floor)))
+      then (.menuSelection | tostring)
+      else "invalid"
+      end
+    ' <<<"$status" 2>/dev/null || printf invalid)"
+
+    if [[ "$menu_alive" != true ]]; then
+      [[ "$menu_alive" == false ]] || menu_alive=invalid
+      echo "RetroArch menu closed or invalid while selection advanced: before=$before after=$after menu=$menu_alive" >&2
+      return 1
+    fi
+    if [[ ! "$after" =~ ^[0-9]+$ ]]; then
+      echo "RetroArch menu selection telemetry is invalid: before=$before after=invalid" >&2
+      return 1
+    fi
+    if [[ "$after" -eq "$target" ]]; then
+      return 0
+    fi
+    if [[ "$after" -ne "$before" ]]; then
+      echo "RetroArch menu selection did not advance exactly once: before=$before after=$after" >&2
+      return 1
+    fi
+    if [[ "$attempt" -lt 20 ]]; then
+      sleep 0.1
+    fi
+  done
+
+  echo "RetroArch menu selection did not advance exactly once before timeout: before=$before after=$after" >&2
+  return 1
 }
 capture_rgui_evidence() {
   local label="$1"

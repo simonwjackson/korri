@@ -360,6 +360,72 @@ grep -F 'assert_single_shell_task_activity' <<<"$pristine_source" >/dev/null
 grep -F 'assert_menu_status 1' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_selection_advanced' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_menu_status 0' "$ACCEPTANCE" >/dev/null
+selection_poll_source="$(sed -n '/^assert_selection_advanced() {/,/^}/p' "$ACCEPTANCE")"
+grep -F 'for attempt in $(seq 1 20); do' <<<"$selection_poll_source" >/dev/null
+grep -F 'sleep 0.1' <<<"$selection_poll_source" >/dev/null
+if grep -F 'echo "$status"' <<<"$selection_poll_source" >/dev/null; then
+  echo 'RetroArch selection polling must not expose authenticated status payloads' >&2
+  exit 1
+fi
+run_selection_fixture() (
+  local before="$1"
+  shift
+  local -a responses=("$@")
+  local counter
+  local index
+  counter="$(mktemp)"
+  trap 'rm -f "$counter"' EXIT
+  printf '0' >"$counter"
+  GATE_CURRENT_LAUNCH=fixture-launch
+  authenticated_retroarch_status() {
+    index="$(cat "$counter")"
+    if [[ "$index" -ge "${#responses[@]}" ]]; then
+      index=$((${#responses[@]} - 1))
+    fi
+    printf '%s' "$((index + 1))" >"$counter"
+    printf '%s\n' "${responses[$index]}"
+  }
+  sleep() { :; }
+  eval "$selection_poll_source"
+  assert_selection_advanced "$before"
+)
+assert_selection_fixture_fails() {
+  local label="$1"
+  shift
+  if run_selection_fixture "$@" >/dev/null 2>&1; then
+    echo "RetroArch selection fixture unexpectedly passed: $label" >&2
+    exit 1
+  fi
+}
+run_selection_fixture 1 \
+  '{"menuAlive":true,"menuSelection":1}' \
+  '{"menuAlive":true,"menuSelection":1}' \
+  '{"menuAlive":true,"menuSelection":2}' >/dev/null
+run_selection_fixture 3 \
+  '{"menuAlive":true,"menuSelection":4}' >/dev/null
+assert_selection_fixture_fails overshoot 1 \
+  '{"menuAlive":true,"menuSelection":3}' \
+  '{"menuAlive":true,"menuSelection":2}'
+assert_selection_fixture_fails regression 2 \
+  '{"menuAlive":true,"menuSelection":1}' \
+  '{"menuAlive":true,"menuSelection":3}'
+assert_selection_fixture_fails menu-closed 1 \
+  '{"menuAlive":false,"menuSelection":1}' \
+  '{"menuAlive":true,"menuSelection":2}'
+assert_selection_fixture_fails timeout 1 \
+  '{"menuAlive":true,"menuSelection":1}'
+invalid_selection_output=""
+if invalid_selection_output="$(run_selection_fixture 1 \
+    '{"menuAlive":true,"menuSelection":"private-selection-value"}' \
+    '{"menuAlive":true,"menuSelection":2}' 2>&1)"; then
+  echo 'RetroArch non-numeric selection fixture unexpectedly passed' >&2
+  exit 1
+fi
+grep -F 'before=1 after=invalid' <<<"$invalid_selection_output" >/dev/null
+if grep -F 'private-selection-value' <<<"$invalid_selection_output" >/dev/null; then
+  echo 'RetroArch invalid selection diagnostics exposed the raw telemetry value' >&2
+  exit 1
+fi
 overlay_menu_source="$(sed -n '/^STAGE="overlay-menu"/,/^STAGE="save-pause"/p' "$ACCEPTANCE")"
 if grep -Eq 'shell input( -d [^ ]+)? keyevent (KEYCODE_DPAD_DOWN|KEYCODE_BACK)' \
     <<<"$overlay_menu_source"; then
