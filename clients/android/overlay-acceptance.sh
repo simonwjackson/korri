@@ -691,14 +691,22 @@ assert_overlay_window() {
 
 assert_top_package() {
   local package="$1"
-  adb_shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" \
-    | grep -F "$package/" >/dev/null
+  local observed
+  observed="$(adb_shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'")" || return 1
+  grep -F "$package/" <<<"$observed" >/dev/null || {
+    echo "expected foreground package $package; observed: $observed" >&2
+    return 1
+  }
 }
 
 assert_top_component() {
   local component="$1"
-  adb_shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" \
-    | grep -F "$component" >/dev/null
+  local observed
+  observed="$(adb_shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'")" || return 1
+  grep -F "$component" <<<"$observed" >/dev/null || {
+    echo "expected foreground component $component; observed: $observed" >&2
+    return 1
+  }
 }
 
 assert_no_game_or_retroarch_activities() {
@@ -1239,7 +1247,8 @@ fi
 
 begin_evidence_checkpoint direct-launch-negative
 checkpoint 'DIRECT NEGATIVE VERIFIED' \
-  "Launch $DIRECT_PACKAGE directly, outside Korri, using the device UI." \
+  "Launch exactly the package $DIRECT_PACKAGE directly, outside Korri, using the device UI." \
+  "Another RetroArch build may also be installed; only $DIRECT_PACKAGE satisfies this checkpoint." \
   'Press physical Guide and verify Korri does not consume it and no Shift sheet appears.'
 assert_top_package "$DIRECT_PACKAGE"
 assert_overlay_window absent
