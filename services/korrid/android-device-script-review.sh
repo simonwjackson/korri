@@ -205,7 +205,13 @@ grep -F 'getprop ro.serialno' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'expected_hardware_serial=%s' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'actual_hardware_serial=%s' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'ANDROID_PACKAGE_PATTERN=' "$OVERLAY_ACCEPTANCE" >/dev/null
-grep -F 'DIRECT_PACKAGE must be exactly com.korri.retroarch' "$OVERLAY_ACCEPTANCE" >/dev/null
+# Korri's RetroArch publishes no launcher activity, so the direct-launch
+# negative must use a user-launchable emulator while the fork's own
+# non-launchability is asserted automatically.
+grep -F 'it cannot be launched outside Korri' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'assert_korri_retroarch_is_not_user_launchable' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'assert_direct_package_is_user_launchable' "$OVERLAY_ACCEPTANCE" >/dev/null
+grep -F 'must publish no launcher activity' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F 'TARGET_SERIAL=' "$OVERLAY_ACCEPTANCE" >/dev/null
 model_check_line="$(grep -nF 'device model mismatch:' "$OVERLAY_ACCEPTANCE" | cut -d: -f1)"
 hardware_check_line="$(grep -nF 'hardware serial mismatch:' "$OVERLAY_ACCEPTANCE" | cut -d: -f1)"
@@ -704,7 +710,7 @@ for invalid_case in \
   : >"$OVERLAY_PREFLIGHT_LOG"
   if env "$invalid_case" KORRI_ADB_BIN="$OVERLAY_PREFLIGHT_ADB" \
     bash "$OVERLAY_ACCEPTANCE" device-1 'Expected Model' \
-      com.korri.retroarch com.example.unrelated "$TMP/evidence" >/dev/null 2>&1; then
+      com.retroarch.aarch64 com.example.unrelated "$TMP/evidence" >/dev/null 2>&1; then
     echo "overlay acceptance accepted invalid package override: $invalid_case" >&2
     exit 1
   fi
@@ -715,7 +721,7 @@ for invalid_case in \
 done
 for invalid_package_args in \
   'bad-package com.example.unrelated' \
-  'com.korri.retroarch bad-package' \
+  'com.retroarch.aarch64 bad-package' \
   'com.example.other com.example.unrelated'; do
   read -r direct_package unrelated_package <<<"$invalid_package_args"
   : >"$OVERLAY_PREFLIGHT_LOG"
@@ -735,7 +741,7 @@ done
 KORRI_DEVICE_SCRIPT_REVIEW_TARGET_SERIAL=other-device \
   KORRI_ADB_BIN="$OVERLAY_PREFLIGHT_ADB" \
   bash "$OVERLAY_ACCEPTANCE" device-1 'Expected Model' \
-    com.korri.retroarch com.example.unrelated "$TMP/evidence" >/dev/null 2>&1 && {
+    com.retroarch.aarch64 com.example.unrelated "$TMP/evidence" >/dev/null 2>&1 && {
       echo 'overlay acceptance accepted an adb serial mismatch' >&2
       exit 1
     }
@@ -748,7 +754,7 @@ fi
 KORRI_DEVICE_SCRIPT_REVIEW_TARGET_MODEL='Wrong Model' \
   KORRI_ADB_BIN="$OVERLAY_PREFLIGHT_ADB" \
   bash "$OVERLAY_ACCEPTANCE" device-1 'Expected Model' \
-    com.korri.retroarch com.example.unrelated "$TMP/evidence" >/dev/null 2>&1 && {
+    com.retroarch.aarch64 com.example.unrelated "$TMP/evidence" >/dev/null 2>&1 && {
       echo 'overlay acceptance accepted a device model mismatch' >&2
       exit 1
     }

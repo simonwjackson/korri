@@ -49,7 +49,7 @@ KORRI_ADB_BIN="$TMP/adb" \
 KORRI_STREAM_CONNECTION_LOSS_PROBE="$CONNECTION_PROBE" \
 bash "$ACCEPTANCE" \
   test-endpoint 'Exact Model' expected-hardware \
-  com.korri.retroarch com.example.unrelated "$TMP/evidence" \
+  com.retroarch.aarch64 com.example.unrelated "$TMP/evidence" \
   >"$TMP/stdout" 2>"$TMP/stderr"
 status=$?
 set -e
@@ -80,7 +80,7 @@ for invalid_scope in partial retroarch FULL Stream stream-only local; do
   KORRI_OVERLAY_ACCEPT_SCOPE="$invalid_scope" \
   bash "$ACCEPTANCE" \
     test-endpoint 'Exact Model' expected-hardware \
-    com.korri.retroarch com.example.unrelated "$TMP/scope-evidence" \
+    com.retroarch.aarch64 com.example.unrelated "$TMP/scope-evidence" \
     >"$TMP/scope-stdout" 2>"$TMP/scope-stderr"
   scope_status=$?
   set -e
@@ -114,7 +114,7 @@ for default_scope_case in unset empty; do
     KORRI_STREAM_CONNECTION_LOSS_PROBE="$CONNECTION_PROBE" \
     bash "$ACCEPTANCE" \
       test-endpoint 'Exact Model' expected-hardware \
-      com.korri.retroarch com.example.unrelated "$TMP/default-evidence" \
+      com.retroarch.aarch64 com.example.unrelated "$TMP/default-evidence" \
       >"$TMP/default-stdout" 2>"$TMP/default-stderr"
   else
     PATH="$TMP:$PATH" \
@@ -124,7 +124,7 @@ for default_scope_case in unset empty; do
     KORRI_OVERLAY_ACCEPT_SCOPE='' \
     bash "$ACCEPTANCE" \
       test-endpoint 'Exact Model' expected-hardware \
-      com.korri.retroarch com.example.unrelated "$TMP/default-evidence" \
+      com.retroarch.aarch64 com.example.unrelated "$TMP/default-evidence" \
       >"$TMP/default-stdout" 2>"$TMP/default-stderr"
   fi
   default_status=$?
@@ -155,7 +155,7 @@ KORRI_STREAM_CONNECTION_LOSS_PROBE="$CONNECTION_PROBE" \
 KORRI_OVERLAY_ACCEPT_SCOPE=stream \
 bash "$ACCEPTANCE" \
   test-endpoint 'Exact Model' expected-hardware \
-  com.korri.retroarch com.example.unrelated "$TMP/stream-evidence" \
+  com.retroarch.aarch64 com.example.unrelated "$TMP/stream-evidence" \
   >"$TMP/stream-stdout" 2>"$TMP/stream-stderr"
 stream_status=$?
 set -e

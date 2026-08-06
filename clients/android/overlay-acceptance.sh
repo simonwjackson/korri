@@ -44,8 +44,16 @@ for package in "$KORRI_PACKAGE" "$RETROARCH_PACKAGE" "$STOCK_RETROARCH_PACKAGE" 
     exit 2
   }
 done
-[[ "$DIRECT_PACKAGE" == com.korri.retroarch ]] || {
-  echo 'DIRECT_PACKAGE must be exactly com.korri.retroarch' >&2
+# The Korri RetroArch build deliberately publishes no launcher activity and
+# gates starting on a signature permission, so it cannot be started outside
+# Korri at all. The direct-launch negative therefore uses a user-launchable
+# emulator, and the fork's non-launchability is asserted separately below.
+[[ "$DIRECT_PACKAGE" != "$RETROARCH_PACKAGE" ]] || {
+  echo "DIRECT_PACKAGE must not be $RETROARCH_PACKAGE: it cannot be launched outside Korri" >&2
+  exit 2
+}
+[[ "$DIRECT_PACKAGE" != "$KORRI_PACKAGE" ]] || {
+  echo 'DIRECT_PACKAGE must not be Korri itself' >&2
   exit 2
 }
 [[ "$DIRECT_PACKAGE" != "$UNRELATED_PACKAGE" ]] || {
@@ -719,6 +727,27 @@ assert_no_game_or_retroarch_activities() {
   fi
 }
 
+# Measured on the acceptance device: Korri's RetroArch resolves no LAUNCHER
+# activity, so no user action can start it directly. This is the strongest form
+# of the direct-launch negative and needs no human step.
+assert_korri_retroarch_is_not_user_launchable() {
+  local resolved
+  resolved="$(adb_shell "cmd package resolve-activity --brief -c android.intent.category.LAUNCHER '$RETROARCH_PACKAGE'" | tr -d '\r')" || return 1
+  grep -Fq 'No activity found' <<<"$resolved" || {
+    echo "$RETROARCH_PACKAGE must publish no launcher activity; resolved: $resolved" >&2
+    return 1
+  }
+}
+
+assert_direct_package_is_user_launchable() {
+  local resolved
+  resolved="$(adb_shell "cmd package resolve-activity --brief -c android.intent.category.LAUNCHER '$DIRECT_PACKAGE'" | tr -d '\r')" || return 1
+  grep -Fq "$DIRECT_PACKAGE/" <<<"$resolved" || {
+    echo "$DIRECT_PACKAGE must be launchable from the device UI; resolved: $resolved" >&2
+    return 1
+  }
+}
+
 assert_pristine_gate_state() {
   local fork_pid
   local stock_pid
@@ -1043,6 +1072,8 @@ done
   echo "$RETROARCH_PACKAGE must be stopped before acceptance backs up mutable state" >&2
   exit 1
 }
+assert_korri_retroarch_is_not_user_launchable
+assert_direct_package_is_user_launchable
 assert_accessibility_service_enabled
 KORRI_PID="$(package_pid "$KORRI_PACKAGE")"
 [[ -n "$KORRI_PID" ]] || {
@@ -1248,7 +1279,7 @@ fi
 begin_evidence_checkpoint direct-launch-negative
 checkpoint 'DIRECT NEGATIVE VERIFIED' \
   "Launch exactly the package $DIRECT_PACKAGE directly, outside Korri, using the device UI." \
-  "Another RetroArch build may also be installed; only $DIRECT_PACKAGE satisfies this checkpoint." \
+  "Korri's own RetroArch build cannot be started this way; that is asserted automatically." \
   'Press physical Guide and verify Korri does not consume it and no Shift sheet appears.'
 assert_top_package "$DIRECT_PACKAGE"
 assert_overlay_window absent
