@@ -8,6 +8,7 @@ ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
 CRATE="$ROOT/services/korrid"
 ANDROID_SMOKE="$CRATE/android-smoke.sh"
 ANDROID_APP_ROUTE="$CRATE/android-app-route-check.sh"
+ANDROID_GAME_DISCOVERY="$CRATE/android-game-discovery-check.sh"
 JOURNEY_RESUME="$CRATE/journey-resume.sh"
 OVERLAY_ACCEPTANCE="$ROOT/clients/android/overlay-acceptance.sh"
 RETROARCH_ACCEPTANCE="$ROOT/plugins/retroarch/android/device-acceptance.sh"
@@ -39,6 +40,7 @@ unset \
   KORRI_ANDROID_DEBUG_CAPABILITY \
   KORRI_ANDROID_DEBUG_PORTAL_RELOAD_SH \
   KORRI_ANDROID_DEBUG_PORTAL_FOCUS_GAME_SH \
+  KORRI_ANDROID_GAME_DISCOVERY_HOST_PORT \
   KORRI_ANDROID_SMOKE_LIBRARY \
   KORRI_ANDROID_UPSTREAMS_CONFIG \
   KORRI_JOURNEY_EXPECTED_TITLE \
@@ -541,8 +543,72 @@ if grep -F 'debug capability=' "$KORRI_SHELL" "$ANDROID_SMOKE" "$ANDROID_APP_ROU
   exit 1
 fi
 
+bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$ANDROID_GAME_DISCOVERY" "$JOURNEY_RESUME"
+
+if ! grep -F 'usage: android-game-discovery-check.sh --serial <adb-serial>' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must require an explicit --serial argument' >&2
+  exit 1
+fi
+if grep -E 'SERIAL="?\$\{1|SERIAL="?\$\{KORRI_ANDROID_DEVICE|ANDROID_SERIAL' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must not default to a positional, KORRI_ANDROID_DEVICE, or ANDROID_SERIAL target' >&2
+  exit 1
+fi
+if ! grep -F 'trap cleanup EXIT' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must clean up through a robust EXIT trap' >&2
+  exit 1
+fi
+if ! grep -F 'run-as '\''$PKG'\''' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must isolate private discovery/credential state through run-as without reading tokens' >&2
+  exit 1
+fi
+if grep -E 'steamgriddb\.credential.*cat|cat .*steamgriddb\.credential|Bearer .*SteamGridDB|KORRI_STEAMGRIDDB' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must never read, print, or inject a real SteamGridDB token' >&2
+  exit 1
+fi
+if grep -F 'am broadcast' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must not add or use a broadcast/intent path bypass' >&2
+  exit 1
+fi
+if ! grep -F 'am instrument -w' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must use the androidTest-only instrumentation seam for picker bypass' >&2
+  exit 1
+fi
+if ! grep -F 'KorriGameDiscoveryDebugTest' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must target the debug discovery instrumentation test' >&2
+  exit 1
+fi
+if ! grep -F 'app.discovery.registerReceipt' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null; then
+  echo 'KorriGameDiscoveryDebugTest must register through the production registerReceipt RPC' >&2
+  exit 1
+fi
+if ! grep -F 'issueFolderSelectionReceipt' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null; then
+  echo 'KorriGameDiscoveryDebugTest must use the same JNI receipt issuer as the picker' >&2
+  exit 1
+fi
+if grep -F 'ACTION_OPEN_DOCUMENT_TREE' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null; then
+  echo 'KorriGameDiscoveryDebugTest must not automate the Android system folder picker' >&2
+  exit 1
+fi
+if ! grep -F 'KorriDiscovery' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must capture structured scan metrics from the narrow debug-safe log seam' >&2
+  exit 1
+fi
+if ! grep -F 'korri.discovery.scanMetrics.v1' "$ROOT/services/korrid/src/discovery/coordinator.rs" >/dev/null; then
+  echo 'discovery coordinator must keep the structured scan metric schema for the device gate' >&2
+  exit 1
+fi
+if ! grep -F 'android-game-discovery-check = {' "$ROOT/nix/tasks.nix" >/dev/null; then
+  echo 'nix/tasks.nix must expose android-game-discovery-check as a Nix app' >&2
+  exit 1
+fi
+if ! sed -n '/android-game-discovery-check = {/,/^    };/p' "$ROOT/nix/tasks.nix" | grep -F 'pkgs.jq' >/dev/null; then
+  echo 'android-game-discovery-check task must put jq on PATH for structured RPC/log assertions' >&2
+  exit 1
+fi
+
 for resumed_activity_script in \
   "$ANDROID_APP_ROUTE" \
+  "$ANDROID_GAME_DISCOVERY" \
   "$CRATE/journey-compare.sh" \
   "$JOURNEY_RESUME" \
   "$CRATE/journey-switch.sh" \

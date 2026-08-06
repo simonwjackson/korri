@@ -1,0 +1,455 @@
+#!/usr/bin/env nix-shell
+#! nix-shell -i bash -p bash android-tools coreutils curl gnugrep gnused jq
+# shellcheck shell=bash
+# Explicit-device Android proof for user-selected game discovery.
+#
+# The automated gate does not drive Android's system folder picker. It stages
+# controlled folders, then an androidTest-only seam asks the same JNI receipt
+# issuer used by the picker for one-use receipts and registers them through the
+# production RPC endpoint. Manual observation note: the interactive chooser
+# remains covered by KorriGameFolderBridgeTest plus a human check that Add folder
+# opens Android's directory picker and reports cancellation without mutation.
+set -euo pipefail
+
+ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
+CRATE="$ROOT/services/korrid"
+SERIAL=""
+ADB_BIN="${KORRI_ADB_BIN:-$(command -v adb)}"
+PKG="com.simonwjackson.korri.debug"
+TEST_PKG="$PKG.test"
+RETROARCH_PKG="${KORRI_RETROARCH_PACKAGE:-com.korri.retroarch}"
+HOST_PORT="${KORRI_ANDROID_GAME_DISCOVERY_HOST_PORT:-43124}"
+ANDROID_STORAGE_ROOT="/sdcard/korri"
+LOCK_REMOTE="$ANDROID_STORAGE_ROOT/.android-game-discovery-check.lock"
+LOCK_OWNER_REMOTE="$LOCK_REMOTE/owner"
+BACKUP_REMOTE="$ANDROID_STORAGE_ROOT/.android-game-discovery-check-backup-$$"
+FIXTURE_A="/sdcard/korri-u9-discovery-a-$$"
+FIXTURE_B="/sdcard/korri-u9-discovery-b-$$"
+CONFIG_REMOTE="$ANDROID_STORAGE_ROOT/config.yaml"
+LIBRARY_REMOTE="$ANDROID_STORAGE_ROOT/library.yaml"
+APK="$ROOT/clients/android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk"
+TEST_APK="$ROOT/clients/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
+CURL=(curl --connect-timeout 2 --max-time 5 --retry 2 --retry-connrefused)
+FORWARD_ACTIVE=false
+LOCK_ACQUIRED=false
+CONFIG_WAS_PRESENT=false
+LIBRARY_WAS_PRESENT=false
+CHECKPOINT_RESTORE_NEEDED=false
+PRIVATE_STATE_MOVED=false
+PRIOR_APPOP_MODE=""
+PRIOR_TOP_ACTIVITY=""
+RUN_DIR=""
+
+usage() {
+  echo "usage: android-game-discovery-check.sh --serial <adb-serial>" >&2
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --serial)
+      SERIAL="${2:-}"
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+done
+if [[ -z "$SERIAL" ]]; then
+  usage
+  exit 1
+fi
+
+adb_target() {
+  if ! timeout 20 "$ADB_BIN" "$@"; then
+    echo "adb command failed or timed out: $*" >&2
+    return 1
+  fi
+}
+
+adb_capture() {
+  timeout 20 "$ADB_BIN" -s "$SERIAL" "$@"
+}
+
+adb_shell_capture() {
+  adb_capture shell "$@"
+}
+
+rpc() {
+  local body="$1"
+  "${CURL[@]}" --fail --silent \
+    -H 'content-type: application/json' \
+    -H "authorization: Bearer $RPC_CAPABILITY" \
+    -d "$body" \
+    "http://127.0.0.1:$HOST_PORT/rpc"
+}
+
+cleanup() {
+  local status=$?
+  local cleanup_failed=false
+  trap - EXIT INT TERM
+  set +e
+
+  if [[ "$FORWARD_ACTIVE" == true ]]; then
+    adb_target -s "$SERIAL" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
+  fi
+  adb_target -s "$SERIAL" shell "am force-stop '$PKG'; am force-stop '$TEST_PKG'; am force-stop '$RETROARCH_PKG'" >/dev/null 2>&1 || true
+  adb_target -s "$SERIAL" shell "rm -rf '$FIXTURE_A' '$FIXTURE_B'" >/dev/null 2>&1 || cleanup_failed=true
+  restore_checkpoint_files || cleanup_failed=true
+  restore_private_state || cleanup_failed=true
+  restore_appop || cleanup_failed=true
+  release_device_lock || cleanup_failed=true
+  [[ -n "$RUN_DIR" ]] && rm -rf "$RUN_DIR"
+
+  if [[ "$cleanup_failed" == true && "$status" -eq 0 ]]; then
+    echo "Android game discovery check cleanup failed after successful run" >&2
+    exit 1
+  fi
+  if [[ "$cleanup_failed" == true ]]; then
+    echo "Android game discovery check cleanup also failed; preserving primary status $status" >&2
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+remote_exists() {
+  adb_target -s "$SERIAL" shell "test -e '$1'" >/dev/null 2>&1
+}
+
+acquire_device_lock() {
+  adb_target -s "$SERIAL" shell "mkdir -p '$ANDROID_STORAGE_ROOT' && if mkdir '$LOCK_REMOTE' 2>/dev/null; then printf '%s\n' 'pid=$$ started=$(date -u +%Y-%m-%dT%H:%M:%SZ)' > '$LOCK_OWNER_REMOTE'; else echo 'Android game discovery check lock is held at $LOCK_REMOTE. If this is stale, remove it manually only after verifying no discovery check is running.' >&2; exit 75; fi"
+  LOCK_ACQUIRED=true
+}
+
+release_device_lock() {
+  if [[ "$LOCK_ACQUIRED" != true ]]; then
+    return 0
+  fi
+  adb_target -s "$SERIAL" shell "rm -rf '$LOCK_REMOTE'" >/dev/null 2>&1 || {
+    echo "Android game discovery check failed to release $LOCK_REMOTE" >&2
+    return 1
+  }
+  LOCK_ACQUIRED=false
+}
+
+backup_checkpoint_files() {
+  acquire_device_lock
+  adb_target -s "$SERIAL" shell "rm -rf '$BACKUP_REMOTE'; mkdir -p '$BACKUP_REMOTE'"
+  CHECKPOINT_RESTORE_NEEDED=true
+  if remote_exists "$CONFIG_REMOTE"; then
+    CONFIG_WAS_PRESENT=true
+    adb_target -s "$SERIAL" shell "cp '$CONFIG_REMOTE' '$BACKUP_REMOTE/config.yaml'"
+  fi
+  if remote_exists "$LIBRARY_REMOTE"; then
+    LIBRARY_WAS_PRESENT=true
+    adb_target -s "$SERIAL" shell "cp '$LIBRARY_REMOTE' '$BACKUP_REMOTE/library.yaml'"
+  fi
+}
+
+restore_checkpoint_files() {
+  local restore_failed=false
+  if [[ "$CHECKPOINT_RESTORE_NEEDED" != true ]]; then
+    return 0
+  fi
+  if [[ "$CONFIG_WAS_PRESENT" == true ]]; then
+    adb_target -s "$SERIAL" shell "cp '$BACKUP_REMOTE/config.yaml' '$CONFIG_REMOTE'" >/dev/null 2>&1 || restore_failed=true
+  else
+    adb_target -s "$SERIAL" shell "rm -f '$CONFIG_REMOTE'" >/dev/null 2>&1 || restore_failed=true
+  fi
+  if [[ "$LIBRARY_WAS_PRESENT" == true ]]; then
+    adb_target -s "$SERIAL" shell "cp '$BACKUP_REMOTE/library.yaml' '$LIBRARY_REMOTE'" >/dev/null 2>&1 || restore_failed=true
+  else
+    adb_target -s "$SERIAL" shell "rm -f '$LIBRARY_REMOTE'" >/dev/null 2>&1 || restore_failed=true
+  fi
+  adb_target -s "$SERIAL" shell "rm -rf '$BACKUP_REMOTE'" >/dev/null 2>&1 || restore_failed=true
+  [[ "$restore_failed" == false ]]
+}
+
+move_private_state_aside() {
+  adb_target -s "$SERIAL" shell "run-as '$PKG' sh -c 'set -e; root=\"no_backup/korrid-state\"; backup=\"no_backup/korrid-state.android-game-discovery-check.$$\"; rm -rf \"\$backup\"; mkdir -p \"\$backup\"; for name in steamgriddb.credential game-discovery steamgriddb-enrichment; do if [ -e \"\$root/\$name\" ]; then mv \"\$root/\$name\" \"\$backup/\$name\"; fi; done'"
+  PRIVATE_STATE_MOVED=true
+}
+
+restore_private_state() {
+  if [[ "$PRIVATE_STATE_MOVED" != true ]]; then
+    return 0
+  fi
+  adb_target -s "$SERIAL" shell "run-as '$PKG' sh -c 'set -e; root=\"no_backup/korrid-state\"; backup=\"no_backup/korrid-state.android-game-discovery-check.$$\"; mkdir -p \"\$root\"; rm -rf \"\$root/steamgriddb.credential\" \"\$root/game-discovery\" \"\$root/steamgriddb-enrichment\"; if [ -d \"\$backup\" ]; then for name in steamgriddb.credential game-discovery steamgriddb-enrichment; do if [ -e \"\$backup/\$name\" ]; then mv \"\$backup/\$name\" \"\$root/\$name\"; fi; done; rm -rf \"\$backup\"; fi'" >/dev/null 2>&1 || {
+    echo "Android game discovery check failed to restore private discovery state" >&2
+    return 1
+  }
+}
+
+capture_appop() {
+  local line
+  line="$(adb_shell_capture "appops get '$PKG' MANAGE_EXTERNAL_STORAGE 2>/dev/null || true" | tr -d '\r' || true)"
+  PRIOR_APPOP_MODE="$(printf '%s\n' "$line" | sed -nE 's/.*MANAGE_EXTERNAL_STORAGE: ([a-z_]+).*/\1/p' | tail -1)"
+  printf 'Prior MANAGE_EXTERNAL_STORAGE app-op: %s\n' "${PRIOR_APPOP_MODE:-default}"
+}
+
+restore_appop() {
+  if [[ -n "$PRIOR_APPOP_MODE" ]]; then
+    adb_target -s "$SERIAL" shell "appops set '$PKG' MANAGE_EXTERNAL_STORAGE '$PRIOR_APPOP_MODE'" >/dev/null 2>&1 || return 1
+  else
+    adb_target -s "$SERIAL" shell "appops set '$PKG' MANAGE_EXTERNAL_STORAGE default" >/dev/null 2>&1 || true
+  fi
+}
+
+write_controlled_config() {
+  cat >"$RUN_DIR/config.yaml" <"$ROOT/docs/research/retroarch-plugin-route/config.yaml"
+  cat >"$RUN_DIR/library.yaml" <<'YAML'
+library: {}
+YAML
+  adb_target -s "$SERIAL" push "$RUN_DIR/config.yaml" "$CONFIG_REMOTE" >/dev/null
+  adb_target -s "$SERIAL" push "$RUN_DIR/library.yaml" "$LIBRARY_REMOTE" >/dev/null
+}
+
+stage_fixtures() {
+  printf 'KORRI-U9-FIRST-ROM\n' >"$RUN_DIR/U9 First.gba"
+  printf 'KORRI-U9-SECOND-ROM\n' >"$RUN_DIR/U9 Second.gba"
+  adb_target -s "$SERIAL" shell "rm -rf '$FIXTURE_A' '$FIXTURE_B'; mkdir -p '$FIXTURE_A' '$FIXTURE_B'"
+  adb_target -s "$SERIAL" push "$RUN_DIR/U9 First.gba" "$FIXTURE_A/U9 First.gba" >/dev/null
+  adb_target -s "$SERIAL" push "$RUN_DIR/U9 Second.gba" "$FIXTURE_B/U9 Second.gba" >/dev/null
+}
+
+build_and_install_instrumentation() {
+  cd "$ROOT/clients/android"
+  ./gradlew --quiet :app:assembleDebugAndroidTest
+  test -f "$TEST_APK"
+  adb_target -s "$SERIAL" install -r "$TEST_APK" >/dev/null
+}
+
+run_discovery_instrumentation() {
+  local action="$1"
+  shift
+  adb_target -s "$SERIAL" shell am instrument -w \
+    -e class com.limelight.KorriGameDiscoveryDebugTest \
+    -e korriDebugDiscoveryAction "$action" \
+    "$@" \
+    "$TEST_PKG/androidx.test.runner.AndroidJUnitRunner" | tee "$RUN_DIR/instrument-$action.log"
+  if grep -E 'FAILURES!!!|INSTRUMENTATION_CODE: -?[1-9]' "$RUN_DIR/instrument-$action.log" >/dev/null; then
+    echo "Android game discovery instrumentation action failed: $action" >&2
+    exit 1
+  fi
+}
+
+register_folder() {
+  local folder="$1"
+  run_discovery_instrumentation register -e gameFolderPath "$folder"
+}
+
+launch_local_spec() {
+  local spec_json="$1"
+  printf '%s' "$spec_json" >"$RUN_DIR/launch-spec.json"
+  run_discovery_instrumentation launchLocal -e launchSpecJson "$spec_json"
+}
+
+recover_rpc_details() {
+  local port=""
+  local capability=""
+  for _ in $(seq 1 20); do
+    local logcat_output=""
+    logcat_output="$(adb_capture logcat -d -s KorridServer:I 2>/dev/null || true)"
+    port="$(printf '%s\n' "$logcat_output" | grep 'listening on 127.0.0.1:' | tail -1 | sed -n 's/.*127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p')"
+    capability="$(printf '%s\n' "$logcat_output" | grep 'debug capability=' | tail -1 | sed -n 's/.*debug capability=\([0-9a-f][0-9a-f]*\).*/\1/p')"
+    if [[ -n "$port" && -n "$capability" ]]; then
+      RPC_PORT="$port"
+      RPC_CAPABILITY="$capability"
+      adb_target -s "$SERIAL" forward --remove "tcp:$HOST_PORT" >/dev/null 2>&1 || true
+      adb_target -s "$SERIAL" forward "tcp:$HOST_PORT" "tcp:$RPC_PORT"
+      FORWARD_ACTIVE=true
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Could not recover embedded korrid RPC details" >&2
+  adb_capture logcat -d -t 300 >&2 || true
+  exit 1
+}
+
+wait_discovery_idle() {
+  local label="$1"
+  local response=""
+  local state=""
+  for _ in $(seq 1 60); do
+    response="$(rpc '{"_tag":"app.discovery.snapshot","payload":{}}')"
+    state="$(jq -r '.outcome.payload.state._tag // empty' <<<"$response")"
+    if [[ "$state" == "Enriching" ]]; then
+      assert_two_u9_games_listable "while Enriching"
+    fi
+    if [[ "$state" == "Idle" || "$state" == "Problem" ]]; then
+      printf 'Discovery %s snapshot: %s\n' "$label" "$response"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Discovery did not settle after $label: state=$state response=$response" >&2
+  exit 1
+}
+
+assert_two_u9_games_listable() {
+  local label="$1"
+  local response
+  response="$(rpc '{"_tag":"app.local-games.list","payload":{}}')"
+  if ! jq -e '
+    .outcome._tag == "Ok"
+    and ([.outcome.payload.games[] | select(.title == "U9 First" or .title == "U9 Second")] | length) == 2
+  ' <<<"$response" >/dev/null; then
+    echo "Expected exactly two U9 games listable $label: $response" >&2
+    exit 1
+  fi
+  printf 'Local games %s: %s\n' "$label" "$response"
+}
+
+u9_game_id() {
+  rpc '{"_tag":"app.local-games.list","payload":{}}' \
+    | jq -r '.outcome.payload.games[] | select(.title == "U9 First") | .id' \
+    | head -1
+}
+
+latest_scan_metric() {
+  adb_capture logcat -d -s KorriDiscovery:I 2>/dev/null \
+    | tr -d '\r' \
+    | sed -n 's/.*KorriDiscovery: //p' \
+    | jq -c 'select(.schema == "korri.discovery.scanMetrics.v1")' \
+    | tail -1
+}
+
+assert_latest_hashed_bytes() {
+  local expected="$1"
+  local label="$2"
+  local metric
+  metric="$(latest_scan_metric)"
+  if [[ -z "$metric" ]]; then
+    echo "No KorriDiscovery scan metric was logged for $label" >&2
+    exit 1
+  fi
+  if ! jq -e --argjson expected "$expected" '.hashedBytes == $expected and (.durationMs | type == "number")' <<<"$metric" >/dev/null; then
+    echo "Unexpected scan metric for $label: $metric" >&2
+    exit 1
+  fi
+  printf 'Scan metric %s: %s\n' "$label" "$metric"
+}
+
+assert_latest_hashed_bytes_nonzero() {
+  local label="$1"
+  local metric
+  metric="$(latest_scan_metric)"
+  if [[ -z "$metric" ]]; then
+    echo "No KorriDiscovery scan metric was logged for $label" >&2
+    exit 1
+  fi
+  if ! jq -e '.hashedBytes > 0 and (.durationMs | type == "number")' <<<"$metric" >/dev/null; then
+    echo "Expected nonzero hashed bytes for $label: $metric" >&2
+    exit 1
+  fi
+  printf 'Scan metric %s: %s\n' "$label" "$metric"
+}
+
+rescan() {
+  rpc '{"_tag":"app.discovery.rescan","payload":{}}' >/dev/null
+  wait_discovery_idle "$1"
+}
+
+if [[ "$SERIAL" == *:* ]]; then
+  timeout 15 "$ADB_BIN" connect "$SERIAL" >/dev/null || true
+fi
+if ! timeout 15 "$ADB_BIN" -s "$SERIAL" wait-for-device; then
+  echo "Android target is not reachable: $SERIAL" >&2
+  exit 1
+fi
+RUN_DIR="$(mktemp -d)"
+PRIOR_TOP_ACTIVITY="$(adb_shell_capture "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" | tr -d '\r' || true)"
+printf 'Prior top activity: %s\n' "${PRIOR_TOP_ACTIVITY:-unknown}"
+capture_appop
+
+test -f "$APK" || { echo "Korri debug APK is missing; run nix run .#korrid-check first" >&2; exit 1; }
+adb_target -s "$SERIAL" install -r "$APK" >/dev/null
+adb_target -s "$SERIAL" shell "am force-stop '$PKG'"
+backup_checkpoint_files
+move_private_state_aside
+write_controlled_config
+stage_fixtures
+build_and_install_instrumentation
+
+# Start from an allowed state, then let the existing smoke gate install, open,
+# and prove the protected RPC surface for this explicit device.
+adb_target -s "$SERIAL" shell "appops set '$PKG' MANAGE_EXTERNAL_STORAGE allow" >/dev/null 2>&1 || true
+"$CRATE/android-smoke.sh" "$SERIAL"
+recover_rpc_details
+settings_response="$(rpc '{"_tag":"system.settings.snapshot","payload":{}}')"
+if ! jq -e '.outcome.payload.steamGridDbCredential == "NotConfigured"' <<<"$settings_response" >/dev/null; then
+  echo "SteamGridDB credential was not isolated for the offline device gate: $settings_response" >&2
+  exit 1
+fi
+printf 'SteamGridDB credential status during gate: NotConfigured\n'
+
+adb_target -s "$SERIAL" logcat -c
+register_folder "$FIXTURE_A"
+wait_discovery_idle "after first folder registration"
+assert_latest_hashed_bytes_nonzero "after first folder registration"
+register_folder "$FIXTURE_B"
+wait_discovery_idle "after second folder registration"
+assert_two_u9_games_listable "after two folder registrations"
+assert_latest_hashed_bytes_nonzero "after second folder registration"
+
+rescan "repeat rescan"
+assert_two_u9_games_listable "after repeat rescan"
+assert_latest_hashed_bytes 0 "unchanged repeat rescan"
+
+adb_target -s "$SERIAL" shell "cp '$FIXTURE_A/U9 First.gba' '$FIXTURE_B/U9 First Duplicate.gba'"
+rescan "duplicate-content rescan"
+assert_two_u9_games_listable "after duplicate-content rescan"
+assert_latest_hashed_bytes_nonzero "duplicate-content rescan"
+rescan "unchanged duplicate-content rescan"
+assert_latest_hashed_bytes 0 "unchanged duplicate-content rescan"
+
+if ! adb_shell_capture "pm path '$RETROARCH_PKG'" | grep -q '^package:'; then
+  echo "Required RetroArch package is not installed: $RETROARCH_PKG" >&2
+  exit 1
+fi
+game_id="$(u9_game_id)"
+if [[ -z "$game_id" ]]; then
+  echo "Could not find discovered U9 First game id" >&2
+  exit 1
+fi
+launch_response="$(rpc "{\"_tag\":\"app.local-games.launch\",\"payload\":{\"gameId\":$(jq -n --arg id "$game_id" '$id')}}")"
+if ! jq -e '
+  .outcome._tag == "Ok"
+  and .outcome.payload.launcherId == "retroarch"
+  and .outcome.payload.component.packageName == "com.korri.retroarch"
+  and .outcome.payload.extras.LIBRETRO == "/data/data/com.korri.retroarch/cores/mgba_libretro_android.so"
+  and (.outcome.payload.extras.ROM | endswith("/U9 First.gba"))
+  and (.outcome.payload.integrity | type == "string" and length > 0)
+' <<<"$launch_response" >/dev/null; then
+  echo "Discovered game did not produce the signed RetroArch+mGBA launch route: $launch_response" >&2
+  exit 1
+fi
+launch_local_spec "$(jq -c '.outcome.payload' <<<"$launch_response")"
+top_after_launch="$(adb_shell_capture "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" | tr -d '\r' || true)"
+printf 'Top activity after discovered launch: %s\n' "$top_after_launch"
+if ! grep -F "$RETROARCH_PKG/" <<<"$top_after_launch" >/dev/null; then
+  echo "Discovered launch did not foreground RetroArch: $top_after_launch" >&2
+  exit 1
+fi
+
+adb_target -s "$SERIAL" shell "appops set '$PKG' MANAGE_EXTERNAL_STORAGE deny" >/dev/null 2>&1 || true
+rescan "with all-files denied"
+denied_snapshot="$(rpc '{"_tag":"app.discovery.snapshot","payload":{}}')"
+if ! jq -e '.outcome._tag == "Ok" and (.outcome.payload.diagnostics | length) > 0' <<<"$denied_snapshot" >/dev/null; then
+  echo "Denied all-files access did not yield a recoverable discovery diagnostic: $denied_snapshot" >&2
+  exit 1
+fi
+assert_two_u9_games_listable "while all-files access is denied"
+adb_target -s "$SERIAL" shell "appops set '$PKG' MANAGE_EXTERNAL_STORAGE allow" >/dev/null 2>&1 || true
+rescan "after all-files recovery"
+assert_two_u9_games_listable "after all-files recovery"
+
+printf 'Android game discovery check passed on %s\n' "$SERIAL"

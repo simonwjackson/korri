@@ -307,6 +307,47 @@ let
       '';
     };
 
+    android-game-discovery-check = {
+      description = "Build Korri, then prove selected-folder GBA discovery, dedupe, permission recovery, and RetroArch launch on an explicit Android target.";
+      needsProseql = true;
+      runtimeInputs = androidInputs ++ [
+        pkgs.android-tools
+        pkgs.curl
+        pkgs.gnugrep
+        pkgs.gnused
+        pkgs.jq
+        pkgs.nix
+      ];
+      env = androidEnv // {
+        KORRI_PORTAL_BUNDLE = "${packages.portal-bundle}/bin/portal-bundle";
+      };
+      usageSuffix = " -- --serial <adb-serial>";
+      script = ''
+        serial=""
+        args=("$@")
+        while [[ $# -gt 0 ]]; do
+          case "$1" in
+            --serial)
+              serial="''${2:-}"
+              shift 2
+              ;;
+            *)
+              shift
+              ;;
+          esac
+        done
+        if [[ -z "$serial" ]]; then
+          echo "usage: android-game-discovery-check --serial <adb-serial>" >&2
+          exit 1
+        fi
+        ${adbPreflight}
+        ${androidSetup}
+        export KORRI_ANDROID_DEVICE="$serial"
+        "$KORRI_ROOT/services/korrid/check.sh"
+        exec "$KORRI_ROOT/services/korrid/android-game-discovery-check.sh" "''${args[@]}"
+      '';
+    };
+
     korrid-script-device = {
       description = "Run the example TypeScript plugin on an Android device.";
       needsProseql = true;
