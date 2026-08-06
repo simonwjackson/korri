@@ -810,14 +810,23 @@ invoke_control() {
   local control_id="$2"
   rpc "{\"_tag\":\"app.session.control.invoke\",\"payload\":{\"launchId\":\"$launch_id\",\"controlId\":\"$control_id\"}}"
 }
-assert_old_launch_rejected() {
+wait_old_launch_stale() {
   local launch_id="$1"
-  local controls
-  local invocation
-  controls="$(controls_for_launch "$launch_id")"
-  invocation="$(invoke_control "$launch_id" '@korri:retroarch/quit')"
-  jq -e '.outcome._tag == "Err" and (.outcome.payload.reason == "StaleSession" or .outcome.payload.reason == "Unavailable")' <<<"$controls" >/dev/null
-  jq -e '.outcome._tag == "Err" and (.outcome.payload.reason == "StaleSession" or .outcome.payload.reason == "Unavailable")' <<<"$invocation" >/dev/null
+  local controls=''
+  local invocation=''
+  for _ in $(seq 1 20); do
+    controls="$(controls_for_launch "$launch_id" 2>/dev/null)" || controls=''
+    invocation="$(invoke_control "$launch_id" '@korri:retroarch/quit' 2>/dev/null)" || invocation=''
+    if jq -e '.outcome._tag == "Err" and .outcome.payload.reason == "StaleSession"' \
+      <<<"$controls" >/dev/null 2>&1 \
+      && jq -e '.outcome._tag == "Err" and .outcome.payload.reason == "StaleSession"' \
+        <<<"$invocation" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  echo "old launch did not become exactly stale after bounded process teardown: controls=$controls invoke=$invocation" >&2
+  return 1
 }
 
 # Discovery and every pristine-state assertion precede the first config,
@@ -1607,7 +1616,7 @@ invoke_overlay_row 2
 # Local completion is proved by process teardown plus rejection of the exact old
 # controls. Remote app.session.status is not local Android launch evidence.
 wait_stopped
-assert_old_launch_rejected "$quit_launch_id"
+wait_old_launch_stale "$quit_launch_id"
 # Retain host idleness as a replacement-safety precondition only.
 assert_session_idle
 GATE_CURRENT_LAUNCH_QUIESCED=true

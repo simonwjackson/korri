@@ -1025,6 +1025,13 @@ fn authorize_moonlight_launch_against_current_policy(
     }
 }
 
+fn stale_session_control() -> SessionControlFailure {
+    SessionControlFailure {
+        reason: SessionControlFailureReason::StaleSession,
+        message: "The gameplay session changed. Reopen the overlay and try again.".into(),
+    }
+}
+
 fn session_route_context_unavailable() -> SessionControlFailure {
     SessionControlFailure {
         reason: SessionControlFailureReason::Unavailable,
@@ -1080,12 +1087,9 @@ fn materialize_session_controls_snapshot(
         .lock()
         .expect("active Android launch mutex poisoned")
         .clone()
-        .ok_or_else(session_route_context_unavailable)?;
+        .ok_or_else(stale_session_control)?;
     if active.launch_id != launch_id {
-        return Err(SessionControlFailure {
-            reason: SessionControlFailureReason::StaleSession,
-            message: "The gameplay session changed. Reopen the overlay and try again.".into(),
-        });
+        return Err(stale_session_control());
     }
     let executor = match active
         .executor
@@ -1337,6 +1341,32 @@ async fn materialize_session_controls(
     ))
 }
 
+fn retire_exact_retroarch_launch(
+    active_android_launch: &Arc<Mutex<Option<launcher::AndroidActiveLaunch>>>,
+    retroarch_control_authority: &RetroarchControlSlot,
+    expected_launch: &launcher::AndroidActiveLaunch,
+    expected_authority: &RetroarchControlAuthority,
+) -> bool {
+    // Keep the established active-then-authority lock order. Holding both locks
+    // makes the terminal transition indivisible to publication and late ACKs.
+    let mut active = active_android_launch
+        .lock()
+        .expect("active Android launch mutex poisoned");
+    let mut authority = retroarch_control_authority
+        .lock()
+        .expect("RetroArch control authority mutex poisoned");
+    if active.as_ref() != Some(expected_launch)
+        || authority
+            .as_ref()
+            .is_none_or(|current| !Arc::ptr_eq(current, expected_authority))
+    {
+        return false;
+    }
+    *active = None;
+    *authority = None;
+    true
+}
+
 async fn invoke_current_session_control(
     brain: &BrainRuntime,
     request: SessionControlInvokeRequest,
@@ -1429,19 +1459,30 @@ async fn invoke_current_session_control(
                     message: "RetroArch did not acknowledge that gameplay control.".into(),
                 });
             }
-            let active = brain
-                .active_android_launch
-                .lock()
-                .expect("active Android launch mutex poisoned")
-                .clone();
-            let exact_authority = brain
-                .retroarch_control_authority
-                .lock()
-                .expect("RetroArch control authority mutex poisoned")
-                .clone()
-                .is_some_and(|current_authority| Arc::ptr_eq(&current_authority, &authority));
-            if active.as_ref() != Some(&current) || !exact_authority {
-                return SessionControlInvokeOutcome::Err(session_route_context_unavailable());
+            if command == launcher::retroarch_control::RetroarchControlCommand::Quit {
+                if !retire_exact_retroarch_launch(
+                    &brain.active_android_launch,
+                    &brain.retroarch_control_authority,
+                    &current,
+                    &authority,
+                ) {
+                    return SessionControlInvokeOutcome::Err(session_route_context_unavailable());
+                }
+            } else {
+                let active = brain
+                    .active_android_launch
+                    .lock()
+                    .expect("active Android launch mutex poisoned")
+                    .clone();
+                let exact_authority = brain
+                    .retroarch_control_authority
+                    .lock()
+                    .expect("RetroArch control authority mutex poisoned")
+                    .clone()
+                    .is_some_and(|current_authority| Arc::ptr_eq(&current_authority, &authority));
+                if active.as_ref() != Some(&current) || !exact_authority {
+                    return SessionControlInvokeOutcome::Err(session_route_context_unavailable());
+                }
             }
             SessionControlInvokeOutcome::Ok(SessionControlInvokeResult::Completed(
                 SessionControlCompleted {
@@ -4140,29 +4181,52 @@ command = ["sh", "-c", "sleep 1"]
         );
         assert_eq!(active_android_launch().unwrap().launch_id, local.launch_id);
 
-        for control_id in ["@korri:retroarch/open-menu", "@korri:retroarch/quit"] {
-            let invoked = client
-                .post(&url)
-                .bearer_auth(&capability)
-                .json(&serde_json::json!({
-                    "_tag": "app.session.control.invoke",
-                    "payload": {
-                        "launchId": local.launch_id.clone(),
-                        "controlId": control_id,
-                    }
-                }))
-                .send()
-                .await
+        let original_authority = {
+            let slot = server_slot().lock().unwrap();
+            let authority = slot
+                .as_ref()
                 .unwrap()
-                .json::<serde_json::Value>()
-                .await
+                .retroarch_control_authority
+                .lock()
+                .unwrap()
+                .clone()
                 .unwrap();
-            assert_eq!(invoked["outcome"]["_tag"], "Ok");
-            assert_eq!(invoked["outcome"]["payload"]["_tag"], "Completed");
-            assert_eq!(
-                invoked["outcome"]["payload"]["payload"]["launchId"],
-                local.launch_id
-            );
+            authority
+        };
+        let open_menu = client
+            .post(&url)
+            .bearer_auth(&capability)
+            .json(&serde_json::json!({
+                "_tag": "app.session.control.invoke",
+                "payload": {
+                    "launchId": local.launch_id.clone(),
+                    "controlId": "@korri:retroarch/open-menu",
+                }
+            }))
+            .send()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        assert_eq!(open_menu["outcome"]["_tag"], "Ok");
+        assert_eq!(open_menu["outcome"]["payload"]["_tag"], "Completed");
+        assert_eq!(
+            open_menu["outcome"]["payload"]["payload"]["launchId"],
+            local.launch_id
+        );
+        assert_eq!(active_android_launch().as_ref(), Some(&local));
+        {
+            let slot = server_slot().lock().unwrap();
+            let authority = slot
+                .as_ref()
+                .unwrap()
+                .retroarch_control_authority
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap();
+            assert!(Arc::ptr_eq(&authority, &original_authority));
         }
         std::fs::write(
             root.path().join("config.yaml"),
@@ -4189,41 +4253,68 @@ command = ["sh", "-c", "sleep 1"]
             .is_empty());
 
         write_wl4_plugin_config(root.path());
-        delay_next_status.store(true, std::sync::atomic::Ordering::SeqCst);
-        let replacement_client = client.clone();
-        let replacement_url = url.clone();
-        let replacement_capability = capability.clone();
-        let replacement_launch_id = local.launch_id.clone();
-        let controls_during_replacement = tokio::spawn(async move {
-            replacement_client
-                .post(&replacement_url)
-                .bearer_auth(&replacement_capability)
-                .json(&serde_json::json!({
-                    "_tag": "app.session.controls",
-                    "payload": { "launchId": replacement_launch_id }
-                }))
+        let quit = client
+            .post(&url)
+            .bearer_auth(&capability)
+            .json(&serde_json::json!({
+                "_tag": "app.session.control.invoke",
+                "payload": {
+                    "launchId": local.launch_id.clone(),
+                    "controlId": "@korri:retroarch/quit",
+                }
+            }))
+            .send()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        assert_eq!(quit["outcome"]["_tag"], "Ok");
+        assert_eq!(quit["outcome"]["payload"]["_tag"], "Completed");
+        assert_eq!(
+            quit["outcome"]["payload"]["payload"]["launchId"],
+            local.launch_id
+        );
+        assert!(active_android_launch().is_none());
+        {
+            let slot = server_slot().lock().unwrap();
+            assert!(slot
+                .as_ref()
+                .unwrap()
+                .retroarch_control_authority
+                .lock()
+                .unwrap()
+                .is_none());
+        }
+
+        for tag in ["app.session.controls", "app.session.control.invoke"] {
+            let payload = if tag == "app.session.controls" {
+                serde_json::json!({ "launchId": local.launch_id.clone() })
+            } else {
+                serde_json::json!({
+                    "launchId": local.launch_id.clone(),
+                    "controlId": "@korri:retroarch/quit",
+                })
+            };
+            let stale = client
+                .post(&url)
+                .bearer_auth(&capability)
+                .json(&serde_json::json!({ "_tag": tag, "payload": payload }))
                 .send()
                 .await
                 .unwrap()
                 .json::<serde_json::Value>()
                 .await
-                .unwrap()
-        });
-        tokio::task::yield_now().await;
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        assert!(clear_active_android_launch(&local.launch_id));
-        assert_eq!(
-            controls_during_replacement.await.unwrap()["outcome"]["_tag"],
-            "Err"
-        );
-        assert!(!delay_next_status.load(std::sync::atomic::Ordering::SeqCst));
+                .unwrap();
+            assert_eq!(stale["outcome"]["_tag"], "Err");
+            assert_eq!(stale["outcome"]["payload"]["reason"], "StaleSession");
+        }
+
         responder.join().unwrap();
-        assert!(active_android_launch().is_none());
         assert_eq!(
             publish_local_active_launch(&spec_json),
             Err(ActiveAndroidLaunchFailure::AlreadyPublished)
         );
-        write_wl4_plugin_config(root.path());
         let fresh_after_end = client
             .post(&url)
             .bearer_auth(&capability)
@@ -4245,6 +4336,52 @@ command = ["sh", "-c", "sleep 1"]
             fresh_after_end["outcome"]["payload"]["launchId"],
             local.launch_id
         );
+        let fresh_json = serde_json::to_string(&fresh_after_end["outcome"]["payload"]).unwrap();
+        assert!(authorize_local_launch_spec(&fresh_json)
+            .is_some_and(|authorized| authorized.publication_required));
+        let replacement = publish_local_active_launch(&fresh_json).unwrap();
+        let replacement_authority = {
+            let slot = server_slot().lock().unwrap();
+            let authority = slot
+                .as_ref()
+                .unwrap()
+                .retroarch_control_authority
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap();
+            authority
+        };
+        // The exact retirement step of a late old QUIT ACK must not clear the
+        // fresh replacement or its distinct authority.
+        let (active_slot, authority_slot) = {
+            let slot = server_slot().lock().unwrap();
+            let server = slot.as_ref().unwrap();
+            (
+                Arc::clone(&server.active_android_launch),
+                Arc::clone(&server.retroarch_control_authority),
+            )
+        };
+        assert!(!retire_exact_retroarch_launch(
+            &active_slot,
+            &authority_slot,
+            &local,
+            &original_authority,
+        ));
+        assert_eq!(active_android_launch().as_ref(), Some(&replacement));
+        {
+            let slot = server_slot().lock().unwrap();
+            let authority = slot
+                .as_ref()
+                .unwrap()
+                .retroarch_control_authority
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap();
+            assert!(Arc::ptr_eq(&authority, &replacement_authority));
+        }
+        assert!(clear_active_android_launch(&replacement.launch_id));
 
         spec["files"][0]["content"] = serde_json::Value::String("tampered".into());
         assert!(!verify_local_launch_spec(

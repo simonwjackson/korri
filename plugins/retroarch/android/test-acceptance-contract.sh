@@ -471,7 +471,7 @@ fi
 quit_source="$(sed -n '/^STAGE="quit-stale"/,/^STAGE="restoration"/p' "$ACCEPTANCE")"
 wait_stopped_line="$(grep -nF 'wait_stopped' <<<"$quit_source" | cut -d: -f1)"
 # shellcheck disable=SC2016 # Literal source-contract needle.
-stale_controls_line="$(grep -nF 'assert_old_launch_rejected "$quit_launch_id"' <<<"$quit_source" | cut -d: -f1)"
+stale_controls_line="$(grep -nF 'wait_old_launch_stale "$quit_launch_id"' <<<"$quit_source" | cut -d: -f1)"
 remote_idle_line="$(grep -nF 'assert_session_idle' <<<"$quit_source" | cut -d: -f1)"
 quiesced_line="$(grep -nF 'GATE_CURRENT_LAUNCH_QUIESCED=true' <<<"$quit_source" | cut -d: -f1)"
 [[ -n "$wait_stopped_line" && -n "$stale_controls_line" && -n "$remote_idle_line" \
@@ -483,6 +483,12 @@ quiesced_line="$(grep -nF 'GATE_CURRENT_LAUNCH_QUIESCED=true' <<<"$quit_source" 
 }
 if grep -F 'quit_session=' <<<"$quit_source" >/dev/null; then
   echo 'local Quit proof must not treat remote session status as local evidence' >&2
+  exit 1
+fi
+stale_wait_source="$(sed -n '/^wait_old_launch_stale() {/,/^}/p' "$ACCEPTANCE")"
+if [[ "$(grep -Fc '.outcome.payload.reason == "StaleSession"' <<<"$stale_wait_source")" -ne 2 ]] \
+  || grep -F 'Unavailable' <<<"$stale_wait_source" >/dev/null; then
+  echo 'local Quit proof must poll controls and invoke until both are exactly StaleSession' >&2
   exit 1
 fi
 
