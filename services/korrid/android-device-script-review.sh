@@ -673,12 +673,13 @@ if ! grep -F 'adb_target_once -s "$SERIAL" shell am instrument -w' "$ANDROID_GAM
   echo 'android-game-discovery-check.sh must not blindly retry non-idempotent instrumentation RPC mutations' >&2
   exit 1
 fi
+restart_block="$(sed -n '/restart_portal_after_registration()/,/^}/p' "$ANDROID_GAME_DISCOVERY")"
 if ! grep -F 'restart_portal_after_registration()' "$ANDROID_GAME_DISCOVERY" >/dev/null \
-  || ! sed -n '/restart_portal_after_registration()/,/^}/p' "$ANDROID_GAME_DISCOVERY" | grep -F 'clear_rpc_forward' >/dev/null \
-  || ! sed -n '/restart_portal_after_registration()/,/^}/p' "$ANDROID_GAME_DISCOVERY" | grep -F 'logcat -c' >/dev/null \
-  || ! sed -n '/restart_portal_after_registration()/,/^}/p' "$ANDROID_GAME_DISCOVERY" | grep -F "am start -n '\$PKG/com.limelight.KorriShellActivity'" >/dev/null \
-  || ! sed -n '/restart_portal_after_registration()/,/^}/p' "$ANDROID_GAME_DISCOVERY" | grep -F 'recover_rpc_details "$label"' >/dev/null; then
-  echo 'android-game-discovery-check.sh must restart KorriShellActivity and recover fresh RPC details after registration invalidates the target process' >&2
+  || ! grep -F 'clear_rpc_forward' <<<"$restart_block" >/dev/null \
+  || grep -F 'logcat -c' <<<"$restart_block" >/dev/null \
+  || ! grep -F "am start -n '\$PKG/com.limelight.KorriShellActivity'" <<<"$restart_block" >/dev/null \
+  || ! grep -F 'recover_rpc_details "$label"' <<<"$restart_block" >/dev/null; then
+  echo 'android-game-discovery-check.sh must restart KorriShellActivity, preserve scan logs, and recover fresh RPC details after registration invalidates the target process' >&2
   exit 1
 fi
 if ! awk '
