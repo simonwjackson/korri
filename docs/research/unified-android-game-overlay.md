@@ -88,19 +88,52 @@ contract. U6 must not move or rename that event vocabulary.
 
 ## U8 acceptance evidence rules and current status
 
-**Current status (2026-08-05): pre-cutover, device proof pending.** Repository
-coverage proves the global host, exact launch scoping, semantic input adapter,
-control materialization, and native executors. A process-local current-service
-request seam now routes `Game`'s floating button, performance HUD, five-finger,
-Back, and controller triggers to the exact armed global session. Stale,
-replacement, foreground-mismatched, and direct cases fail closed. An absent
-service is reported distinctly as unavailable; only that result may use the
-clearly marked temporary old-host fallback.
+**Current status (2026-08-06): pre-cutover, local RetroArch device proof
+passed; Moonlight device proof pending.** Repository coverage proves the global
+host, exact launch scoping, semantic input adapter, control materialization,
+and native executors. A process-local current-service request seam now routes
+`Game`'s floating button, performance HUD, five-finger, Back, and controller
+triggers to the exact armed global session. Stale, replacement,
+foreground-mismatched, and direct cases fail closed. An absent service is
+reported distinctly as unavailable; only that result may use the clearly
+marked temporary old-host fallback.
 
-This is not installed-device parity. `KorriGameOverlay.java` and
-`overlay.html` intentionally remain until the device gate passes. The cutover
-contract test is still in its pre-cutover state and must be flipped only in the
-later removal change.
+The complete local RetroArch gate passed on the installed RG405M in `proc_177`
+(`100.69.171.11:5555`, exact model `TrebleDroid vanilla`, hardware serial
+`13584945524322`). The action-bounded run proved all of the following:
+
+- The physical Guide button opened the global Shift sheet over Korri-launched
+  Wario Land 4. The WebView took controller focus on attachment; physical hat
+  navigation worked immediately without a touch prerequisite.
+- Physical Down and A invoked **Open RetroArch menu**. Authenticated status
+  proved the native Quick Menu was alive, then physical Down advanced its
+  selection exactly once. Physical Up returned to **Resume** and physical A
+  resumed gameplay; authenticated status proved the native menu closed.
+- A second physical Guide/A journey proved Shift's own **Resume** row.
+- Android pause refreshed the account-owned auto-state before the first launch
+  was ended through authenticated, acknowledged RetroArch Quit. The exact old
+  launch became stale, the installed Korri UI relaunched Wario, and runtime
+  evidence proved the non-empty auto-state loaded successfully.
+- A final physical Guide, Down twice, and A invoked Shift's **Quit game**. The
+  acknowledged terminal action tore down the RetroArch process and made the
+  old controls and invocation stale.
+- Transactional cleanup restored `library.yaml` to SHA-256
+  `696019a567bd1a38ba41c96bf193cb051a06fb6bf39dd8bfbf51cae810336d64`,
+  left no owned backup or lock, left no RetroArch PID, and preserved the enabled
+  accessibility component
+  `com.simonwjackson.korri.debug/com.limelight.korri.overlay.KorriOverlayService`.
+
+One visible UX issue remains from this run: opening the sheet can briefly show
+a blank/reappearing game frame before the side sheet slides out. That flicker
+is pending investigation and is not recorded as parity. Abrupt external
+RetroArch force-stop/crash retirement also remains deliberately unresolved;
+timeout alone is not accepted as death evidence and the work is deferred to
+backlog `01KZBYHCA4R9C8QK131HK0VWSA`.
+
+This is not complete installed-device parity. Moonlight and the unified stream
+gate have not passed. `KorriGameOverlay.java` and `overlay.html` intentionally
+remain until that device gate passes. The cutover contract test is still in
+its pre-cutover state and must be flipped only in the later removal change.
 
 Acceptance evidence follows these rules:
 

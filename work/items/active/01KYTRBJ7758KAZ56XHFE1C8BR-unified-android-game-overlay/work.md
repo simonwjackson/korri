@@ -29,3 +29,33 @@
 - [ ] Review the complete diff and resolve relevant residual findings.
 - [ ] Run `nix run .#check` and mandatory device acceptance.
 - [ ] Integrate locally and close the graduated backlog item.
+
+## Installed-device evidence
+
+### 2026-08-06 — local RetroArch gate passed
+
+`proc_177` completed successfully on the RG405M at
+`100.69.171.11:5555` (exact model `TrebleDroid vanilla`, hardware serial
+`13584945524322`). The single action-bounded run proved:
+
+- physical Guide opened the global Shift gameplay sheet over local Wario;
+- the attached overlay accepted physical controller navigation immediately,
+  without first touching the WebView;
+- physical Shift **Open RetroArch menu** produced authenticated native-menu
+  state;
+- native physical Down moved exactly one row, then physical Up plus A selected
+  **Resume** and closed the native menu;
+- physical Shift **Resume** returned to gameplay;
+- pause refreshed the auto-state, authenticated acknowledged Quit retired the
+  first exact launch, and installed-UI relaunch successfully auto-loaded it;
+- final physical Shift **Quit game** acknowledged, tore down RetroArch, and made
+  the old controls and invocation stale;
+- cleanup restored `library.yaml` to
+  `696019a567bd1a38ba41c96bf193cb051a06fb6bf39dd8bfbf51cae810336d64`,
+  left no owned lock/backup or RetroArch PID, and preserved the enabled
+  `com.simonwjackson.korri.debug/com.limelight.korri.overlay.KorriOverlayService`.
+
+The brief blank/reappear transition observed before the sheet slide remains a
+pending UX investigation. Abrupt force-stop/crash retirement is not claimed;
+it is deferred to `01KZBYHCA4R9C8QK131HK0VWSA`. Moonlight parity and U8
+cutover remain pending, so the legacy overlay files stay in place.
