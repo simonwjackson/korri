@@ -175,8 +175,17 @@ if grep -F 'KEYCODE_DPAD_RIGHT' <<<"$library_focus_source" >/dev/null; then
   exit 1
 fi
 [[ "$(grep -Fc 'shell input tap' <<<"$library_focus_source")" -eq 1 ]]
+# The measured Library tile reaches within a few pixels of the RG405M system
+# taskbar, so its activation point must stay in the verified upper quarter of
+# the exact tile rather than its center.
 # shellcheck disable=SC2016 # Literal source-contract needles.
-grep -F 'verified_element_center "$navigation_json"' <<<"$library_focus_source" >/dev/null
+grep -F 'verified_library_system_edge_avoiding_point "$navigation_json"' \
+  <<<"$library_focus_source" >/dev/null
+if grep -F 'verified_element_center "$navigation_json"' \
+  <<<"$library_focus_source" >/dev/null; then
+  echo 'installed Library activation must avoid the system edge, not use the tile center' >&2
+  exit 1
+fi
 grep -F 'Physical A activation is retained by the human unified-overlay gate' \
   <<<"$library_focus_source" >/dev/null
 
@@ -280,10 +289,20 @@ grep -F 'begin_evidence_checkpoint' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F '[rpc responses]' "$OVERLAY_ACCEPTANCE" >/dev/null
 grep -F '[checkpoint-bounded lifecycle records]' "$OVERLAY_ACCEPTANCE" >/dev/null
 capture_evidence_source="$(sed -n '/^capture_evidence() {/,/^}/p' "$OVERLAY_ACCEPTANCE")"
-if grep -F '|| true' <<<"$capture_evidence_source" >/dev/null; then
+# Collecting an optional checkpoint predicate may tolerate no match, because an
+# empty predicate is rejected explicitly straight afterwards. Every device or
+# RPC probe in this function is required evidence and must still fail closed.
+if grep -E '(adb_shell|adb_target|dumpsys|screencap|controls_for_launch|package_pid|rpc )' \
+  <<<"$capture_evidence_source" | grep -F '|| true' >/dev/null; then
   echo 'overlay acceptance must not mask a required structured evidence probe' >&2
   exit 1
 fi
+if grep -F '|| true' <<<"$capture_evidence_source" \
+  | grep -Ev '(predicate|required_lifecycle_records)' >/dev/null; then
+  echo 'overlay acceptance may tolerate no match only while collecting a checkpoint predicate' >&2
+  exit 1
+fi
+grep -F 'required checkpoint predicate' "$OVERLAY_ACCEPTANCE" >/dev/null
 if grep -Eq 'logcat[^[:cntrl:]]*(-t[ =]?1000|tail[[:space:]]+-n?[[:space:]]*1000)' "$OVERLAY_ACCEPTANCE"; then
   echo 'overlay acceptance must not satisfy checkpoints from a stale generic last-1000 log search' >&2
   exit 1
@@ -453,7 +472,13 @@ fi
 grep -F 'EXPECTED_MODEL="$2"' "$RETROARCH_ACCEPTANCE" >/dev/null
 # shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F 'EXPECTED_HARDWARE_SERIAL="$3"' "$RETROARCH_ACCEPTANCE" >/dev/null
-grep -F 'unauthenticated UDP probe must report exact remote rc=124 and no response' "$RETROARCH_ACCEPTANCE" >/dev/null
+# Measured Toybox nc returns either 0 or 124 after a successful no-response
+# probe, so delivery is proven by empty output plus exactly one authenticated
+# rejection rather than by one exit status.
+grep -F 'unauthenticated UDP probe must report empty output and remote rc 0 or 124' \
+  "$RETROARCH_ACCEPTANCE" >/dev/null
+grep -F 'remote_nc_rc=0 remote_nc_output=' "$RETROARCH_ACCEPTANCE" >/dev/null
+grep -F 'remote_nc_rc=124 remote_nc_output=' "$RETROARCH_ACCEPTANCE" >/dev/null
 grep -F 'UDP probe transport failed before its remote completion marker' "$RETROARCH_ACCEPTANCE" >/dev/null
 grep -F 'assert_no_artemis_game_activity' "$RETROARCH_ACCEPTANCE" >/dev/null
 grep -F 'assert_pristine_gate_state' "$RETROARCH_ACCEPTANCE" >/dev/null
