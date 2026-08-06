@@ -20,6 +20,61 @@ grep -F 'wl4.state.auto' "$ACCEPTANCE" >/dev/null
 grep -F 'wl4.srm' "$ACCEPTANCE" >/dev/null
 grep -F 'must be stopped before acceptance can back up save state' "$ACCEPTANCE" >/dev/null
 grep -F 'could not quiesce the exact recorded launch; backup and lock retained' "$ACCEPTANCE" >/dev/null
+for stage in \
+  preflight fixture portal-card portal-detail portal-location-launch wait-playing \
+  udp-negative overlay-menu save-pause relaunch quit-stale restoration; do
+  grep -F "STAGE=\"$stage\"" "$ACCEPTANCE" >/dev/null || {
+    echo "RetroArch acceptance is missing diagnostic stage: $stage" >&2
+    exit 1
+  }
+done
+stage_report_source="$(sed -n '/^report_stage_failure() {/,/^}/p' "$ACCEPTANCE")"
+grep -F "printf 'RetroArch acceptance failed: stage=%s line=%s\\n'" \
+  <<<"$stage_report_source" >/dev/null
+if grep -Eq 'BASH_COMMAND|capability|authority|payload|authorization' \
+    <<<"$stage_report_source"; then
+  echo 'RetroArch stage diagnostics must expose only stage and line' >&2
+  exit 1
+fi
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F 'report_stage_failure "$status" "$LINENO"' "$ACCEPTANCE" >/dev/null
+cleanup_source="$(sed -n '/^cleanup() {/,/^}/p' "$ACCEPTANCE")"
+for classification in \
+  'active-launch=%s' 'active_classification="absent"' \
+  'active_classification="recorded"' 'active_classification="replacement"' \
+  'fork-pid=%s' 'pid_classification="recorded"' \
+  'pid_classification="replacement"'; do
+  grep -F "$classification" <<<"$cleanup_source" >/dev/null || {
+    echo "RetroArch cleanup is missing safe classification: $classification" >&2
+    exit 1
+  }
+done
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F 'confirmed_pid="$(package_pid "$FORK_PACKAGE")"' \
+  <<<"$cleanup_source" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F 'for ((quiesce_attempt = 1; quiesce_attempt <= 20; quiesce_attempt++)); do' \
+  <<<"$cleanup_source" >/dev/null
+grep -F 'sleep 0.25' <<<"$cleanup_source" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
+revalidate_pid_line="$(grep -nF 'confirmed_pid="$(package_pid "$FORK_PACKAGE")"' \
+  <<<"$cleanup_source" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+force_stop_line="$(grep -nF 'shell am force-stop "$FORK_PACKAGE"' \
+  <<<"$cleanup_source" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+bounded_wait_line="$(grep -nF 'for ((quiesce_attempt = 1; quiesce_attempt <= 20; quiesce_attempt++)); do' \
+  <<<"$cleanup_source" | cut -d: -f1)"
+[[ -n "$revalidate_pid_line" && -n "$force_stop_line" && -n "$bounded_wait_line" \
+  && "$revalidate_pid_line" -lt "$force_stop_line" \
+  && "$force_stop_line" -lt "$bounded_wait_line" ]] || {
+  echo 'RetroArch cleanup must revalidate the recorded PID, force-stop, then wait boundedly' >&2
+  exit 1
+}
+if grep -Eq 'BASH_COMMAND|authorization: Bearer|capability=' <<<"$cleanup_source"; then
+  echo 'RetroArch cleanup diagnostics must not expose commands or authority' >&2
+  exit 1
+fi
 # shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F 'EXPECTED_MODEL="$2"' "$ACCEPTANCE" >/dev/null
 # shellcheck disable=SC2016 # Literal source-contract needle.

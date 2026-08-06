@@ -3,6 +3,17 @@
 # shellcheck shell=bash
 set -euo pipefail
 
+# Failure diagnostics intentionally expose only a fixed phase label and source
+# line. Never include BASH_COMMAND, RPC payloads, capabilities, or authority.
+STAGE="preflight"
+report_stage_failure() {
+  local status="$1"
+  local line="$2"
+  printf 'RetroArch acceptance failed: stage=%s line=%s\n' "$STAGE" "$line" >&2
+  return "$status"
+}
+trap 'status=$?; report_stage_failure "$status" "$LINENO"' ERR
+
 usage() {
   echo 'usage: device-acceptance.sh <adb-serial> <exact-device-model> <exact-hardware-serial>' >&2
   exit 2
@@ -382,40 +393,97 @@ restore_checkpoint_files() {
 
 cleanup() {
   local status=$?
+  STAGE="restoration"
   local cleanup_failed=false
   local safe_to_restore=true
   local target_pid=""
+  local confirmed_pid=""
   local replacement_observed=false
+  local active_classification="unavailable"
+  local pid_classification="absent"
+  local quiesce_attempt
   if [[ "$TARGET_STARTED_BY_GATE" == true ]]; then
     local active_launch=""
     local session=""
-    if [[ "$FORWARD_ACTIVE" == true && -n "$capability" ]]; then
-      session="$(rpc '{"_tag":"app.session.status","payload":{}}' 2>/dev/null || true)"
-      active_launch="$(jq -r '.outcome.payload.active.launchId // empty' <<<"$session" 2>/dev/null || true)"
+    if [[ "$FORWARD_ACTIVE" == true && -n "$capability" ]] \
+      && session="$(rpc '{"_tag":"app.session.status","payload":{}}' 2>/dev/null)" \
+      && jq -e '.outcome._tag == "Ok"' <<<"$session" >/dev/null 2>&1; then
+      active_classification="absent"
+      active_launch="$(jq -r '.outcome.payload.active.launchId // empty' <<<"$session")"
       if [[ -n "$active_launch" ]]; then
         if ! is_gate_launch "$active_launch"; then
+          active_classification="replacement"
           safe_to_restore=false
           replacement_observed=true
         else
+          active_classification="recorded"
           invoke_control "$active_launch" '@korri:retroarch/quit' >/dev/null 2>&1 || safe_to_restore=false
         fi
       fi
+    else
+      # Without current launch state, cleanup cannot prove that restoration
+      # would not race a replacement session.
+      safe_to_restore=false
     fi
+    printf 'RetroArch acceptance cleanup: active-launch=%s\n' "$active_classification" >&2
     if [[ "$replacement_observed" == false ]]; then
       if ! target_pid="$(package_pid "$FORK_PACKAGE")"; then
+        pid_classification="unavailable"
         safe_to_restore=false
       elif [[ -n "$target_pid" ]]; then
         if [[ -z "${GATE_RETROARCH_PIDS[$target_pid]:-}" ]]; then
+          pid_classification="replacement"
           safe_to_restore=false
           replacement_observed=true
-        elif ! "${ADB[@]}" shell am force-stop "$FORK_PACKAGE" >/dev/null 2>&1; then
-          safe_to_restore=false
+        else
+          pid_classification="recorded"
+          # Revalidate the package PID immediately before the package-scoped
+          # force-stop. A replacement process is never treated as gate-owned.
+          if ! confirmed_pid="$(package_pid "$FORK_PACKAGE")"; then
+            safe_to_restore=false
+          elif [[ "$confirmed_pid" != "$target_pid" ]]; then
+            pid_classification="replacement"
+            safe_to_restore=false
+            replacement_observed=true
+          elif ! "${ADB[@]}" shell am force-stop "$FORK_PACKAGE" >/dev/null 2>&1; then
+            safe_to_restore=false
+          else
+            # Android process teardown can lag behind a successful force-stop.
+            # Wait boundedly, rejecting any unrecorded replacement observed in
+            # the interval instead of restoring files underneath it.
+            for ((quiesce_attempt = 1; quiesce_attempt <= 20; quiesce_attempt++)); do
+              if ! target_pid="$(package_pid "$FORK_PACKAGE")"; then
+                safe_to_restore=false
+                break
+              fi
+              [[ -z "$target_pid" ]] && break
+              if [[ -z "${GATE_RETROARCH_PIDS[$target_pid]:-}" ]]; then
+                pid_classification="replacement"
+                safe_to_restore=false
+                replacement_observed=true
+                break
+              fi
+              sleep 0.25
+            done
+            [[ -z "$target_pid" ]] || safe_to_restore=false
+          fi
         fi
       fi
-      if [[ "$replacement_observed" == false ]] \
-        && { ! target_pid="$(package_pid "$FORK_PACKAGE")" || [[ -n "$target_pid" ]]; }; then
-        safe_to_restore=false
+      printf 'RetroArch acceptance cleanup: fork-pid=%s\n' "$pid_classification" >&2
+    else
+      # A replacement active launch forbids mutation, but read-only PID
+      # classification still explains whether the package process is one this
+      # gate recorded. Never force-stop from this branch.
+      if ! target_pid="$(package_pid "$FORK_PACKAGE")"; then
+        pid_classification="unavailable"
+      elif [[ -z "$target_pid" ]]; then
+        pid_classification="absent"
+      elif [[ -n "${GATE_RETROARCH_PIDS[$target_pid]:-}" ]]; then
+        pid_classification="recorded"
+      else
+        pid_classification="replacement"
       fi
+      printf 'RetroArch acceptance cleanup: fork-pid=%s\n' "$pid_classification" >&2
     fi
     if [[ "$safe_to_restore" != true ]]; then
       echo "RetroArch acceptance could not quiesce the exact recorded launch; backup and lock retained at $CHECKPOINT_BACKUP_DIR and $LOCK_REMOTE" >&2
@@ -611,6 +679,7 @@ assert_old_launch_rejected() {
 
 # Discovery and every pristine-state assertion precede the first config,
 # library, state, save, or preferences mutation.
+STAGE="fixture"
 discover_live_korri_authority || {
   echo 'The already-running Korri RPC became unavailable before mutation.' >&2
   exit 1
@@ -958,6 +1027,7 @@ launch_wario_entry() {
   local local_location_id='["local",null,"wl4"]'
   local detail_observation
   local location_observation
+  STAGE="portal-card"
   focus_wario_in_installed_library "$label"
   sleep 1
   portal_shot_focuses_wario "$label" || {
@@ -978,6 +1048,7 @@ launch_wario_entry() {
   }
   "${ADB[@]}" shell input tap "$tap_x" "$tap_y"
 
+  STAGE="portal-detail"
   # Library selection opens detail. Prove exact Wario identity and exactly one
   # visible primary Play/Continue action before activation. DevTools focuses
   # and measures only; it never clicks, dispatches input, or calls RPC.
@@ -1004,6 +1075,7 @@ launch_wario_entry() {
 
   "${ADB[@]}" shell input tap "$tap_x" "$tap_y"
 
+  STAGE="portal-location-launch"
   # A folded game never silently chooses a host. Prove the exact chooser and
   # select the opaque local copy identity through its verified installed row;
   # labels are presentation only and are never used for routing.
@@ -1064,6 +1136,7 @@ if ! grep -q 'com.limelight.korri.overlay.KorriOverlayService' \
 fi
 
 launch_wario_entry first
+STAGE="wait-playing"
 status_first="$(wait_playing)"
 if ! pid_first="$(package_pid "$FORK_PACKAGE")"; then
   exit 1
@@ -1072,6 +1145,7 @@ fi
 record_gate_pid "$pid_first"
 assert_no_artemis_game_activity
 
+STAGE="udp-negative"
 # Loopback is transport, not authority. The launch-derived endpoint is visible
 # in Korri's generated config, but an exact-size unauthenticated frame receives
 # no response and cannot forge a command.
@@ -1089,6 +1163,7 @@ if ! current_pid="$(package_pid "$FORK_PACKAGE")"; then
 fi
 [[ "$current_pid" == "$pid_first" ]]
 
+STAGE="overlay-menu"
 # Non-destructive native-menu journey. Authenticated, MAC-covered GET_STATUS
 # telemetry is the pass criterion; screenshots are retained only as supporting
 # evidence. SHOW_MENU must acknowledge before the portal removes its window.
@@ -1119,6 +1194,7 @@ press_guide
 "${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_CENTER
 sleep 1
 
+STAGE="save-pause"
 # Android pause must synchronously replace the auto-state before suspension.
 before_mtime="$("${ADB[@]}" shell stat -c %Y "$STATE_FILE" 2>/dev/null | tr -d '\r' || printf 0)"
 sleep 1
@@ -1140,6 +1216,7 @@ if grep -qE 'Fatal signal|FATAL EXCEPTION' <<<"$pause_error_logs"; then
   exit 1
 fi
 
+STAGE="relaunch"
 # Relaunch through Korri again; verbose runtime logging proves the non-empty
 # auto-state was loaded successfully rather than merely left on disk.
 AUTO_LOAD_LOG_MARKER="$(new_logcat_marker auto-load)"
@@ -1147,6 +1224,7 @@ AUTO_LOAD_LOG_MARKER="$(new_logcat_marker auto-load)"
 "$DEBUG_PORTAL_RELOAD_SH" "$SERIAL" "$KORRI_PACKAGE" \
   --expect-game wl4 'Wario Land 4' >/dev/null
 launch_wario_entry second
+STAGE="relaunch"
 status_second="$(wait_playing)"
 assert_no_artemis_game_activity
 "${ADB[@]}" shell "test -s '$STATE_FILE'"
@@ -1158,6 +1236,7 @@ auto_load_log="$(logcat_since "$AUTO_LOAD_LOG_MARKER" 2>/dev/null | \
   exit 1
 }
 
+STAGE="quit-stale"
 before_quit_mtime="$("${ADB[@]}" shell stat -c %Y "$STATE_FILE" | tr -d '\r')"
 sleep 1
 # Resume is row zero, Open RetroArch menu is row one, and destructive Quit is row two.
@@ -1208,6 +1287,7 @@ assert_accessibility_service_enabled
 assert_korri_process_unchanged
 assert_no_artemis_game_activity
 
+STAGE="restoration"
 printf 'First launch: %s\n' "$status_first"
 printf 'Pause state: %s bytes at %s\n' "$state_size" "$after_mtime"
 printf 'Relaunch: %s\n' "$status_second"
