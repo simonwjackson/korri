@@ -46,6 +46,7 @@ public class KorriOverlayServiceTest {
         state.updateSession(artemis(), true);
         state.updateForeground("com.simonwjackson.korri", "com.limelight.Game");
 
+        assertTrue(state.isSessionAccepted());
         assertTrue(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN));
         assertFalse(state.isShowing());
         assertTrue(state.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP));
@@ -58,6 +59,7 @@ public class KorriOverlayServiceTest {
         KorriOverlayService.StateMachine direct = new KorriOverlayService.StateMachine(
                 "com.simonwjackson.korri");
         direct.updateForeground("org.example.game", "org.example.game.Game");
+        assertFalse(direct.isSessionAccepted());
         assertFalse(direct.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN));
         assertFalse(direct.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP));
 
@@ -66,6 +68,7 @@ public class KorriOverlayServiceTest {
         mismatch.updateSession(artemis(), true);
         mismatch.updateForeground(
                 "com.simonwjackson.korri", "com.limelight.KorriShellActivity");
+        assertFalse(mismatch.isSessionAccepted());
         assertFalse(mismatch.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_DOWN));
         assertFalse(mismatch.onKey(KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.ACTION_UP));
     }

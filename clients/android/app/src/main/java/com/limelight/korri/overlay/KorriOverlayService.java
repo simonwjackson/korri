@@ -193,7 +193,10 @@ public final class KorriOverlayService extends AccessibilityService {
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
         syncSession();
-        if (state == null) return false;
+        if (state == null) {
+            logPhysicalGuideEvent(event, false, false, false);
+            return false;
+        }
 
         if (event.getKeyCode() == KeyEvent.KEYCODE_BUTTON_MODE) {
             boolean wasShowing = state.isShowing();
@@ -206,6 +209,8 @@ public final class KorriOverlayService extends AccessibilityService {
                         "{\"type\":\"system\",\"source\":\"gamepad\"}");
             }
             reconcileWindow();
+            logPhysicalGuideEvent(
+                    event, consumed, state.isSessionAccepted(), state.isShowing());
             return consumed;
         }
 
@@ -213,13 +218,27 @@ public final class KorriOverlayService extends AccessibilityService {
                 event.getDeviceId(), event.getKeyCode(), event.getSource(),
                 event.getAction(), event.getRepeatCount(),
                 state.isShowing(), event.isCanceled());
-        if (!decision.consumed()) return false;
+        if (!decision.consumed()) {
+            logPhysicalGuideEvent(
+                    event, false, state.isSessionAccepted(), state.isShowing());
+            return false;
+        }
         if (decision.inputJson() != null && windowController != null) {
             windowController.sendInput(decision.inputJson());
         }
         if (decision.dismiss()) state.updateOverlayVisibility(false);
         reconcileWindow();
+        logPhysicalGuideEvent(
+                event, true, state.isSessionAccepted(), state.isShowing());
         return true;
+    }
+
+    private static void logPhysicalGuideEvent(
+            KeyEvent event, boolean consumed, boolean sessionAccepted, boolean showing) {
+        String diagnostic = KorriPhysicalGuideTelemetry.format(
+                event.getKeyCode(), event.getAction(), event.getDeviceId(),
+                consumed, sessionAccepted, showing);
+        if (diagnostic != null) Log.i("KorriOverlay", diagnostic);
     }
 
     @Override
@@ -1220,6 +1239,16 @@ public final class KorriOverlayService extends AccessibilityService {
             return showing;
         }
 
+        public boolean isSessionAccepted() {
+            return !destroyed
+                    && launch != null
+                    && ownerArmed
+                    && launch.launchId().equals(matchedLaunchId)
+                    && !launch.launchId().equals(suspendedLaunchId)
+                    && (isForegroundMatch()
+                        || ownsVisibleOverlayForeground(foregroundPackage, foregroundClass));
+        }
+
         public int toggleCount() {
             return toggleCount;
         }
@@ -1243,15 +1272,10 @@ public final class KorriOverlayService extends AccessibilityService {
         }
 
         private boolean isExactRequestScope(String launchId) {
-            return !destroyed
-                    && launchId != null
+            return launchId != null
                     && launch != null
                     && launchId.equals(launch.launchId())
-                    && ownerArmed
-                    && launchId.equals(matchedLaunchId)
-                    && !launchId.equals(suspendedLaunchId)
-                    && (isForegroundMatch()
-                        || ownsVisibleOverlayForeground(foregroundPackage, foregroundClass));
+                    && isSessionAccepted();
         }
 
         private boolean isArmed() {
