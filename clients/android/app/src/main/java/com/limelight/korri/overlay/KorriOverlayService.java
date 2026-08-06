@@ -755,8 +755,10 @@ public final class KorriOverlayService extends AccessibilityService {
             if (window != null) return;
             try {
                 window = factory.create();
-            } catch (Exception ignored) {
+                Log.i("KorriOverlay", KorriOverlayWindowTelemetry.success());
+            } catch (Exception failure) {
                 window = null;
+                Log.i("KorriOverlay", KorriOverlayWindowTelemetry.failure(failure));
             }
         }
 
