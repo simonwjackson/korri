@@ -952,18 +952,25 @@ wait_playing() {
   echo 'fork process did not become live' >&2
   return 1
 }
-press_guide() {
-  "${ADB[@]}" shell input -d 0 keyevent KEYCODE_BUTTON_MODE
-  sleep 1
-}
-invoke_overlay_row() {
-  local rows_after_resume="$1"
-  press_guide
-  for _ in $(seq 1 "$rows_after_resume"); do
-    "${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_DOWN
-  done
-  "${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_CENTER
-  sleep 1
+human_checkpoint() {
+  local checkpoint_id="$1"
+  local instructions="$2"
+  local expected_confirmation="${RUN_NONCE}/${checkpoint_id}"
+  local confirmation
+
+  printf 'Human checkpoint %s:\n%s\n' "$checkpoint_id" "$instructions" >&2
+  printf 'Only after completing those physical actions, confirm with exactly: %s\n' \
+    "$expected_confirmation" >&2
+  if ! IFS= read -r confirmation; then
+    printf 'Human checkpoint %s failed: stdin reached EOF before confirmation\n' \
+      "$checkpoint_id" >&2
+    return 1
+  fi
+  if [[ "$confirmation" != "$expected_confirmation" ]]; then
+    printf 'Human checkpoint %s failed: confirmation did not match this run nonce/id\n' \
+      "$checkpoint_id" >&2
+    return 1
+  fi
 }
 authenticated_retroarch_status() {
   local launch_id="$1"
@@ -1546,7 +1553,7 @@ STAGE="overlay-menu"
 # telemetry is the pass criterion; screenshots are retained only as supporting
 # evidence. SHOW_MENU must acknowledge before the portal removes its window.
 assert_menu_status 0
-invoke_overlay_row 1
+human_checkpoint open-retroarch-menu $'On the physical device only:\n  1. Press the physical Guide button.\n  2. Visually verify the actual Shift gameplay sheet is visible before selecting anything.\n  3. Press physical Down exactly once to focus Open RetroArch menu.\n  4. Press physical A exactly once to invoke Open RetroArch menu.'
 assert_overlay_window_absent
 assert_menu_status 1
 menu_selection_before="$(authenticated_retroarch_status "$GATE_CURRENT_LAUNCH" | jq -r '.menuSelection')"
@@ -1568,9 +1575,9 @@ if ! current_pid="$(package_pid "$FORK_PACKAGE")"; then
   exit 1
 fi
 [[ "$current_pid" == "$pid_first" ]]
-press_guide
-"${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_CENTER
-sleep 1
+human_checkpoint resume-from-overlay $'On the physical device only:\n  1. Press the physical Guide button.\n  2. Visually verify the actual Shift gameplay sheet is visible and Resume is focused before selecting anything.\n  3. Press physical A exactly once on Resume.'
+assert_overlay_window_absent
+assert_menu_status 0
 
 STAGE="save-pause"
 # Android pause must synchronously replace the auto-state before suspension.
@@ -1621,7 +1628,7 @@ sleep 1
 # Resume is row zero, Open RetroArch menu is row one, and destructive Quit is row two.
 # Completion requires the explicit native QUIT acknowledgement before the sheet dismisses.
 quit_launch_id="$GATE_CURRENT_LAUNCH"
-invoke_overlay_row 2
+human_checkpoint quit-retroarch $'On the physical device only:\n  1. Press the physical Guide button.\n  2. Visually verify the actual Shift gameplay sheet is visible before selecting anything.\n  3. Press physical Down exactly twice to focus Quit game.\n  4. Press physical A exactly once to invoke Quit game.'
 # Local completion is proved by process teardown plus rejection of the exact old
 # controls. Remote app.session.status is not local Android launch evidence.
 wait_stopped

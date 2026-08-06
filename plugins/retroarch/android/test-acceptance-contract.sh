@@ -254,9 +254,45 @@ if grep -F 'KEYCODE_BUTTON_A' "$ACCEPTANCE" >/dev/null; then
   echo 'RetroArch acceptance must not assume controller A after DevTools focus' >&2
   exit 1
 fi
-grep -F 'KEYCODE_DPAD_CENTER' "$ACCEPTANCE" >/dev/null
-grep -F 'KEYCODE_BUTTON_MODE' "$ACCEPTANCE" >/dev/null
-grep -F 'invoke_overlay_row 1' "$ACCEPTANCE" >/dev/null
+if grep -F 'KEYCODE_BUTTON_MODE' "$ACCEPTANCE" >/dev/null; then
+  echo 'RetroArch acceptance must never synthesize Guide with KEYCODE_BUTTON_MODE' >&2
+  exit 1
+fi
+if grep -Eq '^(press_guide|invoke_overlay_row)\(\)' "$ACCEPTANCE"; then
+  echo 'RetroArch acceptance must use fail-closed human overlay checkpoints' >&2
+  exit 1
+fi
+grep -F 'human_checkpoint open-retroarch-menu' "$ACCEPTANCE" >/dev/null
+grep -F 'human_checkpoint resume-from-overlay' "$ACCEPTANCE" >/dev/null
+grep -F 'human_checkpoint quit-retroarch' "$ACCEPTANCE" >/dev/null
+grep -F 'Visually verify the actual Shift gameplay sheet is visible' "$ACCEPTANCE" >/dev/null
+human_checkpoint_source="$(sed -n '/^human_checkpoint() {/,/^}/p' "$ACCEPTANCE")"
+grep -F "printf 'Human checkpoint %s:" <<<"$human_checkpoint_source" >/dev/null
+grep -F 'IFS= read -r confirmation' <<<"$human_checkpoint_source" >/dev/null
+grep -F 'stdin reached EOF before confirmation' <<<"$human_checkpoint_source" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F 'expected_confirmation="${RUN_NONCE}/${checkpoint_id}"' \
+  <<<"$human_checkpoint_source" >/dev/null
+if grep -Eq '/dev/tty|read .*-[tT]|timeout' <<<"$human_checkpoint_source"; then
+  echo 'RetroArch human checkpoints must use blocking managed stdin without timeout or TTY assumptions' >&2
+  exit 1
+fi
+(
+  eval "$human_checkpoint_source"
+  RUN_NONCE=0123456789abcdef0123456789abcdef
+  expected="$RUN_NONCE/static-checkpoint"
+  printf '%s\n' "$expected" | human_checkpoint static-checkpoint instructions \
+    >/dev/null 2>&1
+  if printf '%s\n' "$expected-extra" | human_checkpoint static-checkpoint instructions \
+      >/dev/null 2>&1; then
+    echo 'RetroArch human checkpoint accepted a non-exact confirmation' >&2
+    exit 1
+  fi
+  if human_checkpoint static-checkpoint instructions </dev/null >/dev/null 2>&1; then
+    echo 'RetroArch human checkpoint passed when managed stdin reached EOF' >&2
+    exit 1
+  fi
+)
 grep -F 'assert_overlay_window_absent' "$ACCEPTANCE" >/dev/null
 grep -F 'Korri gameplay overlay' "$ACCEPTANCE" >/dev/null
 grep -F 'authenticated_retroarch_status' "$ACCEPTANCE" >/dev/null
@@ -323,6 +359,55 @@ grep -F 'assert_menu_status 1' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_selection_advanced' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_DPAD_DOWN' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_menu_status 0' "$ACCEPTANCE" >/dev/null
+overlay_menu_source="$(sed -n '/^STAGE="overlay-menu"/,/^STAGE="save-pause"/p' "$ACCEPTANCE")"
+open_checkpoint_line="$(grep -nF 'human_checkpoint open-retroarch-menu' \
+  <<<"$overlay_menu_source" | cut -d: -f1)"
+open_absent_line="$(grep -nF 'assert_overlay_window_absent' \
+  <<<"$overlay_menu_source" | head -1 | cut -d: -f1)"
+open_alive_line="$(grep -nF 'assert_menu_status 1' \
+  <<<"$overlay_menu_source" | cut -d: -f1)"
+resume_checkpoint_line="$(grep -nF 'human_checkpoint resume-from-overlay' \
+  <<<"$overlay_menu_source" | cut -d: -f1)"
+resume_absent_line="$(grep -nF 'assert_overlay_window_absent' \
+  <<<"$overlay_menu_source" | tail -1 | cut -d: -f1)"
+resume_closed_line="$(grep -nF 'assert_menu_status 0' \
+  <<<"$overlay_menu_source" | tail -1 | cut -d: -f1)"
+[[ -n "$open_checkpoint_line" && -n "$open_absent_line" && -n "$open_alive_line" \
+  && -n "$resume_checkpoint_line" && -n "$resume_absent_line" \
+  && -n "$resume_closed_line" \
+  && "$open_checkpoint_line" -lt "$open_absent_line" \
+  && "$open_absent_line" -lt "$open_alive_line" \
+  && "$open_alive_line" -lt "$resume_checkpoint_line" \
+  && "$resume_checkpoint_line" -lt "$resume_absent_line" \
+  && "$resume_absent_line" -lt "$resume_closed_line" ]] || {
+  echo 'RetroArch physical open-menu and Resume checkpoints must precede their effect assertions' >&2
+  exit 1
+}
+for physical_instruction in \
+  'Press the physical Guide button.' \
+  'Press physical Down exactly once to focus Open RetroArch menu.' \
+  'Press physical A exactly once to invoke Open RetroArch menu.' \
+  'Press physical A exactly once on Resume.' \
+  'Press physical Down exactly twice to focus Quit game.' \
+  'Press physical A exactly once to invoke Quit game.'; do
+  grep -F "$physical_instruction" "$ACCEPTANCE" >/dev/null || {
+    echo "RetroArch human checkpoint is missing physical instruction: $physical_instruction" >&2
+    exit 1
+  }
+done
+quit_stage_source="$(sed -n '/^STAGE="quit-stale"/,/^STAGE="restoration"/p' "$ACCEPTANCE")"
+quit_checkpoint_line="$(grep -nF 'human_checkpoint quit-retroarch' \
+  <<<"$quit_stage_source" | cut -d: -f1)"
+quit_stopped_line="$(grep -nF 'wait_stopped' <<<"$quit_stage_source" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+quit_stale_line="$(grep -nF 'wait_old_launch_stale "$quit_launch_id"' \
+  <<<"$quit_stage_source" | cut -d: -f1)"
+[[ -n "$quit_checkpoint_line" && -n "$quit_stopped_line" && -n "$quit_stale_line" \
+  && "$quit_checkpoint_line" -lt "$quit_stopped_line" \
+  && "$quit_stopped_line" -lt "$quit_stale_line" ]] || {
+  echo 'RetroArch physical Quit checkpoint must precede process and stale-control gates' >&2
+  exit 1
+}
 menu_status_source="$(sed -n '/^assert_menu_status() {/,/^}/p' "$ACCEPTANCE")"
 grep -F '0) expected_json=false ;;' <<<"$menu_status_source" >/dev/null
 grep -F '1) expected_json=true ;;' <<<"$menu_status_source" >/dev/null
@@ -386,7 +471,6 @@ udp_log_line="$(grep -nF 'assert_udp_rejection_log "$UDP_REJECTION_LOG_MARKER"' 
   exit 1
 }
 grep -F 'KEYCODE_BACK' "$ACCEPTANCE" >/dev/null
-grep -F 'invoke_overlay_row 2' "$ACCEPTANCE" >/dev/null
 grep -F 'enabled_accessibility_services' "$ACCEPTANCE" >/dev/null
 grep -F 'use: "@korri:retroarch/retroarch"' "$WL4_LIBRARY" >/dev/null
 grep -F 'runtime: "@korri:mgba/mgba"' "$WL4_LIBRARY" >/dev/null
