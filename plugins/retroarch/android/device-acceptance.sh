@@ -883,11 +883,50 @@ assert_udp_no_response() {
     echo 'UDP probe transport failed before its remote completion marker' >&2
     return 1
   fi
-  local expected="$marker remote_nc_rc=124 remote_nc_output="
-  if [[ "$remote_result" != "$expected" ]]; then
-    echo "unauthenticated UDP probe must report exact remote rc=124 and no response; observed=$remote_result" >&2
-    return 1
-  fi
+  case "$remote_result" in
+    "$marker remote_nc_rc=0 remote_nc_output=" | "$marker remote_nc_rc=124 remote_nc_output=")
+      return 0
+      ;;
+    *)
+      echo "unauthenticated UDP probe must report empty output and remote rc 0 or 124; observed=$remote_result" >&2
+      return 1
+      ;;
+  esac
+}
+
+assert_udp_rejection_log() {
+  local marker="$1"
+  local logs=''
+  local malformed_count=0
+  local authenticated_count=0
+  for _ in $(seq 1 20); do
+    logs="$(logcat_since "$marker" -v raw -s \
+      KorriAcceptance:I RetroArch:V '*:S' 2>/dev/null)" || return 1
+    malformed_count="$(grep -Fxc \
+      '[NetCMD] Rejected malformed Korri command.' <<<"$logs" || true)"
+    authenticated_count="$(grep -Ec \
+      '\[NetCMD\] Korri authenticated (request accepted|reply)' \
+      <<<"$logs" || true)"
+    if [[ "$malformed_count" -gt 1 || "$authenticated_count" -ne 0 ]]; then
+      break
+    fi
+    if [[ "$malformed_count" -eq 1 ]]; then
+      # Let a same-action duplicate or reply log settle before final evidence.
+      sleep 0.1
+      logs="$(logcat_since "$marker" -v raw -s \
+        KorriAcceptance:I RetroArch:V '*:S' 2>/dev/null)" || return 1
+      malformed_count="$(grep -Fxc \
+        '[NetCMD] Rejected malformed Korri command.' <<<"$logs" || true)"
+      authenticated_count="$(grep -Ec \
+        '\[NetCMD\] Korri authenticated (request accepted|reply)' \
+        <<<"$logs" || true)"
+      [[ "$malformed_count" -eq 1 && "$authenticated_count" -eq 0 ]] && return 0
+      break
+    fi
+    sleep 0.1
+  done
+  echo "unauthenticated UDP probe lacked exact action-bound rejection evidence: malformed=$malformed_count authenticated=$authenticated_count" >&2
+  return 1
 }
 wait_playing() {
   local pid=''
@@ -1472,11 +1511,13 @@ control_port="$("${ADB[@]}" shell "grep '^network_cmd_port = ' '$RETROARCH_CONFI
 [[ "$control_port" =~ ^[0-9]+$ && "$control_port" -ge 49152 && "$control_port" -le 65535 ]]
 assert_adb_probe_ready
 assert_udp_probe_ready
+UDP_REJECTION_LOG_MARKER="$(new_logcat_marker udp-negative)"
 if ! udp_remote_result="$(udp_unauthenticated "$control_port")"; then
   echo 'UDP probe transport failed before its remote completion marker' >&2
   exit 1
 fi
 assert_udp_no_response "$UDP_COMPLETION_MARKER" "$udp_remote_result"
+assert_udp_rejection_log "$UDP_REJECTION_LOG_MARKER"
 if ! current_pid="$(package_pid "$FORK_PACKAGE")"; then
   exit 1
 fi

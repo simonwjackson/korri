@@ -327,9 +327,34 @@ grep -F 'KEYCODE_BUTTON_SELECT' "$ACCEPTANCE" >/dev/null
 grep -F 'network_cmd_port' "$ACCEPTANCE" >/dev/null
 grep -F 'UDP_COMPLETION_MARKER=' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_adb_probe_ready' "$ACCEPTANCE" >/dev/null
+grep -F 'remote_nc_rc=0 remote_nc_output=' "$ACCEPTANCE" >/dev/null
 grep -F 'remote_nc_rc=124 remote_nc_output=' "$ACCEPTANCE" >/dev/null
 grep -F 'UDP probe transport failed before its remote completion marker' "$ACCEPTANCE" >/dev/null
-grep -F 'unauthenticated UDP probe must report exact remote rc=124 and no response' "$ACCEPTANCE" >/dev/null
+grep -F 'unauthenticated UDP probe must report empty output and remote rc 0 or 124' "$ACCEPTANCE" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F 'assert_udp_rejection_log "$UDP_REJECTION_LOG_MARKER"' "$ACCEPTANCE" >/dev/null
+grep -F '[NetCMD] Rejected malformed Korri command.' "$ACCEPTANCE" >/dev/null
+grep -F '\[NetCMD\] Korri authenticated (request accepted|reply)' "$ACCEPTANCE" >/dev/null
+udp_stage_source="$(sed -n '/^STAGE="udp-negative"/,/^STAGE="overlay-menu"/p' "$ACCEPTANCE")"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+udp_marker_line="$(grep -nF 'UDP_REJECTION_LOG_MARKER="$(new_logcat_marker udp-negative)"' \
+  <<<"$udp_stage_source" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+udp_probe_line="$(grep -nF 'if ! udp_remote_result="$(udp_unauthenticated "$control_port")"; then' \
+  <<<"$udp_stage_source" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+udp_result_line="$(grep -nF 'assert_udp_no_response "$UDP_COMPLETION_MARKER" "$udp_remote_result"' \
+  <<<"$udp_stage_source" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+udp_log_line="$(grep -nF 'assert_udp_rejection_log "$UDP_REJECTION_LOG_MARKER"' \
+  <<<"$udp_stage_source" | cut -d: -f1)"
+[[ -n "$udp_marker_line" && -n "$udp_probe_line" && -n "$udp_result_line" \
+  && -n "$udp_log_line" && "$udp_probe_line" -eq $((udp_marker_line + 1)) \
+  && "$udp_probe_line" -lt "$udp_result_line" \
+  && "$udp_result_line" -lt "$udp_log_line" ]] || {
+  echo 'UDP negative gate must mark immediately before probe, then verify no response and exact rejection logs' >&2
+  exit 1
+}
 grep -F 'KEYCODE_BACK' "$ACCEPTANCE" >/dev/null
 grep -F 'invoke_overlay_row 2' "$ACCEPTANCE" >/dev/null
 grep -F 'enabled_accessibility_services' "$ACCEPTANCE" >/dev/null
@@ -574,17 +599,49 @@ sed -n '/^assert_udp_no_response() {/,/^}/p' "$ACCEPTANCE" >"$UDP_ASSERTION"
 # shellcheck source=/dev/null
 source "$UDP_ASSERTION"
 marker='korri-udp-probe-complete-review'
+assert_udp_no_response "$marker" "$marker remote_nc_rc=0 remote_nc_output="
 assert_udp_no_response "$marker" "$marker remote_nc_rc=124 remote_nc_output="
 for rejected in \
   '' \
   'adb transport timeout' \
   "$marker remote_nc_rc=1 remote_nc_output=" \
+  "$marker remote_nc_rc=125 remote_nc_output=" \
+  "$marker remote_nc_rc=0 remote_nc_output=unexpected" \
   "$marker remote_nc_rc=124 remote_nc_output=unexpected"; do
   if assert_udp_no_response "$marker" "$rejected" >/dev/null 2>&1; then
     echo "UDP negative accepted an inexact remote result: $rejected" >&2
     exit 1
   fi
 done
+
+UDP_LOG_ASSERTION="$TMP/assert-udp-rejection-log.sh"
+sed -n '/^assert_udp_rejection_log() {/,/^}/p' "$ACCEPTANCE" >"$UDP_LOG_ASSERTION"
+# shellcheck source=/dev/null
+source "$UDP_LOG_ASSERTION"
+# Invoked indirectly by the sourced assertion helper.
+# shellcheck disable=SC2329
+logcat_since() {
+  printf '%s\n' "$MOCK_UDP_LOGS"
+}
+# Invoked indirectly by the sourced assertion helper.
+# shellcheck disable=SC2329
+sleep() { :; }
+MOCK_UDP_LOGS='[NetCMD] Rejected malformed Korri command.'
+assert_udp_rejection_log 'korri-retroarch-acceptance-udp-negative-review'
+for rejected_logs in \
+  '' \
+  $'[NetCMD] Rejected malformed Korri command.\n[NetCMD] Rejected malformed Korri command.' \
+  $'[NetCMD] Rejected malformed Korri command.\n[NetCMD] Korri authenticated request accepted command=1.' \
+  $'[NetCMD] Rejected malformed Korri command.\n[NetCMD] Korri authenticated reply attempted command=1 length=62.' \
+  $'[NetCMD] Rejected malformed Korri command.\n[NetCMD] Korri authenticated reply sent command=1 length=62.'; do
+  MOCK_UDP_LOGS="$rejected_logs"
+  if assert_udp_rejection_log 'korri-retroarch-acceptance-udp-negative-review' \
+      >/dev/null 2>&1; then
+    echo 'UDP rejection evidence accepted duplicate, request, or reply logs' >&2
+    exit 1
+  fi
+done
+unset -f sleep logcat_since
 
 FOCUS_RENDERER="$TMP/focus-renderer.sh"
 sed -n '/^render_focused_wario_crop_evidence() {/,/^}/p' "$ACCEPTANCE" >"$FOCUS_RENDERER"
