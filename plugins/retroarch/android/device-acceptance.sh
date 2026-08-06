@@ -160,10 +160,73 @@ activity_dump_has_resumed_component() {
   return 1
 }
 
+activity_dump_shell_instance_count() {
+  local activities="$1"
+  local component_needle="$2"
+  local line
+  local count=0
+  # Count only task-history records. dumpsys repeats an ActivityRecord in
+  # resumed/focus summaries, while each live Activity instance has one Hist
+  # record with a non-negative task id.
+  while IFS= read -r line; do
+    [[ "$line" == *"* Hist"* && "$line" == *"$component_needle"* ]] || continue
+    [[ "$line" =~ ActivityRecord\{.*[[:space:]]t[0-9]+([[:space:]}]|$) ]] || continue
+    count=$((count + 1))
+  done <<<"$activities"
+  printf '%s\n' "$count"
+}
+
+assert_single_shell_task_activity() {
+  local activities
+  local count
+  activities="$("${ADB[@]}" shell dumpsys activity activities | tr -d '\r')" || return 1
+  count="$(activity_dump_shell_instance_count "$activities" "$KORRI_ACTIVITY")"
+  [[ "$count" == 1 ]] || {
+    echo "RetroArch acceptance requires exactly one live Korri Shell Activity; observed $count" >&2
+    return 1
+  }
+}
+
 assert_shell_foreground() {
   local activities
   activities="$("${ADB[@]}" shell dumpsys activity activities | tr -d '\r')" || return 1
   activity_dump_has_resumed_component "$activities" "$KORRI_ACTIVITY"
+}
+
+bring_existing_shell_task_forward() {
+  local activities
+  local before_count
+  local after_count
+  activities="$("${ADB[@]}" shell dumpsys activity activities | tr -d '\r')" || return 1
+  before_count="$(activity_dump_shell_instance_count "$activities" "$KORRI_ACTIVITY")"
+  [[ "$before_count" == 0 || "$before_count" == 1 ]] || {
+    echo "refusing to bring Korri forward with $before_count live Shell Activities" >&2
+    return 1
+  }
+
+  # Match launcher-icon task semantics. NEW_TASK|RESET_TASK_IF_NEEDED brings an
+  # existing launcher-root task forward instead of stacking a bare component
+  # instance above it. If Android reclaimed the Activity, one root is created.
+  "${ADB[@]}" shell am start --display 0 \
+    -a android.intent.action.MAIN \
+    -c android.intent.category.LAUNCHER \
+    -f 0x10200000 \
+    -n "$KORRI_ACTIVITY" >/dev/null || return 1
+  for _ in $(seq 1 20); do
+    if assert_shell_foreground; then
+      activities="$("${ADB[@]}" shell dumpsys activity activities | tr -d '\r')" || return 1
+      after_count="$(activity_dump_shell_instance_count "$activities" "$KORRI_ACTIVITY")"
+      [[ "$after_count" == 1 ]] || {
+        echo "launcher-equivalent Korri return produced $after_count live Shell Activities" >&2
+        return 1
+      }
+      assert_korri_process_unchanged
+      return
+    fi
+    sleep 0.25
+  done
+  echo 'launcher-equivalent Korri return did not resume the Shell Activity' >&2
+  return 1
 }
 
 assert_device_awake_and_shell_focused() {
@@ -239,6 +302,7 @@ assert_pristine_gate_state() {
   local stock_pid
   assert_device_awake_and_shell_focused
   assert_shell_foreground
+  assert_single_shell_task_activity
   assert_no_artemis_game_activity
   assert_no_retroarch_activities
   fork_pid="$(package_pid "$FORK_PACKAGE")" || return 1
@@ -573,12 +637,9 @@ cleanup() {
     fi
   fi
   if [[ "$SHELL_BROUGHT_FORWARD" == true && "$replacement_observed" == false ]]; then
-    "${ADB[@]}" shell am start --display 0 -n "$KORRI_ACTIVITY" >/dev/null 2>&1 || cleanup_failed=true
-    for _ in $(seq 1 20); do
-      assert_shell_foreground && break
-      sleep 0.25
-    done
+    bring_existing_shell_task_forward >/dev/null 2>&1 || cleanup_failed=true
     assert_shell_foreground || cleanup_failed=true
+    assert_single_shell_task_activity || cleanup_failed=true
   fi
   if [[ -n "$PORTAL_EVIDENCE_DIR" && "$status" -eq 0 ]]; then
     rm -rf "$PORTAL_EVIDENCE_DIR"
@@ -1155,9 +1216,12 @@ launch_wario_entry() {
   local detail_image="$PORTAL_EVIDENCE_DIR/$label.detail-play.png"
   local location_focus_json="$PORTAL_EVIDENCE_DIR/$label.local-location.focus.json"
   local location_image="$PORTAL_EVIDENCE_DIR/$label.local-location.png"
+  local location_failure_image="$PORTAL_EVIDENCE_DIR/$label.local-location.launch-failed.png"
+  local location_failure_diagnostic="$PORTAL_EVIDENCE_DIR/$label.local-location.launch-failed.txt"
   local local_location_id='["local",null,"wl4"]'
   local detail_observation
   local location_observation
+  local location_failure_observation
   STAGE="portal-card"
   focus_wario_in_installed_library "$label"
   sleep 1
@@ -1243,7 +1307,34 @@ launch_wario_entry() {
     sleep 0.25
   done
   [[ -n "$pid" ]] || {
-    echo 'verified Wario local launch location did not start Korri RetroArch' >&2
+    "${ADB[@]}" exec-out screencap -p >"$location_failure_image"
+    # Diagnose only by re-observing the exact chooser row. This helper may
+    # focus and measure the trusted element, but it cannot click, dispatch
+    # input, invoke an RPC, or retry the launch.
+    if location_failure_observation="$(timeout 5 "$DEBUG_PORTAL_FOCUS_GAME_SH" \
+      "$SERIAL" "$KORRI_PACKAGE" --launch-location \
+      "$local_location_id" 'Wario Land 4' 2>&1)"; then
+      if jq -e --arg locationId "$local_location_id" '
+        .view == "launch-location"
+        and .dialogLabel == "Choose where to play Wario Land 4"
+        and .title == "Wario Land 4"
+        and .locationId == $locationId
+        and .label == "This device"
+        and .focused == true
+        and .rectFinitePositive == true
+        and .fullyOnScreen == true
+      ' <<<"$location_failure_observation" >/dev/null; then
+        printf 'exact local launch row remained visible after the one pointer activation\n%s\n' \
+          "$location_failure_observation" >"$location_failure_diagnostic"
+      else
+        printf 'post-activation launch-location observation was not exact\n%s\n' \
+          "$location_failure_observation" >"$location_failure_diagnostic"
+      fi
+    else
+      printf 'exact local launch row was unavailable after the one pointer activation\n%s\n' \
+        "$location_failure_observation" >"$location_failure_diagnostic"
+    fi
+    echo "verified Wario local launch location did not start Korri RetroArch; evidence is in $PORTAL_EVIDENCE_DIR" >&2
     return 1
   }
   # This is the first process observed after the verified local-location tap.
@@ -1370,7 +1461,8 @@ STAGE="relaunch"
 # Relaunch through Korri again; verbose runtime logging proves the non-empty
 # auto-state was loaded successfully rather than merely left on disk.
 AUTO_LOAD_LOG_MARKER="$(new_logcat_marker auto-load)"
-"${ADB[@]}" shell am start --display 0 -n "$KORRI_ACTIVITY" >/dev/null
+bring_existing_shell_task_forward
+SHELL_BROUGHT_FORWARD=true
 "$DEBUG_PORTAL_RELOAD_SH" "$SERIAL" "$KORRI_PACKAGE" \
   --expect-game wl4 'Wario Land 4' >/dev/null
 launch_wario_entry second

@@ -122,7 +122,7 @@ card_tap_line="$(grep -nF 'shell input tap "$tap_x" "$tap_y"' <<<"$launch_flow_s
 detail_focus_line="$(grep -nF -- '"$SERIAL" "$KORRI_PACKAGE" --detail-play' <<<"$launch_flow_source" | cut -d: -f1)"
 # shellcheck disable=SC2016 # Literal source-contract needle.
 play_tap_line="$(grep -nF 'shell input tap "$tap_x" "$tap_y"' <<<"$launch_flow_source" | sed -n '2s/:.*//p')"
-location_focus_line="$(grep -nF -- '--launch-location' <<<"$launch_flow_source" | cut -d: -f1)"
+location_focus_line="$(grep -nF -- '--launch-location' <<<"$launch_flow_source" | head -1 | cut -d: -f1)"
 # shellcheck disable=SC2016 # Literal source-contract needle.
 location_tap_line="$(grep -nF 'shell input tap "$tap_x" "$tap_y"' <<<"$launch_flow_source" | sed -n '3s/:.*//p')"
 [[ -n "$card_tap_line" && -n "$detail_focus_line" && -n "$play_tap_line" \
@@ -134,6 +134,29 @@ location_tap_line="$(grep -nF 'shell input tap "$tap_x" "$tap_y"' <<<"$launch_fl
   echo 'RetroArch acceptance must verify detail and explicit local choice before launch' >&2
   exit 1
 }
+# shellcheck disable=SC2016 # Literal source-contract needles.
+for failure_evidence in \
+  'local-location.launch-failed.png' \
+  'local-location.launch-failed.txt' \
+  'exact local launch row remained visible after the one pointer activation' \
+  'evidence is in $PORTAL_EVIDENCE_DIR'; do
+  grep -F "$failure_evidence" <<<"$launch_flow_source" >/dev/null || {
+    echo "RetroArch local launch failure evidence is missing: $failure_evidence" >&2
+    exit 1
+  }
+done
+[[ "$(grep -Fc -- '--launch-location' <<<"$launch_flow_source")" -eq 2 ]]
+# shellcheck disable=SC2016 # Literal source-contract range.
+location_failure_source="$(sed -n \
+  '/exec-out screencap -p >"$location_failure_image"/,/# This is the first process observed/p' \
+  <<<"$launch_flow_source")"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F 'timeout 5 "$DEBUG_PORTAL_FOCUS_GAME_SH"' \
+  <<<"$location_failure_source" >/dev/null
+if grep -Eq 'shell input tap|rpc |app\.local-games\.launch' <<<"$location_failure_source"; then
+  echo 'RetroArch local launch diagnostics must not activate or invoke a launch RPC' >&2
+  exit 1
+fi
 if grep -Eq '\.click\(' "$ACCEPTANCE"; then
   echo 'RetroArch UI activation must not use DevTools click' >&2
   exit 1
@@ -222,8 +245,28 @@ grep -F 'new_logcat_marker' "$ACCEPTANCE" >/dev/null
 grep -F 'logcat_since "$AUTO_LOAD_LOG_MARKER"' "$ACCEPTANCE" >/dev/null
 grep -F '"_tag":"system.health"' "$ACCEPTANCE" >/dev/null
 grep -F 'existing_korri_pid=' "$ACCEPTANCE" >/dev/null
-# shellcheck disable=SC2016 # Literal source-contract needle.
-grep -F 'am start --display 0 -n "$KORRI_ACTIVITY"' "$ACCEPTANCE" >/dev/null
+# shellcheck disable=SC2016 # Literal forbidden source pattern.
+if grep -F 'am start --display 0 -n "$KORRI_ACTIVITY"' "$ACCEPTANCE" >/dev/null; then
+  echo 'RetroArch acceptance must not stack a bare Korri Shell component Activity' >&2
+  exit 1
+fi
+bring_shell_source="$(sed -n '/^bring_existing_shell_task_forward() {/,/^}/p' "$ACCEPTANCE")"
+# shellcheck disable=SC2016 # Literal source-contract needles.
+for launcher_contract in \
+  '-a android.intent.action.MAIN' \
+  '-c android.intent.category.LAUNCHER' \
+  '-f 0x10200000' \
+  '-n "$KORRI_ACTIVITY"' \
+  'before_count="$(activity_dump_shell_instance_count' \
+  'after_count="$(activity_dump_shell_instance_count' \
+  '[[ "$after_count" == 1 ]]' \
+  'assert_korri_process_unchanged'; do
+  grep -F -- "$launcher_contract" <<<"$bring_shell_source" >/dev/null || {
+    echo "launcher-equivalent Korri return is missing: $launcher_contract" >&2
+    exit 1
+  }
+done
+[[ "$(grep -Fc 'bring_existing_shell_task_forward' "$ACCEPTANCE")" -ge 3 ]]
 grep -F 'assert_accessibility_service_enabled' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_shell_foreground' "$ACCEPTANCE" >/dev/null
 shell_foreground_source="$(sed -n '/^assert_shell_foreground() {/,/^}/p' "$ACCEPTANCE")"
@@ -243,6 +286,7 @@ if grep -Eq 'KEYCODE_WAKEUP|dismiss-keyguard|statusbar collapse' <<<"$awake_focu
 fi
 pristine_source="$(sed -n '/^assert_pristine_gate_state() {/,/^}/p' "$ACCEPTANCE")"
 grep -F 'assert_device_awake_and_shell_focused' <<<"$pristine_source" >/dev/null
+grep -F 'assert_single_shell_task_activity' <<<"$pristine_source" >/dev/null
 grep -F 'assert_menu_status 1' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_selection_advanced' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_DPAD_DOWN' "$ACCEPTANCE" >/dev/null
@@ -410,6 +454,7 @@ done
 
 ACTIVITY_PARSER="$TMP/activity-dump-parser.sh"
 sed -n '/^activity_dump_has_resumed_component() {/,/^}/p' "$ACCEPTANCE" >"$ACTIVITY_PARSER"
+sed -n '/^activity_dump_shell_instance_count() {/,/^}/p' "$ACCEPTANCE" >>"$ACTIVITY_PARSER"
 sed -n '/^activity_dump_has_live_component() {/,/^}/p' "$ACCEPTANCE" >>"$ACTIVITY_PARSER"
 # shellcheck source=/dev/null
 source "$ACTIVITY_PARSER"
@@ -428,6 +473,21 @@ if activity_dump_has_resumed_component \
   echo 'resumed activity parser accepted a component other than the exact Korri Shell activity' >&2
   exit 1
 fi
+single_shell_dump="
+  topResumedActivity=ActivityRecord{778899 u0 $SHELL_COMPONENT t109}
+    * Hist  #0: ActivityRecord{778899 u0 $SHELL_COMPONENT t109}
+  ResumedActivity: ActivityRecord{778899 u0 $SHELL_COMPONENT t109}
+"
+[[ "$(activity_dump_shell_instance_count "$single_shell_dump" "$SHELL_COMPONENT")" == 1 ]]
+duplicate_shell_dump="
+    * Hist  #1: ActivityRecord{aabbcc u0 $SHELL_COMPONENT t109}
+    * Hist  #0: ActivityRecord{778899 u0 $SHELL_COMPONENT t109}
+"
+[[ "$(activity_dump_shell_instance_count "$duplicate_shell_dump" "$SHELL_COMPONENT")" == 2 ]]
+tombstone_shell_dump="
+    * Hist  #1: ActivityRecord{aabbcc u0 $SHELL_COMPONENT t-1 f}
+"
+[[ "$(activity_dump_shell_instance_count "$tombstone_shell_dump" "$SHELL_COMPONENT")" == 0 ]]
 # Attached task ids (t0+) are live even when the record is paused/history.
 activity_dump_has_live_component \
   "    mLastPausedActivity: ActivityRecord{ac82bb6 u0 $GAME_COMPONENT t69}" \

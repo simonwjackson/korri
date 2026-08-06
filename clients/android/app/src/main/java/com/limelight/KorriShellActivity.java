@@ -15,6 +15,8 @@ import android.os.Looper;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.KeyEvent;
+import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -70,6 +72,7 @@ public class KorriShellActivity extends AppCompatActivity {
     private int korridPort = -1;
     private String korridCapability = "";
     private ComputerManagerService.ComputerManagerBinder managerBinder;
+    private boolean computerManagerBound;
     private final CountDownLatch binderReady = new CountDownLatch(1);
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
@@ -100,7 +103,7 @@ public class KorriShellActivity extends AppCompatActivity {
                 this, portalOrigin(portalUrl), localStorageRoot());
         korridCapability = KorridServer.capability();
 
-        bindService(new Intent(this, ComputerManagerService.class),
+        computerManagerBound = bindService(new Intent(this, ComputerManagerService.class),
                 serviceConnection, BIND_AUTO_CREATE);
 
         webView = new WebView(this);
@@ -234,13 +237,34 @@ public class KorriShellActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        // korrid deliberately outlives this screen: launching a game destroys
-        // the activity, and the brain must keep serving while the game runs.
-        // KorriBrainService owns the shutdown now.
-        super.onDestroy();
-        if (managerBinder != null) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            throw new IllegalStateException("Korri Shell destruction must run on the main thread");
+        }
+
+        // A finished Activity must not leave a second trusted portal target in
+        // the process. Detach before destroy, revoke the Shell-only authority,
+        // and clear our field before WebView teardown can re-enter lifecycle
+        // code. The foreground brain remains owned by KorriBrainService.
+        final WebView ownedWebView = webView;
+        webView = null;
+        if (ownedWebView != null) {
+            final ViewParent parent = ownedWebView.getParent();
+            if (parent instanceof ViewGroup) {
+                ((ViewGroup) parent).removeView(ownedWebView);
+            }
+            ownedWebView.removeJavascriptInterface("KorriNative");
+            ownedWebView.stopLoading();
+            ownedWebView.destroy();
+        }
+
+        // Binding ownership begins when bindService() succeeds, not when its
+        // asynchronous binder callback happens to complete.
+        if (computerManagerBound) {
+            computerManagerBound = false;
             unbindService(serviceConnection);
         }
+        managerBinder = null;
+        super.onDestroy();
     }
 
     @Override
