@@ -13,6 +13,7 @@ COMMAND_HEADER="$SOURCE/command.h"
 PLATFORM="$SOURCE/frontend/drivers/platform_unix.c"
 ANDROID_INPUT="$SOURCE/input/drivers/android_input.c"
 DIAGNOSTICS_PATCH="$HERE/patches/0013-secret-free-control-diagnostics.patch"
+CONTENT_IDENTITY_PATCH="$HERE/patches/0014-report-full-content-leaf.patch"
 
 grep -q '#define DEFAULT_KIOSK_MODE_ENABLE true' "$CONFIG"
 grep -q '#define DEFAULT_CONFIG_SAVE_ON_EXIT false' "$CONFIG"
@@ -71,6 +72,28 @@ grep -q 'MENU_ST_FLAG_ALIVE' "$COMMAND"
 grep -q 'menu_st->selection_ptr' "$COMMAND"
 grep -q 'crc32=%08lx,menu=%u,selection=%lu' "$COMMAND"
 grep -q 'GET_STATUS CONTENTLESS menu=%u,selection=%lu' "$COMMAND"
+status_function="$(sed -n '/^bool command_get_status(command_t \*cmd, const char\* arg)/,/^}/p' "$COMMAND")"
+grep -Fq 'const char *content_path       = path_get(RARCH_PATH_CONTENT);' <<<"$status_function"
+grep -Fq 'content_leaf = path_basename(path_get(RARCH_PATH_CONTENT));' <<<"$status_function"
+grep -Fq 'if ((flags & CONTENT_ST_FLAG_IS_INITED) && content_leaf)' <<<"$status_function"
+grep -Fq 'strlcpy(reply + _len, content_leaf, sizeof(reply) - _len)' <<<"$status_function"
+grep -Fq 'string_is_equal(content_leaf, ".")' <<<"$status_function"
+grep -Fq 'string_is_equal(content_leaf, "..")' <<<"$status_function"
+grep -Fq "strchr(content_leaf, '/')" <<<"$status_function"
+grep -Fq "strchr(content_leaf, '\\\\')" <<<"$status_function"
+grep -Fq "strchr(content_leaf, ',')" <<<"$status_function"
+grep -Fq "strchr(content_leaf, '\\r')" <<<"$status_function"
+grep -Fq "strchr(content_leaf, '\\n')" <<<"$status_function"
+if grep -Fq 'RARCH_PATH_BASENAME' <<<"$status_function"; then
+  echo 'RetroArch status must not use the extension-stripping RARCH_PATH_BASENAME' >&2
+  exit 1
+fi
+if grep -Eq '(strlcpy|snprintf).*content_path' <<<"$status_function"; then
+  echo 'RetroArch status must never serialize the content directory or full path' >&2
+  exit 1
+fi
+grep -Eq '^\+.*content_leaf = path_basename\(path_get\(RARCH_PATH_CONTENT\)\);' "$CONTENT_IDENTITY_PATCH"
+grep -q '0014-report-full-content-leaf.patch' "$HERE/patches/README.md"
 grep -q 'command_event(CMD_EVENT_MENU_TOGGLE, NULL)' "$COMMAND"
 grep -q 'SHOW_MENU OK' "$COMMAND"
 grep -q 'SHOW_MENU ERROR' "$COMMAND"

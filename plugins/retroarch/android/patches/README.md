@@ -79,3 +79,8 @@ per `NNNN-description.patch` and record its upstream-facing rationale here.
   loopback listener retained launch authority plus accepted command tags and
   attempted/sent reply tags and lengths. It never logs a token, nonce, frame,
   payload, capability, path, or port.
+- `0014-report-full-content-leaf.patch` — reports the full content leaf name,
+  including its extension, from `RARCH_PATH_CONTENT` so authenticated status
+  matches the launch-bound ROM identity. Empty, dot, nested, delimiter-bearing,
+  or line-breaking leaves fail closed as `CONTENTLESS`; no directory or full
+  path enters the reply.
