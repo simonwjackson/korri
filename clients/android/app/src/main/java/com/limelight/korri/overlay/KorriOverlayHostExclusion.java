@@ -55,8 +55,15 @@ public final class KorriOverlayHostExclusion {
     }
 
     public void openGlobal(Runnable open) {
-        Owner owner = current;
-        openGlobal(owner, open);
+        Owner predecessor = current;
+        if (predecessor == null) {
+            open.run();
+            return;
+        }
+        closeVisibleCurrent();
+        // A retiring predecessor may unregister itself. It may also install a
+        // replacement synchronously; that newer Game generation wins.
+        if (current == null || isCurrent(predecessor)) open.run();
     }
 
     public void openGlobal(Owner owner, Runnable open) {

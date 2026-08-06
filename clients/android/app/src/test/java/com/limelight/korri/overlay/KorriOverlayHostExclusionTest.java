@@ -8,6 +8,44 @@ import static org.junit.Assert.assertTrue;
 
 public class KorriOverlayHostExclusionTest {
     @Test
+    public void ownerlessGlobalOpenRunsWhenThereIsNoLegacyOwner() {
+        KorriOverlayHostExclusion exclusion = new KorriOverlayHostExclusion();
+        final int[] opens = { 0 };
+
+        exclusion.openGlobal(() -> opens[0]++);
+
+        assertEquals(1, opens[0]);
+    }
+
+    @Test
+    public void ownerlessGlobalOpenRunsAfterVisiblePredecessorUnregistersDuringRetirement() {
+        KorriOverlayHostExclusion exclusion = new KorriOverlayHostExclusion();
+        UnregisteringLegacyHost predecessor = new UnregisteringLegacyHost(exclusion);
+        predecessor.owner = exclusion.register(predecessor);
+        final int[] opens = { 0 };
+
+        exclusion.openGlobal(() -> opens[0]++);
+
+        assertEquals(1, predecessor.closeAndDestroyCount);
+        assertEquals(1, opens[0]);
+        assertFalse(exclusion.isCurrent(predecessor.owner));
+    }
+
+    @Test
+    public void ownerlessGlobalOpenRunsWithSameHiddenCurrentPredecessor() {
+        KorriOverlayHostExclusion exclusion = new KorriOverlayHostExclusion();
+        RecordingLegacyHost predecessor = new RecordingLegacyHost(false);
+        KorriOverlayHostExclusion.Owner owner = exclusion.register(predecessor);
+        final int[] opens = { 0 };
+
+        exclusion.openGlobal(() -> opens[0]++);
+
+        assertEquals(0, predecessor.closeAndDestroyCount);
+        assertTrue(exclusion.isCurrent(owner));
+        assertEquals(1, opens[0]);
+    }
+
+    @Test
     public void fallbackOpenThenServiceConnectClosesCurrentLegacyHost() {
         KorriOverlayHostExclusion exclusion = new KorriOverlayHostExclusion();
         RecordingLegacyHost legacy = new RecordingLegacyHost(true);
@@ -92,7 +130,22 @@ public class KorriOverlayHostExclusionTest {
     }
 
     @Test
-    public void replacementDuringPredecessorRetirementPreventsDisplacedOwnerOpening() {
+    public void replacementDuringPredecessorRetirementPreventsOwnerlessGlobalOpening() {
+        KorriOverlayHostExclusion exclusion = new KorriOverlayHostExclusion();
+        RecordingLegacyHost newest = new RecordingLegacyHost(true);
+        ReplacingLegacyHost predecessor = new ReplacingLegacyHost(exclusion, newest);
+        exclusion.register(predecessor);
+        final int[] opens = { 0 };
+
+        exclusion.openGlobal(() -> opens[0]++);
+
+        assertEquals(1, predecessor.closeAndDestroyCount);
+        assertEquals(0, newest.closeAndDestroyCount);
+        assertEquals(0, opens[0]);
+    }
+
+    @Test
+    public void ownerOverloadRemainsStrictWhenRetirementInstallsReplacement() {
         KorriOverlayHostExclusion exclusion = new KorriOverlayHostExclusion();
         RecordingLegacyHost newest = new RecordingLegacyHost(true);
         ReplacingLegacyHost predecessor = new ReplacingLegacyHost(exclusion, newest);
@@ -123,6 +176,22 @@ public class KorriOverlayHostExclusionTest {
         @Override
         public void closeAndDestroy() {
             closeAndDestroyCount++;
+        }
+    }
+
+    private static final class UnregisteringLegacyHost extends RecordingLegacyHost {
+        private final KorriOverlayHostExclusion exclusion;
+        private KorriOverlayHostExclusion.Owner owner;
+
+        UnregisteringLegacyHost(KorriOverlayHostExclusion exclusion) {
+            super(true);
+            this.exclusion = exclusion;
+        }
+
+        @Override
+        public void closeAndDestroy() {
+            super.closeAndDestroy();
+            exclusion.unregister(owner);
         }
     }
 
