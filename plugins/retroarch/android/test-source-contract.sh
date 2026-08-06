@@ -12,6 +12,7 @@ COMMAND="$SOURCE/command.c"
 COMMAND_HEADER="$SOURCE/command.h"
 PLATFORM="$SOURCE/frontend/drivers/platform_unix.c"
 ANDROID_INPUT="$SOURCE/input/drivers/android_input.c"
+DIAGNOSTICS_PATCH="$HERE/patches/0013-secret-free-control-diagnostics.patch"
 
 grep -q '#define DEFAULT_KIOSK_MODE_ENABLE true' "$CONFIG"
 grep -q '#define DEFAULT_CONFIG_SAVE_ON_EXIT false' "$CONFIG"
@@ -75,6 +76,18 @@ grep -q 'SHOW_MENU OK' "$COMMAND"
 grep -q 'SHOW_MENU ERROR' "$COMMAND"
 grep -q 'QUIT OK' "$COMMAND"
 grep -q 'Rejected unauthenticated Korri command' "$COMMAND"
+grep -q 'Korri listener ready authority=%s' "$COMMAND"
+grep -q 'Korri authenticated request accepted command=%u' "$COMMAND"
+grep -q 'Korri authenticated reply attempted command=%u length=%lu' "$COMMAND"
+grep -q 'Korri authenticated reply sent command=%u length=%lu' "$COMMAND"
+grep -q 'Korri listener ready authority=%s' "$DIAGNOSTICS_PATCH"
+grep -q 'Korri authenticated request accepted command=%u' "$DIAGNOSTICS_PATCH"
+grep -q 'Korri authenticated reply sent command=%u length=%lu' "$DIAGNOSTICS_PATCH"
+diagnostic_lines="$(grep -E 'Korri (listener ready|authenticated request accepted|authenticated reply (attempted|sent))' "$COMMAND")"
+if grep -Eqi 'token|nonce|frame|payload|capability|path|port' <<<"$diagnostic_lines"; then
+  echo 'RetroArch control diagnostics contain secret or endpoint material' >&2
+  exit 1
+fi
 grep -q 'korri_secure_wipe(network_command_token, sizeof(network_command_token))' "$COMMAND"
 grep -q 'korri_secure_wipe(netcmd->token, sizeof(netcmd->token))' "$COMMAND"
 if grep -q 'string_is_equal(buf, network_command_token)' "$COMMAND"; then

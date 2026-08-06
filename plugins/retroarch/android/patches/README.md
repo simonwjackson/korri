@@ -75,3 +75,7 @@ per `NNNN-description.patch` and record its upstream-facing rationale here.
   CRC32 plus menu-alive and selection-index telemetry. Replay insertion occurs
   after MAC validation and before allowlist dispatch, so duplicate status,
   menu, and quit datagrams receive neither an effect nor a usable response.
+- `0013-secret-free-control-diagnostics.patch` — records only whether the
+  loopback listener retained launch authority plus accepted command tags and
+  attempted/sent reply tags and lengths. It never logs a token, nonce, frame,
+  payload, capability, path, or port.

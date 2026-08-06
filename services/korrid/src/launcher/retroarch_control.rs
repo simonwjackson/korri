@@ -452,6 +452,17 @@ mod tests {
         assert_eq!(request[0], PROTOCOL_VERSION);
         assert_eq!(&request[1..33], &nonce);
         assert_eq!(request[33], RetroarchControlCommand::ShowMenu.tag());
+        // Known answer for HMAC-SHA256 over the exact 34-byte binary prefix,
+        // keyed by the 64 ASCII token bytes. RetroArch's pinned C parity uses
+        // this same frame/key treaty through sha256_hash-based HMAC.
+        assert_eq!(
+            &request[34..],
+            &[
+                0xd0, 0xf5, 0x44, 0xda, 0x97, 0x4b, 0x12, 0x49, 0x39, 0x16, 0x19, 0x0c, 0x0b, 0xb6,
+                0xa9, 0xb1, 0x16, 0x9c, 0x4e, 0xb4, 0x6b, 0xea, 0x37, 0x9b, 0x9d, 0xa3, 0xba, 0xb4,
+                0x93, 0xd3, 0xb5, 0x07,
+            ]
+        );
 
         let mut tampered = request;
         tampered[33] = RetroarchControlCommand::Quit.tag();

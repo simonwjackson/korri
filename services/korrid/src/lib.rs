@@ -1033,6 +1033,28 @@ fn session_route_context_unavailable() -> SessionControlFailure {
     }
 }
 
+fn retroarch_probe_unavailable(category: &str) -> SessionControlFailure {
+    SessionControlFailure {
+        reason: SessionControlFailureReason::Unavailable,
+        message: format!("RetroArch controls are unavailable (probe: {category})."),
+    }
+}
+
+fn retroarch_probe_failure(
+    error: launcher::retroarch_control::RetroarchControlError,
+) -> SessionControlFailure {
+    use launcher::retroarch_control::RetroarchControlError;
+
+    let category = match error {
+        RetroarchControlError::InvalidAuthority => "invalid-authority",
+        RetroarchControlError::Unavailable => "unavailable",
+        RetroarchControlError::Timeout => "timeout",
+        RetroarchControlError::WrongSource => "wrong-source",
+        RetroarchControlError::WrongResponse => "wrong-response",
+    };
+    retroarch_probe_unavailable(category)
+}
+
 enum MaterializedSessionExecutor {
     Moonlight(MoonlightExecutorState),
     Retroarch(RetroarchControlAuthority),
@@ -1281,10 +1303,9 @@ async fn materialize_session_controls(
     let probe = Arc::clone(&authority);
     let status = tokio::task::spawn_blocking(move || probe.expected_status())
         .await
-        .map_err(|_| session_route_context_unavailable())?
-        .ok()
-        .flatten()
-        .ok_or_else(session_route_context_unavailable)?;
+        .map_err(|_| retroarch_probe_unavailable("unavailable"))?
+        .map_err(retroarch_probe_failure)?
+        .ok_or_else(|| retroarch_probe_unavailable("identity-mismatch"))?;
     let current = active_android_launch
         .lock()
         .expect("active Android launch mutex poisoned")
@@ -2773,6 +2794,35 @@ mod tests {
     fn write_wl4_plugin_config(root: &Path) {
         std::fs::write(root.join("config.yaml"), "{}\n").unwrap();
         std::fs::write(root.join("library.yaml"), WL4_PLUGIN_LIBRARY).unwrap();
+    }
+
+    #[test]
+    fn retroarch_probe_failures_keep_unavailable_reason_and_safe_categories() {
+        use launcher::retroarch_control::RetroarchControlError;
+
+        for (error, category) in [
+            (RetroarchControlError::InvalidAuthority, "invalid-authority"),
+            (RetroarchControlError::Unavailable, "unavailable"),
+            (RetroarchControlError::Timeout, "timeout"),
+            (RetroarchControlError::WrongSource, "wrong-source"),
+            (RetroarchControlError::WrongResponse, "wrong-response"),
+        ] {
+            let failure = retroarch_probe_failure(error);
+            assert_eq!(failure.reason, SessionControlFailureReason::Unavailable);
+            assert_eq!(
+                failure.message,
+                format!("RetroArch controls are unavailable (probe: {category}).")
+            );
+            assert!(!failure.message.contains("token"));
+            assert!(!failure.message.contains("nonce"));
+            assert!(!failure.message.contains("capability"));
+        }
+        let mismatch = retroarch_probe_unavailable("identity-mismatch");
+        assert_eq!(mismatch.reason, SessionControlFailureReason::Unavailable);
+        assert_eq!(
+            mismatch.message,
+            "RetroArch controls are unavailable (probe: identity-mismatch)."
+        );
     }
 
     #[tokio::test]
