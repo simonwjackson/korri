@@ -678,7 +678,9 @@ describe("Shift library", () => {
     fireEvent.click(screen.getByRole("button", { name: "Wario Land 4" }))
 
     expect(container.querySelector("[data-shift-library]")).toBeNull()
-    expect(container.querySelector("[data-shift-detail]")).toBeDefined()
+    const detail = container.querySelector("[data-shift-detail]")
+    expect(detail).toBeDefined()
+    expect(detail?.getAttribute("data-shift-detail-game-id")).toBe("local-game:wl4")
     expect(host.calls).toEqual([])
 
     fireEvent.click(screen.getByRole("button", { name: "▶ Play" }))

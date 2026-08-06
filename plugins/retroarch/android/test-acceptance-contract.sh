@@ -38,8 +38,25 @@ grep -F 'render_focused_wario_crop_evidence' "$ACCEPTANCE" >/dev/null
 grep -F 'focused_tile_center' "$ACCEPTANCE" >/dev/null
 # shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F '"${ADB[@]}" shell input tap "$tap_x" "$tap_y"' "$ACCEPTANCE" >/dev/null
-[[ "$(grep -Fc 'shell input tap' "$ACCEPTANCE")" -eq 1 ]]
+[[ "$(grep -Fc 'shell input tap' "$ACCEPTANCE")" -eq 2 ]]
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F -- '"$SERIAL" "$KORRI_PACKAGE" --detail-play' "$ACCEPTANCE" >/dev/null
+grep -F 'detail-play.focus.json' "$ACCEPTANCE" >/dev/null
+grep -F 'detail-play.png' "$ACCEPTANCE" >/dev/null
 grep -F 'Physical controller confirm remains mandatory' "$ACCEPTANCE" >/dev/null
+launch_flow_source="$(sed -n '/^launch_wario_entry() {/,/^}/p' "$ACCEPTANCE")"
+# shellcheck disable=SC2016 # Literal source-contract needles.
+card_tap_line="$(grep -nF 'shell input tap "$tap_x" "$tap_y"' <<<"$launch_flow_source" | sed -n '1s/:.*//p')"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+detail_focus_line="$(grep -nF -- '"$SERIAL" "$KORRI_PACKAGE" --detail-play' <<<"$launch_flow_source" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+play_tap_line="$(grep -nF 'shell input tap "$tap_x" "$tap_y"' <<<"$launch_flow_source" | sed -n '2s/:.*//p')"
+[[ -n "$card_tap_line" && -n "$detail_focus_line" && -n "$play_tap_line" \
+  && "$card_tap_line" -lt "$detail_focus_line" \
+  && "$detail_focus_line" -lt "$play_tap_line" ]] || {
+  echo 'RetroArch acceptance must open exact Wario detail before tapping verified Play' >&2
+  exit 1
+}
 if grep -Eq '\.click\(|app\.local-games\.launch' "$ACCEPTANCE"; then
   echo 'RetroArch UI activation must not use DevTools click or a launch RPC' >&2
   exit 1
@@ -271,6 +288,10 @@ cat >"$TMP/focused-wario.json" <<'JSON'
 {"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":548,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480}}
 JSON
 [[ "$(focused_tile_center "$TMP/focused-wario.json")" == '589 290' ]]
+cat >"$TMP/focused-play.json" <<'JSON'
+{"gameId":"local-game:wl4","title":"Wario Land 4","label":"Play","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":342.5,"top":287.25,"width":130,"height":52},"viewport":{"width":640,"height":480}}
+JSON
+[[ "$(focused_tile_center "$TMP/focused-play.json")" == '407 313' ]]
 for invalid in \
   '{"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":-1,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480}}' \
   '{"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":600,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480}}' \

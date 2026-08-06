@@ -934,6 +934,9 @@ launch_wario_entry() {
   local observed_controls
   local tap_x tap_y
   local focus_json="$PORTAL_EVIDENCE_DIR/$label.focus.json"
+  local detail_focus_json="$PORTAL_EVIDENCE_DIR/$label.detail-play.focus.json"
+  local detail_image="$PORTAL_EVIDENCE_DIR/$label.detail-play.png"
+  local detail_observation
   focus_wario_in_installed_library "$label"
   sleep 1
   portal_shot_focuses_wario "$label" || {
@@ -952,6 +955,32 @@ launch_wario_entry() {
     echo 'focused Wario center was not an integer coordinate' >&2
     return 1
   }
+  "${ADB[@]}" shell input tap "$tap_x" "$tap_y"
+
+  # Library selection opens detail. Prove exact Wario identity and exactly one
+  # visible primary Play/Continue action before activation. DevTools focuses
+  # and measures only; it never clicks, dispatches input, or calls RPC.
+  detail_observation="$("$DEBUG_PORTAL_FOCUS_GAME_SH" \
+    "$SERIAL" "$KORRI_PACKAGE" --detail-play)" || {
+      echo 'installed portal did not open exact Wario detail with one Play action' >&2
+      return 1
+    }
+  printf '%s\n' "$detail_observation" >"$detail_focus_json"
+  "${ADB[@]}" exec-out screencap -p >"$detail_image"
+  pid="$(package_pid "$FORK_PACKAGE")" || return 1
+  [[ -z "$pid" ]] || {
+    echo 'Wario Library card bypassed detail and launched before Play confirmation' >&2
+    return 1
+  }
+  if ! read -r tap_x tap_y < <(focused_tile_center "$detail_focus_json"); then
+    echo 'focused Wario Play bounds did not produce a safe on-screen tap coordinate' >&2
+    return 1
+  fi
+  [[ "$tap_x" =~ ^[0-9]+$ && "$tap_y" =~ ^[0-9]+$ ]] || {
+    echo 'focused Wario Play center was not an integer coordinate' >&2
+    return 1
+  }
+
   TARGET_STARTED_BY_GATE=true
   "${ADB[@]}" shell input tap "$tap_x" "$tap_y"
   sleep 2
@@ -960,7 +989,7 @@ launch_wario_entry() {
 
   pid="$(package_pid "$FORK_PACKAGE")" || return 1
   [[ -n "$pid" ]] || {
-    echo 'focused Wario tile did not launch Korri RetroArch through the portal' >&2
+    echo 'verified Wario detail Play action did not launch Korri RetroArch' >&2
     return 1
   }
   GATE_CURRENT_LAUNCH=""

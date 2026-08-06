@@ -41,6 +41,7 @@ export function ShiftDetailSplit({
   return (
     <div
       data-shift-detail
+      data-shift-detail-game-id={game.id}
       className="shift-detail-split intrinsic"
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.detailTemplate)}
     >

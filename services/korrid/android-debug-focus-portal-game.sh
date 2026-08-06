@@ -12,6 +12,7 @@ usage:
   android-debug-focus-portal-game.sh <adb-serial> <package> --library [devtools-port]
   android-debug-focus-portal-game.sh <adb-serial> <package> --verify-library [devtools-port]
   android-debug-focus-portal-game.sh <adb-serial> <package> --game <game-id> <exact-title> [devtools-port]
+  android-debug-focus-portal-game.sh <adb-serial> <package> --detail-play [devtools-port]
 USAGE
   exit 2
 }
@@ -33,6 +34,11 @@ case "$mode" in
     title="$2"
     shift 2
     [[ "$game_id" =~ ^[A-Za-z0-9._:@/-]+$ && -n "$title" ]] || usage
+    ;;
+  --detail-play)
+    [[ $# -le 1 ]] || usage
+    game_id='local-game:wl4'
+    title='Wario Land 4'
     ;;
   *) usage ;;
 esac
@@ -195,6 +201,87 @@ case "$mode" in
       and (.bounds.top + .bounds.height) <= .viewport.height'
     failure='trusted main portal Library did not expose exactly one focusable game with the expected identity'
     ;;
+  --detail-play)
+    expression="(() => {$common_js
+      const gameId = $game_id_js;
+      const title = $title_js;
+      const rendered = (element) => {
+        const style = getComputedStyle(element);
+        return element instanceof HTMLElement && element.getClientRects().length > 0
+          && style.display !== 'none' && style.visibility !== 'hidden';
+      };
+      const detailRoots = Array.from(document.querySelectorAll('[data-shift-detail]'))
+        .filter(rendered);
+      const exactRoots = detailRoots.filter((element) =>
+        element.getAttribute('data-shift-detail-game-id') === gameId);
+      if (detailRoots.length !== 1 || exactRoots.length !== 1) {
+        throw new Error('expected one visible detail with exact game identity');
+      }
+      const root = exactRoots[0];
+      const visibleTitles = Array.from(root.querySelectorAll('[data-korri-part=\"shift.detail-title\"]'))
+        .filter(rendered);
+      const exactTitles = visibleTitles.filter((element) => element.textContent?.trim() === title);
+      if (visibleTitles.length !== 1 || exactTitles.length !== 1) {
+        throw new Error('expected one exact visible detail title');
+      }
+      const candidates = Array.from(root.querySelectorAll('button.shift-detail-btn.primary'))
+        .filter(renderedFocusable);
+      const labelled = candidates.map((element) => {
+        const accessible = element.getAttribute('aria-label')?.trim()
+          || element.textContent?.trim() || '';
+        const label = accessible.replace(/^[▶▷►]\s*/, '');
+        return {element, label};
+      }).filter(({label}) => label === 'Play' || label === 'Continue');
+      if (candidates.length !== 1 || labelled.length !== 1) {
+        throw new Error('expected one visible focusable primary Play or Continue action');
+      }
+      const target = labelled[0].element;
+      const label = labelled[0].label;
+      target.focus();
+      const rect = target.getBoundingClientRect();
+      const rectValues = [rect.left, rect.top, rect.width, rect.height, rect.right, rect.bottom];
+      const rectFinitePositive = rectValues.every(Number.isFinite)
+        && rect.width > 0 && rect.height > 0;
+      const fullyOnScreen = rectFinitePositive
+        && rect.left >= 0 && rect.top >= 0
+        && rect.right <= window.innerWidth && rect.bottom <= window.innerHeight;
+      return {
+        href: location.href,
+        view: 'detail',
+        gameId: root.getAttribute('data-shift-detail-game-id'),
+        title: exactTitles[0].textContent?.trim(),
+        label,
+        visibleDetailRoots: detailRoots.length,
+        exactDetailRoots: exactRoots.length,
+        visibleTitles: visibleTitles.length,
+        exactTitles: exactTitles.length,
+        primaryCandidates: candidates.length,
+        exactActions: labelled.length,
+        activeExact: document.activeElement === target
+          && target.matches('button.shift-detail-btn.primary'),
+        bounds: {left: rect.left, top: rect.top, width: rect.width, height: rect.height},
+        viewport: {width: window.innerWidth, height: window.innerHeight},
+        rectFinitePositive,
+        fullyOnScreen
+      };
+    })()"
+    predicate='.href == $url and .view == "detail" and .gameId == $gameId and .title == $title
+      and (.label == "Play" or .label == "Continue")
+      and .visibleDetailRoots == 1 and .exactDetailRoots == 1
+      and .visibleTitles == 1 and .exactTitles == 1
+      and .primaryCandidates == 1 and .exactActions == 1 and .activeExact == true
+      and .rectFinitePositive == true and .fullyOnScreen == true
+      and (.bounds | type == "object") and (.viewport | type == "object")
+      and (.bounds.left | type == "number") and (.bounds.top | type == "number")
+      and (.bounds.width | type == "number") and .bounds.width > 0
+      and (.bounds.height | type == "number") and .bounds.height > 0
+      and (.viewport.width | type == "number") and .viewport.width > 0
+      and (.viewport.height | type == "number") and .viewport.height > 0
+      and .bounds.left >= 0 and .bounds.top >= 0
+      and (.bounds.left + .bounds.width) <= .viewport.width
+      and (.bounds.top + .bounds.height) <= .viewport.height'
+    failure='trusted main portal did not expose exact Wario detail with one focusable Play action'
+    ;;
 esac
 
 verified=''
@@ -226,6 +313,11 @@ case "$mode" in
   --game)
     "$JQ_BIN" -c \
       '{url:.href,view,gameId,title,focused:.activeExact,bounds,viewport,
+        rectFinitePositive,fullyOnScreen}' <<<"$verified"
+    ;;
+  --detail-play)
+    "$JQ_BIN" -c \
+      '{url:.href,view,gameId,title,label,focused:.activeExact,bounds,viewport,
         rectFinitePositive,fullyOnScreen}' <<<"$verified"
     ;;
 esac
