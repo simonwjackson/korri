@@ -323,6 +323,36 @@ grep -F 'assert_menu_status 1' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_selection_advanced' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_DPAD_DOWN' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_menu_status 0' "$ACCEPTANCE" >/dev/null
+menu_status_source="$(sed -n '/^assert_menu_status() {/,/^}/p' "$ACCEPTANCE")"
+grep -F '0) expected_json=false ;;' <<<"$menu_status_source" >/dev/null
+grep -F '1) expected_json=true ;;' <<<"$menu_status_source" >/dev/null
+(
+  eval "$menu_status_source"
+  # shellcheck disable=SC2034 # Read by the evaluated source contract.
+  GATE_CURRENT_LAUNCH=test-launch
+  menu_alive=false
+  # shellcheck disable=SC2329 # Called by the evaluated source contract.
+  authenticated_retroarch_status() {
+    printf '{"menuAlive":%s}\n' "$menu_alive"
+  }
+  assert_menu_status 0
+  menu_alive=true
+  assert_menu_status 1
+  invalid_error=''
+  if invalid_error="$(assert_menu_status false 2>&1)"; then
+    echo 'RetroArch menu status assertion accepted non-numeric boolean input' >&2
+    exit 1
+  fi
+  [[ "$invalid_error" == \
+    'RetroArch menu status expectation must be exactly 0 or 1: false' ]]
+  missing_error=''
+  if missing_error="$(assert_menu_status 2>&1)"; then
+    echo 'RetroArch menu status assertion accepted missing input' >&2
+    exit 1
+  fi
+  [[ "$missing_error" == \
+    'RetroArch menu status expectation must be exactly 0 or 1: ' ]]
+)
 grep -F 'KEYCODE_BUTTON_SELECT' "$ACCEPTANCE" >/dev/null
 grep -F 'network_cmd_port' "$ACCEPTANCE" >/dev/null
 grep -F 'UDP_COMPLETION_MARKER=' "$ACCEPTANCE" >/dev/null

@@ -982,11 +982,20 @@ authenticated_retroarch_status() {
   jq -c '.outcome.payload.retroarchTelemetry' <<<"$controls"
 }
 assert_menu_status() {
-  local expected="$1"
+  local expected_input="${1-}"
+  local expected_json
+  case "$expected_input" in
+    0) expected_json=false ;;
+    1) expected_json=true ;;
+    *)
+      echo "RetroArch menu status expectation must be exactly 0 or 1: $expected_input" >&2
+      return 2
+      ;;
+  esac
   local status
   status="$(authenticated_retroarch_status "$GATE_CURRENT_LAUNCH")"
-  jq -e --argjson expected "$expected" '.menuAlive == $expected' <<<"$status" >/dev/null || {
-    echo "RetroArch menu telemetry did not report menu=$expected: $status" >&2
+  jq -e --argjson expected "$expected_json" '.menuAlive == $expected' <<<"$status" >/dev/null || {
+    echo "RetroArch menu telemetry did not report menu=$expected_input: $status" >&2
     return 1
   }
 }
