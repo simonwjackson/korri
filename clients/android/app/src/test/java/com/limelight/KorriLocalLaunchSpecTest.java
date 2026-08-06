@@ -59,6 +59,7 @@ public class KorriLocalLaunchSpecTest {
     public void acceptsTheGeneratedLauncherTemplate() throws Exception {
         KorriLocalLaunchSpec.Parsed parsed =
                 KorriLocalLaunchSpec.parse(validSpec().toString(), ROOT);
+        assertEquals("retroarch", parsed.launcherId);
         assertEquals("/storage/emulated/0/korri/roms/wl4.gba",
                 parsed.extras.get("ROM"));
         assertEquals(4, parsed.directories.size());

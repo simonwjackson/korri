@@ -34,6 +34,7 @@ import com.limelight.nvstream.http.NvHTTP;
 import com.limelight.nvstream.http.PairingManager;
 import com.limelight.utils.CacheHelper;
 import com.limelight.utils.ServerHelper;
+import com.limelight.korri.overlay.KorriActiveLaunch;
 import com.limelight.korri.overlay.KorriOverlayPermission;
 import com.simonwjackson.korri.korrid.KorriBrainService;
 import com.simonwjackson.korri.korrid.KorridServer;
@@ -564,11 +565,25 @@ public class KorriShellActivity extends AppCompatActivity {
                         error.getMessage() != null ? error.getMessage() : "start failed");
             }
             if (authorization == KorridServer.LOCAL_LAUNCH_PUBLISH) {
+                final KorriActiveLaunch active;
                 try {
                     // Record only after Android accepted a fresh exact signed launch.
-                    KorriBrainService.publishLocalActiveLaunch(spec, specJson);
+                    active = KorriBrainService.publishLocalActiveLaunch(spec, specJson);
                 } catch (Exception publishError) {
                     return launchFailed("StartFailed", "local launch context could not be recorded");
+                }
+                try {
+                    // This action-bound event contains identity only. Never add the
+                    // signed spec, control token, RPC capability, or control port.
+                    Log.i(KorriLocalLaunchLifecycle.TAG,
+                            KorriLocalLaunchLifecycle.published(
+                                    active.launchId(),
+                                    active.gameId(),
+                                    spec.component.getPackageName(),
+                                    spec.launcherId));
+                } catch (IllegalArgumentException metadataError) {
+                    Log.e(KorriLocalLaunchLifecycle.TAG,
+                            "local launch publication metadata was invalid");
                 }
             }
             return "{\"_tag\":\"Launched\"}";

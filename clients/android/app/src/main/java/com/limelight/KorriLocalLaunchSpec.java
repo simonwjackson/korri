@@ -41,6 +41,7 @@ final class KorriLocalLaunchSpec {
     }
 
     static final class Parsed {
+        final String launcherId;
         final boolean isAndroidApp;
         final ComponentName component;
         final Map<String, String> extras;
@@ -48,11 +49,13 @@ final class KorriLocalLaunchSpec {
         final List<FileSpec> files;
 
         Parsed(
+                String launcherId,
                 boolean isAndroidApp,
                 ComponentName component,
                 Map<String, String> extras,
                 List<String> directories,
                 List<FileSpec> files) {
+            this.launcherId = launcherId;
             this.isAndroidApp = isAndroidApp;
             this.component = component;
             this.extras = Collections.unmodifiableMap(extras);
@@ -164,7 +167,8 @@ final class KorriLocalLaunchSpec {
                 throw new Invalid("InvalidSpec",
                         "android-app launches carry no extras and provision nothing");
             }
-            return new Parsed(isAndroidApp, component, extras, directories, files);
+            return new Parsed(
+                    launcherId, isAndroidApp, component, extras, directories, files);
         } catch (Invalid error) {
             throw error;
         } catch (Exception error) {

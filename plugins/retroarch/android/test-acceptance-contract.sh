@@ -161,36 +161,68 @@ if grep -Eq '\.click\(' "$ACCEPTANCE"; then
   echo 'RetroArch UI activation must not use DevTools click' >&2
   exit 1
 fi
-# The only launch RPC in the installed flow is a post-start repeated request
-# that discovers the already-published local launch through exact resume.
+# A fresh marker precedes the one installed pointer activation. The resulting
+# dedicated publication event discovers local identity without an RPC cycle.
+# shellcheck disable=SC2016 # Literal source-contract needles.
+publication_marker_line="$(grep -nF 'publication_marker="$(new_logcat_marker' \
+  <<<"$launch_flow_source" | cut -d: -f1)"
+record_pid_line="$(grep -nF 'record_gate_pid "$pid"' <<<"$launch_flow_source" | cut -d: -f1)"
+record_launch_line="$(grep -nF 'record_gate_launch "$GATE_CURRENT_LAUNCH"' <<<"$launch_flow_source" | cut -d: -f1)"
+controls_line="$(grep -nF 'observed_controls="$(controls_for_launch' <<<"$launch_flow_source" | cut -d: -f1)"
+publication_recheck_line="$(grep -nF 'if ! publication_launch="$(parse_local_publication' \
+  <<<"$launch_flow_source" | cut -d: -f1)"
+resume_rpc_line="$(grep -nF 'observed_resume="$(rpc' <<<"$launch_flow_source" | cut -d: -f1)"
+[[ -n "$publication_marker_line" && -n "$record_pid_line" && -n "$record_launch_line" \
+  && -n "$controls_line" && -n "$publication_recheck_line" && -n "$resume_rpc_line" \
+  && "$publication_marker_line" -lt "$location_tap_line" \
+  && "$location_tap_line" -lt "$record_pid_line" \
+  && "$record_pid_line" -lt "$record_launch_line" \
+  && "$record_launch_line" -lt "$controls_line" \
+  && "$controls_line" -lt "$publication_recheck_line" \
+  && "$publication_recheck_line" -lt "$resume_rpc_line" ]] || {
+  echo 'RetroArch acceptance must mark, activate, record PID/publication, prove controls, recheck publication, then resume' >&2
+  exit 1
+}
+for publication_contract in \
+  'KorriLocalLifecycle:I' \
+  'local-publication.log' \
+  'publication_count" -eq 1' \
+  'parse_local_publication "$publication_lines"' \
+  'record_gate_launch "$GATE_CURRENT_LAUNCH"'; do
+  grep -F "$publication_contract" <<<"$launch_flow_source" >/dev/null || {
+    echo "RetroArch publication discovery is missing: $publication_contract" >&2
+    exit 1
+  }
+done
+publication_parser_source="$(sed -n '/^parse_local_publication() {/,/^}/p' "$ACCEPTANCE")"
+grep -F 'launchId=([0-9a-f]{32}) event=published gameId=wl4 package=com\.korri\.retroarch launcher=retroarch' \
+  <<<"$publication_parser_source" >/dev/null
+for controls_contract in \
+  'local-controls.json' \
+  'controls_ready=false' \
+  '@korri:retroarch/open-menu' \
+  '@korri:retroarch/quit' \
+  'retroarchTelemetry.contentBasename == "wl4.gba"' \
+  'retroarchTelemetry.crc32 == "d6141609"'; do
+  grep -F "$controls_contract" <<<"$launch_flow_source" >/dev/null || {
+    echo "RetroArch bounded controls readiness is missing: $controls_contract" >&2
+    exit 1
+  }
+done
 # shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F 'observed_resume="$(rpc '\''{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}'\'')"' \
+  <<<"$launch_flow_source" >/dev/null
+grep -F 'assert_exact_wario_resume "$observed_resume" "$GATE_CURRENT_LAUNCH"' \
   <<<"$launch_flow_source" >/dev/null
 if grep -E 'rpc .*app\.session\.status' <<<"$launch_flow_source" >/dev/null; then
   echo 'local launch discovery must never read federated app.session.status' >&2
   exit 1
 fi
-# shellcheck disable=SC2016 # Literal source-contract needles.
-record_pid_line="$(grep -nF 'record_gate_pid "$pid"' <<<"$launch_flow_source" | cut -d: -f1)"
-# shellcheck disable=SC2016 # Literal source-contract needle.
-resume_rpc_line="$(grep -nF 'observed_resume="$(rpc' <<<"$launch_flow_source" | cut -d: -f1)"
-# shellcheck disable=SC2016 # Literal source-contract needle.
-record_launch_line="$(grep -nF 'record_gate_launch "$GATE_CURRENT_LAUNCH"' <<<"$launch_flow_source" | cut -d: -f1)"
-# shellcheck disable=SC2016 # Literal source-contract needle.
-controls_line="$(grep -nF 'observed_controls="$(controls_for_launch' <<<"$launch_flow_source" | cut -d: -f1)"
-[[ -n "$record_pid_line" && -n "$resume_rpc_line" && -n "$record_launch_line" \
-  && -n "$controls_line" && "$location_tap_line" -lt "$record_pid_line" \
-  && "$record_pid_line" -lt "$resume_rpc_line" \
-  && "$resume_rpc_line" -lt "$record_launch_line" \
-  && "$record_launch_line" -lt "$controls_line" ]] || {
-  echo 'RetroArch acceptance must record PID, discover exact resume, record launch, then query controls' >&2
-  exit 1
-}
-# shellcheck disable=SC2016 # Literal source-contract needle.
-grep -F 'assert_exact_wario_resume "$observed_resume"' <<<"$launch_flow_source" >/dev/null
 resume_assertion_source="$(sed -n '/^assert_exact_wario_resume() {/,/^}/p' "$ACCEPTANCE")"
 for resume_contract in \
   '.outcome.payload.disposition == "resume"' \
+  '.outcome.payload.launchId == $launchId' \
+  'test("^[0-9a-f]{32}$")' \
   '.outcome.payload.context.gameId == "wl4"' \
   '.outcome.payload.context.contentCrc32 == "d6141609"' \
   '"packageName":"com.korri.retroarch"' \
@@ -433,12 +465,32 @@ TMP="$(mktemp -d)"
 cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
 
+PUBLICATION_PARSER="$TMP/parse-local-publication.sh"
+printf '%s\n' "$publication_parser_source" >"$PUBLICATION_PARSER"
+# shellcheck source=/dev/null
+source "$PUBLICATION_PARSER"
+valid_publication='launchId=0123456789abcdef0123456789abcdef event=published gameId=wl4 package=com.korri.retroarch launcher=retroarch'
+[[ "$(parse_local_publication "$valid_publication")" == \
+  '0123456789abcdef0123456789abcdef' ]]
+for invalid_publication in \
+  '' \
+  "$valid_publication"$'\n'"$valid_publication" \
+  'launchId=ABCDEF6789abcdef0123456789abcdef event=published gameId=wl4 package=com.korri.retroarch launcher=retroarch' \
+  'launchId=0123456789abcdef0123456789abcdef event=published gameId=other package=com.korri.retroarch launcher=retroarch' \
+  'launchId=0123456789abcdef0123456789abcdef event=published gameId=wl4 package=com.other.retroarch launcher=retroarch'; do
+  if parse_local_publication "$invalid_publication" >/dev/null; then
+    echo "local publication parser accepted zero, duplicate, or malformed evidence" >&2
+    exit 1
+  fi
+done
+
 RESUME_ASSERTION="$TMP/assert-exact-wario-resume.sh"
 printf '%s\n' "$resume_assertion_source" >"$RESUME_ASSERTION"
 # shellcheck source=/dev/null
 source "$RESUME_ASSERTION"
 valid_resume='{"outcome":{"_tag":"Ok","payload":{"disposition":"resume","launchId":"0123456789abcdef0123456789abcdef","launcherId":"retroarch","context":{"gameId":"wl4","title":"Wario Land 4","contentCrc32":"d6141609","contributors":[{"kind":"launcher","id":"@korri:retroarch/retroarch"},{"kind":"runtime","id":"@korri:mgba/mgba"}],"executor":{"id":"retroarch-control","available":true},"foreground":{"kind":"component","packageName":"com.korri.retroarch","className":"com.retroarch.browser.retroactivity.RetroActivityFuture"}},"component":{"packageName":"com.korri.retroarch","className":"com.retroarch.browser.retroactivity.RetroActivityFuture"},"extras":{"ROM":"/storage/emulated/0/korri/roms/wl4.gba","LIBRETRO":"/data/data/com.korri.retroarch/cores/mgba_libretro_android.so","CONFIGFILE":"/storage/emulated/0/korri/retroarch.cfg"},"integrity":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}}'
-assert_exact_wario_resume "$valid_resume"
+expected_resume_launch_id='0123456789abcdef0123456789abcdef'
+assert_exact_wario_resume "$valid_resume" "$expected_resume_launch_id"
 for mutation in \
   '.outcome.payload.disposition = "fresh"' \
   '.outcome.payload.launchId = "replacement"' \
@@ -446,7 +498,7 @@ for mutation in \
   '.outcome.payload.component.packageName = "com.retroarch.aarch64"' \
   '.outcome.payload.extras.LIBRETRO = "/replacement/core.so"'; do
   invalid_resume="$(jq -c "$mutation" <<<"$valid_resume")"
-  if assert_exact_wario_resume "$invalid_resume"; then
+  if assert_exact_wario_resume "$invalid_resume" "$expected_resume_launch_id"; then
     echo "exact Wario resume assertion accepted mutation: $mutation" >&2
     exit 1
   fi

@@ -1174,12 +1174,27 @@ verified_element_center() {
     | "\($x) \($y)"
   ' "$focus_json"
 }
+parse_local_publication() {
+  local publication_lines="$1"
+  local publication_count
+  local launch_id
+  publication_count="$(grep -c . <<<"$publication_lines" || true)"
+  [[ "$publication_count" -eq 1 ]] || return 1
+  launch_id="$(sed -nE \
+    's/^launchId=([0-9a-f]{32}) event=published gameId=wl4 package=com\.korri\.retroarch launcher=retroarch$/\1/p' \
+    <<<"$publication_lines")"
+  [[ "$launch_id" =~ ^[0-9a-f]{32}$ ]] || return 1
+  printf '%s' "$launch_id"
+}
+
 assert_exact_wario_resume() {
   local response="$1"
-  jq -e '
+  local expected_launch_id="$2"
+  jq -e --arg launchId "$expected_launch_id" '
     .outcome._tag == "Ok"
     and .outcome.payload.disposition == "resume"
-    and (.outcome.payload.launchId | type == "string" and length == 32)
+    and .outcome.payload.launchId == $launchId
+    and (.outcome.payload.launchId | test("^[0-9a-f]{32}$"))
     and .outcome.payload.launcherId == "retroarch"
     and .outcome.payload.context.gameId == "wl4"
     and .outcome.payload.context.title == "Wario Land 4"
@@ -1209,7 +1224,13 @@ launch_wario_entry() {
   local label="$1"
   local pid=""
   local observed_resume
-  local observed_controls
+  local observed_controls=''
+  local publication_marker=''
+  local publication_log=''
+  local publication_lines=''
+  local publication_launch=''
+  local publication_count=0
+  local controls_ready=false
   local tap_x tap_y
   local focus_json="$PORTAL_EVIDENCE_DIR/$label.focus.json"
   local detail_focus_json="$PORTAL_EVIDENCE_DIR/$label.detail-play.focus.json"
@@ -1218,6 +1239,8 @@ launch_wario_entry() {
   local location_image="$PORTAL_EVIDENCE_DIR/$label.local-location.png"
   local location_failure_image="$PORTAL_EVIDENCE_DIR/$label.local-location.launch-failed.png"
   local location_failure_diagnostic="$PORTAL_EVIDENCE_DIR/$label.local-location.launch-failed.txt"
+  local publication_diagnostic="$PORTAL_EVIDENCE_DIR/$label.local-publication.log"
+  local controls_diagnostic="$PORTAL_EVIDENCE_DIR/$label.local-controls.json"
   local local_location_id='["local",null,"wl4"]'
   local detail_observation
   local location_observation
@@ -1297,6 +1320,8 @@ launch_wario_entry() {
   }
 
   TARGET_STARTED_BY_GATE=true
+  # Bound publication evidence to this one verified installed-UI activation.
+  publication_marker="$(new_logcat_marker "local-publication-$label")"
   "${ADB[@]}" shell input tap "$tap_x" "$tap_y"
   # Physical controller confirm remains mandatory in the unified-overlay human
   # gate; this automated RetroArch gate proves the normal installed pointer UI.
@@ -1344,26 +1369,79 @@ launch_wario_entry() {
 
   GATE_CURRENT_LAUNCH=""
   GATE_CURRENT_LAUNCH_QUIESCED=false
-  # app.session.status describes the federated host session and cannot discover
-  # a local Android launch. A repeated exact local launch is conservative: the
-  # running route must authenticate as live and return the same signed launch as
-  # a resume without rotating launch or control authority.
+  # Discover only the publication caused by the action-bound pointer activation.
+  # The dedicated event contains identity, never signed specs or authorities.
+  for _ in $(seq 1 40); do
+    publication_log="$(logcat_since "$publication_marker" -v raw -s \
+      KorriAcceptance:I KorriLocalLifecycle:I '*:S' 2>/dev/null || true)"
+    publication_lines="$(sed '/^[[:space:]]*$/d' <<<"$publication_log")"
+    publication_count="$(grep -c . <<<"$publication_lines" || true)"
+    [[ "$publication_count" -gt 0 ]] && break
+    sleep 0.25
+  done
+  printf '%s\n' "$publication_log" >"$publication_diagnostic"
+  [[ "$publication_count" -eq 1 ]] || {
+    echo "local launch publication evidence was missing or ambiguous; evidence is in $PORTAL_EVIDENCE_DIR" >&2
+    return 1
+  }
+  if ! GATE_CURRENT_LAUNCH="$(parse_local_publication "$publication_lines")"; then
+    echo "local launch publication evidence was malformed; evidence is in $PORTAL_EVIDENCE_DIR" >&2
+    return 1
+  fi
+  record_gate_launch "$GATE_CURRENT_LAUNCH"
+
+  # Publication precedes runtime readiness. Poll the exact launch until korrid
+  # authenticates GET_STATUS and materializes both required RetroArch controls.
+  for _ in $(seq 1 40); do
+    observed_controls="$(controls_for_launch "$GATE_CURRENT_LAUNCH" 2>/dev/null || true)"
+    if jq -e --arg launchId "$GATE_CURRENT_LAUNCH" '
+      .outcome._tag == "Ok"
+      and .outcome.payload.launchId == $launchId
+      and .outcome.payload.retroarchTelemetry.contentBasename == "wl4.gba"
+      and .outcome.payload.retroarchTelemetry.crc32 == "d6141609"
+      and ([.outcome.payload.groups[] | select(.id == "@korri:retroarch")] | length) == 1
+      and ([.outcome.payload.groups[]
+        | select(.id == "@korri:retroarch")
+        | .controls[]
+        | {id, destructive}] | sort_by(.id)) == [
+          {"id":"@korri:retroarch/open-menu","destructive":false},
+          {"id":"@korri:retroarch/quit","destructive":true}
+        ]
+    ' <<<"$observed_controls" >/dev/null 2>&1; then
+      controls_ready=true
+      break
+    fi
+    sleep 0.25
+  done
+  printf '%s\n' "$observed_controls" >"$controls_diagnostic"
+  [[ "$controls_ready" == true ]] || {
+    echo "published local launch did not expose authenticated RetroArch controls; evidence is in $PORTAL_EVIDENCE_DIR" >&2
+    return 1
+  }
+
+  # Re-read the complete action-bounded window after readiness. A delayed
+  # duplicate/replacement publication must not pass merely because the first
+  # poll observed one valid line before the second line arrived.
+  publication_log="$(logcat_since "$publication_marker" -v raw -s \
+    KorriAcceptance:I KorriLocalLifecycle:I '*:S' 2>/dev/null || true)"
+  publication_lines="$(sed '/^[[:space:]]*$/d' <<<"$publication_log")"
+  printf '%s\n' "$publication_log" >"$publication_diagnostic"
+  if ! publication_launch="$(parse_local_publication "$publication_lines")" \
+      || [[ "$publication_launch" != "$GATE_CURRENT_LAUNCH" ]]; then
+    echo "local launch publication evidence changed or became ambiguous; evidence is in $PORTAL_EVIDENCE_DIR" >&2
+    return 1
+  fi
+
+  # Only after authenticated controls are ready may the conservative repeated
+  # launch prove exact same-session resume without rotating authority.
   observed_resume="$(rpc '{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}')"
-  if ! assert_exact_wario_resume "$observed_resume"; then
+  if ! assert_exact_wario_resume "$observed_resume" "$GATE_CURRENT_LAUNCH"; then
     echo 'running Wario route did not return the exact conservative local resume specification' >&2
     return 1
   fi
-  GATE_CURRENT_LAUNCH="$(jq -er '.outcome.payload.launchId' <<<"$observed_resume")"
-  record_gate_launch "$GATE_CURRENT_LAUNCH"
-  observed_controls="$(controls_for_launch "$GATE_CURRENT_LAUNCH")"
-  jq -e --arg launchId "$GATE_CURRENT_LAUNCH" '
-    .outcome._tag == "Ok" and .outcome.payload.launchId == $launchId
-  ' <<<"$observed_controls" >/dev/null || {
-    echo 'exact resumed local launch did not expose policy-rechecked controls' >&2
-    return 1
-  }
-  if grep -q 'KORRI_CONTROL_TOKEN' <<<"$observed_resume$observed_controls"; then
-    echo 'private RetroArch control authority leaked into actual launch evidence' >&2
+  if grep -qE 'KORRI_CONTROL_TOKEN|capability|authorization: Bearer' \
+    <<<"$publication_log$observed_resume$observed_controls"; then
+    echo 'private launch authority leaked into actual launch evidence' >&2
     return 1
   fi
 }

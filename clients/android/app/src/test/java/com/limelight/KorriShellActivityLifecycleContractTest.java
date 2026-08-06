@@ -28,6 +28,38 @@ public class KorriShellActivityLifecycleContractTest {
     }
 
     @Test
+    public void localPublicationEvidenceFollowsAndroidStartAndRustPublication() throws Exception {
+        String source = source();
+        String launchLocal = method(source, "public String launchLocal(String specJson)",
+                "private void requestAllFilesAccess()");
+
+        assertOrdered(launchLocal,
+                "startActivityOnUiThread(intent, \"local launcher start timed out\")",
+                "KorriBrainService.publishLocalActiveLaunch(spec, specJson)",
+                "Log.i(KorriLocalLaunchLifecycle.TAG",
+                "KorriLocalLaunchLifecycle.published(");
+        assertTrue(launchLocal.contains("active.launchId()"));
+        assertTrue(launchLocal.contains("active.gameId()"));
+        assertTrue(launchLocal.contains("spec.component.getPackageName()"));
+        assertTrue(launchLocal.contains("spec.launcherId"));
+        assertFalse(launchLocal.contains("Log.i(KorriLocalLaunchLifecycle.TAG, specJson"));
+
+        String eventSource = new String(Files.readAllBytes(
+                Path.of("src/main/java/com/limelight/KorriLocalLaunchLifecycle.java")),
+                StandardCharsets.UTF_8);
+        assertTrue(eventSource.contains("launchId="));
+        assertTrue(eventSource.contains(" event=published"));
+        assertTrue(eventSource.contains(" gameId="));
+        assertTrue(eventSource.contains(" package="));
+        assertTrue(eventSource.contains(" launcher="));
+        assertFalse(eventSource.contains("specJson"));
+        assertFalse(eventSource.contains("capability"));
+        assertFalse(eventSource.contains("authorization"));
+        assertFalse(eventSource.contains("controlToken"));
+        assertFalse(eventSource.contains("controlPort"));
+    }
+
+    @Test
     public void serviceBindingIsReleasedByBindingOwnershipRatherThanCallbackTiming() throws Exception {
         String source = source();
         String onCreate = method(source, "protected void onCreate(Bundle savedInstanceState)",
