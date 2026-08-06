@@ -1,8 +1,11 @@
 use std::{
     fs,
+    path::Path,
     sync::{Arc, Mutex},
     time::Duration,
 };
+
+use sha2::{Digest, Sha256};
 
 use korrid::{
     config::{resolver, snapshot::ConfigSnapshotCoordinator, Target},
@@ -54,6 +57,65 @@ fn wait_until_idle(
         );
         std::thread::sleep(Duration::from_millis(10));
     }
+}
+
+fn write_private_storage_state(
+    private_root: &Path,
+    storage_id: &str,
+    root: &Path,
+    pending_scan: bool,
+    pending_removal: bool,
+) {
+    let discovery_root = private_root.join("game-discovery");
+    fs::create_dir_all(&discovery_root).unwrap();
+    let record_yaml = format!("root: {}\n", root.display());
+    let fingerprint = format!(
+        "sha256:{}",
+        hex::encode(Sha256::digest(record_yaml.as_bytes()))
+    );
+    fs::write(discovery_root.join("hash-cache.json"), "{}\n").unwrap();
+    fs::write(discovery_root.join("ownership.json"), r#"{"releases":{}}"#).unwrap();
+    fs::write(
+        discovery_root.join("storage-order.json"),
+        format!(r#"["{storage_id}"]"#),
+    )
+    .unwrap();
+    fs::write(
+        discovery_root.join("storage-ownership.json"),
+        format!(
+            r#"{{"storages":{{"{storage_id}":{{"root":"{}","fingerprint":"{fingerprint}"}}}}}}"#,
+            root.display()
+        ),
+    )
+    .unwrap();
+    write_repair_state(private_root, storage_id, pending_scan, pending_removal);
+}
+
+fn write_repair_state(
+    private_root: &Path,
+    storage_id: &str,
+    pending_scan: bool,
+    pending_removal: bool,
+) {
+    let discovery_root = private_root.join("game-discovery");
+    fs::create_dir_all(&discovery_root).unwrap();
+    let pending_scans = if pending_scan {
+        format!(r#"["{storage_id}"]"#)
+    } else {
+        "[]".into()
+    };
+    let pending_removals = if pending_removal {
+        format!(r#"["{storage_id}"]"#)
+    } else {
+        "[]".into()
+    };
+    fs::write(
+        discovery_root.join("repair.json"),
+        format!(
+            r#"{{"pending_removals":{pending_removals},"pending_scans":{pending_scans},"pending_ownership":{{}}}}"#
+        ),
+    )
+    .unwrap();
 }
 
 #[test]
@@ -136,6 +198,116 @@ fn lifecycle_coalesces_active_rescans() {
             .len(),
         1
     );
+}
+
+#[test]
+fn lifecycle_preserves_active_add_location_payloads_while_scan_runs() {
+    let readable = tempfile::tempdir().unwrap();
+    let private = tempfile::tempdir().unwrap();
+    let first = tempfile::tempdir().unwrap();
+    let second = tempfile::tempdir().unwrap();
+    fs::write(first.path().join("one.gba"), b"one").unwrap();
+    fs::write(second.path().join("two.gba"), b"two").unwrap();
+    let grants = FolderSelectionGrantStore::default();
+    let discovery = lifecycle(&readable, &private, grants.clone());
+    let first_receipt = grants.issue_approved_path(first.path()).unwrap().token;
+    let second_receipt = grants.issue_approved_path(second.path()).unwrap().token;
+
+    discovery.register_receipt(&first_receipt).unwrap();
+    discovery.register_receipt(&second_receipt).unwrap();
+    let idle = wait_until_idle(&discovery);
+
+    assert_eq!(idle.state, DiscoveryPhase::Idle);
+    assert_eq!(idle.locations.len(), 2);
+    let snapshot = ConfigSnapshotCoordinator::new(readable.path())
+        .reload()
+        .snapshot;
+    assert!(snapshot.library.contains_key("one"));
+    assert!(snapshot.library.contains_key("two"));
+}
+
+#[test]
+fn lifecycle_hides_authored_storage_from_discovery_locations() {
+    let readable = tempfile::tempdir().unwrap();
+    let private = tempfile::tempdir().unwrap();
+    let authored = tempfile::tempdir().unwrap();
+    let selected = tempfile::tempdir().unwrap();
+    fs::write(selected.path().join("game.gba"), b"rom").unwrap();
+    fs::write(
+        readable.path().join("config.yaml"),
+        format!(
+            "storage:\n  authored:\n    root: {}\n",
+            authored.path().canonicalize().unwrap().display()
+        ),
+    )
+    .unwrap();
+    let grants = FolderSelectionGrantStore::default();
+    let discovery = lifecycle(&readable, &private, grants.clone());
+
+    assert!(discovery.snapshot().locations.is_empty());
+    let receipt = grants.issue_approved_path(selected.path()).unwrap().token;
+    discovery.register_receipt(&receipt).unwrap();
+    let idle = wait_until_idle(&discovery);
+
+    assert_eq!(idle.locations.len(), 1);
+    assert_ne!(idle.locations[0].id, "authored");
+}
+
+#[test]
+fn lifecycle_recovers_pending_scan_after_config_first_add_restart() {
+    let readable = tempfile::tempdir().unwrap();
+    let private = tempfile::tempdir().unwrap();
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("game.gba"), b"rom").unwrap();
+    let storage_id = "game-folder-recovery";
+    let canonical = root.path().canonicalize().unwrap();
+    fs::write(
+        readable.path().join("config.yaml"),
+        format!(
+            "storage:\n  {storage_id}:\n    root: {}\n",
+            canonical.display()
+        ),
+    )
+    .unwrap();
+    fs::write(readable.path().join("library.yaml"), "{}\n").unwrap();
+    write_private_storage_state(private.path(), storage_id, &canonical, true, false);
+
+    let discovery = lifecycle(&readable, &private, FolderSelectionGrantStore::default());
+    assert_eq!(discovery.snapshot().state, DiscoveryPhase::Scanning);
+    let idle = wait_until_idle(&discovery);
+
+    assert_eq!(idle.state, DiscoveryPhase::Idle);
+    assert!(ConfigSnapshotCoordinator::new(readable.path())
+        .reload()
+        .snapshot
+        .library
+        .contains_key("game"));
+}
+
+#[test]
+fn lifecycle_recovers_pending_removal_after_config_first_remove_restart() {
+    let readable = tempfile::tempdir().unwrap();
+    let private = tempfile::tempdir().unwrap();
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("game.gba"), b"rom").unwrap();
+    let discovery = DiscoveryCoordinator::new(readable.path(), private.path());
+    let storage_id = discovery
+        .add_location(root.path(), &options())
+        .unwrap()
+        .storage_id
+        .unwrap();
+    write_repair_state(private.path(), &storage_id, false, true);
+
+    let lifecycle = lifecycle(&readable, &private, FolderSelectionGrantStore::default());
+    assert_eq!(lifecycle.snapshot().state, DiscoveryPhase::Scanning);
+    let idle = wait_until_idle(&lifecycle);
+
+    assert_eq!(idle.state, DiscoveryPhase::Idle);
+    assert!(ConfigSnapshotCoordinator::new(readable.path())
+        .reload()
+        .snapshot
+        .library
+        .is_empty());
 }
 
 #[test]

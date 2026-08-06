@@ -39,6 +39,35 @@ pub(crate) struct EnrichmentOptions {
     pub retry_limit: usize,
     pub max_image_bytes: u64,
     pub retry_after_delay: Arc<dyn Fn(Duration) + Send + Sync>,
+    #[cfg(test)]
+    pub asset_download_policy: AssetDownloadPolicy,
+}
+
+#[cfg(test)]
+#[derive(Clone)]
+pub(crate) struct AssetDownloadPolicy {
+    pub allow_http_loopback: bool,
+    pub resolver: Arc<dyn Fn(&str, u16) -> Result<SocketAddr, EnrichmentDiagnostic> + Send + Sync>,
+}
+
+#[cfg(test)]
+impl Default for AssetDownloadPolicy {
+    fn default() -> Self {
+        Self {
+            allow_http_loopback: false,
+            resolver: Arc::new(resolve_public_address),
+        }
+    }
+}
+
+#[cfg(test)]
+impl std::fmt::Debug for AssetDownloadPolicy {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("AssetDownloadPolicy")
+            .field("allow_http_loopback", &self.allow_http_loopback)
+            .finish_non_exhaustive()
+    }
 }
 
 impl std::fmt::Debug for EnrichmentOptions {
@@ -62,6 +91,8 @@ impl Default for EnrichmentOptions {
             retry_limit: DEFAULT_RETRY_LIMIT,
             max_image_bytes: DEFAULT_MAX_IMAGE_BYTES,
             retry_after_delay: Arc::new(thread::sleep),
+            #[cfg(test)]
+            asset_download_policy: AssetDownloadPolicy::default(),
         }
     }
 }
@@ -172,6 +203,10 @@ impl SteamGridDbEnricher {
     }
 
     pub(crate) fn clear_retryable_attempts(&self) -> Result<(), EnrichmentDiagnostic> {
+        let _guard = self
+            .write_lock
+            .lock()
+            .expect("discovery write lock poisoned");
         let mut state = read_attempt_state(&self.private_root).map_err(storage_diagnostic)?;
         state
             .attempts
@@ -190,38 +225,44 @@ impl SteamGridDbEnricher {
     }
 
     pub(crate) fn run(&self) -> EnrichmentReport {
-        let token = match settings::read_steamgriddb_credential(&self.private_root) {
-            Ok(Some(token)) => token,
-            Ok(None) => {
-                return EnrichmentReport {
-                    diagnostics: vec![EnrichmentDiagnostic {
-                        code: "SteamGridDbCredentialMissing",
-                        message: "SteamGridDB credential is not configured".into(),
-                        playable_id: None,
-                    }],
-                    ..EnrichmentReport::default()
-                };
-            }
-            Err(_) => {
-                return EnrichmentReport {
-                    diagnostics: vec![EnrichmentDiagnostic {
-                        code: "SteamGridDbCredentialUnavailable",
-                        message: "SteamGridDB credential state is unavailable".into(),
-                        playable_id: None,
-                    }],
-                    ..EnrichmentReport::default()
-                };
-            }
-        };
-
-        let mut attempts = match read_attempt_state(&self.private_root) {
-            Ok(state) => state,
-            Err(error) => {
-                return EnrichmentReport {
-                    diagnostics: vec![storage_diagnostic(error)],
-                    ..EnrichmentReport::default()
-                };
-            }
+        let (token, attempts) = {
+            let _guard = self
+                .write_lock
+                .lock()
+                .expect("discovery write lock poisoned");
+            let token = match settings::read_steamgriddb_credential(&self.private_root) {
+                Ok(Some(token)) => token,
+                Ok(None) => {
+                    return EnrichmentReport {
+                        diagnostics: vec![EnrichmentDiagnostic {
+                            code: "SteamGridDbCredentialMissing",
+                            message: "SteamGridDB credential is not configured".into(),
+                            playable_id: None,
+                        }],
+                        ..EnrichmentReport::default()
+                    };
+                }
+                Err(_) => {
+                    return EnrichmentReport {
+                        diagnostics: vec![EnrichmentDiagnostic {
+                            code: "SteamGridDbCredentialUnavailable",
+                            message: "SteamGridDB credential state is unavailable".into(),
+                            playable_id: None,
+                        }],
+                        ..EnrichmentReport::default()
+                    };
+                }
+            };
+            let attempts = match read_attempt_state(&self.private_root) {
+                Ok(state) => state,
+                Err(error) => {
+                    return EnrichmentReport {
+                        diagnostics: vec![storage_diagnostic(error)],
+                        ..EnrichmentReport::default()
+                    };
+                }
+            };
+            (token, attempts)
         };
         let asset_repo = GameAssetRepository::new(&self.private_root);
         let games = match discovery::reconcile::owned_discovery_games(
@@ -262,37 +303,77 @@ impl SteamGridDbEnricher {
         for game in eligible.into_iter().take(self.options.batch_limit) {
             report.attempted += 1;
             let result = self.enrich_one(&client, &token, &asset_repo, &game);
-            let key = attempt_key(&game);
-            match result {
+            let record = match result {
                 Ok(AttemptOutcome::Assigned) => {
-                    attempts
-                        .attempts
-                        .insert(key, attempt_record(&game, AttemptOutcome::Assigned));
                     report.assigned += 1;
+                    Some(attempt_record(&game, AttemptOutcome::Assigned))
                 }
-                Ok(AttemptOutcome::Skipped) => {}
-                Ok(outcome) => {
-                    attempts
-                        .attempts
-                        .insert(key, attempt_record(&game, outcome));
-                }
+                Ok(AttemptOutcome::Skipped) => None,
+                Ok(outcome) => Some(attempt_record(&game, outcome)),
                 Err(ProviderStop::Unauthorized(diagnostic)) => {
                     report.diagnostics.push(diagnostic);
                     break;
                 }
                 Err(ProviderStop::Diagnostic(diagnostic, outcome)) => {
-                    attempts
-                        .attempts
-                        .insert(key, attempt_record(&game, outcome));
                     report.diagnostics.push(diagnostic);
+                    Some(attempt_record(&game, outcome))
                 }
-            }
-            if let Err(error) = write_attempt_state(&self.private_root, &attempts) {
-                report.diagnostics.push(storage_diagnostic(error));
-                break;
+            };
+            let Some(record) = record else {
+                continue;
+            };
+            match self.record_attempt_if_credential_current(&token, attempt_key(&game), record) {
+                Ok(true) => {}
+                Ok(false) => break,
+                Err(diagnostic) => {
+                    report.diagnostics.push(diagnostic);
+                    break;
+                }
             }
         }
         report
+    }
+
+    fn download_image(&self, url: &Url) -> Result<Vec<u8>, EnrichmentDiagnostic> {
+        #[cfg(test)]
+        {
+            return download_image_with_policy(
+                url,
+                self.options.max_image_bytes,
+                &self.options.asset_download_policy,
+            );
+        }
+        #[cfg(not(test))]
+        {
+            download_image(url, self.options.max_image_bytes)
+        }
+    }
+
+    fn record_attempt_if_credential_current(
+        &self,
+        expected_token: &str,
+        key: String,
+        record: AttemptRecord,
+    ) -> Result<bool, EnrichmentDiagnostic> {
+        let _guard = self
+            .write_lock
+            .lock()
+            .expect("discovery write lock poisoned");
+        match settings::read_steamgriddb_credential(&self.private_root) {
+            Ok(Some(token)) if token == expected_token => {}
+            Ok(_) => return Ok(false),
+            Err(_) => {
+                return Err(EnrichmentDiagnostic {
+                    code: "SteamGridDbCredentialUnavailable",
+                    message: "SteamGridDB credential state is unavailable".into(),
+                    playable_id: None,
+                })
+            }
+        }
+        let mut attempts = read_attempt_state(&self.private_root).map_err(storage_diagnostic)?;
+        attempts.attempts.insert(key, record);
+        write_attempt_state(&self.private_root, &attempts).map_err(storage_diagnostic)?;
+        Ok(true)
     }
 
     fn enrich_one(
@@ -330,13 +411,12 @@ impl SteamGridDbEnricher {
         let Some(grid) = choose_grid(&grids) else {
             return Ok(AttemptOutcome::NoMatch);
         };
-        let bytes =
-            download_image(&grid.url, self.options.max_image_bytes).map_err(|diagnostic| {
-                ProviderStop::Diagnostic(
-                    with_game(diagnostic, &game.playable_id),
-                    AttemptOutcome::Transient,
-                )
-            })?;
+        let bytes = self.download_image(&grid.url).map_err(|diagnostic| {
+            ProviderStop::Diagnostic(
+                with_game(diagnostic, &game.playable_id),
+                AttemptOutcome::Transient,
+            )
+        })?;
         if discovery::reconcile::current_owned_discovery_game(
             &self.readable_root,
             &self.private_root,
@@ -657,19 +737,49 @@ fn choose_grid(grids: &[Grid]) -> Option<Grid> {
 }
 
 fn download_image(url: &Url, max_bytes: u64) -> Result<Vec<u8>, EnrichmentDiagnostic> {
+    download_image_checked(url, max_bytes, &resolve_public_address, false)
+}
+
+#[cfg(test)]
+fn download_image_with_policy(
+    url: &Url,
+    max_bytes: u64,
+    policy: &AssetDownloadPolicy,
+) -> Result<Vec<u8>, EnrichmentDiagnostic> {
+    download_image_checked(
+        url,
+        max_bytes,
+        &*policy.resolver,
+        policy.allow_http_loopback,
+    )
+}
+
+fn download_image_checked(
+    url: &Url,
+    max_bytes: u64,
+    resolver: &(dyn Fn(&str, u16) -> Result<SocketAddr, EnrichmentDiagnostic> + Send + Sync),
+    allow_http_loopback: bool,
+) -> Result<Vec<u8>, EnrichmentDiagnostic> {
     if url.scheme() != "https" {
-        return Err(EnrichmentDiagnostic {
-            code: "AssetUrlRejected",
-            message: "SteamGridDB asset URL must use HTTPS".into(),
-            playable_id: None,
-        });
+        if !(allow_http_loopback
+            && url.scheme() == "http"
+            && url
+                .host_str()
+                .is_some_and(|host| host == "127.0.0.1" || host == "localhost" || host == "::1"))
+        {
+            return Err(EnrichmentDiagnostic {
+                code: "AssetUrlRejected",
+                message: "SteamGridDB asset URL must use HTTPS".into(),
+                playable_id: None,
+            });
+        }
     }
     let host = url.host_str().ok_or_else(|| EnrichmentDiagnostic {
         code: "AssetUrlRejected",
         message: "SteamGridDB asset URL has no host".into(),
         playable_id: None,
     })?;
-    let approved = resolve_public_address(host, url.port_or_known_default().unwrap_or(443))?;
+    let approved = resolver(host, url.port_or_known_default().unwrap_or(443))?;
     let client = Client::builder()
         .redirect(Policy::none())
         .timeout(Duration::from_secs(10))
@@ -961,6 +1071,83 @@ mod tests {
         (base, requests, handle)
     }
 
+    fn delayed_api_server(
+        responses: Vec<&'static str>,
+        delay: Duration,
+    ) -> (Url, Arc<Mutex<Vec<String>>>, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = Url::parse(&format!(
+            "http://{}/api/v2/",
+            listener.local_addr().unwrap()
+        ))
+        .unwrap();
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let captured = requests.clone();
+        let responses = Arc::new(Mutex::new(responses));
+        let handle = thread::spawn(move || {
+            while !responses.lock().unwrap().is_empty() {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut buffer = [0u8; 4096];
+                let read = stream.read(&mut buffer).unwrap();
+                captured
+                    .lock()
+                    .unwrap()
+                    .push(String::from_utf8_lossy(&buffer[..read]).into_owned());
+                thread::sleep(delay);
+                let response = responses.lock().unwrap().remove(0);
+                stream.write_all(response.as_bytes()).unwrap();
+            }
+        });
+        (base, requests, handle)
+    }
+
+    fn byte_server(
+        responses: Vec<Vec<u8>>,
+    ) -> (Url, Arc<Mutex<Vec<String>>>, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = Url::parse(&format!("http://{}", listener.local_addr().unwrap())).unwrap();
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let captured = requests.clone();
+        let responses = Arc::new(Mutex::new(responses));
+        let handle = thread::spawn(move || {
+            while !responses.lock().unwrap().is_empty() {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut buffer = [0u8; 4096];
+                let read = stream.read(&mut buffer).unwrap();
+                captured
+                    .lock()
+                    .unwrap()
+                    .push(String::from_utf8_lossy(&buffer[..read]).into_owned());
+                let response = responses.lock().unwrap().remove(0);
+                stream.write_all(&response).unwrap();
+            }
+        });
+        (base, requests, handle)
+    }
+
+    fn http_json(body: &str) -> String {
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        )
+    }
+
+    fn http_bytes(content_type: &str, body: &[u8]) -> Vec<u8> {
+        let mut response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        )
+        .into_bytes();
+        response.extend_from_slice(body);
+        response
+    }
+
+    fn http_redirect(location: &str) -> Vec<u8> {
+        format!("HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\n\r\n")
+            .into_bytes()
+    }
+
     fn options_with_base(base: Url, batch_limit: usize) -> EnrichmentOptions {
         EnrichmentOptions {
             api_base_url: base,
@@ -968,6 +1155,25 @@ mod tests {
             retry_limit: 0,
             max_image_bytes: 1024,
             retry_after_delay: Arc::new(|_| {}),
+            asset_download_policy: AssetDownloadPolicy::default(),
+        }
+    }
+
+    fn options_with_local_assets(base: Url, batch_limit: usize) -> EnrichmentOptions {
+        EnrichmentOptions {
+            asset_download_policy: AssetDownloadPolicy {
+                allow_http_loopback: true,
+                resolver: Arc::new(|host, port| {
+                    format!("{host}:{port}")
+                        .parse()
+                        .map_err(|_| EnrichmentDiagnostic {
+                            code: "AssetUrlRejected",
+                            message: "asset host could not be resolved".into(),
+                            playable_id: None,
+                        })
+                }),
+            },
+            ..options_with_base(base, batch_limit)
         }
     }
 
@@ -1277,6 +1483,157 @@ mod tests {
         assert_eq!(first.attempted, 1);
         assert_eq!(second.attempted, 1);
         assert_eq!(requests.lock().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn provider_success_updates_title_assigns_identity_bound_tile_and_records_attempt() {
+        let readable = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("Wario_Land_4.gba"), b"rom").unwrap();
+        DiscoveryCoordinator::new(readable.path(), private.path())
+            .add_location(root.path(), &discovery_options())
+            .unwrap();
+        settings::set_steamgriddb_credential(private.path(), "secret-token-123").unwrap();
+        let asset_response = http_bytes("image/png", PNG_1X1);
+        let (asset_base, asset_requests, asset_handle) = byte_server(vec![asset_response]);
+        let asset_url = asset_base.join("grid.png").unwrap();
+        let search = http_json(r#"{"data":[{"id":123,"name":"Wario Land 4","verified":true}]}"#);
+        let grids = http_json(&format!(
+            r#"{{"data":[{{"id":456,"score":99,"style":"alternate","url":"{asset_url}","thumb":"{asset_url}","tags":[]}}]}}"#
+        ));
+        let (base, api_requests, api_handle) = api_server(vec![
+            Box::leak(search.into_boxed_str()),
+            Box::leak(grids.into_boxed_str()),
+        ]);
+
+        let report = SteamGridDbEnricher::with_options(
+            readable.path(),
+            private.path(),
+            Arc::new(Mutex::new(())),
+            options_with_local_assets(base, 1),
+        )
+        .run();
+        api_handle.join().unwrap();
+        asset_handle.join().unwrap();
+
+        assert_eq!(report.attempted, 1);
+        assert_eq!(report.assigned, 1);
+        assert!(report.diagnostics.is_empty(), "{:?}", report.diagnostics);
+        let captured_api = api_requests.lock().unwrap().join("\n");
+        assert!(
+            captured_api.contains("GET /api/v2/search/autocomplete/wario%20land%204?types=game"),
+            "{captured_api}"
+        );
+        assert!(captured_api.contains("GET /api/v2/grids/game/123?dimensions=512x512"));
+        assert_eq!(asset_requests.lock().unwrap().len(), 1);
+        let updated = discovery::reconcile::owned_discovery_games(readable.path(), private.path())
+            .unwrap()
+            .pop()
+            .unwrap();
+        assert_eq!(updated.title, "Wario Land 4");
+        let repo = GameAssetRepository::new(private.path());
+        let assignment = repo
+            .matching_assignment(&owner_identity(&updated))
+            .unwrap()
+            .unwrap();
+        assert_eq!(assignment.source.game_id, 123);
+        assert_eq!(assignment.source.grid_id, 456);
+        assert_eq!(assignment.source.width, 1);
+        assert_eq!(assignment.source.height, 1);
+        assert!(private
+            .path()
+            .join("game-assets")
+            .join("blobs")
+            .join(&assignment.asset_id)
+            .is_file());
+        let attempts = read_attempt_state(private.path()).unwrap();
+        assert!(attempts
+            .attempts
+            .values()
+            .any(|record| matches!(record.outcome, AttemptOutcome::Assigned)));
+    }
+
+    #[test]
+    fn asset_redirect_is_rejected_after_exactly_one_asset_request() {
+        let readable = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("Wario_Land_4.gba"), b"rom").unwrap();
+        DiscoveryCoordinator::new(readable.path(), private.path())
+            .add_location(root.path(), &discovery_options())
+            .unwrap();
+        settings::set_steamgriddb_credential(private.path(), "secret-token-123").unwrap();
+        let (asset_base, asset_requests, asset_handle) =
+            byte_server(vec![http_redirect("http://127.0.0.1/other.png")]);
+        let asset_url = asset_base.join("grid.png").unwrap();
+        let search = http_json(r#"{"data":[{"id":123,"name":"Wario Land 4","verified":true}]}"#);
+        let grids = http_json(&format!(
+            r#"{{"data":[{{"id":456,"score":99,"style":"alternate","url":"{asset_url}","tags":[]}}]}}"#
+        ));
+        let (base, _api_requests, api_handle) = api_server(vec![
+            Box::leak(search.into_boxed_str()),
+            Box::leak(grids.into_boxed_str()),
+        ]);
+
+        let report = SteamGridDbEnricher::with_options(
+            readable.path(),
+            private.path(),
+            Arc::new(Mutex::new(())),
+            options_with_local_assets(base, 1),
+        )
+        .run();
+        api_handle.join().unwrap();
+        asset_handle.join().unwrap();
+
+        assert_eq!(asset_requests.lock().unwrap().len(), 1);
+        assert_eq!(report.diagnostics.len(), 1);
+        assert_eq!(report.diagnostics[0].code, "AssetRedirectRejected");
+    }
+
+    #[test]
+    fn concurrent_credential_change_prevents_stale_attempt_from_returning() {
+        let readable = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("wl4.gba"), b"rom").unwrap();
+        DiscoveryCoordinator::new(readable.path(), private.path())
+            .add_location(root.path(), &discovery_options())
+            .unwrap();
+        settings::set_steamgriddb_credential(private.path(), "old-token").unwrap();
+        let no_match = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 11\r\n\r\n{\"data\":[]}";
+        let (base, requests, handle) =
+            delayed_api_server(vec![no_match], Duration::from_millis(100));
+        let lock = Arc::new(Mutex::new(()));
+        let enricher = SteamGridDbEnricher::with_options(
+            readable.path(),
+            private.path(),
+            lock.clone(),
+            options_with_base(base, 1),
+        );
+        let worker = thread::spawn(move || enricher.run());
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while requests.lock().unwrap().is_empty() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "provider was not called"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+        {
+            let _guard = lock.lock().unwrap();
+            settings::set_steamgriddb_credential(private.path(), "new-token").unwrap();
+            SteamGridDbEnricher::clear_non_assigned_attempts(private.path()).unwrap();
+        }
+
+        let report = worker.join().unwrap();
+        handle.join().unwrap();
+
+        assert_eq!(report.attempted, 1);
+        assert!(read_attempt_state(private.path())
+            .unwrap()
+            .attempts
+            .is_empty());
     }
 
     #[test]

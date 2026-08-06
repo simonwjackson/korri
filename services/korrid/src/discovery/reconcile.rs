@@ -178,6 +178,23 @@ impl DiscoveryCoordinator {
         Ok(report)
     }
 
+    pub(crate) fn has_recovery_work(&self) -> bool {
+        PrivateState::read(&self.private_root).is_ok_and(|private| {
+            !private.repair.pending_scans.is_empty() || !private.repair.pending_removals.is_empty()
+        })
+    }
+
+    pub(crate) fn owned_location_summaries(
+        readable_root: &Path,
+        private_root: &Path,
+    ) -> Result<Vec<(String, String)>, DiscoveryError> {
+        ensure_fixed_files(readable_root)?;
+        let private = PrivateState::read(private_root)?;
+        let config_yaml = read_fixed(readable_root, CONFIG_FILE_NAME)?;
+        let config_doc = parse_mapping(&config_yaml)?;
+        Ok(ordered_owned_storage_summaries(&config_doc, &private))
+    }
+
     pub fn rescan(
         &self,
         options: &DiscoveryOptions,
@@ -1081,6 +1098,28 @@ fn append_dedupe_diagnostics(scan: &mut ScanReport, max_diagnostics: usize) {
         }
         scan.diagnostics.push(diagnostic);
     }
+}
+
+fn ordered_owned_storage_summaries(
+    config_doc: &Mapping,
+    private: &PrivateState,
+) -> Vec<(String, String)> {
+    let mut storages = Vec::new();
+    for storage_id in &private.storage_order {
+        let record = storage_record(config_doc, storage_id);
+        if !private.storage_is_owned_current(storage_id, record.as_ref()) {
+            continue;
+        }
+        let Some(root) = record
+            .as_ref()
+            .and_then(|record| record.get(Value::String("root".into())))
+            .and_then(Value::as_str)
+        else {
+            continue;
+        };
+        storages.push((storage_id.clone(), root.to_owned()));
+    }
+    storages
 }
 
 fn ordered_storages(

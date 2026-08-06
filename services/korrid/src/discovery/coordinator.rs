@@ -1,5 +1,6 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, VecDeque},
+    fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -94,16 +95,28 @@ impl FolderSelectionGrantStore {
     }
 
     pub fn consume(&self, token: &str) -> Result<PathBuf, FolderSelectionGrantError> {
+        self.consume_when(token, |_| true)
+    }
+
+    fn consume_when(
+        &self,
+        token: &str,
+        accept: impl FnOnce(&Path) -> bool,
+    ) -> Result<PathBuf, FolderSelectionGrantError> {
         let mut inner = self
             .inner
             .lock()
             .expect("folder selection grant store poisoned");
-        let Some(grant) = inner.grants.remove(token) else {
+        let Some(grant) = inner.grants.get(token).cloned() else {
             prune_expired(&mut inner);
             return Err(FolderSelectionGrantError::Unknown);
         };
         if Instant::now() > grant.expires_at {
+            inner.grants.remove(token);
             return Err(FolderSelectionGrantError::Expired);
+        }
+        if accept(&grant.canonical_path) {
+            inner.grants.remove(token);
         }
         Ok(grant.canonical_path)
     }
@@ -136,10 +149,13 @@ fn canonical_directory(path: &Path) -> Result<PathBuf, FolderSelectionGrantError
 pub struct DiscoveryLifecycleCoordinator {
     reconciler: ReconcileCoordinator,
     enricher: SteamGridDbEnricher,
+    readable_root: PathBuf,
+    private_root: PathBuf,
     snapshot_reader: ConfigSnapshotCoordinator,
     grants: FolderSelectionGrantStore,
     options: DiscoveryOptions,
     state: Arc<Mutex<LifecycleState>>,
+    snapshot_cache: Arc<Mutex<LifecycleSnapshotCache>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -176,9 +192,28 @@ struct LifecycleState {
     generation: u64,
     active: bool,
     enriching: bool,
-    pending_rescan: bool,
+    work_queue: VecDeque<WorkRequest>,
     last_problem: Option<DiscoveryLifecycleDiagnostic>,
     diagnostics: Vec<DiscoveryLifecycleDiagnostic>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct LifecycleSnapshotCache {
+    fixed_files_revision: Option<FixedFilesRevision>,
+    locations: Vec<DiscoveryLocationSummary>,
+    diagnostic: Option<crate::config::snapshot::SnapshotDiagnostic>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct FixedFilesRevision {
+    config: Option<FileRevision>,
+    library: Option<FileRevision>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct FileRevision {
+    len: u64,
+    modified: Option<std::time::SystemTime>,
 }
 
 impl DiscoveryLifecycleCoordinator {
@@ -198,14 +233,22 @@ impl DiscoveryLifecycleCoordinator {
         let enricher = SteamGridDbEnricher::new(&readable_root, &private_root, write_lock);
         let snapshot_reader = ConfigSnapshotCoordinator::new(&readable_root);
         snapshot_reader.reload();
-        Self {
+        let coordinator = Self {
+            readable_root,
+            private_root,
             snapshot_reader,
             reconciler,
             enricher,
             grants,
             options: DiscoveryOptions::default(),
             state: Arc::new(Mutex::new(LifecycleState::default())),
+            snapshot_cache: Arc::new(Mutex::new(LifecycleSnapshotCache::default())),
+        };
+        coordinator.refresh_snapshot_cache();
+        if coordinator.reconciler.has_recovery_work() {
+            coordinator.start_work(WorkRequest::Rescan);
         }
+        coordinator
     }
 
     pub fn with_options(mut self, options: DiscoveryOptions) -> Self {
@@ -221,8 +264,10 @@ impl DiscoveryLifecycleCoordinator {
         &self,
         receipt: &str,
     ) -> Result<DiscoverySnapshot, FolderSelectionGrantError> {
-        let path = self.grants.consume(receipt)?;
-        self.start_work(WorkRequest::AddLocation(path));
+        self.grants.consume_when(receipt, |path| {
+            self.start_work(WorkRequest::AddLocation(path.to_owned()));
+            true
+        })?;
         Ok(self.snapshot())
     }
 
@@ -266,12 +311,11 @@ impl DiscoveryLifecycleCoordinator {
             .lock()
             .expect("discovery lifecycle state poisoned");
         if state.active {
-            state.pending_rescan = true;
+            enqueue_work(&mut state, request);
             bump(&mut state);
             return;
         }
         state.active = true;
-        state.pending_rescan = false;
         state.last_problem = None;
         bump(&mut state);
         drop(state);
@@ -308,11 +352,10 @@ impl DiscoveryLifecycleCoordinator {
                 .state
                 .lock()
                 .expect("discovery lifecycle state poisoned");
-            if state.pending_rescan {
-                state.pending_rescan = false;
+            if let Some(next) = state.work_queue.pop_front() {
                 state.active = true;
                 bump(&mut state);
-                request = WorkRequest::Rescan;
+                request = next;
                 continue;
             }
             state.active = false;
@@ -346,6 +389,12 @@ impl DiscoveryLifecycleCoordinator {
         match result {
             Ok(report) => {
                 emit_scan_metric(&report);
+                drop(state);
+                self.refresh_snapshot_cache();
+                let mut state = self
+                    .state
+                    .lock()
+                    .expect("discovery lifecycle state poisoned");
                 state.diagnostics = report
                     .scan
                     .diagnostics
@@ -398,7 +447,7 @@ impl DiscoveryLifecycleCoordinator {
     }
 
     fn snapshot_with_state(&self, mutate: impl FnOnce(&mut LifecycleState)) -> DiscoverySnapshot {
-        let config_state = self.snapshot_reader.reload();
+        self.refresh_snapshot_cache_if_stale();
         let mut state = self
             .state
             .lock()
@@ -407,7 +456,12 @@ impl DiscoveryLifecycleCoordinator {
         let generation = state.generation;
         let active = state.active;
         let enriching = state.enriching;
-        let diagnostics = bounded_diagnostics(&state, &config_state.diagnostic);
+        let cache = self
+            .snapshot_cache
+            .lock()
+            .expect("discovery snapshot cache poisoned")
+            .clone();
+        let diagnostics = bounded_diagnostics(&state, &cache.diagnostic);
         let phase = if active && !enriching {
             DiscoveryPhase::Scanning
         } else if enriching {
@@ -417,21 +471,49 @@ impl DiscoveryLifecycleCoordinator {
         } else {
             DiscoveryPhase::Idle
         };
-        let locations = config_state
-            .snapshot
-            .storage
-            .iter()
-            .map(|(id, storage)| DiscoveryLocationSummary {
-                id: id.clone(),
-                label: storage.root.0.clone(),
-            })
-            .collect();
         DiscoverySnapshot {
             generation: format!("discovery-{generation}"),
             state: phase,
-            locations,
+            locations: cache.locations,
             diagnostics,
         }
+    }
+
+    fn refresh_snapshot_cache_if_stale(&self) {
+        let revision = fixed_files_revision(&self.readable_root);
+        let is_stale = self
+            .snapshot_cache
+            .lock()
+            .expect("discovery snapshot cache poisoned")
+            .fixed_files_revision
+            .as_ref()
+            != Some(&revision);
+        if is_stale {
+            self.refresh_snapshot_cache();
+        }
+    }
+
+    fn refresh_snapshot_cache(&self) {
+        let config_state = self.snapshot_reader.reload();
+        let locations = match ReconcileCoordinator::owned_location_summaries(
+            &self.readable_root,
+            &self.private_root,
+        ) {
+            Ok(locations) => locations
+                .into_iter()
+                .map(|(id, label)| DiscoveryLocationSummary { id, label })
+                .collect(),
+            Err(_) => Vec::new(),
+        };
+        let mut cache = self
+            .snapshot_cache
+            .lock()
+            .expect("discovery snapshot cache poisoned");
+        *cache = LifecycleSnapshotCache {
+            fixed_files_revision: Some(fixed_files_revision(&self.readable_root)),
+            locations,
+            diagnostic: config_state.diagnostic,
+        };
     }
 }
 
@@ -439,7 +521,34 @@ fn bump(state: &mut LifecycleState) {
     state.generation = state.generation.saturating_add(1);
 }
 
-#[derive(Clone, Debug)]
+fn enqueue_work(state: &mut LifecycleState, request: WorkRequest) {
+    if matches!(request, WorkRequest::Rescan)
+        && state
+            .work_queue
+            .iter()
+            .any(|queued| matches!(queued, WorkRequest::Rescan))
+    {
+        return;
+    }
+    state.work_queue.push_back(request);
+}
+
+fn fixed_files_revision(root: &Path) -> FixedFilesRevision {
+    FixedFilesRevision {
+        config: file_revision(&root.join(crate::config::snapshot::CONFIG_FILE_NAME)),
+        library: file_revision(&root.join(crate::config::snapshot::LIBRARY_FILE_NAME)),
+    }
+}
+
+fn file_revision(path: &Path) -> Option<FileRevision> {
+    let metadata = fs::metadata(path).ok()?;
+    Some(FileRevision {
+        len: metadata.len(),
+        modified: metadata.modified().ok(),
+    })
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum WorkRequest {
     AddLocation(PathBuf),
     RemoveLocation(String),
