@@ -15,6 +15,7 @@ KORRI_SHELL="$ROOT/clients/android/app/src/main/java/com/limelight/KorriShellAct
 ANDROID_GAME="$ROOT/clients/android/app/src/main/java/com/limelight/Game.java"
 OVERLAY_SERVICE="$ROOT/clients/android/app/src/main/java/com/limelight/korri/overlay/KorriOverlayService.java"
 DEBUG_AUTHORITY="$CRATE/android-debug-capability.sh"
+DEBUG_PORTAL_TARGET="$CRATE/android-debug-portal-target.sh"
 DEBUG_PORTAL_RELOAD="$CRATE/android-debug-reload-portal.sh"
 DEBUG_PORTAL_FOCUS_GAME="$CRATE/android-debug-focus-portal-game.sh"
 
@@ -52,8 +53,8 @@ export KORRI_ANDROID_DEBUG_CAPABILITY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$JOURNEY_RESUME" \
   "$OVERLAY_ACCEPTANCE" "$RETROARCH_ACCEPTANCE" \
-  "$CRATE/android-debug-capability.sh" "$CRATE/android-debug-reload-portal.sh" \
-  "$CRATE/android-debug-focus-portal-game.sh" \
+  "$CRATE/android-debug-capability.sh" "$CRATE/android-debug-portal-target.sh" \
+  "$CRATE/android-debug-reload-portal.sh" "$CRATE/android-debug-focus-portal-game.sh" \
   "$CRATE/test-android-debug-capability.sh" \
   "$CRATE/test-android-debug-reload-portal.sh" \
   "$CRATE/test-android-debug-focus-portal-game.sh"
@@ -64,6 +65,13 @@ grep -F "https://appassets.androidplatform.net/assets/portal/index.html" "$DEBUG
 grep -F '({port: KorriNative.korridPort(), capability: KorriNative.korridCapability()})' "$DEBUG_AUTHORITY" >/dev/null
 grep -F 'keys == ["capability", "port"]' "$DEBUG_AUTHORITY" >/dev/null
 grep -F 'test("^[0-9a-f]{64}$")' "$DEBUG_AUTHORITY" >/dev/null
+for helper in "$DEBUG_AUTHORITY" "$DEBUG_PORTAL_RELOAD" "$DEBUG_PORTAL_FOCUS_GAME"; do
+  grep -F 'android-debug-portal-target.sh' "$helper" >/dev/null
+done
+grep -F "const hasNative = typeof native === 'object'" "$DEBUG_PORTAL_TARGET" >/dev/null
+grep -F "typeof native.korridPort === 'function'" "$DEBUG_PORTAL_TARGET" >/dev/null
+grep -F "typeof native.korridCapability === 'function'" "$DEBUG_PORTAL_TARGET" >/dev/null
+grep -F 'shell_count" -eq 1' "$DEBUG_PORTAL_TARGET" >/dev/null
 if grep -Eq 'logcat|KorridServer|KorriPortal' "$DEBUG_AUTHORITY"; then
   echo 'debug authority must not depend on logcat readiness or port history' >&2
   exit 1
@@ -84,7 +92,7 @@ for acceptance in "$OVERLAY_ACCEPTANCE" "$RETROARCH_ACCEPTANCE"; do
   fi
 done
 grep -F "https://appassets.androidplatform.net/assets/portal/index.html" "$DEBUG_PORTAL_RELOAD" >/dev/null
-grep -F "expected exactly one bundled main Korri portal page" "$DEBUG_PORTAL_RELOAD" >/dev/null
+grep -F 'korri_debug_select_main_portal_socket' "$DEBUG_PORTAL_RELOAD" >/dev/null
 grep -F "performance.timeOrigin" "$DEBUG_PORTAL_RELOAD" >/dev/null
 grep -F "navigationType" "$DEBUG_PORTAL_RELOAD" >/dev/null
 grep -F "data-shift-game-id" "$DEBUG_PORTAL_RELOAD" >/dev/null
@@ -97,7 +105,7 @@ if grep -Eq 'force-stop|am[[:space:]]+kill|pm[[:space:]]+clear|install|uninstall
   exit 1
 fi
 grep -F "https://appassets.androidplatform.net/assets/portal/index.html" "$DEBUG_PORTAL_FOCUS_GAME" >/dev/null
-grep -F "expected exactly one bundled main Korri portal page" "$DEBUG_PORTAL_FOCUS_GAME" >/dev/null
+grep -F 'korri_debug_select_main_portal_socket' "$DEBUG_PORTAL_FOCUS_GAME" >/dev/null
 grep -F "document.querySelectorAll('[data-shift-library]').length !== 1" "$DEBUG_PORTAL_FOCUS_GAME" >/dev/null
 grep -F 'target.focus()' "$DEBUG_PORTAL_FOCUS_GAME" >/dev/null
 grep -F 'shift.cine-library-tile' "$DEBUG_PORTAL_FOCUS_GAME" >/dev/null

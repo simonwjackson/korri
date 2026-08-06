@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Debug-device helper for reloading only the bundled main Korri portal WebView.
-# It never evaluates in overlay or external pages and never reads the korrid
-# capability. Release WebViews do not expose the inspector used here.
+# Same-URL overlay pages receive only inert Shell-interface classification;
+# reload/probe expressions run only in the uniquely classified main Shell. The
+# helper never invokes or reads the korrid authority. Release WebViews expose no
+# inspector.
 # shellcheck disable=SC2016 # jq programs intentionally use jq variables in single quotes.
 set -euo pipefail
 
@@ -44,6 +46,9 @@ JQ_BIN="${KORRI_JQ_BIN:-$(command -v jq)}"
 WEBSOCAT_BIN="${KORRI_WEBSOCAT_BIN:-$(command -v websocat)}"
 TIMEOUT_BIN="${KORRI_TIMEOUT_BIN:-$(command -v timeout)}"
 ADB=("$ADB_BIN" -s "$serial")
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=services/korrid/android-debug-portal-target.sh
+source "$SCRIPT_DIR/android-debug-portal-target.sh"
 
 pid="$("${ADB[@]}" shell pidof "$package" | tr -d '\r\n')"
 [[ "$pid" =~ ^[0-9]+$ ]] || {
@@ -62,41 +67,6 @@ json_targets() {
     "http://127.0.0.1:$devtools_port/json"
 }
 
-select_trusted_portal_socket() {
-  local targets="$1"
-  local count
-  count="$("$JQ_BIN" -er --arg url "$TRUSTED_PORTAL_URL" \
-    '[.[] | select(.type == "page" and .url == $url)] | length' <<<"$targets")"
-  [[ "$count" == 1 ]] || {
-    echo "expected exactly one bundled main Korri portal page, found $count" >&2
-    return 1
-  }
-  local socket
-  socket="$("$JQ_BIN" -er --arg url "$TRUSTED_PORTAL_URL" \
-    '.[] | select(.type == "page" and .url == $url) | .webSocketDebuggerUrl' <<<"$targets")"
-  [[ "$socket" =~ ^ws://(127\.0\.0\.1|localhost):${devtools_port}/devtools/page/[A-Za-z0-9._:-]+$ ]] || {
-    echo 'trusted portal exposed an unexpected debugger socket' >&2
-    return 1
-  }
-  printf '%s\n' "$socket"
-}
-
-evaluate() {
-  local socket="$1"
-  local expression="$2"
-  local id=1
-  local request response
-  request="$("$JQ_BIN" -cn --argjson id "$id" --arg expression "$expression" \
-    '{id:$id,method:"Runtime.evaluate",params:{expression:$expression,returnByValue:true,awaitPromise:false}}')"
-  response="$(printf '%s\n' "$request" | "$TIMEOUT_BIN" 5 "$WEBSOCAT_BIN" -1 "$socket")"
-  "$JQ_BIN" -ce --argjson id "$id" '
-    select(.id == $id)
-    | select(.error == null)
-    | select(.result.exceptionDetails == null)
-    | .result.result.value
-  ' <<<"$response" | tail -1
-}
-
 url_js="$("$JQ_BIN" -Rn --arg value "$TRUSTED_PORTAL_URL" '$value')"
 game_id_js="$("$JQ_BIN" -Rn --arg value "$expected_game_id" '$value')"
 title_js="$("$JQ_BIN" -Rn --arg value "$expected_title" '$value')"
@@ -104,7 +74,7 @@ title_js="$("$JQ_BIN" -Rn --arg value "$expected_title" '$value')"
 socket=''
 for _ in $(seq 1 20); do
   if targets="$(json_targets 2>/dev/null)" \
-    && socket="$(select_trusted_portal_socket "$targets" 2>/dev/null)"; then
+    && socket="$(korri_debug_select_main_portal_socket "$targets" 2>/dev/null)"; then
     break
   fi
   socket=''
@@ -124,7 +94,7 @@ before_expression="(() => {
     timeOrigin: performance.timeOrigin
   };
 })()"
-before="$(evaluate "$socket" "$before_expression")"
+before="$(korri_debug_evaluate "$socket" "$before_expression")"
 "$JQ_BIN" -e --arg url "$TRUSTED_PORTAL_URL" '
   .exactPortal == true and .href == $url and (.timeOrigin | type == "number")
 ' <<<"$before" >/dev/null
@@ -137,7 +107,7 @@ reload_expression="(() => {
   setTimeout(() => location.reload(), 100);
   return {requested: true, href: location.href, beforeTimeOrigin};
 })()"
-reload_result="$(evaluate "$socket" "$reload_expression")"
+reload_result="$(korri_debug_evaluate "$socket" "$reload_expression")"
 "$JQ_BIN" -e --arg url "$TRUSTED_PORTAL_URL" --argjson before "$before_time_origin" '
   .requested == true and .href == $url and .beforeTimeOrigin == $before
 ' <<<"$reload_result" >/dev/null
@@ -167,8 +137,8 @@ probe_expression="(() => {
 verified=''
 for _ in $(seq 1 80); do
   if targets="$(json_targets 2>/dev/null)" \
-    && socket="$(select_trusted_portal_socket "$targets" 2>/dev/null)" \
-    && candidate="$(evaluate "$socket" "$probe_expression" 2>/dev/null)"; then
+    && socket="$(korri_debug_select_main_portal_socket "$targets" 2>/dev/null)" \
+    && candidate="$(korri_debug_evaluate "$socket" "$probe_expression" 2>/dev/null)"; then
     # Home is curated: a valid catalog game may intentionally be absent from
     # the mounted Home DOM. The acceptance caller proves the exact game through
     # app.local-games.list after this verified reload; this helper proves only

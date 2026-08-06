@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Debug-device helper for focusing exact elements in the bundled Shift portal.
-# It selects only the exact main portal target, never clicks or dispatches
-# input, and never reads or invokes Korri's native bridge or RPC endpoint.
+# Same-URL overlay pages receive only inert Shell-interface classification;
+# focus/probe expressions run only in the uniquely classified main Shell. It
+# never clicks, dispatches input, invokes native functions, or reaches RPC.
 # Release WebViews expose no inspector.
 # shellcheck disable=SC2016 # jq/JavaScript variables are intentionally quoted.
 set -euo pipefail
@@ -63,6 +64,9 @@ JQ_BIN="${KORRI_JQ_BIN:-$(command -v jq)}"
 WEBSOCAT_BIN="${KORRI_WEBSOCAT_BIN:-$(command -v websocat)}"
 TIMEOUT_BIN="${KORRI_TIMEOUT_BIN:-$(command -v timeout)}"
 ADB=("$ADB_BIN" -s "$serial")
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=services/korrid/android-debug-portal-target.sh
+source "$SCRIPT_DIR/android-debug-portal-target.sh"
 
 pid="$("${ADB[@]}" shell pidof "$package" | tr -d '\r\n')"
 [[ "$pid" =~ ^[0-9]+$ ]] || {
@@ -79,34 +83,6 @@ trap cleanup EXIT
 json_targets() {
   "$CURL_BIN" --fail --silent --show-error --connect-timeout 2 --max-time 5 \
     "http://127.0.0.1:$devtools_port/json"
-}
-
-select_trusted_portal_socket() {
-  local targets="$1"
-  local count socket
-  count="$("$JQ_BIN" -er --arg url "$TRUSTED_PORTAL_URL" \
-    '[.[] | select(.type == "page" and .url == $url)] | length' <<<"$targets")"
-  [[ "$count" == 1 ]] || {
-    echo "expected exactly one bundled main Korri portal page, found $count" >&2
-    return 1
-  }
-  socket="$("$JQ_BIN" -er --arg url "$TRUSTED_PORTAL_URL" \
-    '.[] | select(.type == "page" and .url == $url) | .webSocketDebuggerUrl' <<<"$targets")"
-  [[ "$socket" =~ ^ws://(127\.0\.0\.1|localhost):${devtools_port}/devtools/page/[A-Za-z0-9._:-]+$ ]] || return 1
-  printf '%s\n' "$socket"
-}
-
-evaluate() {
-  local socket="$1" expression="$2" request response
-  request="$("$JQ_BIN" -cn --arg expression "$expression" \
-    '{id:1,method:"Runtime.evaluate",params:{expression:$expression,returnByValue:true,awaitPromise:false}}')"
-  response="$(printf '%s\n' "$request" | "$TIMEOUT_BIN" 5 "$WEBSOCAT_BIN" -1 "$socket")"
-  "$JQ_BIN" -ce '
-    select(.id == 1)
-    | select(.error == null)
-    | select(.result.exceptionDetails == null)
-    | .result.result.value
-  ' <<<"$response" | tail -1
 }
 
 url_js="$("$JQ_BIN" -Rn --arg value "$TRUSTED_PORTAL_URL" '$value')"
@@ -400,8 +376,8 @@ esac
 verified=''
 for _ in $(seq 1 80); do
   if targets="$(json_targets 2>/dev/null)" \
-    && socket="$(select_trusted_portal_socket "$targets" 2>/dev/null)" \
-    && candidate="$(evaluate "$socket" "$expression" 2>/dev/null)" \
+    && socket="$(korri_debug_select_main_portal_socket "$targets" 2>/dev/null)" \
+    && candidate="$(korri_debug_evaluate "$socket" "$expression" 2>/dev/null)" \
     && "$JQ_BIN" -e --arg url "$TRUSTED_PORTAL_URL" --arg gameId "$game_id" \
       --arg locationId "$location_id" --arg title "$title" \
       "$predicate" <<<"$candidate" >/dev/null; then
