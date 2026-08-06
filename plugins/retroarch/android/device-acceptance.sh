@@ -166,6 +166,26 @@ assert_shell_foreground() {
   activity_dump_has_resumed_component "$activities" "$KORRI_ACTIVITY"
 }
 
+assert_device_awake_and_shell_focused() {
+  local power
+  local display_zero
+  local current_focus
+  local focused_component
+  power="$("${ADB[@]}" shell dumpsys power | tr -d '\r')" || return 1
+  grep -Eq '(^|[[:space:]])mWakefulness=Awake([[:space:]]|$)' <<<"$power" || {
+    echo 'RetroArch acceptance requires the device to already be awake; it will not wake or unlock it automatically' >&2
+    return 1
+  }
+  display_zero="$("${ADB[@]}" shell dumpsys window displays | tr -d '\r' \
+    | sed -n '/Display: mDisplayId=0/,/Display: mDisplayId=[1-9]/p')" || return 1
+  current_focus="$(grep 'mCurrentFocus=' <<<"$display_zero" | head -1 || true)"
+  focused_component="$(sed -n 's/.* u[0-9][0-9]* \([^ }]*\)}.*/\1/p' <<<"$current_focus")"
+  [[ "$focused_component" == "$KORRI_ACTIVITY" ]] || {
+    echo "RetroArch acceptance requires exact Korri Shell window focus before mutation: $current_focus" >&2
+    return 1
+  }
+}
+
 activity_dump_has_live_component() {
   local activities="$1"
   local component_needle="$2"
@@ -217,6 +237,7 @@ assert_korri_process_unchanged() {
 assert_pristine_gate_state() {
   local fork_pid
   local stock_pid
+  assert_device_awake_and_shell_focused
   assert_shell_foreground
   assert_no_artemis_game_activity
   assert_no_retroarch_activities
@@ -908,9 +929,12 @@ traverse_library_to_final_viewport() {
 focus_wario_in_installed_library() {
   local label="$1"
   local navigation_observation
-  local library_observation
+  local library_observation=''
+  local library_verified=false
   local focus_observation
   local navigation_json="$PORTAL_EVIDENCE_DIR/$label.library-navigation.json"
+  local library_json="$PORTAL_EVIDENCE_DIR/$label.library-view.json"
+  local library_diagnostic="$PORTAL_EVIDENCE_DIR/$label.library-view.last-diagnostic.txt"
   local tap_x tap_y
   # A reload may restore focus anywhere on curated Home. DevTools may focus and
   # measure only the exact visible Library tile; activation remains one bounded
@@ -936,10 +960,25 @@ focus_wario_in_installed_library() {
   "${ADB[@]}" shell input tap "$tap_x" "$tap_y"
   # Physical A activation is retained by the human unified-overlay gate; this
   # automated gate verifies the resulting installed Shift Library explicitly.
-  library_observation="$("$DEBUG_PORTAL_FOCUS_GAME_SH" \
-    "$SERIAL" "$KORRI_PACKAGE" --verify-library)"
-  jq -e '.view == "library" and .verified == true' <<<"$library_observation" >/dev/null
-  printf '%s\n' "$library_observation" >"$PORTAL_EVIDENCE_DIR/$label.library-view.json"
+  # React may commit the route after the pointer command returns. Poll only the
+  # existing read-only exact-view helper: never click again or invoke an RPC.
+  for _ in $(seq 1 20); do
+    library_observation=''
+    if library_observation="$(timeout 1 "$DEBUG_PORTAL_FOCUS_GAME_SH" \
+      "$SERIAL" "$KORRI_PACKAGE" --verify-library 2>"$library_diagnostic")" \
+      && jq -e '.view == "library" and .verified == true' \
+        <<<"$library_observation" >/dev/null 2>&1; then
+      library_verified=true
+      break
+    fi
+    sleep 0.25
+  done
+  printf '%s\n' "$library_observation" >"$library_json"
+  if [[ "$library_verified" != true ]]; then
+    echo "installed Library did not become exactly verified; last output is in $library_json and last diagnostic is in $library_diagnostic" >&2
+    [[ ! -s "$library_diagnostic" ]] || cat "$library_diagnostic" >&2
+    return 1
+  fi
   traverse_library_to_final_viewport
   # Korrid's local RPC id is `wl4`; the folded surface identity is namespaced
   # so it cannot collide with peer or provider entries.

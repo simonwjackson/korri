@@ -230,6 +230,19 @@ shell_foreground_source="$(sed -n '/^assert_shell_foreground() {/,/^}/p' "$ACCEP
 # shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F 'activity_dump_has_resumed_component "$activities" "$KORRI_ACTIVITY"' \
   <<<"$shell_foreground_source" >/dev/null
+awake_focus_source="$(sed -n '/^assert_device_awake_and_shell_focused() {/,/^}/p' "$ACCEPTANCE")"
+grep -F 'dumpsys power' <<<"$awake_focus_source" >/dev/null
+grep -F 'mWakefulness=Awake' <<<"$awake_focus_source" >/dev/null
+grep -F 'dumpsys window displays' <<<"$awake_focus_source" >/dev/null
+grep -F 'mCurrentFocus=' <<<"$awake_focus_source" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F '[[ "$focused_component" == "$KORRI_ACTIVITY" ]]' <<<"$awake_focus_source" >/dev/null
+if grep -Eq 'KEYCODE_WAKEUP|dismiss-keyguard|statusbar collapse' <<<"$awake_focus_source"; then
+  echo 'RetroArch pristine preflight must observe wake/focus state without changing it' >&2
+  exit 1
+fi
+pristine_source="$(sed -n '/^assert_pristine_gate_state() {/,/^}/p' "$ACCEPTANCE")"
+grep -F 'assert_device_awake_and_shell_focused' <<<"$pristine_source" >/dev/null
 grep -F 'assert_menu_status 1' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_selection_advanced' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_DPAD_DOWN' "$ACCEPTANCE" >/dev/null
@@ -269,6 +282,23 @@ if grep -F 'KEYCODE_DPAD_RIGHT' <<<"$library_focus_source" >/dev/null; then
   exit 1
 fi
 [[ "$(grep -Fc 'shell input tap' <<<"$library_focus_source")" -eq 1 ]]
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F 'for _ in $(seq 1 20); do' <<<"$library_focus_source" >/dev/null
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F 'timeout 1 "$DEBUG_PORTAL_FOCUS_GAME_SH"' <<<"$library_focus_source" >/dev/null
+grep -F 'sleep 0.25' <<<"$library_focus_source" >/dev/null
+grep -F 'library_verified=true' <<<"$library_focus_source" >/dev/null
+grep -F 'library-view.last-diagnostic.txt' <<<"$library_focus_source" >/dev/null
+grep -F "jq -e '.view == \"library\" and .verified == true'" \
+  <<<"$library_focus_source" >/dev/null
+# The bounded post-tap wait may only repeat the read-only verifier. It must not
+# introduce another activation or route-changing RPC.
+# shellcheck disable=SC2016 # Literal source-contract needle.
+[[ "$(grep -Fc -- '"$SERIAL" "$KORRI_PACKAGE" --verify-library' <<<"$library_focus_source")" -eq 1 ]]
+if grep -F 'rpc ' <<<"$library_focus_source" >/dev/null; then
+  echo 'RetroArch Library transition polling must not invoke RPC' >&2
+  exit 1
+fi
 # shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F 'verified_element_center "$navigation_json"' <<<"$library_focus_source" >/dev/null
 grep -F 'Physical A activation is retained by the human unified-overlay gate' \
