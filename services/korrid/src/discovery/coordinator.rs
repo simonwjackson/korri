@@ -5,6 +5,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(target_os = "android")]
+use std::ffi::CString;
+
 use crate::{
     config::snapshot::ConfigSnapshotCoordinator,
     discovery::{
@@ -342,6 +345,7 @@ impl DiscoveryLifecycleCoordinator {
             .expect("discovery lifecycle state poisoned");
         match result {
             Ok(report) => {
+                emit_scan_metric(&report);
                 state.diagnostics = report
                     .scan
                     .diagnostics
@@ -510,6 +514,49 @@ impl From<FolderSelectionGrantError> for DiscoveryLifecycleDiagnostic {
     }
 }
 
+#[cfg(any(target_os = "android", test))]
+fn scan_metric_json(report: &DiscoveryMutationReport) -> String {
+    serde_json::json!({
+        "schema": "korri.discovery.scanMetrics.v1",
+        "durationMs": report.scan_duration_ms,
+        "hashedBytes": report.scan.hashed_bytes,
+        "candidates": report.scan.candidates.len(),
+        "diagnostics": report.scan.diagnostics.len(),
+        "addedLibraryRecords": report.added_library_records,
+        "removedLibraryRecords": report.removed_library_records,
+        "removedReleases": report.removed_releases,
+        "storageId": report.storage_id.as_deref(),
+        "repaired": report.repaired,
+    })
+    .to_string()
+}
+
+#[cfg(target_os = "android")]
+fn emit_scan_metric(report: &DiscoveryMutationReport) {
+    let Ok(tag) = CString::new("KorriDiscovery") else {
+        return;
+    };
+    let Ok(message) = CString::new(scan_metric_json(report)) else {
+        return;
+    };
+    unsafe {
+        __android_log_write(4, tag.as_ptr(), message.as_ptr());
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn emit_scan_metric(_report: &DiscoveryMutationReport) {}
+
+#[cfg(target_os = "android")]
+#[link(name = "log")]
+extern "C" {
+    fn __android_log_write(
+        prio: std::os::raw::c_int,
+        tag: *const std::os::raw::c_char,
+        text: *const std::os::raw::c_char,
+    ) -> std::os::raw::c_int;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -536,6 +583,24 @@ mod tests {
             store.consume(&expired.token).unwrap_err(),
             FolderSelectionGrantError::Expired
         );
+    }
+
+    #[test]
+    fn scan_metric_json_is_structured_and_contains_no_paths() {
+        let mut report = DiscoveryMutationReport::default();
+        report.scan_duration_ms = 12;
+        report.scan.hashed_bytes = 34;
+        report.storage_id = Some("selected-1".into());
+
+        let metric = scan_metric_json(&report);
+        let json: serde_json::Value = serde_json::from_str(&metric).unwrap();
+        assert_eq!(json["schema"], "korri.discovery.scanMetrics.v1");
+        assert_eq!(json["durationMs"], 12);
+        assert_eq!(json["hashedBytes"], 34);
+        assert_eq!(json["storageId"], "selected-1");
+        assert!(!metric.contains("/storage/"));
+        assert!(!metric.contains("SteamGridDB"));
+        assert!(!metric.contains("Bearer"));
     }
 
     #[test]

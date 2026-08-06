@@ -4,7 +4,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 use serde::{Deserialize, Serialize};
@@ -61,6 +61,7 @@ pub struct DiscoveryOptions {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct DiscoveryMutationReport {
     pub scan: ScanReport,
+    pub scan_duration_ms: u128,
     pub added_library_records: usize,
     pub removed_library_records: usize,
     pub removed_releases: usize,
@@ -253,7 +254,9 @@ impl DiscoveryCoordinator {
                 max_sortable_entries: options.max_sortable_entries,
             },
         );
+        let scan_started = Instant::now();
         let mut scan = scanner.scan(&storages, &mut hash_cache);
+        let scan_duration_ms = scan_started.elapsed().as_millis();
         append_dedupe_diagnostics(&mut scan, options.max_diagnostics);
         drop(_scan_guard);
 
@@ -284,6 +287,7 @@ impl DiscoveryCoordinator {
         report.removed_library_records += reconciliation.removed_items;
         report.removed_releases += reconciliation.removed_releases;
         report.scan = scan;
+        report.scan_duration_ms = scan_duration_ms;
         private.repair.pending_scans.clear();
         private.write(&self.private_root)?;
         Ok(report)
