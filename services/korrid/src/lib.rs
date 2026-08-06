@@ -3954,6 +3954,40 @@ command = ["sh", "-c", "sleep 1"]
         assert_eq!(repeated["outcome"]["_tag"], "Ok");
         assert_eq!(repeated["outcome"]["payload"]["launchId"], local.launch_id);
         assert_eq!(repeated["outcome"]["payload"]["disposition"], "resume");
+        // Acceptance discovers a published local launch through this repeated
+        // request. Resume may change only disposition/integrity: route,
+        // package, core, content, and provisioning must remain exact.
+        for field in [
+            "launchId",
+            "launcherId",
+            "context",
+            "component",
+            "extras",
+            "directories",
+            "files",
+        ] {
+            assert_eq!(
+                repeated["outcome"]["payload"][field], spec[field],
+                "resume changed launch field {field}"
+            );
+        }
+        assert_eq!(
+            repeated["outcome"]["payload"]["component"]["packageName"],
+            "com.korri.retroarch"
+        );
+        assert_eq!(
+            repeated["outcome"]["payload"]["extras"]["ROM"],
+            root.path().join("roms/wl4.gba").display().to_string()
+        );
+        assert_eq!(
+            repeated["outcome"]["payload"]["extras"]["LIBRETRO"],
+            "/data/data/com.korri.retroarch/cores/mgba_libretro_android.so"
+        );
+        assert_eq!(repeated["outcome"]["payload"]["context"]["gameId"], "wl4");
+        assert_eq!(
+            repeated["outcome"]["payload"]["context"]["contentCrc32"],
+            "cbf43926"
+        );
         assert!(repeated["outcome"]["payload"]["files"][0]["content"]
             .as_str()
             .unwrap()

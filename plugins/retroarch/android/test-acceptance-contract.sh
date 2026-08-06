@@ -38,6 +38,7 @@ if grep -Eq 'BASH_COMMAND|capability|authority|payload|authorization' \
 fi
 # shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F 'report_stage_failure "$status" "$LINENO"' "$ACCEPTANCE" >/dev/null
+grep -F 'set -Eeuo pipefail' "$ACCEPTANCE" >/dev/null
 cleanup_source="$(sed -n '/^cleanup() {/,/^}/p' "$ACCEPTANCE")"
 for classification in \
   'active-launch=%s' 'active_classification="absent"' \
@@ -75,6 +76,17 @@ if grep -Eq 'BASH_COMMAND|authorization: Bearer|capability=' <<<"$cleanup_source
   echo 'RetroArch cleanup diagnostics must not expose commands or authority' >&2
   exit 1
 fi
+for cleanup_contract in \
+  "controls_for_launch \"\$GATE_CURRENT_LAUNCH\"" \
+  "invoke_control \"\$GATE_CURRENT_LAUNCH\" '@korri:retroarch/quit'" \
+  'tracked_launch_stale=true' \
+  "[[ \"\$tracked_launch_stale\" == true ]]" \
+  "[[ \"\$GATE_CURRENT_LAUNCH_QUIESCED\" == true ]]"; do
+  grep -F "$cleanup_contract" <<<"$cleanup_source" >/dev/null || {
+    echo "RetroArch cleanup is missing tracked local-launch policy: $cleanup_contract" >&2
+    exit 1
+  }
+done
 # shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F 'EXPECTED_MODEL="$2"' "$ACCEPTANCE" >/dev/null
 # shellcheck disable=SC2016 # Literal source-contract needle.
@@ -122,10 +134,51 @@ location_tap_line="$(grep -nF 'shell input tap "$tap_x" "$tap_y"' <<<"$launch_fl
   echo 'RetroArch acceptance must verify detail and explicit local choice before launch' >&2
   exit 1
 }
-if grep -Eq '\.click\(|app\.local-games\.launch' "$ACCEPTANCE"; then
-  echo 'RetroArch UI activation must not use DevTools click or a launch RPC' >&2
+if grep -Eq '\.click\(' "$ACCEPTANCE"; then
+  echo 'RetroArch UI activation must not use DevTools click' >&2
   exit 1
 fi
+# The only launch RPC in the installed flow is a post-start repeated request
+# that discovers the already-published local launch through exact resume.
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F 'observed_resume="$(rpc '\''{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}'\'')"' \
+  <<<"$launch_flow_source" >/dev/null
+if grep -E 'rpc .*app\.session\.status' <<<"$launch_flow_source" >/dev/null; then
+  echo 'local launch discovery must never read federated app.session.status' >&2
+  exit 1
+fi
+# shellcheck disable=SC2016 # Literal source-contract needles.
+record_pid_line="$(grep -nF 'record_gate_pid "$pid"' <<<"$launch_flow_source" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+resume_rpc_line="$(grep -nF 'observed_resume="$(rpc' <<<"$launch_flow_source" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+record_launch_line="$(grep -nF 'record_gate_launch "$GATE_CURRENT_LAUNCH"' <<<"$launch_flow_source" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+controls_line="$(grep -nF 'observed_controls="$(controls_for_launch' <<<"$launch_flow_source" | cut -d: -f1)"
+[[ -n "$record_pid_line" && -n "$resume_rpc_line" && -n "$record_launch_line" \
+  && -n "$controls_line" && "$location_tap_line" -lt "$record_pid_line" \
+  && "$record_pid_line" -lt "$resume_rpc_line" \
+  && "$resume_rpc_line" -lt "$record_launch_line" \
+  && "$record_launch_line" -lt "$controls_line" ]] || {
+  echo 'RetroArch acceptance must record PID, discover exact resume, record launch, then query controls' >&2
+  exit 1
+}
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F 'assert_exact_wario_resume "$observed_resume"' <<<"$launch_flow_source" >/dev/null
+resume_assertion_source="$(sed -n '/^assert_exact_wario_resume() {/,/^}/p' "$ACCEPTANCE")"
+for resume_contract in \
+  '.outcome.payload.disposition == "resume"' \
+  '.outcome.payload.context.gameId == "wl4"' \
+  '.outcome.payload.context.contentCrc32 == "d6141609"' \
+  '"packageName":"com.korri.retroarch"' \
+  '"id":"@korri:mgba/mgba"' \
+  '.outcome.payload.extras.ROM == "/storage/emulated/0/korri/roms/wl4.gba"' \
+  '.outcome.payload.extras.LIBRETRO == "/data/data/com.korri.retroarch/cores/mgba_libretro_android.so"'; do
+  grep -F "$resume_contract" <<<"$resume_assertion_source" >/dev/null || {
+    echo "RetroArch exact resume contract is missing: $resume_contract" >&2
+    exit 1
+  }
+done
 grep -F 'focus-crop-4x.png' "$ACCEPTANCE" >/dev/null
 grep -F 'focusOutlinePaddedCropRatio' "$ACCEPTANCE" >/dev/null
 grep -F -- '-colorspace sRGB' "$ACCEPTANCE" >/dev/null
@@ -242,7 +295,7 @@ if grep -F 'launch_spec=' "$ACCEPTANCE" >/dev/null; then
 fi
 discovery_line="$(grep -nF 'discover_live_korri_authority ||' "$ACCEPTANCE" | head -1 | cut -d: -f1)"
 pristine_line="$(grep -nF 'assert_pristine_gate_state' "$ACCEPTANCE" | tail -1 | cut -d: -f1)"
-idle_line="$(grep -nF 'assert_session_idle' "$ACCEPTANCE" | tail -1 | cut -d: -f1)"
+idle_line="$(grep -n '^assert_session_idle$' "$ACCEPTANCE" | head -1 | cut -d: -f1)"
 mutation_line="$(grep -nF 'provision_checkpoint_files' "$ACCEPTANCE" | tail -1 | cut -d: -f1)"
 [[ -n "$discovery_line" && -n "$pristine_line" && -n "$idle_line" && -n "$mutation_line" \
   && "$discovery_line" -lt "$mutation_line" \
@@ -280,10 +333,46 @@ if grep -Eq 'settings (put|delete) secure (enabled_accessibility_services|access
   echo 'RetroArch acceptance must not modify Android accessibility settings' >&2
   exit 1
 fi
+quit_source="$(sed -n '/^STAGE="quit-stale"/,/^STAGE="restoration"/p' "$ACCEPTANCE")"
+wait_stopped_line="$(grep -nF 'wait_stopped' <<<"$quit_source" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+stale_controls_line="$(grep -nF 'assert_old_launch_rejected "$quit_launch_id"' <<<"$quit_source" | cut -d: -f1)"
+remote_idle_line="$(grep -nF 'assert_session_idle' <<<"$quit_source" | cut -d: -f1)"
+quiesced_line="$(grep -nF 'GATE_CURRENT_LAUNCH_QUIESCED=true' <<<"$quit_source" | cut -d: -f1)"
+[[ -n "$wait_stopped_line" && -n "$stale_controls_line" && -n "$remote_idle_line" \
+  && -n "$quiesced_line" && "$wait_stopped_line" -lt "$stale_controls_line" \
+  && "$stale_controls_line" -lt "$remote_idle_line" \
+  && "$remote_idle_line" -lt "$quiesced_line" ]] || {
+  echo 'local Quit proof must use process stop and stale controls before remote idle precondition' >&2
+  exit 1
+}
+if grep -F 'quit_session=' <<<"$quit_source" >/dev/null; then
+  echo 'local Quit proof must not treat remote session status as local evidence' >&2
+  exit 1
+fi
 
 TMP="$(mktemp -d)"
 cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
+
+RESUME_ASSERTION="$TMP/assert-exact-wario-resume.sh"
+printf '%s\n' "$resume_assertion_source" >"$RESUME_ASSERTION"
+# shellcheck source=/dev/null
+source "$RESUME_ASSERTION"
+valid_resume='{"outcome":{"_tag":"Ok","payload":{"disposition":"resume","launchId":"0123456789abcdef0123456789abcdef","launcherId":"retroarch","context":{"gameId":"wl4","title":"Wario Land 4","contentCrc32":"d6141609","contributors":[{"kind":"launcher","id":"@korri:retroarch/retroarch"},{"kind":"runtime","id":"@korri:mgba/mgba"}],"executor":{"id":"retroarch-control","available":true},"foreground":{"kind":"component","packageName":"com.korri.retroarch","className":"com.retroarch.browser.retroactivity.RetroActivityFuture"}},"component":{"packageName":"com.korri.retroarch","className":"com.retroarch.browser.retroactivity.RetroActivityFuture"},"extras":{"ROM":"/storage/emulated/0/korri/roms/wl4.gba","LIBRETRO":"/data/data/com.korri.retroarch/cores/mgba_libretro_android.so","CONFIGFILE":"/storage/emulated/0/korri/retroarch.cfg"},"integrity":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}}'
+assert_exact_wario_resume "$valid_resume"
+for mutation in \
+  '.outcome.payload.disposition = "fresh"' \
+  '.outcome.payload.launchId = "replacement"' \
+  '.outcome.payload.context.contentCrc32 = "00000000"' \
+  '.outcome.payload.component.packageName = "com.retroarch.aarch64"' \
+  '.outcome.payload.extras.LIBRETRO = "/replacement/core.so"'; do
+  invalid_resume="$(jq -c "$mutation" <<<"$valid_resume")"
+  if assert_exact_wario_resume "$invalid_resume"; then
+    echo "exact Wario resume assertion accepted mutation: $mutation" >&2
+    exit 1
+  fi
+done
 
 ACTIVITY_PARSER="$TMP/activity-dump-parser.sh"
 sed -n '/^activity_dump_has_live_component() {/,/^}/p' "$ACCEPTANCE" >"$ACTIVITY_PARSER"

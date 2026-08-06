@@ -1,7 +1,7 @@
 #!/usr/bin/env nix-shell
 #! nix-shell -i bash -p bash coreutils curl diffutils gnugrep gnused imagemagick jq tesseract android-tools websocat
 # shellcheck shell=bash
-set -euo pipefail
+set -Eeuo pipefail
 
 # Failure diagnostics intentionally expose only a fixed phase label and source
 # line. Never include BASH_COMMAND, RPC payloads, capabilities, or authority.
@@ -76,6 +76,7 @@ SHELL_BROUGHT_FORWARD=false
 PORTAL_EVIDENCE_DIR=""
 capability=""
 GATE_CURRENT_LAUNCH=""
+GATE_CURRENT_LAUNCH_QUIESCED=false
 declare -A GATE_LAUNCH_IDS=()
 declare -A GATE_RETROARCH_PIDS=()
 KORRI_SERVICE_COMPONENT="$KORRI_PACKAGE/com.limelight.korri.overlay.KorriOverlayService"
@@ -401,28 +402,73 @@ cleanup() {
   local replacement_observed=false
   local active_classification="unavailable"
   local pid_classification="absent"
+  local tracked_launch_stale=false
   local quiesce_attempt
   if [[ "$TARGET_STARTED_BY_GATE" == true ]]; then
     local active_launch=""
+    local controls=""
+    local invocation=""
     local session=""
     if [[ "$FORWARD_ACTIVE" == true && -n "$capability" ]] \
       && session="$(rpc '{"_tag":"app.session.status","payload":{}}' 2>/dev/null)" \
       && jq -e '.outcome._tag == "Ok"' <<<"$session" >/dev/null 2>&1; then
+      # app.session.status is only the federated-host replacement precondition.
+      # Local ownership comes from the launch ID recorded through the exact
+      # post-start resume result and a fresh policy-rechecked controls response.
       active_classification="absent"
       active_launch="$(jq -r '.outcome.payload.active.launchId // empty' <<<"$session")"
-      if [[ -n "$active_launch" ]]; then
-        if ! is_gate_launch "$active_launch"; then
-          active_classification="replacement"
-          safe_to_restore=false
-          replacement_observed=true
-        else
+      if [[ -n "$active_launch" ]] && ! is_gate_launch "$active_launch"; then
+        active_classification="replacement"
+        safe_to_restore=false
+        replacement_observed=true
+      elif [[ -n "$GATE_CURRENT_LAUNCH" ]]; then
+        if controls="$(controls_for_launch "$GATE_CURRENT_LAUNCH" 2>/dev/null)" \
+          && jq -e --arg launchId "$GATE_CURRENT_LAUNCH" '
+            .outcome._tag == "Ok" and .outcome.payload.launchId == $launchId
+          ' <<<"$controls" >/dev/null 2>&1; then
           active_classification="recorded"
-          invoke_control "$active_launch" '@korri:retroarch/quit' >/dev/null 2>&1 || safe_to_restore=false
+          if ! invocation="$(invoke_control "$GATE_CURRENT_LAUNCH" '@korri:retroarch/quit' 2>/dev/null)" \
+            || ! jq -e '
+              .outcome._tag == "Ok" and .outcome.payload._tag == "Completed"
+            ' <<<"$invocation" >/dev/null 2>&1; then
+            safe_to_restore=false
+          fi
+        elif jq -e '
+          .outcome._tag == "Err" and .outcome.payload.reason == "StaleSession"
+        ' <<<"$controls" >/dev/null 2>&1; then
+          if [[ "$GATE_CURRENT_LAUNCH_QUIESCED" == true ]]; then
+            # The main path already paired process teardown with stale-control
+            # rejection, so this exact launch is known to be absent.
+            tracked_launch_stale=true
+          else
+            # Stale without paired teardown could mean an unobservable local
+            # replacement. Never restore configuration based on absence alone.
+            active_classification="replacement"
+            safe_to_restore=false
+            replacement_observed=true
+          fi
+        else
+          active_classification="unavailable"
+          safe_to_restore=false
+        fi
+      elif [[ -n "$active_launch" ]]; then
+        # Defensive: a host session carrying a gate ID is still policy-checked
+        # through controls before cleanup invokes any effect.
+        if controls="$(controls_for_launch "$active_launch" 2>/dev/null)" \
+          && jq -e --arg launchId "$active_launch" '
+            .outcome._tag == "Ok" and .outcome.payload.launchId == $launchId
+          ' <<<"$controls" >/dev/null 2>&1; then
+          active_classification="recorded"
+          invoke_control "$active_launch" '@korri:retroarch/quit' >/dev/null 2>&1 \
+            || safe_to_restore=false
+        else
+          active_classification="unavailable"
+          safe_to_restore=false
         fi
       fi
     else
-      # Without current launch state, cleanup cannot prove that restoration
-      # would not race a replacement session.
+      # Without current host replacement state, cleanup cannot prove that
+      # restoration would not race another session.
       safe_to_restore=false
     fi
     printf 'RetroArch acceptance cleanup: active-launch=%s\n' "$active_classification" >&2
@@ -431,7 +477,8 @@ cleanup() {
         pid_classification="unavailable"
         safe_to_restore=false
       elif [[ -n "$target_pid" ]]; then
-        if [[ -z "${GATE_RETROARCH_PIDS[$target_pid]:-}" ]]; then
+        if [[ "$tracked_launch_stale" == true ]] \
+          || [[ -z "${GATE_RETROARCH_PIDS[$target_pid]:-}" ]]; then
           pid_classification="replacement"
           safe_to_restore=false
           replacement_observed=true
@@ -1013,10 +1060,41 @@ verified_element_center() {
     | "\($x) \($y)"
   ' "$focus_json"
 }
+assert_exact_wario_resume() {
+  local response="$1"
+  jq -e '
+    .outcome._tag == "Ok"
+    and .outcome.payload.disposition == "resume"
+    and (.outcome.payload.launchId | type == "string" and length == 32)
+    and .outcome.payload.launcherId == "retroarch"
+    and .outcome.payload.context.gameId == "wl4"
+    and .outcome.payload.context.title == "Wario Land 4"
+    and .outcome.payload.context.contentCrc32 == "d6141609"
+    and .outcome.payload.context.contributors == [
+      {"kind":"launcher","id":"@korri:retroarch/retroarch"},
+      {"kind":"runtime","id":"@korri:mgba/mgba"}
+    ]
+    and .outcome.payload.context.executor == {"id":"retroarch-control","available":true}
+    and .outcome.payload.context.foreground == {
+      "kind":"component",
+      "packageName":"com.korri.retroarch",
+      "className":"com.retroarch.browser.retroactivity.RetroActivityFuture"
+    }
+    and .outcome.payload.component == {
+      "packageName":"com.korri.retroarch",
+      "className":"com.retroarch.browser.retroactivity.RetroActivityFuture"
+    }
+    and .outcome.payload.extras.ROM == "/storage/emulated/0/korri/roms/wl4.gba"
+    and .outcome.payload.extras.LIBRETRO == "/data/data/com.korri.retroarch/cores/mgba_libretro_android.so"
+    and .outcome.payload.extras.CONFIGFILE == "/storage/emulated/0/korri/retroarch.cfg"
+    and (.outcome.payload.integrity | type == "string" and length == 64)
+  ' <<<"$response" >/dev/null
+}
+
 launch_wario_entry() {
   local label="$1"
   local pid=""
-  local observed_session
+  local observed_resume
   local observed_controls
   local tap_x tap_y
   local focus_json="$PORTAL_EVIDENCE_DIR/$label.focus.json"
@@ -1115,13 +1193,32 @@ launch_wario_entry() {
     echo 'verified Wario local launch location did not start Korri RetroArch' >&2
     return 1
   }
-  GATE_CURRENT_LAUNCH=""
-  observed_session="$(rpc '{"_tag":"app.session.status","payload":{}}')"
-  GATE_CURRENT_LAUNCH="$(jq -er '.outcome.payload.active.launchId' <<<"$observed_session")"
-  record_gate_launch "$GATE_CURRENT_LAUNCH"
+  # This is the first process observed after the verified local-location tap.
+  # Record it before any RPC can fail so cleanup can distinguish the gate-owned
+  # process from a later replacement even if launch discovery is interrupted.
   record_gate_pid "$pid"
+
+  GATE_CURRENT_LAUNCH=""
+  GATE_CURRENT_LAUNCH_QUIESCED=false
+  # app.session.status describes the federated host session and cannot discover
+  # a local Android launch. A repeated exact local launch is conservative: the
+  # running route must authenticate as live and return the same signed launch as
+  # a resume without rotating launch or control authority.
+  observed_resume="$(rpc '{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}')"
+  if ! assert_exact_wario_resume "$observed_resume"; then
+    echo 'running Wario route did not return the exact conservative local resume specification' >&2
+    return 1
+  fi
+  GATE_CURRENT_LAUNCH="$(jq -er '.outcome.payload.launchId' <<<"$observed_resume")"
+  record_gate_launch "$GATE_CURRENT_LAUNCH"
   observed_controls="$(controls_for_launch "$GATE_CURRENT_LAUNCH")"
-  if grep -q 'KORRI_CONTROL_TOKEN' <<<"$observed_session$observed_controls"; then
+  jq -e --arg launchId "$GATE_CURRENT_LAUNCH" '
+    .outcome._tag == "Ok" and .outcome.payload.launchId == $launchId
+  ' <<<"$observed_controls" >/dev/null || {
+    echo 'exact resumed local launch did not expose policy-rechecked controls' >&2
+    return 1
+  }
+  if grep -q 'KORRI_CONTROL_TOKEN' <<<"$observed_resume$observed_controls"; then
     echo 'private RetroArch control authority leaked into actual launch evidence' >&2
     return 1
   fi
@@ -1243,17 +1340,13 @@ sleep 1
 # Completion requires the explicit native QUIT acknowledgement before the sheet dismisses.
 quit_launch_id="$GATE_CURRENT_LAUNCH"
 invoke_overlay_row 2
+# Local completion is proved by process teardown plus rejection of the exact old
+# controls. Remote app.session.status is not local Android launch evidence.
 wait_stopped
-for _ in $(seq 1 20); do
-  quit_session="$(rpc '{"_tag":"app.session.status","payload":{}}')"
-  jq -e '.outcome._tag == "Ok" and (.outcome.payload.active | not)' <<<"$quit_session" >/dev/null && break
-  sleep 0.25
-done
-jq -e '.outcome._tag == "Ok" and (.outcome.payload.active | not)' <<<"$quit_session" >/dev/null || {
-  echo 'active launch did not become idle after Quit' >&2
-  exit 1
-}
 assert_old_launch_rejected "$quit_launch_id"
+# Retain host idleness as a replacement-safety precondition only.
+assert_session_idle
+GATE_CURRENT_LAUNCH_QUIESCED=true
 after_quit_mtime="$("${ADB[@]}" shell stat -c %Y "$STATE_FILE" | tr -d '\r')"
 [[ "$after_quit_mtime" -gt "$before_quit_mtime" ]] || {
   echo 'graceful QUIT did not refresh the auto-state' >&2
