@@ -2110,6 +2110,15 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                         &brain.private_state_root,
                         &request.token,
                     )
+                    .and_then(|status| {
+                        crate::enrichment::SteamGridDbEnricher::clear_non_assigned_attempts(
+                            &brain.private_state_root,
+                        )
+                        .map_err(|diagnostic| {
+                            config::settings::SettingsError::Storage(diagnostic.message)
+                        })?;
+                        Ok(status)
+                    })
                     .map(|status| SensitiveSettingOutcome::Ok(SensitiveSettingResult { status }))
                     .unwrap_or_else(|error| SensitiveSettingOutcome::Err(settings_failure(error))),
                 )
@@ -2121,14 +2130,22 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                 }))
             }
         },
-        RpcRequest::SteamGridDbCredentialClear(_) => match &state.mode {
-            ServerMode::Brain(brain) => {
-                let _write = brain
-                    .settings_write_lock
-                    .lock()
-                    .expect("settings write lock poisoned");
-                RpcResponse::SteamGridDbCredentialClear(
+        RpcRequest::SteamGridDbCredentialClear(_) => {
+            match &state.mode {
+                ServerMode::Brain(brain) => {
+                    let _write = brain
+                        .settings_write_lock
+                        .lock()
+                        .expect("settings write lock poisoned");
+                    RpcResponse::SteamGridDbCredentialClear(
                     config::settings::clear_steamgriddb_credential(&brain.private_state_root)
+                        .and_then(|status| {
+                            crate::enrichment::SteamGridDbEnricher::clear_non_assigned_attempts(
+                                &brain.private_state_root,
+                            )
+                            .map_err(|diagnostic| config::settings::SettingsError::Storage(diagnostic.message))?;
+                            Ok(status)
+                        })
                         .map(|status| {
                             SensitiveSettingOutcome::Ok(SensitiveSettingResult { status })
                         })
@@ -2136,14 +2153,15 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                             SensitiveSettingOutcome::Err(settings_failure(error))
                         }),
                 )
+                }
+                ServerMode::Host(_) => RpcResponse::SteamGridDbCredentialClear(
+                    SensitiveSettingOutcome::Err(RpcFailure {
+                        code: "OperationUnsupported".into(),
+                        message: "settings are available only from the Android brain".into(),
+                    }),
+                ),
             }
-            ServerMode::Host(_) => {
-                RpcResponse::SteamGridDbCredentialClear(SensitiveSettingOutcome::Err(RpcFailure {
-                    code: "OperationUnsupported".into(),
-                    message: "settings are available only from the Android brain".into(),
-                }))
-            }
-        },
+        }
     }
 }
 

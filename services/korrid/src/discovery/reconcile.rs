@@ -334,6 +334,9 @@ struct OwnedRelease {
 pub(crate) struct DiscoveryOwnedGame {
     pub playable_id: String,
     pub title: String,
+    pub release_id: String,
+    pub release_fingerprint: String,
+    pub rom_identity: String,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -447,24 +450,77 @@ pub(crate) fn owned_discovery_games(
         let Some(item) = value.as_mapping() else {
             continue;
         };
-        if private.is_owned_current(playable_id, item, None) {
-            games.push(DiscoveryOwnedGame {
-                playable_id: playable_id.to_owned(),
-                title: mapping_string(item, "title").unwrap_or_else(|| playable_id.to_owned()),
-            });
+        if let Some(game) = owned_game_from_item(&private, playable_id, item) {
+            games.push(game);
         }
     }
     games.sort_by(|left, right| left.playable_id.cmp(&right.playable_id));
     Ok(games)
 }
 
+fn owned_game_from_item(
+    private: &PrivateState,
+    playable_id: &str,
+    item: &Mapping,
+) -> Option<DiscoveryOwnedGame> {
+    let release_fingerprint = fingerprint_item(item);
+    for release in item_releases(item) {
+        let release_id = mapping_string(&release, "id")?;
+        let owned = private
+            .ownership
+            .releases
+            .get(&ownership_key(playable_id, &release_id))?;
+        if owned.fingerprint != release_fingerprint {
+            continue;
+        }
+        let rom_identity = release
+            .get(Value::String("identity".into()))
+            .and_then(Value::as_mapping)
+            .and_then(|identity| mapping_string(identity, "value"))?;
+        return Some(DiscoveryOwnedGame {
+            playable_id: playable_id.to_owned(),
+            title: mapping_string(item, "title").unwrap_or_else(|| playable_id.to_owned()),
+            release_id,
+            release_fingerprint,
+            rom_identity,
+        });
+    }
+    None
+}
+
+fn same_owned_identity(left: &DiscoveryOwnedGame, right: &DiscoveryOwnedGame) -> bool {
+    left.playable_id == right.playable_id
+        && left.release_id == right.release_id
+        && left.release_fingerprint == right.release_fingerprint
+        && left.rom_identity == right.rom_identity
+}
+
+pub(crate) fn current_owned_discovery_game(
+    readable_root: &Path,
+    private_root: &Path,
+    expected: &DiscoveryOwnedGame,
+) -> Result<Option<DiscoveryOwnedGame>, DiscoveryError> {
+    let library_yaml = read_fixed(readable_root, LIBRARY_FILE_NAME)?;
+    let mut private = PrivateState::read(private_root)?;
+    apply_pending_ownership(&library_yaml, &mut private)?;
+    let library_doc = parse_mapping(&library_yaml)?;
+    let current = library_doc
+        .get(Value::String("library".into()))
+        .and_then(Value::as_mapping)
+        .and_then(|library| library.get(Value::String(expected.playable_id.clone())))
+        .and_then(Value::as_mapping)
+        .and_then(|item| owned_game_from_item(&private, &expected.playable_id, item));
+    private.write(private_root)?;
+    Ok(current.filter(|current| same_owned_identity(current, expected)))
+}
+
 pub(crate) fn update_owned_discovery_title(
     readable_root: &Path,
     private_root: &Path,
     write_lock: &Arc<Mutex<()>>,
-    playable_id: &str,
+    game: &DiscoveryOwnedGame,
     title: &str,
-) -> Result<bool, DiscoveryError> {
+) -> Result<Option<DiscoveryOwnedGame>, DiscoveryError> {
     let _guard = write_lock.lock().expect("discovery write lock poisoned");
     ensure_fixed_files(readable_root)?;
     let config_yaml = read_fixed(readable_root, CONFIG_FILE_NAME)?;
@@ -476,19 +532,23 @@ pub(crate) fn update_owned_discovery_title(
         .get_mut(Value::String("library".into()))
         .and_then(Value::as_mapping_mut)
     else {
-        return Ok(false);
+        return Ok(None);
     };
-    let key = Value::String(playable_id.to_owned());
+    let key = Value::String(game.playable_id.clone());
     let Some(item) = library.get_mut(&key).and_then(Value::as_mapping_mut) else {
-        return Ok(false);
+        return Ok(None);
     };
-    if !private.is_owned_current(playable_id, item, None) {
+    let Some(current) = owned_game_from_item(&private, &game.playable_id, item) else {
         private.write(private_root)?;
-        return Ok(false);
+        return Ok(None);
+    };
+    if !same_owned_identity(&current, game) {
+        private.write(private_root)?;
+        return Ok(None);
     }
     if mapping_string(item, "title").as_deref() == Some(title) {
         private.write(private_root)?;
-        return Ok(false);
+        return Ok(Some(current));
     }
     item.insert(
         Value::String("title".into()),
@@ -497,8 +557,20 @@ pub(crate) fn update_owned_discovery_title(
     let new_fingerprint = fingerprint_item(item);
     let release_ids: Vec<String> = item_releases(item)
         .iter()
-        .filter_map(|release| mapping_string(release, "id"))
+        .filter_map(|release| mapping_string(&release, "id"))
         .collect();
+    let mut updated = current.clone();
+    updated.title = title.to_owned();
+    updated.release_fingerprint = new_fingerprint.clone();
+    for release_id in &release_ids {
+        let key = ownership_key(&game.playable_id, release_id);
+        if let Some(owned) = private.ownership.releases.get(&key) {
+            let mut pending = owned.clone();
+            pending.fingerprint = new_fingerprint.clone();
+            private.repair.pending_ownership.insert(key, pending);
+        }
+    }
+    private.write(private_root)?;
     let candidate_library = serialize_mapping(library_doc)?;
     validate_pair(&config_yaml, &candidate_library)?;
     commit_library_atomically(
@@ -508,13 +580,14 @@ pub(crate) fn update_owned_discovery_title(
         &candidate_library,
     )?;
     for release_id in release_ids {
-        let key = ownership_key(playable_id, &release_id);
+        let key = ownership_key(&game.playable_id, &release_id);
         if let Some(owned) = private.ownership.releases.get_mut(&key) {
             owned.fingerprint = new_fingerprint.clone();
         }
+        private.repair.pending_ownership.remove(&key);
     }
     private.write(private_root)?;
-    Ok(true)
+    Ok(Some(updated))
 }
 
 fn reconcile_candidates(
@@ -1629,6 +1702,40 @@ mod tests {
     }
 
     #[test]
+    fn edited_generated_record_is_not_current_for_enrichment_assignment() {
+        let readable = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("wl4.gba"), b"rom").unwrap();
+        let lock = Arc::new(Mutex::new(()));
+        let discovery =
+            DiscoveryCoordinator::with_write_lock(readable.path(), private.path(), lock.clone());
+        discovery.add_location(root.path(), &options()).unwrap();
+        let game = owned_discovery_games(readable.path(), private.path())
+            .unwrap()
+            .pop()
+            .unwrap();
+        let edited = read_library(readable.path()).replace("title: wl4", "title: Hand Edited");
+        fs::write(readable.path().join(LIBRARY_FILE_NAME), edited).unwrap();
+
+        assert_eq!(
+            current_owned_discovery_game(readable.path(), private.path(), &game).unwrap(),
+            None
+        );
+        assert_eq!(
+            update_owned_discovery_title(
+                readable.path(),
+                private.path(),
+                &lock,
+                &game,
+                "Wario Land 4"
+            )
+            .unwrap(),
+            None
+        );
+    }
+
+    #[test]
     fn enriched_owned_title_updates_fingerprint_and_survives_rescan_until_removal() {
         let readable = tempfile::tempdir().unwrap();
         let private = tempfile::tempdir().unwrap();
@@ -1639,14 +1746,20 @@ mod tests {
             DiscoveryCoordinator::with_write_lock(readable.path(), private.path(), lock.clone());
         let add = discovery.add_location(root.path(), &options()).unwrap();
 
+        let game = owned_discovery_games(readable.path(), private.path())
+            .unwrap()
+            .into_iter()
+            .find(|game| game.playable_id == "wl4")
+            .unwrap();
         assert!(update_owned_discovery_title(
             readable.path(),
             private.path(),
             &lock,
-            "wl4",
+            &game,
             "Wario Land 4"
         )
-        .unwrap());
+        .unwrap()
+        .is_some());
         discovery.rescan(&options()).unwrap();
         assert!(read_library(readable.path()).contains("title: Wario Land 4"));
 

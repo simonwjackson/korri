@@ -15,7 +15,7 @@ use std::{
 use crate::{
     config::settings,
     discovery::{self, title},
-    game_assets::{AssetCandidate, AssetError, GameAssetRepository},
+    game_assets::{AssetCandidate, AssetError, AssetOwnerIdentity, GameAssetRepository},
 };
 
 const STATE_DIR: &str = "steamgriddb-enrichment";
@@ -84,7 +84,16 @@ pub(crate) struct EnrichmentDiagnostic {
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 struct AttemptState {
     #[serde(default)]
-    attempts: BTreeMap<String, AttemptOutcome>,
+    attempts: BTreeMap<String, AttemptRecord>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct AttemptRecord {
+    outcome: AttemptOutcome,
+    playable_id: String,
+    release_id: String,
+    release_fingerprint: String,
+    rom_identity: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -95,7 +104,43 @@ enum AttemptOutcome {
     Ambiguous,
     Unverified,
     Transient,
+    Permanent,
     AssetRejected,
+    Skipped,
+}
+
+fn attempt_key(game: &discovery::reconcile::DiscoveryOwnedGame) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(game.playable_id.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(game.release_id.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(game.release_fingerprint.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(game.rom_identity.as_bytes());
+    format!("sha256:{}", hex::encode(hasher.finalize()))
+}
+
+fn attempt_record(
+    game: &discovery::reconcile::DiscoveryOwnedGame,
+    outcome: AttemptOutcome,
+) -> AttemptRecord {
+    AttemptRecord {
+        outcome,
+        playable_id: game.playable_id.clone(),
+        release_id: game.release_id.clone(),
+        release_fingerprint: game.release_fingerprint.clone(),
+        rom_identity: game.rom_identity.clone(),
+    }
+}
+
+fn owner_identity(game: &discovery::reconcile::DiscoveryOwnedGame) -> AssetOwnerIdentity {
+    AssetOwnerIdentity {
+        playable_id: game.playable_id.clone(),
+        release_id: game.release_id.clone(),
+        release_fingerprint: game.release_fingerprint.clone(),
+        rom_identity: game.rom_identity.clone(),
+    }
 }
 
 impl SteamGridDbEnricher {
@@ -130,8 +175,18 @@ impl SteamGridDbEnricher {
         let mut state = read_attempt_state(&self.private_root).map_err(storage_diagnostic)?;
         state
             .attempts
-            .retain(|_, outcome| matches!(outcome, AttemptOutcome::Assigned));
+            .retain(|_, record| !matches!(record.outcome, AttemptOutcome::Transient));
         write_attempt_state(&self.private_root, &state).map_err(storage_diagnostic)
+    }
+
+    pub(crate) fn clear_non_assigned_attempts(
+        private_root: impl AsRef<Path>,
+    ) -> Result<(), EnrichmentDiagnostic> {
+        let mut state = read_attempt_state(private_root.as_ref()).map_err(storage_diagnostic)?;
+        state
+            .attempts
+            .retain(|_, record| matches!(record.outcome, AttemptOutcome::Assigned));
+        write_attempt_state(private_root.as_ref(), &state).map_err(storage_diagnostic)
     }
 
     pub(crate) fn run(&self) -> EnrichmentReport {
@@ -187,12 +242,7 @@ impl SteamGridDbEnricher {
         };
         let eligible: Vec<_> = games
             .into_iter()
-            .filter(|game| !attempts.attempts.contains_key(&game.playable_id))
-            .filter(|game| {
-                !asset_repo
-                    .has_assignment(&game.playable_id)
-                    .unwrap_or(false)
-            })
+            .filter(|game| !attempts.attempts.contains_key(&attempt_key(game)))
             .collect();
         let mut report = EnrichmentReport {
             remaining: eligible.len().saturating_sub(self.options.batch_limit),
@@ -212,22 +262,28 @@ impl SteamGridDbEnricher {
         for game in eligible.into_iter().take(self.options.batch_limit) {
             report.attempted += 1;
             let result = self.enrich_one(&client, &token, &asset_repo, &game);
+            let key = attempt_key(&game);
             match result {
                 Ok(AttemptOutcome::Assigned) => {
                     attempts
                         .attempts
-                        .insert(game.playable_id.clone(), AttemptOutcome::Assigned);
+                        .insert(key, attempt_record(&game, AttemptOutcome::Assigned));
                     report.assigned += 1;
                 }
+                Ok(AttemptOutcome::Skipped) => {}
                 Ok(outcome) => {
-                    attempts.attempts.insert(game.playable_id.clone(), outcome);
+                    attempts
+                        .attempts
+                        .insert(key, attempt_record(&game, outcome));
                 }
                 Err(ProviderStop::Unauthorized(diagnostic)) => {
                     report.diagnostics.push(diagnostic);
                     break;
                 }
                 Err(ProviderStop::Diagnostic(diagnostic, outcome)) => {
-                    attempts.attempts.insert(game.playable_id.clone(), outcome);
+                    attempts
+                        .attempts
+                        .insert(key, attempt_record(&game, outcome));
                     report.diagnostics.push(diagnostic);
                 }
             }
@@ -247,6 +303,18 @@ impl SteamGridDbEnricher {
         game: &discovery::reconcile::DiscoveryOwnedGame,
     ) -> Result<AttemptOutcome, ProviderStop> {
         let query = title::normalized_match_name(&game.title);
+        if asset_repo
+            .matching_assignment(&owner_identity(game))
+            .map_err(|error| {
+                ProviderStop::Diagnostic(
+                    asset_diagnostic(error, &game.playable_id),
+                    AttemptOutcome::Transient,
+                )
+            })?
+            .is_some()
+        {
+            return Ok(AttemptOutcome::Assigned);
+        }
         let matches = request_with_retry(self, game, || {
             search_game(client, &self.options.api_base_url, token, &query)
         })?;
@@ -269,28 +337,30 @@ impl SteamGridDbEnricher {
                     AttemptOutcome::Transient,
                 )
             })?;
-        asset_repo
-            .assign_tile(
-                &game.playable_id,
-                AssetCandidate {
-                    bytes,
-                    declared_width: grid.width,
-                    declared_height: grid.height,
-                    game_id: accepted.id,
-                    grid_id: grid.id,
+        if discovery::reconcile::current_owned_discovery_game(
+            &self.readable_root,
+            &self.private_root,
+            game,
+        )
+        .map_err(|error| {
+            ProviderStop::Diagnostic(
+                EnrichmentDiagnostic {
+                    code: "EnrichmentCatalogWriteFailed",
+                    message: error.to_string(),
+                    playable_id: Some(game.playable_id.clone()),
                 },
+                AttemptOutcome::Transient,
             )
-            .map_err(|error| {
-                ProviderStop::Diagnostic(
-                    asset_diagnostic(error, &game.playable_id),
-                    AttemptOutcome::AssetRejected,
-                )
-            })?;
-        let _ = discovery::reconcile::update_owned_discovery_title(
+        })?
+        .is_none()
+        {
+            return Ok(AttemptOutcome::Skipped);
+        }
+        let Some(updated_game) = discovery::reconcile::update_owned_discovery_title(
             &self.readable_root,
             &self.private_root,
             &self.write_lock,
-            &game.playable_id,
+            game,
             &accepted.name,
         )
         .map_err(|error| {
@@ -302,7 +372,49 @@ impl SteamGridDbEnricher {
                 },
                 AttemptOutcome::Transient,
             )
-        })?;
+        })?
+        else {
+            return Ok(AttemptOutcome::Skipped);
+        };
+        let _assignment_guard = self
+            .write_lock
+            .lock()
+            .expect("discovery write lock poisoned");
+        let Some(current_game) = discovery::reconcile::current_owned_discovery_game(
+            &self.readable_root,
+            &self.private_root,
+            &updated_game,
+        )
+        .map_err(|error| {
+            ProviderStop::Diagnostic(
+                EnrichmentDiagnostic {
+                    code: "EnrichmentCatalogWriteFailed",
+                    message: error.to_string(),
+                    playable_id: Some(game.playable_id.clone()),
+                },
+                AttemptOutcome::Transient,
+            )
+        })?
+        else {
+            return Ok(AttemptOutcome::Skipped);
+        };
+        asset_repo
+            .assign_tile(
+                owner_identity(&current_game),
+                AssetCandidate {
+                    bytes,
+                    declared_width: None,
+                    declared_height: None,
+                    game_id: accepted.id,
+                    grid_id: grid.id,
+                },
+            )
+            .map_err(|error| {
+                ProviderStop::Diagnostic(
+                    asset_diagnostic(error, &game.playable_id),
+                    AttemptOutcome::AssetRejected,
+                )
+            })?;
         Ok(AttemptOutcome::Assigned)
     }
 }
@@ -339,13 +451,19 @@ fn request_with_retry<T>(
                 let _ = message;
             }
             Err(error) => {
+                let (code, outcome) = match error {
+                    RequestFailure::Permanent(_) => {
+                        ("SteamGridDbPermanentFailure", AttemptOutcome::Permanent)
+                    }
+                    _ => ("SteamGridDbTransientFailure", AttemptOutcome::Transient),
+                };
                 return Err(ProviderStop::Diagnostic(
                     EnrichmentDiagnostic {
-                        code: "SteamGridDbTransientFailure",
+                        code,
                         message: error.sanitized_message(),
                         playable_id: Some(game.playable_id.clone()),
                     },
-                    AttemptOutcome::Transient,
+                    outcome,
                 ));
             }
         }
@@ -379,19 +497,9 @@ struct Grid {
     #[serde(default)]
     score: Option<i64>,
     #[serde(default)]
-    width: Option<u32>,
-    #[serde(default)]
-    height: Option<u32>,
-    #[serde(default)]
-    nsfw: bool,
-    #[serde(default)]
-    humor: bool,
-    #[serde(default)]
-    epilepsy: bool,
+    tags: Vec<String>,
     #[serde(default)]
     style: Option<String>,
-    #[serde(default, rename = "type")]
-    kind: Option<String>,
 }
 
 fn deserialize_url<'de, D>(deserializer: D) -> Result<Url, D::Error>
@@ -432,7 +540,11 @@ fn grids_for_game(
     let response = client
         .get(url)
         .bearer_auth(token)
-        .query(&[("dimensions", "1x1"), ("types", "static")])
+        .query(&[
+            ("dimensions", "512x512"),
+            ("types", "static"),
+            ("styles", "alternate,blurred,material,white,black"),
+        ])
         .send()
         .map_err(|error| RequestFailure::Transient(error.to_string()))?;
     parse_response::<GridResponse>(response).map(|response| response.data)
@@ -518,11 +630,17 @@ fn exact_verified_match(query: &str, games: &[SearchGame]) -> MatchDecision {
     }
 }
 
+fn safe_grid_tags(tags: &[String]) -> bool {
+    !tags.iter().any(|tag| {
+        let normalized = tag.to_ascii_lowercase();
+        normalized == "nsfw" || normalized == "humor" || normalized == "epilepsy"
+    })
+}
+
 fn choose_grid(grids: &[Grid]) -> Option<Grid> {
     let mut safe: Vec<_> = grids
         .iter()
-        .filter(|grid| !grid.nsfw && !grid.humor && !grid.epilepsy)
-        .filter(|grid| grid.width == grid.height && grid.width.is_some())
+        .filter(|grid| safe_grid_tags(&grid.tags))
         .filter(|grid| {
             grid.style.as_deref().is_none_or(|style| {
                 style == "alternate"
@@ -532,7 +650,6 @@ fn choose_grid(grids: &[Grid]) -> Option<Grid> {
                     || style == "black"
             })
         })
-        .filter(|grid| grid.kind.as_deref().is_none_or(|kind| kind == "static"))
         .cloned()
         .collect();
     safe.sort_by_key(|grid| Reverse(grid.score.unwrap_or(0)));
@@ -646,28 +763,75 @@ fn resolve_public_address(host: &str, port: u16) -> Result<SocketAddr, Enrichmen
 
 fn is_public_ip(ip: IpAddr) -> bool {
     match ip {
-        IpAddr::V4(ip) => {
-            !(ip.is_private()
-                || ip.is_loopback()
-                || ip.is_link_local()
-                || ip.is_unspecified()
-                || ip.is_multicast()
-                || ip.octets()[0] == 0)
-        }
+        IpAddr::V4(ip) => is_global_ipv4(ip),
         IpAddr::V6(ip) => {
-            !(ip.is_loopback()
-                || ip.is_unspecified()
-                || ip.is_multicast()
-                || (ip.segments()[0] & 0xfe00) == 0xfc00
-                || (ip.segments()[0] & 0xffc0) == 0xfe80)
+            if let Some(embedded) = embedded_ipv4(ip) {
+                return is_global_ipv4(embedded);
+            }
+            is_global_ipv6(ip)
         }
     }
+}
+
+fn embedded_ipv4(ip: std::net::Ipv6Addr) -> Option<std::net::Ipv4Addr> {
+    if let Some(mapped) = ip.to_ipv4_mapped() {
+        return Some(mapped);
+    }
+    let segments = ip.segments();
+    if segments[..6].iter().all(|segment| *segment == 0) && (segments[6] != 0 || segments[7] != 1) {
+        let octets = ip.octets();
+        return Some(std::net::Ipv4Addr::new(
+            octets[12], octets[13], octets[14], octets[15],
+        ));
+    }
+    if segments[..6] == [0x0064, 0xff9b, 0, 0, 0, 0] || segments[..3] == [0x0064, 0xff9b, 0x0001] {
+        let octets = ip.octets();
+        return Some(std::net::Ipv4Addr::new(
+            octets[12], octets[13], octets[14], octets[15],
+        ));
+    }
+    if segments[0] == 0x2002 {
+        let octets = ip.octets();
+        return Some(std::net::Ipv4Addr::new(
+            octets[2], octets[3], octets[4], octets[5],
+        ));
+    }
+    None
+}
+
+fn is_global_ipv6(ip: std::net::Ipv6Addr) -> bool {
+    let segments = ip.segments();
+    !(ip.is_loopback()
+        || ip.is_unspecified()
+        || ip.is_multicast()
+        || (segments[0] & 0xfe00) == 0xfc00
+        || (segments[0] & 0xffc0) == 0xfe80
+        || (segments[0] == 0x2001 && segments[1] == 0x0db8)
+        || (segments[0] == 0x2001 && segments[1] == 0x0000))
+}
+
+fn is_global_ipv4(ip: std::net::Ipv4Addr) -> bool {
+    let octets = ip.octets();
+    !(ip.is_private()
+        || ip.is_loopback()
+        || ip.is_link_local()
+        || ip.is_unspecified()
+        || ip.is_multicast()
+        || ip.is_broadcast()
+        || octets[0] == 0
+        || octets[0] >= 240
+        || (octets[0] == 100 && (octets[1] & 0b1100_0000) == 0b0100_0000)
+        || (octets[0] == 192 && octets[1] == 0 && octets[2] == 0)
+        || (octets[0] == 192 && octets[1] == 0 && octets[2] == 2)
+        || (octets[0] == 198 && (octets[1] == 18 || octets[1] == 19))
+        || (octets[0] == 198 && octets[1] == 51 && octets[2] == 100)
+        || (octets[0] == 203 && octets[1] == 0 && octets[2] == 113))
 }
 
 fn api_client(base: &Url) -> Result<Client, EnrichmentDiagnostic> {
     let local_test_base = base
         .host_str()
-        .is_some_and(|host| host == "127.0.0.1" || host == "localhost" || host == "[::1]");
+        .is_some_and(|host| host == "127.0.0.1" || host == "localhost" || host == "::1");
     if base.scheme() != "https" && !local_test_base {
         return Err(EnrichmentDiagnostic {
             code: "SteamGridDbConfigurationInvalid",
@@ -753,6 +917,12 @@ mod tests {
         sync::{Arc, Mutex},
         thread,
     };
+
+    const PNG_1X1: &[u8] = &[
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 4,
+        0, 0, 0, 181, 28, 12, 2, 0, 0, 0, 11, 73, 68, 65, 84, 120, 156, 99, 250, 207, 0, 0, 2, 7,
+        1, 2, 154, 28, 49, 113, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ];
 
     fn discovery_options() -> discovery::DiscoveryOptions {
         discovery::DiscoveryOptions {
@@ -864,47 +1034,72 @@ mod tests {
                 id: 1,
                 url: Url::parse("https://example.com/1.png").unwrap(),
                 score: Some(100),
-                width: Some(600),
-                height: Some(900),
-                nsfw: false,
-                humor: false,
-                epilepsy: false,
+                tags: vec!["humor".into()],
                 style: None,
-                kind: Some("static".into()),
             },
             Grid {
                 id: 2,
                 url: Url::parse("https://example.com/2.png").unwrap(),
                 score: Some(10),
-                width: Some(512),
-                height: Some(512),
-                nsfw: true,
-                humor: false,
-                epilepsy: false,
+                tags: vec!["nsfw".into()],
                 style: None,
-                kind: Some("static".into()),
             },
             Grid {
                 id: 3,
                 url: Url::parse("https://example.com/3.png").unwrap(),
                 score: Some(50),
-                width: Some(512),
-                height: Some(512),
-                nsfw: false,
-                humor: false,
-                epilepsy: false,
+                tags: Vec::new(),
                 style: None,
-                kind: Some("static".into()),
             },
         ];
         assert_eq!(choose_grid(&grids).unwrap().id, 3);
     }
 
     #[test]
-    fn rejects_private_asset_destinations_before_request() {
+    fn decodes_spec_grid_response_fields_without_provider_dimensions() {
+        let response: GridResponse = serde_json::from_str(
+            r#"{"data":[{"id":10,"score":20,"style":"alternate","url":"https://example.com/grid.png","thumb":"https://example.com/thumb.png","tags":[]}]}"#,
+        )
+        .unwrap();
+
+        assert_eq!(choose_grid(&response.data).unwrap().id, 10);
+    }
+
+    #[test]
+    fn chooses_spec_response_grid_without_declared_dimensions() {
+        let grids = vec![Grid {
+            id: 10,
+            url: Url::parse("https://example.com/grid.png").unwrap(),
+            score: Some(20),
+            tags: Vec::new(),
+            style: Some("alternate".into()),
+        }];
+        assert_eq!(choose_grid(&grids).unwrap().id, 10);
+    }
+
+    #[test]
+    fn grids_request_uses_provider_supported_square_dimensions() {
+        let (base, requests, handle) = api_server(vec![
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 11\r\n\r\n{\"data\":[]}",
+        ]);
+        let client = api_client(&base).unwrap();
+
+        let grids = grids_for_game(&client, &base, "secret-token-123", 42).unwrap();
+        handle.join().unwrap();
+
+        assert!(grids.is_empty());
+        let captured = requests.lock().unwrap().join("\n");
+        assert!(captured.contains("dimensions=512x512"), "{captured}");
+        assert!(!captured.contains("dimensions=1x1"), "{captured}");
+    }
+
+    #[test]
+    fn rejects_private_and_ipv4_mapped_asset_destinations_before_request() {
         let url = Url::parse("https://127.0.0.1/asset.png").unwrap();
         let error = download_image(&url, 1024).unwrap_err();
         assert_eq!(error.code, "AssetUrlRejected");
+        assert!(!is_public_ip("::ffff:127.0.0.1".parse().unwrap()));
+        assert!(!is_public_ip("::ffff:10.0.0.1".parse().unwrap()));
     }
 
     #[test]
@@ -940,6 +1135,148 @@ mod tests {
             report.diagnostics[0].code,
             "SteamGridDbCredentialUnauthorized"
         );
+    }
+
+    #[test]
+    fn matching_assignment_repairs_missing_attempt_without_provider_call() {
+        let readable = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("wl4.gba"), b"rom").unwrap();
+        DiscoveryCoordinator::new(readable.path(), private.path())
+            .add_location(root.path(), &discovery_options())
+            .unwrap();
+        let game = discovery::reconcile::owned_discovery_games(readable.path(), private.path())
+            .unwrap()
+            .pop()
+            .unwrap();
+        GameAssetRepository::new(private.path())
+            .assign_tile(
+                owner_identity(&game),
+                AssetCandidate {
+                    bytes: PNG_1X1.to_vec(),
+                    declared_width: Some(1),
+                    declared_height: Some(1),
+                    game_id: 1,
+                    grid_id: 2,
+                },
+            )
+            .unwrap();
+        settings::set_steamgriddb_credential(private.path(), "secret-token-123").unwrap();
+
+        let report = SteamGridDbEnricher::with_options(
+            readable.path(),
+            private.path(),
+            Arc::new(Mutex::new(())),
+            options_with_base(Url::parse("http://127.0.0.1:9/api/v2/").unwrap(), 1),
+        )
+        .run();
+
+        assert_eq!(report.attempted, 1);
+        assert_eq!(report.assigned, 1);
+        assert!(report.diagnostics.is_empty(), "{:?}", report.diagnostics);
+    }
+
+    #[test]
+    fn unreadable_assignment_state_stops_before_provider_request() {
+        let readable = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("wl4.gba"), b"rom").unwrap();
+        DiscoveryCoordinator::new(readable.path(), private.path())
+            .add_location(root.path(), &discovery_options())
+            .unwrap();
+        let assignment_dir = private.path().join("game-assets");
+        std::fs::create_dir_all(&assignment_dir).unwrap();
+        std::fs::write(assignment_dir.join("assignments.json"), b"not-json").unwrap();
+        settings::set_steamgriddb_credential(private.path(), "secret-token-123").unwrap();
+
+        let report = SteamGridDbEnricher::with_options(
+            readable.path(),
+            private.path(),
+            Arc::new(Mutex::new(())),
+            options_with_base(Url::parse("http://127.0.0.1:9/api/v2/").unwrap(), 1),
+        )
+        .run();
+
+        assert_eq!(report.attempted, 1);
+        assert_eq!(report.diagnostics[0].code, "AssetStorageUnavailable");
+    }
+
+    #[test]
+    fn permanent_provider_failure_is_not_retried_until_provider_configuration_changes() {
+        let readable = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("wl4.gba"), b"rom").unwrap();
+        DiscoveryCoordinator::new(readable.path(), private.path())
+            .add_location(root.path(), &discovery_options())
+            .unwrap();
+        settings::set_steamgriddb_credential(private.path(), "secret-token-123").unwrap();
+        let (base, requests, handle) = api_server(vec![
+            "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n",
+        ]);
+        let options = options_with_base(base, 1);
+
+        let first = SteamGridDbEnricher::with_options(
+            readable.path(),
+            private.path(),
+            Arc::new(Mutex::new(())),
+            options.clone(),
+        )
+        .run();
+        handle.join().unwrap();
+        let second = SteamGridDbEnricher::with_options(
+            readable.path(),
+            private.path(),
+            Arc::new(Mutex::new(())),
+            options,
+        )
+        .run();
+        SteamGridDbEnricher::clear_non_assigned_attempts(private.path()).unwrap();
+
+        assert_eq!(requests.lock().unwrap().len(), 1);
+        assert_eq!(first.diagnostics[0].code, "SteamGridDbPermanentFailure");
+        assert_eq!(second.attempted, 0);
+    }
+
+    #[test]
+    fn changed_same_id_rom_ignores_stale_attempt_and_enriches_current_identity() {
+        let readable = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let rom = root.path().join("wl4.gba");
+        std::fs::write(&rom, b"rom-one").unwrap();
+        let discovery = DiscoveryCoordinator::new(readable.path(), private.path());
+        discovery
+            .add_location(root.path(), &discovery_options())
+            .unwrap();
+        settings::set_steamgriddb_credential(private.path(), "secret-token-123").unwrap();
+        let no_match = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 11\r\n\r\n{\"data\":[]}";
+        let (base, requests, handle) = api_server(vec![no_match, no_match]);
+        let options = options_with_base(base, 1);
+
+        let first = SteamGridDbEnricher::with_options(
+            readable.path(),
+            private.path(),
+            Arc::new(Mutex::new(())),
+            options.clone(),
+        )
+        .run();
+        std::fs::write(&rom, b"rom-two").unwrap();
+        discovery.rescan(&discovery_options()).unwrap();
+        let second = SteamGridDbEnricher::with_options(
+            readable.path(),
+            private.path(),
+            Arc::new(Mutex::new(())),
+            options,
+        )
+        .run();
+        handle.join().unwrap();
+
+        assert_eq!(first.attempted, 1);
+        assert_eq!(second.attempted, 1);
+        assert_eq!(requests.lock().unwrap().len(), 2);
     }
 
     #[test]

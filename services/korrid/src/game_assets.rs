@@ -1,4 +1,4 @@
-use image::{GenericImageView, ImageFormat, ImageReader};
+use image::{GenericImageView, ImageFormat, ImageReader, Limits};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -19,7 +19,16 @@ const MAX_DIMENSION: u32 = 4096;
 pub(crate) struct AssetAssignment {
     pub asset_id: String,
     pub role: String,
+    pub owner: AssetOwnerIdentity,
     pub source: SteamGridDbProvenance,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct AssetOwnerIdentity {
+    pub playable_id: String,
+    pub release_id: String,
+    pub release_fingerprint: String,
+    pub rom_identity: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -70,13 +79,24 @@ impl GameAssetRepository {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn has_assignment(&self, playable_id: &str) -> Result<bool, AssetError> {
         Ok(read_assignments(&self.root)?.contains_key(playable_id))
     }
 
+    pub(crate) fn matching_assignment(
+        &self,
+        owner: &AssetOwnerIdentity,
+    ) -> Result<Option<AssetAssignment>, AssetError> {
+        Ok(read_assignments(&self.root)?
+            .get(&owner.playable_id)
+            .filter(|assignment| &assignment.owner == owner)
+            .cloned())
+    }
+
     pub(crate) fn assign_tile(
         &self,
-        playable_id: &str,
+        owner: AssetOwnerIdentity,
         candidate: AssetCandidate,
     ) -> Result<AssetAssignment, AssetError> {
         let decoded = validate_image(&candidate)?;
@@ -92,6 +112,7 @@ impl GameAssetRepository {
         let assignment = AssetAssignment {
             asset_id: blob_name,
             role: "tile".into(),
+            owner,
             source: SteamGridDbProvenance {
                 provider: "steamgriddb".into(),
                 game_id: candidate.game_id,
@@ -103,7 +124,7 @@ impl GameAssetRepository {
             },
         };
         let mut assignments = read_assignments(&self.root)?;
-        assignments.insert(playable_id.to_owned(), assignment.clone());
+        assignments.insert(assignment.owner.playable_id.clone(), assignment.clone());
         if let Err(error) = write_json_atomically(&self.root.join(ASSIGNMENTS_FILE), &assignments) {
             if wrote_blob {
                 let _ = fs::remove_file(&blob_path);
@@ -142,16 +163,19 @@ fn validate_image(candidate: &AssetCandidate) -> Result<DecodedImage, AssetError
         ImageFormat::WebP => "webp",
         _ => return Err(AssetError::Unsupported),
     };
-    let image = ImageReader::with_format(Cursor::new(&candidate.bytes), format)
-        .decode()
-        .map_err(|_| AssetError::Malformed)?;
+    let mut header_reader = ImageReader::with_format(Cursor::new(&candidate.bytes), format);
+    header_reader.limits(image_limits());
+    let (width, height) = header_reader
+        .into_dimensions()
+        .map_err(|error| image_dimension_error(error))?;
+    if !safe_square_dimensions(width, height) {
+        return Err(AssetError::UnsafeDimensions);
+    }
+    let mut reader = ImageReader::with_format(Cursor::new(&candidate.bytes), format);
+    reader.limits(image_limits());
+    let image = reader.decode().map_err(|error| image_decode_error(error))?;
     let (width, height) = image.dimensions();
-    if width == 0
-        || height == 0
-        || width != height
-        || width > MAX_DIMENSION
-        || height > MAX_DIMENSION
-    {
+    if !safe_square_dimensions(width, height) {
         return Err(AssetError::UnsafeDimensions);
     }
     if candidate
@@ -170,6 +194,38 @@ fn validate_image(candidate: &AssetCandidate) -> Result<DecodedImage, AssetError
         width,
         height,
     })
+}
+
+fn image_limits() -> Limits {
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(MAX_DIMENSION);
+    limits.max_image_height = Some(MAX_DIMENSION);
+    limits.max_alloc = Some(MAX_ASSET_BYTES as u64);
+    limits
+}
+
+fn safe_square_dimensions(width: u32, height: u32) -> bool {
+    width != 0
+        && height != 0
+        && width == height
+        && width <= MAX_DIMENSION
+        && height <= MAX_DIMENSION
+}
+
+fn image_dimension_error(error: image::ImageError) -> AssetError {
+    match error {
+        image::ImageError::Limits(_) => AssetError::UnsafeDimensions,
+        image::ImageError::Unsupported(_) => AssetError::Unsupported,
+        _ => AssetError::Malformed,
+    }
+}
+
+fn image_decode_error(error: image::ImageError) -> AssetError {
+    match error {
+        image::ImageError::Limits(_) => AssetError::UnsafeDimensions,
+        image::ImageError::Unsupported(_) => AssetError::Unsupported,
+        _ => AssetError::Malformed,
+    }
 }
 
 fn looks_like_svg(bytes: &[u8]) -> bool {
@@ -241,13 +297,22 @@ mod tests {
         1, 2, 154, 28, 49, 113, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
     ];
 
+    fn owner() -> AssetOwnerIdentity {
+        AssetOwnerIdentity {
+            playable_id: "wl4".into(),
+            release_id: "gba".into(),
+            release_fingerprint: "sha256:item".into(),
+            rom_identity: "sha256:rom".into(),
+        }
+    }
+
     #[test]
     fn assigns_valid_static_square_image_content_addressably() {
         let private = tempfile::tempdir().unwrap();
         let repo = GameAssetRepository::new(private.path());
         let assignment = repo
             .assign_tile(
-                "wl4",
+                owner(),
                 AssetCandidate {
                     bytes: PNG_1X1.to_vec(),
                     declared_width: Some(1),
@@ -263,6 +328,43 @@ mod tests {
         assert!(repo.has_assignment("wl4").unwrap());
     }
 
+    fn png_with_dimensions(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = PNG_1X1.to_vec();
+        bytes[16..20].copy_from_slice(&width.to_be_bytes());
+        bytes[20..24].copy_from_slice(&height.to_be_bytes());
+        let crc = crc32(&bytes[12..29]);
+        bytes[29..33].copy_from_slice(&crc.to_be_bytes());
+        bytes
+    }
+
+    fn crc32(bytes: &[u8]) -> u32 {
+        let mut crc = 0xffff_ffffu32;
+        for byte in bytes {
+            crc ^= *byte as u32;
+            for _ in 0..8 {
+                let mask = 0u32.wrapping_sub(crc & 1);
+                crc = (crc >> 1) ^ (0xedb8_8320 & mask);
+            }
+        }
+        !crc
+    }
+
+    #[test]
+    fn rejects_unsafe_header_dimensions_before_full_decode_allocation() {
+        let candidate = AssetCandidate {
+            bytes: png_with_dimensions(MAX_DIMENSION + 1, MAX_DIMENSION + 1),
+            declared_width: None,
+            declared_height: None,
+            game_id: 10,
+            grid_id: 20,
+        };
+
+        assert_eq!(
+            validate_image(&candidate),
+            Err(AssetError::UnsafeDimensions)
+        );
+    }
+
     #[test]
     fn rejects_unsupported_malformed_and_inconsistent_assets_without_assignment() {
         let private = tempfile::tempdir().unwrap();
@@ -274,7 +376,7 @@ mod tests {
         ] {
             assert!(repo
                 .assign_tile(
-                    "wl4",
+                    owner(),
                     AssetCandidate {
                         bytes,
                         declared_width: Some(1),
@@ -287,7 +389,7 @@ mod tests {
         }
         assert!(repo
             .assign_tile(
-                "wl4",
+                owner(),
                 AssetCandidate {
                     bytes: PNG_1X1.to_vec(),
                     declared_width: Some(2),

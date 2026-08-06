@@ -274,10 +274,12 @@ impl DiscoveryLifecycleCoordinator {
         drop(state);
 
         let this = self.clone();
-        std::thread::Builder::new()
+        if let Err(error) = std::thread::Builder::new()
             .name("korrid-discovery".into())
             .spawn(move || this.run_work_loop(request))
-            .expect("spawn discovery worker");
+        {
+            self.record_spawn_failure(error);
+        }
     }
 
     fn run_work_loop(&self, mut request: WorkRequest) {
@@ -314,6 +316,23 @@ impl DiscoveryLifecycleCoordinator {
             bump(&mut state);
             break;
         }
+    }
+
+    fn record_spawn_failure(&self, error: std::io::Error) {
+        let mut state = self
+            .state
+            .lock()
+            .expect("discovery lifecycle state poisoned");
+        state.active = false;
+        state.enriching = false;
+        let diagnostic = DiscoveryLifecycleDiagnostic {
+            code: "DiscoveryWorkerSpawnFailed".into(),
+            message: format!("discovery worker could not be started: {error}"),
+            location_id: None,
+        };
+        state.diagnostics = vec![diagnostic.clone()];
+        state.last_problem = Some(diagnostic);
+        bump(&mut state);
     }
 
     fn record_result(&self, result: Result<DiscoveryMutationReport, DiscoveryError>) -> bool {
@@ -353,18 +372,8 @@ impl DiscoveryLifecycleCoordinator {
             state.enriching = true;
             bump(&mut state);
         }
-        let mut diagnostics = Vec::new();
-        loop {
-            let report = self.enricher.run();
-            let unauthorized = report
-                .diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.code == "SteamGridDbCredentialUnauthorized");
-            diagnostics.extend(report.diagnostics);
-            if report.remaining == 0 || report.attempted == 0 || unauthorized {
-                break;
-            }
-        }
+        let report = self.enricher.run();
+        let diagnostics = report.diagnostics;
         let mut state = self
             .state
             .lock()
