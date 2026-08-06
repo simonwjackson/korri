@@ -517,8 +517,24 @@ fi
 # shellcheck disable=SC2016 # Literal source-contract needle.
 grep -F 'verified_library_system_edge_avoiding_point "$navigation_json"' \
   <<<"$library_focus_source" >/dev/null
+grep -F 'wait_for_stable_library_tile "$navigation_observation"' \
+  <<<"$library_focus_source" >/dev/null
+grep -F 'library-view.post-tap.png' <<<"$library_focus_source" >/dev/null
+grep -F 'exec-out screencap -p >"$library_failure_image"' \
+  <<<"$library_focus_source" >/dev/null
 grep -F 'Physical A activation is retained by the human unified-overlay gate' \
   <<<"$library_focus_source" >/dev/null
+stable_library_source="$(sed -n '/^wait_for_stable_library_tile() {/,/^}/p' "$ACCEPTANCE")"
+grep -F 'local max_attempts=10' <<<"$stable_library_source" >/dev/null
+grep -F 'sleep 0.15' <<<"$stable_library_source" >/dev/null
+grep -F -- '"$SERIAL" "$KORRI_PACKAGE" --library' \
+  <<<"$stable_library_source" >/dev/null
+grep -F 'library_tile_bounds_stable "$previous" "$current"' \
+  <<<"$stable_library_source" >/dev/null
+if grep -Eq 'input (tap|swipe)|rpc ' <<<"$stable_library_source"; then
+  echo 'Library bounds stabilization must only repeat the trusted focus observation' >&2
+  exit 1
+fi
 traversal_source="$(sed -n '/^traverse_library_to_final_viewport() {/,/^}/p' "$ACCEPTANCE")"
 traversal_max="$(sed -n 's/^[[:space:]]*local max_steps=\([0-9][0-9]*\)$/\1/p' <<<"$traversal_source")"
 [[ "$traversal_max" =~ ^[0-9]+$ && "$traversal_max" -ge 1 && "$traversal_max" -le 64 ]] || {
@@ -763,6 +779,84 @@ for rejected_logs in \
   fi
 done
 unset -f sleep logcat_since
+
+LIBRARY_STABILITY="$TMP/library-stability.sh"
+for stability_function in \
+  exact_library_tile_observation \
+  library_tile_bounds_stable \
+  wait_for_stable_library_tile; do
+  sed -n "/^${stability_function}() {/,/^}/p" "$ACCEPTANCE" \
+    >>"$LIBRARY_STABILITY"
+done
+# shellcheck source=/dev/null
+source "$LIBRARY_STABILITY"
+MOCK_LIBRARY_HELPER="$TMP/mock-library-helper.sh"
+cat >"$MOCK_LIBRARY_HELPER" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+index="$(cat "$MOCK_LIBRARY_STATE")"
+index=$((index + 1))
+printf '%s\n' "$index" >"$MOCK_LIBRARY_STATE"
+cat "$MOCK_LIBRARY_FIXTURES/$index.json"
+SH
+chmod +x "$MOCK_LIBRARY_HELPER"
+DEBUG_PORTAL_FOCUS_GAME_SH="$MOCK_LIBRARY_HELPER"
+SERIAL=fixture-serial
+KORRI_PACKAGE=fixture-package
+library_fixture() {
+  local path="$1"
+  local left="$2"
+  local top="$3"
+  local width="$4"
+  local height="$5"
+  jq -cn \
+    --argjson left "$left" --argjson top "$top" \
+    --argjson width "$width" --argjson height "$height" \
+    '{view:"home",part:"shift.cine-library-tile",title:"Library",
+      focused:true,rectFinitePositive:true,fullyOnScreen:true,
+      bounds:{left:$left,top:$top,width:$width,height:$height},
+      viewport:{width:640,height:480}}' >"$path"
+}
+# Keep source delay evidence above while making fixture execution immediate.
+sleep() { :; }
+
+MOVING_FIXTURES="$TMP/moving-library-fixtures"
+mkdir "$MOVING_FIXTURES"
+library_fixture "$TMP/moving-library-initial.json" 400 350 52 78
+library_fixture "$MOVING_FIXTURES/1.json" 403 351 53 79
+library_fixture "$MOVING_FIXTURES/2.json" 405 352 54 80
+library_fixture "$MOVING_FIXTURES/3.json" 405.8 352.6 54.4 80.7
+MOCK_LIBRARY_STATE="$TMP/moving-library-state"
+MOCK_LIBRARY_FIXTURES="$MOVING_FIXTURES"
+export MOCK_LIBRARY_STATE MOCK_LIBRARY_FIXTURES
+printf '0\n' >"$MOCK_LIBRARY_STATE"
+stable_library_observation="$(wait_for_stable_library_tile \
+  "$(cat "$TMP/moving-library-initial.json")")"
+jq -e --slurpfile expected "$MOVING_FIXTURES/3.json" \
+  '. == $expected[0]' <<<"$stable_library_observation" >/dev/null
+[[ "$(cat "$MOCK_LIBRARY_STATE")" == 3 ]]
+
+MOVING_FOREVER_FIXTURES="$TMP/moving-forever-library-fixtures"
+mkdir "$MOVING_FOREVER_FIXTURES"
+library_fixture "$TMP/moving-forever-library-initial.json" 400 350 52 78
+for fixture_index in $(seq 1 10); do
+  if ((fixture_index % 2 == 0)); then
+    library_fixture "$MOVING_FOREVER_FIXTURES/$fixture_index.json" 406 350 52 78
+  else
+    library_fixture "$MOVING_FOREVER_FIXTURES/$fixture_index.json" 403 350 52 78
+  fi
+done
+MOCK_LIBRARY_STATE="$TMP/moving-forever-library-state"
+MOCK_LIBRARY_FIXTURES="$MOVING_FOREVER_FIXTURES"
+export MOCK_LIBRARY_STATE MOCK_LIBRARY_FIXTURES
+printf '0\n' >"$MOCK_LIBRARY_STATE"
+if wait_for_stable_library_tile \
+    "$(cat "$TMP/moving-forever-library-initial.json")" >/dev/null 2>&1; then
+  echo 'Library bounds stabilization accepted a never-stable fixture sequence' >&2
+  exit 1
+fi
+[[ "$(cat "$MOCK_LIBRARY_STATE")" == 10 ]]
+unset -f sleep library_fixture
 
 FOCUS_RENDERER="$TMP/focus-renderer.sh"
 sed -n '/^render_focused_wario_crop_evidence() {/,/^}/p' "$ACCEPTANCE" >"$FOCUS_RENDERER"

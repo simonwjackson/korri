@@ -1040,6 +1040,62 @@ wait_stopped() {
   echo 'fork did not stop after graceful QUIT' >&2
   return 1
 }
+exact_library_tile_observation() {
+  local observation="$1"
+  jq -e '
+    def bounded_number:
+      type == "number" and . > -100000 and . < 100000;
+    .view == "home" and .part == "shift.cine-library-tile"
+    and .title == "Library" and .focused == true
+    and .rectFinitePositive == true and .fullyOnScreen == true
+    and (.bounds.left | bounded_number)
+    and (.bounds.top | bounded_number)
+    and (.bounds.width | bounded_number) and (.bounds.width > 0)
+    and (.bounds.height | bounded_number) and (.bounds.height > 0)
+    and (.viewport.width | bounded_number) and (.viewport.width > 0)
+    and (.viewport.height | bounded_number) and (.viewport.height > 0)
+    and .bounds.left >= 0 and .bounds.top >= 0
+    and (.bounds.left + .bounds.width) <= .viewport.width
+    and (.bounds.top + .bounds.height) <= .viewport.height
+  ' <<<"$observation" >/dev/null 2>&1
+}
+library_tile_bounds_stable() {
+  local previous="$1"
+  local current="$2"
+  jq -en --argjson previous "$previous" --argjson current "$current" '
+    def abs: if . < 0 then -. else . end;
+    (($previous.bounds.left - $current.bounds.left) | abs) <= 1
+    and (($previous.bounds.top - $current.bounds.top) | abs) <= 1
+    and (($previous.bounds.width - $current.bounds.width) | abs) <= 1
+    and (($previous.bounds.height - $current.bounds.height) | abs) <= 1
+  ' >/dev/null 2>&1
+}
+wait_for_stable_library_tile() {
+  local previous="$1"
+  local current=''
+  local max_attempts=10
+  local attempt
+
+  exact_library_tile_observation "$previous" || previous=''
+  for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+    sleep 0.15
+    current=''
+    if ! current="$(timeout 1 "$DEBUG_PORTAL_FOCUS_GAME_SH" \
+      "$SERIAL" "$KORRI_PACKAGE" --library)" \
+      || ! exact_library_tile_observation "$current"; then
+      previous=''
+      continue
+    fi
+    if [[ -n "$previous" ]] \
+      && library_tile_bounds_stable "$previous" "$current"; then
+      printf '%s\n' "$current"
+      return 0
+    fi
+    previous="$current"
+  done
+  echo 'Library tile bounds did not stabilize within 10 trusted re-observations' >&2
+  return 1
+}
 traverse_library_to_final_viewport() {
   local step
   local max_steps=64
@@ -1060,19 +1116,20 @@ focus_wario_in_installed_library() {
   local navigation_json="$PORTAL_EVIDENCE_DIR/$label.library-navigation.json"
   local library_json="$PORTAL_EVIDENCE_DIR/$label.library-view.json"
   local library_diagnostic="$PORTAL_EVIDENCE_DIR/$label.library-view.last-diagnostic.txt"
+  local library_failure_image="$PORTAL_EVIDENCE_DIR/$label.library-view.post-tap.png"
   local tap_x tap_y
   # A reload may restore focus anywhere on curated Home. DevTools may focus and
   # measure only the exact visible Library tile; activation remains one bounded
   # pointer event through the installed UI, never a click/RPC/native shortcut.
   navigation_observation="$("$DEBUG_PORTAL_FOCUS_GAME_SH" \
     "$SERIAL" "$KORRI_PACKAGE" --library)"
-  jq -e '
-    .view == "home" and .part == "shift.cine-library-tile"
-    and .title == "Library" and .focused == true
-    and .rectFinitePositive == true and .fullyOnScreen == true
-    and (.bounds.width > 0) and (.bounds.height > 0)
-    and (.viewport.width > 0) and (.viewport.height > 0)
-  ' <<<"$navigation_observation" >/dev/null
+  exact_library_tile_observation "$navigation_observation"
+  # Focus can start a CSS rail transition after the first measurement. Reuse
+  # only the same trusted focus/observation helper until two consecutive exact
+  # observations differ by at most one CSS pixel on every bounds dimension.
+  navigation_observation="$(
+    wait_for_stable_library_tile "$navigation_observation"
+  )"
   printf '%s\n' "$navigation_observation" >"$navigation_json"
   if ! read -r tap_x tap_y < <(
     verified_library_system_edge_avoiding_point "$navigation_json"
@@ -1102,7 +1159,10 @@ focus_wario_in_installed_library() {
   done
   printf '%s\n' "$library_observation" >"$library_json"
   if [[ "$library_verified" != true ]]; then
-    echo "installed Library did not become exactly verified; last output is in $library_json and last diagnostic is in $library_diagnostic" >&2
+    if ! "${ADB[@]}" exec-out screencap -p >"$library_failure_image"; then
+      echo "could not capture post-tap Library failure screenshot at $library_failure_image" >&2
+    fi
+    echo "installed Library did not become exactly verified; last output is in $library_json, last diagnostic is in $library_diagnostic, and post-tap screenshot is in $library_failure_image" >&2
     [[ ! -s "$library_diagnostic" ]] || cat "$library_diagnostic" >&2
     return 1
   fi
