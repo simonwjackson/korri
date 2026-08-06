@@ -16,6 +16,9 @@ final class KorriGameFolderPickerState {
     private State state = State.idle();
 
     synchronized String choose() {
+        if (state.busy) {
+            return busyResultJson(generation, state);
+        }
         generation += 1;
         state = State.choosing();
         return openResultJson(generation);
@@ -60,6 +63,18 @@ final class KorriGameFolderPickerState {
             JSONObject result = new JSONObject();
             result.put("_tag", "Opened");
             result.put("generation", Long.toString(generation));
+            return result.toString();
+        } catch (Exception error) {
+            return "{\"_tag\":\"Unavailable\",\"message\":\"open failed\"}";
+        }
+    }
+
+    private static String busyResultJson(long generation, State state) {
+        try {
+            JSONObject result = new JSONObject();
+            result.put("_tag", "Busy");
+            result.put("generation", Long.toString(generation));
+            result.put("state", state.tag);
             return result.toString();
         } catch (Exception error) {
             return "{\"_tag\":\"Unavailable\",\"message\":\"open failed\"}";
@@ -122,33 +137,41 @@ final class KorriGameFolderPickerState {
         final String code;
         final String message;
         final boolean definitive;
+        final boolean busy;
 
-        private State(String tag, String receipt, String code, String message, boolean definitive) {
+        private State(
+                String tag,
+                String receipt,
+                String code,
+                String message,
+                boolean definitive,
+                boolean busy) {
             this.tag = tag;
             this.receipt = receipt;
             this.code = code;
             this.message = message;
             this.definitive = definitive;
+            this.busy = busy;
         }
 
         static State idle() {
-            return new State("Idle", null, null, null, false);
+            return new State("Idle", null, null, null, false, false);
         }
 
         static State choosing() {
-            return new State("Choosing", null, null, null, false);
+            return new State("Choosing", null, null, null, false, true);
         }
 
         static State selected(String receipt) {
-            return new State("Selected", receipt, null, null, true);
+            return new State("Selected", receipt, null, null, true, true);
         }
 
         static State cancelled() {
-            return new State("Cancelled", null, null, null, true);
+            return new State("Cancelled", null, null, null, true, false);
         }
 
         static State problem(String code, String message) {
-            return new State("Problem", null, code, message, true);
+            return new State("Problem", null, code, message, true, false);
         }
     }
 }

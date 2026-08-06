@@ -32,8 +32,8 @@ import type {
 // Moonlight startup behind korrid's signed, one-use launch instruction. 13 adds
 // the honest gameplay-overlay accessibility grant/settings seam. 14 adds the
 // receipt-based asynchronous game-folder picker. 15 adds opaque local cover
-// asset URL resolution.
-export const BRIDGE_VERSION = 15
+// asset URL resolution. 16 adds picker single-flight Busy results.
+export const BRIDGE_VERSION = 16
 
 // ── Local launches (JS -> Kotlin) ───────────────────────────────────────
 
@@ -289,6 +289,11 @@ export interface KorriNativeBridgeSurface {
 
 export type OpenGameFolderPickerResult =
   | { readonly _tag: "Opened"; readonly generation: string }
+  | {
+      readonly _tag: "Busy"
+      readonly generation: string
+      readonly state: "Choosing" | "Selected"
+    }
   | { readonly _tag: "Unavailable"; readonly message: string }
 
 export type GameFolderPickerState =

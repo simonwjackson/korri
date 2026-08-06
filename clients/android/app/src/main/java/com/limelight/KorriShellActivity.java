@@ -424,7 +424,7 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public int bridgeVersion() {
             // Mirrors BRIDGE_VERSION in contracts/bridge/korri-native-bridge.ts.
-            return 15;
+            return 16;
         }
 
         @JavascriptInterface
@@ -589,6 +589,12 @@ public class KorriShellActivity extends AppCompatActivity {
         /** Open Android's asynchronous game-folder picker. */
         @JavascriptInterface
         public String openGameFolderPicker() {
+            String opened = gameFolderPicker.choose();
+            try {
+                if ("Busy".equals(new JSONObject(opened).getString("_tag"))) return opened;
+            } catch (Exception ignored) {
+                // Fall through and let the start attempt report the real failure.
+            }
             if (!hasAllFilesStorageAccess()) {
                 try {
                     requestAllFilesAccess();
@@ -601,7 +607,6 @@ public class KorriShellActivity extends AppCompatActivity {
                 return KorriGameFolderPickerState.unavailableJson(
                         "Grant Korri file access, then choose a game folder");
             }
-            String opened = gameFolderPicker.choose();
             try {
                 Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION

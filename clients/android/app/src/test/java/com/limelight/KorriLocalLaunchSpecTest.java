@@ -166,6 +166,14 @@ public class KorriLocalLaunchSpecTest {
     }
 
     @Test
+    public void rejectsRetroarchWithoutAuthorizedContentRoot() throws Exception {
+        JSONObject spec = validSpec();
+        spec.remove("authorizedContentRoot");
+
+        assertInvalid(spec, "InvalidSpec");
+    }
+
+    @Test
     public void rejectsRetroarchRomOutsideSignedContentRoot() throws Exception {
         JSONObject spec = validSpec()
                 .put("authorizedContentRoot", "/storage/emulated/0/Games/GBA");

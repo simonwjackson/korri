@@ -39,6 +39,25 @@ public class KorriGameFolderBridgeTest {
     }
 
     @Test
+    public void pickerStateRejectsDuplicateOpenWhileChoosingOrSelected() throws Exception {
+        KorriGameFolderPickerState state = new KorriGameFolderPickerState();
+        JSONObject opened = new JSONObject(state.choose());
+        JSONObject busyChoosing = new JSONObject(state.choose());
+        assertEquals("Busy", busyChoosing.getString("_tag"));
+        assertEquals(opened.getString("generation"), busyChoosing.getString("generation"));
+        assertEquals("Choosing", busyChoosing.getString("state"));
+
+        state.selected("receipt-1");
+        JSONObject selected = new JSONObject(state.snapshotJson());
+        JSONObject busySelected = new JSONObject(state.choose());
+        assertEquals("Busy", busySelected.getString("_tag"));
+        assertEquals(selected.getString("generation"), busySelected.getString("generation"));
+        assertEquals("Selected", busySelected.getString("state"));
+        assertEquals("receipt-1", new JSONObject(state.snapshotJson())
+                .getJSONObject("state").getString("receipt"));
+    }
+
+    @Test
     public void pickerStatePublishesCancelledAndProblemAsDefinitiveGenerations() throws Exception {
         KorriGameFolderPickerState state = new KorriGameFolderPickerState();
         state.cancelled();

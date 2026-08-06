@@ -74,7 +74,8 @@ const secretStatusLabel = (status: SecretSettingStatus): string =>
   status === SecretSettingStatus.Configured ? "Configured" : "Not configured"
 
 const discoveryStateLabel = (snapshot: DiscoverySnapshot | undefined): string => {
-  switch (snapshot?.state._tag) {
+  if (snapshot === undefined) return "Not set up"
+  switch (snapshot.state._tag) {
     case "Scanning":
       return "Scanning…"
     case "Enriching":
@@ -83,9 +84,9 @@ const discoveryStateLabel = (snapshot: DiscoverySnapshot | undefined): string =>
       return "Needs attention"
     case "Idle":
       return "Ready"
-    default:
-      return "Not set up"
   }
+  const exhaustive: never = snapshot.state
+  return exhaustive
 }
 
 export function settingsFrom(facts: DeviceFacts): readonly SurfaceSettingGroup[] {

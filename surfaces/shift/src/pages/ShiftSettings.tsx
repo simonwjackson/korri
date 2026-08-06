@@ -104,6 +104,9 @@ export function ShiftSettings({
     [groups],
   )
   const focusedItem = items[index]
+  const focusedItemSaving =
+    status._tag === "Saving" && status.settingId === focusedItem?.id
+  const focusedItemSelectable = focusedItem?.interaction && !focusedItemSaving
   const editingItem: SurfaceSettingItem | null =
     items.find(item => item.id === editingId) ?? null
   const confirmingItem: SurfaceSettingItem | null =
@@ -188,23 +191,22 @@ export function ShiftSettings({
                   {group.items.map(item => {
                     position += 1
                     const slot = position
+                    const saving =
+                      status._tag === "Saving" && status.settingId === item.id
                     return (
                       <ShiftSettingRow
                         key={item.id}
                         index={slot}
                         label={item.label}
                         focused={slot === index}
-                        saving={
-                          status._tag === "Saving" &&
-                          status.settingId === item.id
-                        }
+                        saving={saving}
                         {...(item.value === undefined
                           ? {}
                           : { value: item.value })}
                         {...(item.description === undefined
                           ? {}
                           : { description: item.description })}
-                        {...(item.interaction === undefined
+                        {...(item.interaction === undefined || saving
                           ? {}
                           : {
                               onSelect: () => {
@@ -241,13 +243,13 @@ export function ShiftSettings({
           ) : null}
           <ShiftCineLegend
             hints={[
-              ...(focusedItem?.interaction
+              ...(focusedItemSelectable
                 ? [{ glyph: "A", label: "Select", primary: true }]
                 : []),
               {
                 glyph: "B",
                 label: "Back",
-                primary: !focusedItem?.interaction,
+                primary: !focusedItemSelectable,
               },
             ]}
           />

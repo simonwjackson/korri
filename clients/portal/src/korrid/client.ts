@@ -501,6 +501,7 @@ export interface InMemoryKorridClientConfig {
   readonly localLaunchSpecs?: Readonly<Record<string, LaunchSpec>>
   readonly localFailures?: readonly { readonly code: string; readonly message: string }[]
   readonly discovery?: DiscoverySnapshot
+  readonly discoveryReceipts?: readonly string[]
   /** Seed an active host session for now-playing flows. */
   readonly activeSession?: ActiveSession
   /** Seed the dedicated gameplay-overlay browser/test consumer. */
@@ -624,6 +625,10 @@ export function createInMemoryKorridClient(
     diagnostics: [],
   }
   let discoveryRevision = 0
+  let discoveryScanRevision = 0
+  const availableDiscoveryReceipts = new Set(
+    config.discoveryReceipts ?? ["in-memory-folder-receipt"],
+  )
   const nextDiscovery = (state = discovery.state): DiscoverySnapshot => {
     discoveryRevision += 1
     discovery = {
@@ -632,6 +637,16 @@ export function createInMemoryKorridClient(
       state,
     }
     return discovery
+  }
+  const scanningDiscovery = (
+    settleState: DiscoverySnapshot["state"] = { _tag: "Idle", payload: {} },
+  ): DiscoverySnapshot => {
+    const token = ++discoveryScanRevision
+    const scanning = nextDiscovery({ _tag: "Scanning", payload: {} })
+    setTimeout(() => {
+      if (token === discoveryScanRevision) nextDiscovery(settleState)
+    }, 0)
+    return scanning
   }
   return {
     async health() {
@@ -693,7 +708,7 @@ export function createInMemoryKorridClient(
       return { _tag: "Ok", payload: discovery }
     },
     async registerDiscoveryReceipt(receipt) {
-      if (receipt === "") {
+      if (!availableDiscoveryReceipts.delete(receipt)) {
         return {
           _tag: "Err",
           payload: {
@@ -711,17 +726,17 @@ export function createInMemoryKorridClient(
           ],
         }
       }
-      return { _tag: "Ok", payload: nextDiscovery({ _tag: "Scanning", payload: {} }) }
+      return { _tag: "Ok", payload: scanningDiscovery() }
     },
     async removeDiscoveryLocation(locationId) {
       discovery = {
         ...discovery,
         locations: discovery.locations.filter(location => location.id !== locationId),
       }
-      return { _tag: "Ok", payload: nextDiscovery({ _tag: "Scanning", payload: {} }) }
+      return { _tag: "Ok", payload: scanningDiscovery() }
     },
     async rescanDiscovery() {
-      return { _tag: "Ok", payload: nextDiscovery({ _tag: "Scanning", payload: {} }) }
+      return { _tag: "Ok", payload: scanningDiscovery() }
     },
     async catalogSnapshot() {
       if (behavior === "catalog-fail") {
@@ -912,6 +927,7 @@ export function createInMemoryKorridClient(
 
 export interface DiscoverySnapshotPoller {
   pollNow(): Promise<void>
+  dispose(): void
 }
 
 export function createDiscoverySnapshotPoller(
@@ -919,13 +935,15 @@ export function createDiscoverySnapshotPoller(
   publish: (snapshot: DiscoverySnapshot) => void,
 ): DiscoverySnapshotPoller {
   let inFlight = false
+  let disposed = false
   let lastGeneration: string | undefined
   return {
     async pollNow() {
-      if (inFlight) return
+      if (disposed || inFlight) return
       inFlight = true
       try {
         const outcome = await client.discoverySnapshot()
+        if (disposed) return
         if (outcome._tag === "Ok" && outcome.payload.generation !== lastGeneration) {
           lastGeneration = outcome.payload.generation
           publish(outcome.payload)
@@ -933,6 +951,9 @@ export function createDiscoverySnapshotPoller(
       } finally {
         inFlight = false
       }
+    },
+    dispose() {
+      disposed = true
     },
   }
 }

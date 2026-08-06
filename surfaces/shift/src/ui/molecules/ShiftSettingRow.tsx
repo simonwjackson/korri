@@ -62,6 +62,7 @@ export function ShiftSettingRow({
     "data-setting-index": index,
     "data-focused": focused || undefined,
     "data-actionable": Boolean(onSelect) || undefined,
+    "data-saving": saving || undefined,
     "aria-label": value === undefined ? label : `${label}: ${value}`,
     onFocus,
     ...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.settingRow, label),

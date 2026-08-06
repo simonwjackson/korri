@@ -1134,6 +1134,23 @@ describe("Shift settings", () => {
     expect(host.calls).toEqual(["settings-dismiss"])
   })
 
+  test("a saving setting row is busy instead of selectable", () => {
+    const host = createFixtureHost()
+    const { container } = render(
+      <ShiftSurface
+        model={model({
+          settingsStatus: { _tag: "Saving", settingId: "file-access" },
+        })}
+        host={host}
+      />,
+    )
+    openSettings()
+
+    expect(screen.queryByRole("button", { name: "File access: Granted" })).toBeNull()
+    expect(container.querySelector(".shift-setting-row[data-saving='true']"))
+      .toBeDefined()
+  })
+
   test("back returns to the games without touching the host", () => {
     const host = createFixtureHost()
     render(<ShiftSurface model={model()} host={host} />)

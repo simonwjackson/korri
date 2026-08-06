@@ -324,7 +324,10 @@ export function createInMemoryLauncherBridge(
   const streamApps = config.streamApps ?? sampleApps
   const delayMs = config.delayMs ?? 0
   const localGameAssetUrls = config.localGameAssetUrls ?? {}
-  const delay = () => new Promise(resolve => setTimeout(resolve, delayMs))
+  const delay = () =>
+    delayMs <= 0
+      ? Promise.resolve()
+      : new Promise(resolve => setTimeout(resolve, delayMs))
   const storageAccessResult: StorageAccessResult =
     behavior === "storage-denied" ? { _tag: "Denied" } : { _tag: "Granted" }
   let pickerRevision = 0
@@ -450,6 +453,17 @@ export function createInMemoryLauncherBridge(
     },
     async openGameFolderPicker() {
       await delay()
+      const currentPickerState = pickerSnapshot.state
+      if (
+        currentPickerState._tag === "Choosing" ||
+        currentPickerState._tag === "Selected"
+      ) {
+        return {
+          _tag: "Busy",
+          generation: pickerSnapshot.generation,
+          state: currentPickerState._tag,
+        }
+      }
       if (behavior === "storage-denied") {
         nextPicker({
           _tag: "Problem",
@@ -458,11 +472,14 @@ export function createInMemoryLauncherBridge(
         })
         return { _tag: "Unavailable", message: "file access is not granted" }
       }
+      nextPicker({ _tag: "Choosing" })
       const configured = config.gameFolderPicker ?? {
         _tag: "Selected" as const,
         receipt: "in-memory-folder-receipt",
       }
-      nextPicker(configured)
+      setTimeout(() => {
+        if (pickerSnapshot.state._tag === "Choosing") nextPicker(configured)
+      }, 0)
       return { _tag: "Opened", generation: pickerSnapshot.generation }
     },
     async gameFolderPickerSnapshot() {
@@ -631,6 +648,17 @@ function decodeOpenGameFolderPicker(
   switch (payload._tag) {
     case "Opened":
       return { _tag: "Opened", generation: stringField(payload, "generation") }
+    case "Busy": {
+      const state = stringField(payload, "state")
+      if (state !== "Choosing" && state !== "Selected") {
+        throw new Error("malformed OpenGameFolderPickerResult")
+      }
+      return {
+        _tag: "Busy",
+        generation: stringField(payload, "generation"),
+        state,
+      }
+    }
     case "Unavailable":
       return { _tag: "Unavailable", message: stringField(payload, "message") }
     default:

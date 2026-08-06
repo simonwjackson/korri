@@ -453,7 +453,9 @@ describe("discovery", () => {
   })
 
   it("browser memory exposes the discovery lifecycle without raw paths", async () => {
-    const client = createInMemoryKorridClient()
+    const client = createInMemoryKorridClient({
+      discoveryReceipts: ["receipt-1"],
+    })
 
     expect(await client.discoverySnapshot()).toMatchObject({
       _tag: "Ok",
@@ -463,9 +465,14 @@ describe("discovery", () => {
       _tag: "Ok",
       payload: { state: { _tag: "Scanning" } },
     })
-    expect(await client.registerDiscoveryReceipt("")).toMatchObject({
+    expect(await client.registerDiscoveryReceipt("receipt-1")).toMatchObject({
       _tag: "Err",
       payload: { code: "FolderSelectionReceiptUnknown" },
+    })
+    await new Promise(resolve => setTimeout(resolve, 1))
+    expect(await client.discoverySnapshot()).toMatchObject({
+      _tag: "Ok",
+      payload: { state: { _tag: "Idle" } },
     })
   })
 
@@ -502,6 +509,37 @@ describe("discovery", () => {
 
     expect(maxActive).toBe(1)
     expect(published).toEqual(["g0", "g1"])
+  })
+
+  it("does not publish an in-flight polling result after disposal", async () => {
+    let release: (() => void) | undefined
+    const published: string[] = []
+    const poller = createDiscoverySnapshotPoller(
+      {
+        async discoverySnapshot() {
+          await new Promise<void>(resolve => {
+            release = resolve
+          })
+          return {
+            _tag: "Ok",
+            payload: {
+              generation: "late",
+              state: { _tag: "Idle", payload: {} },
+              locations: [],
+              diagnostics: [],
+            },
+          }
+        },
+      },
+      snapshot => published.push(snapshot.generation),
+    )
+
+    const pending = poller.pollNow()
+    poller.dispose()
+    release?.()
+    await pending
+
+    expect(published).toEqual([])
   })
 })
 

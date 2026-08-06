@@ -114,6 +114,8 @@ export function useLaunchables(
   const [settingsStatus, setSettingsStatus] = useState<SurfaceSettingsStatus>({
     _tag: "Idle",
   })
+  const settingsStatusRef = useRef(settingsStatus)
+  settingsStatusRef.current = settingsStatus
   const stateRef = useRef(state)
   stateRef.current = state
   const factsRef = useRef(facts)
@@ -127,9 +129,13 @@ export function useLaunchables(
     },
   })
   const settingsBusyRef = useRef(false)
+  const folderAddOpeningRef = useRef(false)
+  const folderPickerSeq = useRef(0)
   const folderReceiptSubmissions = useRef(new Set<string>())
   const completedFolderReceiptGenerations = useRef(new Set<string>())
   const uncertainFolderReceipts = useRef(new Set<string>())
+  const unknownFolderReceipts = useRef(new Set<string>())
+  const reportedUnknownFolderReceipts = useRef(new Set<string>())
   const discoveryWasActive = useRef(false)
   const discoveryPoller = useRef(
     createDiscoverySnapshotPoller(korrid, snapshot => {
@@ -154,9 +160,17 @@ export function useLaunchables(
     [korrid],
   )
 
-  const settingsProblem = useCallback((settingId: string, message: string) => {
-    setSettingsStatus({ _tag: "Problem", settingId, message })
+  const publishSettingsStatus = useCallback((next: SurfaceSettingsStatus) => {
+    settingsStatusRef.current = next
+    setSettingsStatus(next)
   }, [])
+
+  const settingsProblem = useCallback(
+    (settingId: string, message: string) => {
+      publishSettingsStatus({ _tag: "Problem", settingId, message })
+    },
+    [publishSettingsStatus],
+  )
 
   const acknowledgeFolderPicker = useCallback(
     (generation: string) => {
@@ -171,31 +185,43 @@ export function useLaunchables(
         case "Idle":
           return
         case "Choosing":
-          setSettingsStatus({ _tag: "Saving", settingId: "game-folder-add" })
+          publishSettingsStatus({ _tag: "Saving", settingId: "game-folder-add" })
           return
         case "Cancelled":
           acknowledgeFolderPicker(snapshot.generation)
-          setSettingsStatus({ _tag: "Idle" })
+          publishSettingsStatus({ _tag: "Idle" })
           return
         case "Problem":
           acknowledgeFolderPicker(snapshot.generation)
           settingsProblem("game-folder-add", snapshot.state.message)
           return
         case "Selected": {
+          if (unknownFolderReceipts.current.has(snapshot.generation)) {
+            if (!reportedUnknownFolderReceipts.current.has(snapshot.generation)) {
+              reportedUnknownFolderReceipts.current.add(snapshot.generation)
+              settingsProblem(
+                "game-folder-add",
+                "Korri could not confirm that folder after reconnecting. Choose it again.",
+              )
+            }
+            return
+          }
           if (completedFolderReceiptGenerations.current.has(snapshot.generation)) {
             acknowledgeFolderPicker(snapshot.generation)
             return
           }
           if (folderReceiptSubmissions.current.has(snapshot.generation)) return
           folderReceiptSubmissions.current.add(snapshot.generation)
-          setSettingsStatus({ _tag: "Saving", settingId: "game-folder-add" })
+          publishSettingsStatus({ _tag: "Saving", settingId: "game-folder-add" })
           void korrid.registerDiscoveryReceipt(snapshot.state.receipt).then(result => {
             if (!mountedRef.current) return
             if (result._tag === "Ok") {
               completedFolderReceiptGenerations.current.add(snapshot.generation)
               acknowledgeFolderPicker(snapshot.generation)
               uncertainFolderReceipts.current.delete(snapshot.generation)
-              setSettingsStatus({ _tag: "Idle" })
+              unknownFolderReceipts.current.delete(snapshot.generation)
+              reportedUnknownFolderReceipts.current.delete(snapshot.generation)
+              publishSettingsStatus({ _tag: "Idle" })
               setFacts(current => ({ ...current, discovery: result.payload }))
               return
             }
@@ -209,11 +235,15 @@ export function useLaunchables(
               result.payload.code === "FolderSelectionReceiptUnknown" &&
               uncertainFolderReceipts.current.has(snapshot.generation)
             ) {
-              completedFolderReceiptGenerations.current.add(snapshot.generation)
-              acknowledgeFolderPicker(snapshot.generation)
               uncertainFolderReceipts.current.delete(snapshot.generation)
-              setSettingsStatus({ _tag: "Idle" })
-              void discoveryPoller.current.pollNow()
+              unknownFolderReceipts.current.add(snapshot.generation)
+              if (!reportedUnknownFolderReceipts.current.has(snapshot.generation)) {
+                reportedUnknownFolderReceipts.current.add(snapshot.generation)
+                settingsProblem(
+                  "game-folder-add",
+                  "Korri could not confirm that folder after reconnecting. Choose it again.",
+                )
+              }
               return
             }
             completedFolderReceiptGenerations.current.add(snapshot.generation)
@@ -223,11 +253,14 @@ export function useLaunchables(
         }
       }
     },
-    [acknowledgeFolderPicker, korrid, settingsProblem],
+    [acknowledgeFolderPicker, korrid, publishSettingsStatus, settingsProblem],
   )
 
   const checkFolderPicker = useCallback(async () => {
-    processFolderPickerSnapshot(await bridge.gameFolderPickerSnapshot())
+    const seq = ++folderPickerSeq.current
+    const snapshot = await bridge.gameFolderPickerSnapshot()
+    if (!mountedRef.current || seq !== folderPickerSeq.current) return
+    processFolderPickerSnapshot(snapshot)
   }, [bridge, processFolderPickerSnapshot])
 
   const load = useCallback(async (preserveAction = false) => {
@@ -346,6 +379,8 @@ export function useLaunchables(
       mountedRef.current = false
       actionSeq.current += 1
       stopPollSeq.current += 1
+      folderPickerSeq.current += 1
+      discoveryPoller.current.dispose()
     }
   }, [checkFolderPicker, load])
 
@@ -360,9 +395,13 @@ export function useLaunchables(
   }, [checkFolderPicker, load])
 
   useEffect(() => {
-    discoveryPoller.current = createDiscoverySnapshotPoller(korrid, snapshot => {
+    const previous = discoveryPoller.current
+    const next = createDiscoverySnapshotPoller(korrid, snapshot => {
       setFacts(current => ({ ...current, discovery: snapshot }))
     })
+    discoveryPoller.current = next
+    previous.dispose()
+    return () => next.dispose()
   }, [korrid])
 
   useEffect(() => {
@@ -436,8 +475,43 @@ export function useLaunchables(
         return
       }
       if (actionId === "game-folder-add") {
+        if (
+          folderAddOpeningRef.current ||
+          (settingsStatusRef.current._tag === "Saving" &&
+            settingsStatusRef.current.settingId === "game-folder-add")
+        ) {
+          return
+        }
+        folderAddOpeningRef.current = true
         void (async () => {
+          const seq = ++folderPickerSeq.current
+          const snapshot = await bridge.gameFolderPickerSnapshot()
+          if (!mountedRef.current || seq !== folderPickerSeq.current) {
+            return { _tag: "Opened" as const }
+          }
+          if (snapshot.state._tag === "Choosing") {
+            processFolderPickerSnapshot(snapshot)
+            return { _tag: "Opened" as const }
+          }
+          if (snapshot.state._tag === "Selected") {
+            if (unknownFolderReceipts.current.has(snapshot.generation)) {
+              await bridge.acknowledgeGameFolderPicker(snapshot.generation)
+              if (!mountedRef.current || seq !== folderPickerSeq.current) {
+                return { _tag: "Opened" as const }
+              }
+              unknownFolderReceipts.current.delete(snapshot.generation)
+              reportedUnknownFolderReceipts.current.delete(snapshot.generation)
+              uncertainFolderReceipts.current.delete(snapshot.generation)
+              folderReceiptSubmissions.current.delete(snapshot.generation)
+            } else {
+              processFolderPickerSnapshot(snapshot)
+              return { _tag: "Opened" as const }
+            }
+          }
           const storage = await bridge.storageAccess()
+          if (!mountedRef.current || seq !== folderPickerSeq.current) {
+            return { _tag: "Opened" as const }
+          }
           if (storage._tag === "Denied") {
             const opened = await bridge.openStorageAccessSettings()
             return opened._tag === "Unavailable"
@@ -447,13 +521,17 @@ export function useLaunchables(
           if (storage._tag === "QueryFailed") {
             return { _tag: "Unavailable" as const, message: storage.message }
           }
+          publishSettingsStatus({ _tag: "Saving", settingId: actionId })
           const opened = await bridge.openGameFolderPicker()
-          if (opened._tag === "Opened") {
-            setSettingsStatus({ _tag: "Saving", settingId: actionId })
+          if (!mountedRef.current || seq !== folderPickerSeq.current) return opened
+          if (opened._tag === "Opened" || opened._tag === "Busy") {
+            publishSettingsStatus({ _tag: "Saving", settingId: actionId })
             await checkFolderPicker()
           }
           return opened
         })().then(result => {
+          folderAddOpeningRef.current = false
+          if (!mountedRef.current) return
           if (result._tag === "Unavailable") {
             settingsProblem(actionId, result.message)
           }
@@ -461,29 +539,42 @@ export function useLaunchables(
         return
       }
       if (actionId === "game-folder-rescan") {
-        if (discoveryActive(factsRef.current.discovery)) return
-        setSettingsStatus({ _tag: "Saving", settingId: actionId })
+        if (
+          discoveryActive(factsRef.current.discovery) ||
+          (settingsStatusRef.current._tag === "Saving" &&
+            settingsStatusRef.current.settingId === actionId)
+        ) {
+          return
+        }
+        publishSettingsStatus({ _tag: "Saving", settingId: actionId })
         void korrid.rescanDiscovery().then(result => {
           if (!mountedRef.current) return
           if (result._tag === "Err") {
             settingsProblem(actionId, result.payload.message)
             return
           }
-          setSettingsStatus({ _tag: "Idle" })
+          publishSettingsStatus({ _tag: "Idle" })
           setFacts(current => ({ ...current, discovery: result.payload }))
         })
         return
       }
       if (actionId.startsWith("game-folder-remove:")) {
         const locationId = actionId.slice("game-folder-remove:".length)
-        setSettingsStatus({ _tag: "Saving", settingId: actionId })
+        const settingId = `game-folder:${locationId}`
+        if (
+          settingsStatusRef.current._tag === "Saving" &&
+          settingsStatusRef.current.settingId === settingId
+        ) {
+          return
+        }
+        publishSettingsStatus({ _tag: "Saving", settingId })
         void korrid.removeDiscoveryLocation(locationId).then(result => {
           if (!mountedRef.current) return
           if (result._tag === "Err") {
-            settingsProblem(actionId, result.payload.message)
+            settingsProblem(settingId, result.payload.message)
             return
           }
-          setSettingsStatus({ _tag: "Idle" })
+          publishSettingsStatus({ _tag: "Idle" })
           setFacts(current => ({ ...current, discovery: result.payload }))
         })
         return
@@ -506,7 +597,14 @@ export function useLaunchables(
       }
       settingsProblem(actionId, "This setting is not available")
     },
-    [bridge, checkFolderPicker, korrid, settingsProblem],
+    [
+      bridge,
+      checkFolderPicker,
+      korrid,
+      processFolderPickerSnapshot,
+      publishSettingsStatus,
+      settingsProblem,
+    ],
   )
 
   const changeSetting = useCallback(
@@ -515,7 +613,7 @@ export function useLaunchables(
       // gap synchronously so two writes cannot turn one success into a conflict.
       if (settingsBusyRef.current) return
       settingsBusyRef.current = true
-      setSettingsStatus({ _tag: "Saving", settingId })
+      publishSettingsStatus({ _tag: "Saving", settingId })
 
       if (settingId === "steamgriddb-credential") {
         const operation =
@@ -529,7 +627,7 @@ export function useLaunchables(
             settingsProblem(settingId, result.payload.message)
             return
           }
-          setSettingsStatus({ _tag: "Idle" })
+          publishSettingsStatus({ _tag: "Idle" })
           void load()
         })
         return
@@ -552,18 +650,18 @@ export function useLaunchables(
         const next = { ...factsRef.current, settings: result.payload }
         factsRef.current = next
         setFacts(next)
-        setSettingsStatus({ _tag: "Idle" })
+        publishSettingsStatus({ _tag: "Idle" })
         // Plugin changes alter fulfillability; a successful save therefore
         // refreshes the library rather than waiting for another screen visit.
         void load()
       })
     },
-    [korrid, load, settingsProblem],
+    [korrid, load, publishSettingsStatus, settingsProblem],
   )
 
   const dismissSettingsProblem = useCallback(
-    () => setSettingsStatus({ _tag: "Idle" }),
-    [],
+    () => publishSettingsStatus({ _tag: "Idle" }),
+    [publishSettingsStatus],
   )
 
   const confirmEntry = useCallback(

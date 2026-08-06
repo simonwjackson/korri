@@ -326,7 +326,7 @@ describe("createKorriNativeLauncherBridge", () => {
       }),
     acknowledgeGameFolderPicker: () =>
       JSON.stringify({ _tag: "Acknowledged", generation: "picker-2" }),
-    bridgeVersion: () => 15,
+    bridgeVersion: () => 16,
     ...overrides,
   })
 
@@ -507,6 +507,7 @@ describe("createKorriNativeLauncherBridge", () => {
       gameFolderPicker: { _tag: "Selected", receipt: "fixture-receipt" },
     })
     await selected.openGameFolderPicker()
+    await new Promise(resolve => setTimeout(resolve, 1))
     expect(await selected.gameFolderPickerSnapshot()).toMatchObject({
       state: { _tag: "Selected", receipt: "fixture-receipt" },
     })
@@ -515,6 +516,7 @@ describe("createKorriNativeLauncherBridge", () => {
       gameFolderPicker: { _tag: "Cancelled" },
     })
     await cancelled.openGameFolderPicker()
+    await new Promise(resolve => setTimeout(resolve, 1))
     expect((await cancelled.gameFolderPickerSnapshot()).state._tag).toBe(
       "Cancelled",
     )
@@ -527,8 +529,34 @@ describe("createKorriNativeLauncherBridge", () => {
       },
     })
     await failed.openGameFolderPicker()
+    await new Promise(resolve => setTimeout(resolve, 1))
     expect(await failed.gameFolderPickerSnapshot()).toMatchObject({
       state: { _tag: "Problem", code: "FolderSelectionUnresolvable" },
+    })
+  })
+
+  it("keeps browser picker openings single-flight until the result is acknowledged", async () => {
+    const bridge = createInMemoryLauncherBridge({
+      gameFolderPicker: { _tag: "Selected", receipt: "fixture-receipt" },
+    })
+
+    const opened = await bridge.openGameFolderPicker()
+    const duplicate = await bridge.openGameFolderPicker()
+    await new Promise(resolve => setTimeout(resolve, 1))
+    const selected = await bridge.gameFolderPickerSnapshot()
+    const afterSelected = await bridge.openGameFolderPicker()
+
+    expect(opened).toMatchObject({ _tag: "Opened" })
+    expect(duplicate).toEqual({
+      _tag: "Busy",
+      generation: opened._tag === "Opened" ? opened.generation : "",
+      state: "Choosing",
+    })
+    expect(selected.state).toEqual({ _tag: "Selected", receipt: "fixture-receipt" })
+    expect(afterSelected).toEqual({
+      _tag: "Busy",
+      generation: selected.generation,
+      state: "Selected",
     })
   })
 

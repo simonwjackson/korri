@@ -94,7 +94,7 @@ export interface SurfaceSettingChoice {
 export type SurfaceSettingInteraction =
   | {
       readonly kind: "action"
-      /** Device action from `SurfaceModel.actions`. */
+      /** Setting-local command id. Pass to `SurfaceHost.runAction` unchanged. */
       readonly actionId: string
       /** Destructive actions should be confirmed by the surface before firing. */
       readonly destructive?: boolean
@@ -279,7 +279,7 @@ export interface SurfaceHost {
    * SurfaceGame publishes launchLocations; otherwise it is absent.
    */
   launchGame(gameId: string, launchLocationId?: string): void
-  /** Run a device-level action from `SurfaceModel.actions`. */
+  /** Run an action id Korri published, either device-level or setting-local. */
   runAction(actionId: string): void
   /** Change an editable setting. Korri validates and republishes the result. */
   changeSetting(settingId: string, value: string): void
