@@ -515,7 +515,8 @@ if grep -F 'rpc ' <<<"$library_focus_source" >/dev/null; then
   exit 1
 fi
 # shellcheck disable=SC2016 # Literal source-contract needle.
-grep -F 'verified_element_center "$navigation_json"' <<<"$library_focus_source" >/dev/null
+grep -F 'verified_library_system_edge_avoiding_point "$navigation_json"' \
+  <<<"$library_focus_source" >/dev/null
 grep -F 'Physical A activation is retained by the human unified-overlay gate' \
   <<<"$library_focus_source" >/dev/null
 traversal_source="$(sed -n '/^traverse_library_to_final_viewport() {/,/^}/p' "$ACCEPTANCE")"
@@ -771,6 +772,11 @@ CENTER_EXTRACTOR="$TMP/verified-element-center.sh"
 sed -n '/^verified_element_center() {/,/^}/p' "$ACCEPTANCE" >"$CENTER_EXTRACTOR"
 # shellcheck source=/dev/null
 source "$CENTER_EXTRACTOR"
+LIBRARY_POINT_EXTRACTOR="$TMP/verified-library-system-edge-avoiding-point.sh"
+sed -n '/^verified_library_system_edge_avoiding_point() {/,/^}/p' \
+  "$ACCEPTANCE" >"$LIBRARY_POINT_EXTRACTOR"
+# shellcheck source=/dev/null
+source "$LIBRARY_POINT_EXTRACTOR"
 cat >"$TMP/focused-wario.svg" <<'SVG'
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="480">
   <rect width="640" height="480" fill="#050505"/>
@@ -797,6 +803,33 @@ cat >"$TMP/focused-library.json" <<'JSON'
 {"view":"home","part":"shift.cine-library-tile","title":"Library","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":407.25,"top":352.5,"width":56,"height":80},"viewport":{"width":640,"height":480}}
 JSON
 [[ "$(verified_element_center "$TMP/focused-library.json")" == '435 392' ]]
+cat >"$TMP/measured-rg405m-library.json" <<'JSON'
+{"view":"home","part":"shift.cine-library-tile","title":"Library","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":407.2203063964844,"top":352.7406311035156,"width":54.59063720703125,"height":81.89999389648438},"viewport":{"width":640,"height":480}}
+JSON
+read -r library_x library_y < <(
+  verified_library_system_edge_avoiding_point "$TMP/measured-rg405m-library.json"
+)
+[[ "$library_x $library_y" == '434 373' ]]
+jq -e --argjson x "$library_x" --argjson y "$library_y" '
+  .bounds as $bounds | .viewport as $viewport
+  | ($bounds.top + ($bounds.height / 2) | floor) as $center_y
+  | $x >= $bounds.left and $x < ($bounds.left + $bounds.width)
+  and $y >= $bounds.top and $y < ($bounds.top + $bounds.height)
+  and $x >= 0 and $x < $viewport.width
+  and $y >= 0 and $y < $viewport.height
+  and $y < $center_y
+' "$TMP/measured-rg405m-library.json" >/dev/null
+[[ "$library_x" =~ ^[0-9]+$ && "$library_y" =~ ^[0-9]+$ ]]
+for invalid_library in \
+  '{"view":"home","part":"shift.cine-settings-tile","title":"Library","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":407.2203063964844,"top":352.7406311035156,"width":54.59063720703125,"height":81.89999389648438},"viewport":{"width":640,"height":480}}' \
+  '{"view":"home","part":"shift.cine-library-tile","title":"Library","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":407.2203063964844,"top":352.7406311035156,"width":54.59063720703125,"height":81.89999389648438},"viewport":{"width":640,"height":400}}'; do
+  printf '%s\n' "$invalid_library" >"$TMP/invalid-library-point.json"
+  if verified_library_system_edge_avoiding_point \
+      "$TMP/invalid-library-point.json" >/dev/null 2>&1; then
+    echo "unsafe or inexact Library bounds produced an edge-avoiding point: $invalid_library" >&2
+    exit 1
+  fi
+done
 for invalid in \
   '{"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":-1,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480}}' \
   '{"gameId":"local-game:wl4","title":"Wario Land 4","focused":true,"rectFinitePositive":true,"fullyOnScreen":true,"bounds":{"left":600,"top":230,"width":82,"height":120},"viewport":{"width":640,"height":480}}' \

@@ -1074,12 +1074,14 @@ focus_wario_in_installed_library() {
     and (.viewport.width > 0) and (.viewport.height > 0)
   ' <<<"$navigation_observation" >/dev/null
   printf '%s\n' "$navigation_observation" >"$navigation_json"
-  if ! read -r tap_x tap_y < <(verified_element_center "$navigation_json"); then
-    echo 'focused Library bounds did not produce a safe on-screen tap coordinate' >&2
+  if ! read -r tap_x tap_y < <(
+    verified_library_system_edge_avoiding_point "$navigation_json"
+  ); then
+    echo 'focused Library bounds did not produce a safe system-edge-avoiding tap coordinate' >&2
     return 1
   fi
   [[ "$tap_x" =~ ^[0-9]+$ && "$tap_y" =~ ^[0-9]+$ ]] || {
-    echo 'focused Library center was not an integer coordinate' >&2
+    echo 'focused Library system-edge-avoiding point was not an integer coordinate' >&2
     return 1
   }
   "${ADB[@]}" shell input tap "$tap_x" "$tap_y"
@@ -1235,6 +1237,42 @@ verified_element_center() {
     | (($bounds.top + ($bounds.height / 2)) | floor) as $y
     | select($x >= 0 and $x < $viewport.width
         and $y >= 0 and $y < $viewport.height)
+    | "\($x) \($y)"
+  ' "$focus_json"
+}
+verified_library_system_edge_avoiding_point() {
+  local focus_json="$1"
+  # The measured RG405M Library tile reaches into the bottom system-edge area.
+  # Keep x centered, but place y in the upper quarter of this exact tile so the
+  # one installed pointer activation cannot be intercepted by that edge.
+  jq -er '
+    def bounded_number:
+      type == "number" and . > -100000 and . < 100000;
+    select(.view == "home" and .part == "shift.cine-library-tile"
+        and .title == "Library" and .focused == true
+        and .rectFinitePositive == true and .fullyOnScreen == true)
+    | .bounds as $bounds | .viewport as $viewport
+    | select($bounds.left | bounded_number)
+    | select($bounds.top | bounded_number)
+    | select($bounds.width | bounded_number)
+    | select($bounds.height | bounded_number)
+    | select($viewport.width | bounded_number)
+    | select($viewport.height | bounded_number)
+    | select($bounds.left >= 0 and $bounds.top >= 0
+        and $bounds.width > 0 and $bounds.height > 0
+        and $viewport.width > 0 and $viewport.height > 0
+        and ($bounds.left + $bounds.width) <= $viewport.width
+        and ($bounds.top + $bounds.height) <= $viewport.height)
+    | (($bounds.left + ($bounds.width / 2)) | floor) as $x
+    | (($bounds.top + ($bounds.height / 4)) | floor) as $y
+    | (($bounds.top + ($bounds.height / 2)) | floor) as $center_y
+    | select($x >= $bounds.left
+        and $x < ($bounds.left + $bounds.width)
+        and $y >= $bounds.top
+        and $y < ($bounds.top + $bounds.height)
+        and $x >= 0 and $x < $viewport.width
+        and $y >= 0 and $y < $viewport.height
+        and $y < $center_y)
     | "\($x) \($y)"
   ' "$focus_json"
 }
