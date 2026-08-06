@@ -263,6 +263,8 @@ if grep -Eq '^(press_guide|invoke_overlay_row)\(\)' "$ACCEPTANCE"; then
   exit 1
 fi
 grep -F 'human_checkpoint open-retroarch-menu' "$ACCEPTANCE" >/dev/null
+grep -F 'human_checkpoint move-retroarch-menu' "$ACCEPTANCE" >/dev/null
+grep -F 'human_checkpoint close-retroarch-menu' "$ACCEPTANCE" >/dev/null
 grep -F 'human_checkpoint resume-from-overlay' "$ACCEPTANCE" >/dev/null
 grep -F 'human_checkpoint quit-retroarch' "$ACCEPTANCE" >/dev/null
 grep -F 'Visually verify the actual Shift gameplay sheet is visible' "$ACCEPTANCE" >/dev/null
@@ -357,36 +359,80 @@ grep -F 'assert_device_awake_and_shell_focused' <<<"$pristine_source" >/dev/null
 grep -F 'assert_single_shell_task_activity' <<<"$pristine_source" >/dev/null
 grep -F 'assert_menu_status 1' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_selection_advanced' "$ACCEPTANCE" >/dev/null
-grep -F 'KEYCODE_DPAD_DOWN' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_menu_status 0' "$ACCEPTANCE" >/dev/null
 overlay_menu_source="$(sed -n '/^STAGE="overlay-menu"/,/^STAGE="save-pause"/p' "$ACCEPTANCE")"
+if grep -Eq 'shell input( -d [^ ]+)? keyevent (KEYCODE_DPAD_DOWN|KEYCODE_BACK)' \
+    <<<"$overlay_menu_source"; then
+  echo 'RetroArch positive native-menu parity must not synthesize DPAD_DOWN or BACK' >&2
+  exit 1
+fi
+grep -F 'synthetic SELECT input is intentionally a non-parity negative probe' \
+  <<<"$overlay_menu_source" >/dev/null
+grep -F 'keyevent KEYCODE_BUTTON_SELECT' <<<"$overlay_menu_source" >/dev/null
+initial_closed_line="$(grep -nF 'assert_menu_status 0' \
+  <<<"$overlay_menu_source" | sed -n '1p' | cut -d: -f1)"
 open_checkpoint_line="$(grep -nF 'human_checkpoint open-retroarch-menu' \
   <<<"$overlay_menu_source" | cut -d: -f1)"
 open_absent_line="$(grep -nF 'assert_overlay_window_absent' \
   <<<"$overlay_menu_source" | head -1 | cut -d: -f1)"
 open_alive_line="$(grep -nF 'assert_menu_status 1' \
   <<<"$overlay_menu_source" | cut -d: -f1)"
+before_move_line="$(grep -nF 'capture_rgui_evidence retroarch-rgui-before-move' \
+  <<<"$overlay_menu_source" | cut -d: -f1)"
+move_checkpoint_line="$(grep -nF 'human_checkpoint move-retroarch-menu' \
+  <<<"$overlay_menu_source" | cut -d: -f1)"
+selection_assert_line="$(grep -nF 'assert_selection_advanced "$menu_selection_before"' \
+  <<<"$overlay_menu_source" | cut -d: -f1)"
+after_move_line="$(grep -nF 'capture_rgui_evidence retroarch-rgui-after-move' \
+  <<<"$overlay_menu_source" | cut -d: -f1)"
+close_checkpoint_line="$(grep -nF 'human_checkpoint close-retroarch-menu' \
+  <<<"$overlay_menu_source" | cut -d: -f1)"
+close_status_line="$(grep -nF 'assert_menu_status 0' \
+  <<<"$overlay_menu_source" | sed -n '2p' | cut -d: -f1)"
+select_probe_line="$(grep -nF 'keyevent KEYCODE_BUTTON_SELECT' \
+  <<<"$overlay_menu_source" | cut -d: -f1)"
+select_closed_line="$(grep -nF 'assert_menu_status 0' \
+  <<<"$overlay_menu_source" | sed -n '3p' | cut -d: -f1)"
 resume_checkpoint_line="$(grep -nF 'human_checkpoint resume-from-overlay' \
   <<<"$overlay_menu_source" | cut -d: -f1)"
 resume_absent_line="$(grep -nF 'assert_overlay_window_absent' \
   <<<"$overlay_menu_source" | tail -1 | cut -d: -f1)"
 resume_closed_line="$(grep -nF 'assert_menu_status 0' \
   <<<"$overlay_menu_source" | tail -1 | cut -d: -f1)"
-[[ -n "$open_checkpoint_line" && -n "$open_absent_line" && -n "$open_alive_line" \
-  && -n "$resume_checkpoint_line" && -n "$resume_absent_line" \
-  && -n "$resume_closed_line" \
+for ordered_line in \
+  initial_closed_line open_checkpoint_line open_absent_line open_alive_line \
+  before_move_line move_checkpoint_line selection_assert_line after_move_line \
+  close_checkpoint_line close_status_line select_probe_line select_closed_line \
+  resume_checkpoint_line resume_absent_line resume_closed_line; do
+  [[ -n "${!ordered_line}" ]] || {
+    echo "RetroArch overlay-menu ordering marker is missing: $ordered_line" >&2
+    exit 1
+  }
+done
+[[ "$initial_closed_line" -lt "$open_checkpoint_line" \
   && "$open_checkpoint_line" -lt "$open_absent_line" \
   && "$open_absent_line" -lt "$open_alive_line" \
-  && "$open_alive_line" -lt "$resume_checkpoint_line" \
+  && "$open_alive_line" -lt "$before_move_line" \
+  && "$before_move_line" -lt "$move_checkpoint_line" \
+  && "$move_checkpoint_line" -lt "$selection_assert_line" \
+  && "$selection_assert_line" -lt "$after_move_line" \
+  && "$after_move_line" -lt "$close_checkpoint_line" \
+  && "$close_checkpoint_line" -lt "$close_status_line" \
+  && "$close_status_line" -lt "$select_probe_line" \
+  && "$select_probe_line" -lt "$select_closed_line" \
+  && "$select_closed_line" -lt "$resume_checkpoint_line" \
   && "$resume_checkpoint_line" -lt "$resume_absent_line" \
   && "$resume_absent_line" -lt "$resume_closed_line" ]] || {
-  echo 'RetroArch physical open-menu and Resume checkpoints must precede their effect assertions' >&2
+  echo 'RetroArch physical menu checkpoints must precede exact authenticated effect assertions' >&2
   exit 1
 }
 for physical_instruction in \
   'Press the physical Guide button.' \
   'Press physical Down exactly once to focus Open RetroArch menu.' \
   'Press physical A exactly once to invoke Open RetroArch menu.' \
+  'Press physical Down exactly once in the native RetroArch menu.' \
+  'Visually verify the native RetroArch menu selection moved down exactly one row.' \
+  'Press physical B exactly once to close the native RetroArch menu.' \
   'Press physical A exactly once on Resume.' \
   'Press physical Down exactly twice to focus Quit game.' \
   'Press physical A exactly once to invoke Quit game.'; do
@@ -470,7 +516,6 @@ udp_log_line="$(grep -nF 'assert_udp_rejection_log "$UDP_REJECTION_LOG_MARKER"' 
   echo 'UDP negative gate must mark immediately before probe, then verify no response and exact rejection logs' >&2
   exit 1
 }
-grep -F 'KEYCODE_BACK' "$ACCEPTANCE" >/dev/null
 grep -F 'enabled_accessibility_services' "$ACCEPTANCE" >/dev/null
 grep -F 'use: "@korri:retroarch/retroarch"' "$WL4_LIBRARY" >/dev/null
 grep -F 'runtime: "@korri:mgba/mgba"' "$WL4_LIBRARY" >/dev/null

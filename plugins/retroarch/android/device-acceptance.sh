@@ -1656,15 +1656,16 @@ assert_overlay_window_absent
 assert_menu_status 1
 menu_selection_before="$(authenticated_retroarch_status "$GATE_CURRENT_LAUNCH" | jq -r '.menuSelection')"
 capture_rgui_evidence retroarch-rgui-before-move
-"${ADB[@]}" shell input -d 0 keyevent KEYCODE_DPAD_DOWN
+human_checkpoint move-retroarch-menu $'On the physical device only:\n  1. Press physical Down exactly once in the native RetroArch menu.\n  2. Visually verify the native RetroArch menu selection moved down exactly one row.'
 sleep 0.5
 assert_selection_advanced "$menu_selection_before"
 capture_rgui_evidence retroarch-rgui-after-move
-"${ADB[@]}" shell input -d 0 keyevent KEYCODE_BACK
+human_checkpoint close-retroarch-menu $'On the physical device only:\n  1. Press physical B exactly once to close the native RetroArch menu.'
 sleep 1
 assert_menu_status 0
-# This configured native shortcut key is sent after the Korri overlay has
-# dismissed; it must not independently reopen RetroArch's menu.
+# This synthetic SELECT input is intentionally a non-parity negative probe:
+# after the Korri overlay has dismissed, the configured native shortcut must
+# not independently reopen RetroArch's menu.
 "${ADB[@]}" shell input -d 0 keyevent KEYCODE_BUTTON_SELECT
 sleep 0.5
 assert_menu_status 0
