@@ -147,22 +147,36 @@ assert_accessibility_service_enabled() {
   }
 }
 
+activity_dump_has_resumed_component() {
+  local activities="$1"
+  local component_needle="$2"
+  local line
+  while IFS= read -r line; do
+    [[ "$line" == *"$component_needle"* ]] || continue
+    if [[ "$line" =~ (^|[[:space:]])(topResumedActivity|mResumedActivity|ResumedActivity)[:=] ]]; then
+      return 0
+    fi
+  done <<<"$activities"
+  return 1
+}
+
 assert_shell_foreground() {
-  "${ADB[@]}" shell "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" \
-    | grep -F "$KORRI_ACTIVITY" >/dev/null
+  local activities
+  activities="$("${ADB[@]}" shell dumpsys activity activities | tr -d '\r')" || return 1
+  activity_dump_has_resumed_component "$activities" "$KORRI_ACTIVITY"
 }
 
 activity_dump_has_live_component() {
   local activities="$1"
   local component_needle="$2"
   local line
+  # A resumed/top record is live regardless of whether this Android build
+  # includes a task id on the same summary line.
+  if activity_dump_has_resumed_component "$activities" "$component_needle"; then
+    return 0
+  fi
   while IFS= read -r line; do
     [[ "$line" == *"$component_needle"* ]] || continue
-    # A resumed/top record is live regardless of whether this Android build
-    # includes a task id on the same summary line.
-    if [[ "$line" =~ (topResumedActivity|mResumedActivity|ResumedActivity)[:=] ]]; then
-      return 0
-    fi
     # ActivityRecord task ids are `t0` and above. Framework bookkeeping may
     # retain destroyed/finishing tombstones as `t-1 f`; those are not tasks.
     if [[ "$line" =~ ActivityRecord\{.*[[:space:]]t[0-9]+([[:space:]}]|$) ]]; then

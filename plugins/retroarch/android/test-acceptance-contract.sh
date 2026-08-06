@@ -226,6 +226,10 @@ grep -F 'existing_korri_pid=' "$ACCEPTANCE" >/dev/null
 grep -F 'am start --display 0 -n "$KORRI_ACTIVITY"' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_accessibility_service_enabled' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_shell_foreground' "$ACCEPTANCE" >/dev/null
+shell_foreground_source="$(sed -n '/^assert_shell_foreground() {/,/^}/p' "$ACCEPTANCE")"
+# shellcheck disable=SC2016 # Literal source-contract needle.
+grep -F 'activity_dump_has_resumed_component "$activities" "$KORRI_ACTIVITY"' \
+  <<<"$shell_foreground_source" >/dev/null
 grep -F 'assert_menu_status 1' "$ACCEPTANCE" >/dev/null
 grep -F 'assert_selection_advanced' "$ACCEPTANCE" >/dev/null
 grep -F 'KEYCODE_DPAD_DOWN' "$ACCEPTANCE" >/dev/null
@@ -375,12 +379,25 @@ for mutation in \
 done
 
 ACTIVITY_PARSER="$TMP/activity-dump-parser.sh"
-sed -n '/^activity_dump_has_live_component() {/,/^}/p' "$ACCEPTANCE" >"$ACTIVITY_PARSER"
+sed -n '/^activity_dump_has_resumed_component() {/,/^}/p' "$ACCEPTANCE" >"$ACTIVITY_PARSER"
+sed -n '/^activity_dump_has_live_component() {/,/^}/p' "$ACCEPTANCE" >>"$ACTIVITY_PARSER"
 # shellcheck source=/dev/null
 source "$ACTIVITY_PARSER"
+SHELL_COMPONENT='com.simonwjackson.korri.debug/com.limelight.KorriShellActivity'
 GAME_COMPONENT='com.simonwjackson.korri.debug/com.limelight.Game'
 FORK_COMPONENT='com.korri.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture'
 STOCK_COMPONENT='com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture'
+for resumed_marker in topResumedActivity mResumedActivity ResumedActivity; do
+  activity_dump_has_resumed_component \
+    "    $resumed_marker: ActivityRecord{778899 u0 $SHELL_COMPONENT t109}" \
+    "$SHELL_COMPONENT"
+done
+if activity_dump_has_resumed_component \
+  "    ResumedActivity: ActivityRecord{778899 u0 $GAME_COMPONENT t109}" \
+  "$SHELL_COMPONENT"; then
+  echo 'resumed activity parser accepted a component other than the exact Korri Shell activity' >&2
+  exit 1
+fi
 # Attached task ids (t0+) are live even when the record is paused/history.
 activity_dump_has_live_component \
   "    mLastPausedActivity: ActivityRecord{ac82bb6 u0 $GAME_COMPONENT t69}" \
