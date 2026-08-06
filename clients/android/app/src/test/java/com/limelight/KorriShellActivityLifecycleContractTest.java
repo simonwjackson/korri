@@ -11,6 +11,24 @@ import static org.junit.Assert.assertTrue;
 
 public class KorriShellActivityLifecycleContractTest {
     @Test
+    public void foregroundShellKeepsItsWindowAwakeWithoutPersistentPowerMutation() throws Exception {
+        String source = source();
+        String onCreate = method(source, "protected void onCreate(Bundle savedInstanceState)",
+                "private boolean notificationsAllowed()");
+
+        assertTrue(source.contains("import android.view.WindowManager;"));
+        assertTrue(onCreate.contains(
+                "getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);"));
+        assertFalse(source.contains("PowerManager"));
+        assertFalse(source.contains("WakeLock"));
+        assertFalse(source.contains("Settings.System.put"));
+        assertFalse(source.contains("Settings.Global.put"));
+        assertFalse(source.contains("Settings.Secure.put"));
+        assertFalse(source.contains("SCREEN_OFF_TIMEOUT"));
+        assertFalse(source.contains("STAY_ON_WHILE_PLUGGED_IN"));
+    }
+
+    @Test
     public void finishedShellRevokesAndDestroysItsOwnedPortalOnMainThread() throws Exception {
         String source = source();
         String onDestroy = method(source, "protected void onDestroy()", "protected void onResume()");
