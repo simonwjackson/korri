@@ -310,7 +310,18 @@ if grep -Eq '^(press_guide|invoke_overlay_row)\(\)' "$ACCEPTANCE"; then
 fi
 grep -F 'human_checkpoint open-retroarch-menu' "$ACCEPTANCE" >/dev/null
 grep -F 'human_checkpoint move-retroarch-menu' "$ACCEPTANCE" >/dev/null
-grep -F 'human_checkpoint close-retroarch-menu' "$ACCEPTANCE" >/dev/null
+grep -F 'human_checkpoint resume-retroarch-menu' "$ACCEPTANCE" >/dev/null
+if grep -F 'human_checkpoint close-retroarch-menu' "$ACCEPTANCE" >/dev/null \
+    || grep -F 'Press physical B exactly once to close the native RetroArch menu.' \
+      "$ACCEPTANCE" >/dev/null; then
+  echo 'RetroArch acceptance must resume from Quick Menu rather than claiming B closes it' >&2
+  exit 1
+fi
+native_resume_checkpoint_contract="$(cat <<'EOF'
+human_checkpoint resume-retroarch-menu $'On the physical device only:\n  1. Press physical Up exactly once to return selection to Resume.\n  2. Visually verify Resume is selected.\n  3. Press physical A exactly once to activate Resume and return to gameplay.'
+EOF
+)"
+grep -Fx "$native_resume_checkpoint_contract" "$ACCEPTANCE" >/dev/null
 grep -F 'human_checkpoint resume-from-overlay' "$ACCEPTANCE" >/dev/null
 grep -F 'human_checkpoint quit-retroarch' "$ACCEPTANCE" >/dev/null
 grep -F 'Visually verify the actual Shift gameplay sheet is visible' "$ACCEPTANCE" >/dev/null
@@ -497,9 +508,9 @@ selection_assert_line="$(grep -nF 'assert_selection_advanced "$menu_selection_be
   <<<"$overlay_menu_source" | cut -d: -f1)"
 after_move_line="$(grep -nF 'capture_rgui_evidence retroarch-rgui-after-move' \
   <<<"$overlay_menu_source" | cut -d: -f1)"
-close_checkpoint_line="$(grep -nF 'human_checkpoint close-retroarch-menu' \
+native_resume_checkpoint_line="$(grep -nF 'human_checkpoint resume-retroarch-menu' \
   <<<"$overlay_menu_source" | cut -d: -f1)"
-close_status_line="$(grep -nF 'assert_menu_status 0' \
+native_resume_status_line="$(grep -nF 'assert_menu_status 0' \
   <<<"$overlay_menu_source" | sed -n '2p' | cut -d: -f1)"
 select_probe_line="$(grep -nF 'keyevent KEYCODE_BUTTON_SELECT' \
   <<<"$overlay_menu_source" | cut -d: -f1)"
@@ -514,7 +525,7 @@ resume_closed_line="$(grep -nF 'assert_menu_status 0' \
 for ordered_line in \
   initial_closed_line open_checkpoint_line open_absent_line open_alive_line \
   before_move_line move_checkpoint_line selection_assert_line after_move_line \
-  close_checkpoint_line close_status_line select_probe_line select_closed_line \
+  native_resume_checkpoint_line native_resume_status_line select_probe_line select_closed_line \
   resume_checkpoint_line resume_absent_line resume_closed_line; do
   [[ -n "${!ordered_line}" ]] || {
     echo "RetroArch overlay-menu ordering marker is missing: $ordered_line" >&2
@@ -528,9 +539,9 @@ done
   && "$before_move_line" -lt "$move_checkpoint_line" \
   && "$move_checkpoint_line" -lt "$selection_assert_line" \
   && "$selection_assert_line" -lt "$after_move_line" \
-  && "$after_move_line" -lt "$close_checkpoint_line" \
-  && "$close_checkpoint_line" -lt "$close_status_line" \
-  && "$close_status_line" -lt "$select_probe_line" \
+  && "$after_move_line" -lt "$native_resume_checkpoint_line" \
+  && "$native_resume_checkpoint_line" -lt "$native_resume_status_line" \
+  && "$native_resume_status_line" -lt "$select_probe_line" \
   && "$select_probe_line" -lt "$select_closed_line" \
   && "$select_closed_line" -lt "$resume_checkpoint_line" \
   && "$resume_checkpoint_line" -lt "$resume_absent_line" \
@@ -544,7 +555,9 @@ for physical_instruction in \
   'Press physical A exactly once to invoke Open RetroArch menu.' \
   'Press physical Down exactly once in the native RetroArch menu.' \
   'Visually verify the native RetroArch menu selection moved down exactly one row.' \
-  'Press physical B exactly once to close the native RetroArch menu.' \
+  'Press physical Up exactly once to return selection to Resume.' \
+  'Visually verify Resume is selected.' \
+  'Press physical A exactly once to activate Resume and return to gameplay.' \
   'Press physical A exactly once on Resume.' \
   'Press physical Down exactly twice to focus Quit game.' \
   'Press physical A exactly once to invoke Quit game.'; do

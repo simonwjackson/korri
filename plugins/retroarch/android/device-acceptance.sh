@@ -1707,7 +1707,7 @@ human_checkpoint move-retroarch-menu $'On the physical device only:\n  1. Press 
 sleep 0.5
 assert_selection_advanced "$menu_selection_before"
 capture_rgui_evidence retroarch-rgui-after-move
-human_checkpoint close-retroarch-menu $'On the physical device only:\n  1. Press physical B exactly once to close the native RetroArch menu.'
+human_checkpoint resume-retroarch-menu $'On the physical device only:\n  1. Press physical Up exactly once to return selection to Resume.\n  2. Visually verify Resume is selected.\n  3. Press physical A exactly once to activate Resume and return to gameplay.'
 sleep 1
 assert_menu_status 0
 # This synthetic SELECT input is intentionally a non-parity negative probe:
