@@ -179,6 +179,23 @@ let
       '';
     };
 
+    odin2portal-signed-avb-dry-run = {
+      description = "Build and verify a non-flashable signed AVB chain for the Odin 2 Portal marker image.";
+      runtimeInputs = odin2portalStockRepack.signedAvbRuntimeInputs;
+      usageSuffix = " -- <stock-source> <private-key> <output>";
+      script = ''
+        exec "$KORRI_ROOT/clients/android/firmware/odin2portal/signed-avb-dry-run.sh" "$@"
+      '';
+    };
+
+    odin2portal-signed-avb-dry-run-check = {
+      description = "Test the Odin 2 Portal signed AVB dry-run guards and optional private-source pipeline.";
+      runtimeInputs = odin2portalStockRepack.signedAvbRuntimeInputs;
+      script = ''
+        exec "$KORRI_ROOT/clients/android/firmware/odin2portal/test-signed-avb-dry-run.sh"
+      '';
+    };
+
     odin2portal-rollback-bundle = {
       description = "Stage the exact Odin 2 Portal stock Android rollback images without device writes.";
       runtimeInputs = odin2portalStockRepack.rollbackRuntimeInputs;

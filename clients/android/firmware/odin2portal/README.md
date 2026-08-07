@@ -55,6 +55,23 @@ The result is deliberately not flashable. AYN's signed root AVB chain remains un
 
 Before publication, the marker command proves that the source and staged inputs match the exact-build contract, `build.prop` equals its stock content plus the exact comment, ext4 is clean, the unsigned product and `vbmeta_system` chain verifies on the host, all other logical bytes are unchanged, slot-B placeholders remain empty, and the rebuilt container has the stock physical size. It publishes partition-shaped files only under `NON_FLASHABLE_ARTIFACTS/` with `.not-flashable` suffixes.
 
+## Build the signed AVB dry run
+
+```console
+nix run .#odin2portal-signed-avb-dry-run -- \
+  /path/to/odin2portal-stock-130 \
+  /private/path/korri-odin2portal-avb.pem \
+  /path/to/signed-avb-output
+```
+
+The private key must be the selected Korri RSA-4096 PEM file with mode `0600`. Its encoded public-key SHA-256 must match the tracked public identity contract. The key stays outside Git and is copied only to temporary memory during the command.
+
+The command first rebuilds the marker image from the verified stock source. It does not trust an external marker directory. The output contains the rebuilt marker `super` image, the encoded public key, signed root and system `vbmeta` images, and verification evidence. It does not contain the private key.
+
+The command preserves the AYN `boot` and `recovery` chain keys. It replaces the root signing key and the `vbmeta_system` chain key with the Korri key. The bootloader must stay unlocked.
+
+This output is not flashable. Read `SIGNED-AVB-NOT-FLASHABLE.md`. The selected home and Towada key copies are private but not encrypted. Complete the separate offline encryption before any installation.
+
 ## Stock repack guarantees
 
 Before publishing stock repack output, the command proves:
@@ -83,6 +100,7 @@ The cost is a temporary second 5.68 GB `super.img` plus unpacked working data. A
 nix run .#odin2portal-stock-repack-check
 nix run .#odin2portal-rollback-bundle-check
 nix run .#odin2portal-marker-dry-run-check
+nix run .#odin2portal-signed-avb-dry-run-check
 ```
 
 The public checks use small fixtures for mutation and rejection behavior. The marker check also runs the full pipeline when the private stock capture is supplied:
@@ -90,6 +108,10 @@ The public checks use small fixtures for mutation and rejection behavior. The ma
 ```console
 ODIN2PORTAL_STOCK_SOURCE=/path/to/odin2portal-stock-130 \
   nix run .#odin2portal-marker-dry-run-check
+
+ODIN2PORTAL_STOCK_SOURCE=/path/to/odin2portal-stock-130 \
+ODIN2PORTAL_AVB_PRIVATE_KEY=/private/path/korri-odin2portal-avb.pem \
+  nix run .#odin2portal-signed-avb-dry-run-check
 ```
 
 The checks cover successful publication, source immutability, exact build and slot gates, checksum and layout rejection, and refusal to overwrite output.
