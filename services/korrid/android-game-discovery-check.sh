@@ -558,8 +558,8 @@ assert_two_u9_games_unavailable() {
   response="$(rpc "$label local-games list" '{"_tag":"app.local-games.list","payload":{}}')"
   if ! jq -e --argjson selectedLocationIds "$selected_location_ids" '
     .outcome._tag == "Ok"
-    and (.outcome.payload.games | length) == 0
-    and (.outcome.payload.failures | length) == 2
+    and .outcome.payload.games == []
+    and (.outcome.payload.failures | type == "array" and length == 2)
     and all(.outcome.payload.failures[];
       .code == "LocalRouteUnavailable"
       and (.message as $message
