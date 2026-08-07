@@ -686,11 +686,15 @@ fi
 if ! awk '
   /assert_two_u9_games_listable "after all-files recovery"/ { recovery = NR }
   /launch_local_spec "\$launch_response"/ { launch = NR; after_launch = 1; next }
+  after_launch && /wait_retroarch_resumed_after_launch/ { foreground = NR }
   after_launch && (/rpc "/ || /rescan "/ || /wait_discovery_idle/ || /assert_two_u9_games_listable/) {
     rpc_dependent_after_launch = 1
   }
   /Android game discovery check passed on/ { success = NR }
-  END { exit !(recovery && launch > recovery && success > launch && !rpc_dependent_after_launch) }
+  END {
+    exit !(recovery && launch > recovery && foreground > launch && success > foreground
+      && !rpc_dependent_after_launch)
+  }
 ' "$ANDROID_GAME_DISCOVERY"; then
   echo 'android-game-discovery launch must remain the terminal proof after every RPC-based recovery assertion' >&2
   exit 1
@@ -805,7 +809,7 @@ if ! awk '
   exit 1
 fi
 if ! awk '
-  /set_appop_and_require_effective_mode deny deny ignore/ { deny = NR }
+  /set_appop_and_require_effective_mode ignore ignore/ { deny = NR }
   /restart_portal_and_recover "after all-files denial"/ { deny_restart = NR }
   /rescan "with all-files denied"/ { denied_rescan = NR }
   /set_appop_and_require_effective_mode allow allow/ { allow = NR }
@@ -833,8 +837,8 @@ if grep -F -- '--retry' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
   echo 'android-game-discovery-check.sh must not apply blind curl retries to RPC mutations' >&2
   exit 1
 fi
-if ! grep -F 'set_appop_and_require_effective_mode deny deny ignore' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
-  echo 'android-game-discovery-check.sh must require effective MANAGE_EXTERNAL_STORAGE denial before the denial rescan' >&2
+if ! grep -F 'set_appop_and_require_effective_mode ignore ignore' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must request and require effective MANAGE_EXTERNAL_STORAGE ignore before the denial rescan' >&2
   exit 1
 fi
 if ! grep -F 'set_appop_and_require_effective_mode allow allow' "$ANDROID_GAME_DISCOVERY" >/dev/null; then

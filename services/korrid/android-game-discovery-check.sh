@@ -653,7 +653,7 @@ if ! jq -e 'length > 0' <<<"$selected_location_ids" >/dev/null; then
   echo "No selected discovery locations were available before all-files denial" >&2
   exit 1
 fi
-set_appop_and_require_effective_mode deny deny ignore
+set_appop_and_require_effective_mode ignore ignore
 restart_portal_and_recover "after all-files denial"
 rescan "with all-files denied"
 denied_snapshot="$(rpc "denied all-files snapshot" '{"_tag":"app.discovery.snapshot","payload":{}}')"
