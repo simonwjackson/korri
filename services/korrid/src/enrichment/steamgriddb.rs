@@ -631,7 +631,7 @@ fn grids_for_game(
         .query(&[
             ("dimensions", "512x512"),
             ("types", "static"),
-            ("styles", "alternate,blurred,material,white,black"),
+            ("styles", "alternate,blurred,material,no_logo"),
         ])
         .send()
         .map_err(|error| RequestFailure::Transient(error.to_string()))?;

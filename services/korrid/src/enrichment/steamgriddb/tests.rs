@@ -2,6 +2,7 @@ use super::asset_download::{download_image, download_image_with_policy, is_publi
 use super::*;
 use crate::{config::settings, discovery::reconcile::DiscoveryCoordinator};
 use std::{
+    collections::BTreeSet,
     io::{Read, Write},
     net::TcpListener,
     sync::{Arc, Condvar, Mutex},
@@ -262,7 +263,7 @@ fn chooses_spec_response_grid_without_declared_dimensions() {
 }
 
 #[test]
-fn grids_request_uses_provider_supported_square_dimensions() {
+fn grids_request_uses_provider_supported_square_dimensions_and_styles() {
     let (base, requests, handle) = api_server(vec![
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 11\r\n\r\n{\"data\":[]}",
     ]);
@@ -274,6 +275,21 @@ fn grids_request_uses_provider_supported_square_dimensions() {
     assert!(grids.is_empty());
     let captured = requests.lock().unwrap().join("\n");
     assert!(captured.contains("dimensions=512x512"), "{captured}");
+    let request_target = captured
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .expect("request target");
+    let request_url =
+        Url::parse(&format!("http://localhost{request_target}")).expect("captured request URL");
+    let styles = request_url
+        .query_pairs()
+        .find_map(|(key, value)| (key == "styles").then_some(value))
+        .expect("styles query");
+    assert_eq!(
+        styles.split(',').collect::<BTreeSet<_>>(),
+        BTreeSet::from(["alternate", "blurred", "material", "no_logo"])
+    );
     assert!(!captured.contains("dimensions=1x1"), "{captured}");
 }
 
