@@ -105,6 +105,13 @@ is no such concern, propose no schema change.
 - Android's user-visible Korri root is exactly
   `/storage/emulated/0/korri`. Product code must not recognize older root
   names; device cutovers are performed and verified outside the runtime.
+- Keep the AYN Odin 2 Portal bootloader unlocked for stock-based custom
+  firmware. Installation and recovery tools must verify the unlocked state and
+  stop if the device is locked. They must not contain or run a bootloader lock
+  or relock operation. The unlocked state permits AVB key replacement and stock
+  rollback if a private signing key is lost. Any bootloader state change is a
+  separate destructive operation that needs explicit user approval. Document
+  the orange startup warning and the reduced protection from physical access.
 - Services are Rust. Wire types live in Rust and are exported through
   Typeshare into `contracts/generated/` — those files are read-only;
   regenerate them via `nix run .#korrid-check`, never edit by hand.
