@@ -815,12 +815,7 @@ if ! awk '
   /set_appop_and_require_effective_mode allow allow/ { allow = NR }
   /restart_portal_and_recover "after all-files recovery"/ { allow_restart = NR }
   /rescan "after all-files recovery"/ { recovery_rescan = NR }
-  END {
-    exit !(deny && unavailable > deny && deny_restart > unavailable
-      && denied_rescan > deny_restart && unavailable_routes > denied_rescan
-      && restored > unavailable_routes && allow > restored && allow_restart > allow
-      && recovery_rescan > allow_restart)
-  }
+  END { exit !(deny && unavailable > deny && deny_restart > unavailable && denied_rescan > deny_restart && unavailable_routes > denied_rescan && restored > unavailable_routes && allow > restored && allow_restart > allow && recovery_rescan > allow_restart) }
 ' "$ANDROID_GAME_DISCOVERY"; then
   echo 'android-game-discovery-check.sh must make only its fixtures unavailable, report unavailable routes, restore fixtures, and recover fresh RPC authority' >&2
   exit 1
