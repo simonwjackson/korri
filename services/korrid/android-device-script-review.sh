@@ -691,10 +691,7 @@ if ! awk '
     rpc_dependent_after_launch = 1
   }
   /Android game discovery check passed on/ { success = NR }
-  END {
-    exit !(recovery && launch > recovery && foreground > launch && success > foreground
-      && !rpc_dependent_after_launch)
-  }
+  END { exit !(recovery && launch > recovery && foreground > launch && success > foreground && !rpc_dependent_after_launch) }
 ' "$ANDROID_GAME_DISCOVERY"; then
   echo 'android-game-discovery launch must remain the terminal proof after every RPC-based recovery assertion' >&2
   exit 1
