@@ -27,7 +27,7 @@ import type {
   SettingsSnapshotOutcome,
   SettingsUpdateOutcome,
 } from "@contracts/generated/korrid"
-import { SessionStopPhase } from "@contracts/generated/korrid"
+import { SecretSettingStatus, SessionStopPhase } from "@contracts/generated/korrid"
 import { createInputBus, type InputBus } from "../input/bus"
 import { createSpatialFocusController } from "../input/spatial-focus"
 import type { LauncherBridge } from "../bridge/launcher-bridge"
@@ -150,6 +150,7 @@ function okSettings(): SettingsSnapshotOutcome {
         { id: "@korri:mgba", title: "mGBA", enabled: true },
         { id: "@korri:retroarch", title: "RetroArch", enabled: true },
       ],
+      steamGridDbCredential: SecretSettingStatus.NotConfigured,
     },
   }
 }
@@ -164,6 +165,38 @@ function buildKorrid(sources: Sources, calls: Calls): KorridClient {
     },
     async updateSetting(): Promise<SettingsUpdateOutcome> {
       return okSettings()
+    },
+    async setSteamGridDbCredential() {
+      return {
+        _tag: "Ok" as const,
+        payload: { status: SecretSettingStatus.Configured },
+      }
+    },
+    async clearSteamGridDbCredential() {
+      return {
+        _tag: "Ok" as const,
+        payload: { status: SecretSettingStatus.NotConfigured },
+      }
+    },
+    async discoverySnapshot() {
+      return {
+        _tag: "Ok" as const,
+        payload: {
+          generation: "discovery-0",
+          state: { _tag: "Idle" as const, payload: {} },
+          locations: [],
+          diagnostics: [],
+        },
+      }
+    },
+    async registerDiscoveryReceipt() {
+      return this.discoverySnapshot()
+    },
+    async removeDiscoveryLocation() {
+      return this.discoverySnapshot()
+    },
+    async rescanDiscovery() {
+      return this.discoverySnapshot()
     },
     async catalogSnapshot(): Promise<CatalogSnapshotOutcome> {
       return okCatalog(sources.remoteGames)
@@ -243,6 +276,9 @@ function buildBridge(sources: Sources, calls: Calls): LauncherBridge {
     async launchLocal(_spec): Promise<LaunchLocalResult> {
       return { _tag: "Launched" }
     },
+    async localGameAssetUrl() {
+      return { _tag: "Absent" as const }
+    },
     async queryStreamHosts(): Promise<QueryStreamHostsResult> {
       return { _tag: "StreamHosts", items: [...sources.streamHosts] }
     },
@@ -280,6 +316,15 @@ function buildBridge(sources: Sources, calls: Calls): LauncherBridge {
     },
     async openNotificationSettings() {
       return { _tag: "Opened" as const }
+    },
+    async openGameFolderPicker() {
+      return { _tag: "Unavailable" as const, message: "no picker in this fixture" }
+    },
+    async gameFolderPickerSnapshot() {
+      return { version: 1 as const, generation: "picker-0", state: { _tag: "Idle" as const } }
+    },
+    async acknowledgeGameFolderPicker(generation) {
+      return { _tag: "Acknowledged" as const, generation }
     },
     async systemInfo() {
       return {

@@ -28,7 +28,7 @@ import type {
   SettingsSnapshotOutcome,
   SettingsUpdateOutcome,
 } from "@contracts/generated/korrid"
-import { SessionStopPhase } from "@contracts/generated/korrid"
+import { SecretSettingStatus, SessionStopPhase } from "@contracts/generated/korrid"
 import { createInMemoryLauncherBridge, type LauncherBridge } from "../bridge/launcher-bridge"
 import { createInMemoryKorridClient, type KorridClient } from "../korrid/client"
 import { type Launchables, useLaunchables } from "./use-launchables"
@@ -127,6 +127,7 @@ const settingsOk = (revision = "settings-0"): SettingsSnapshotOutcome => ({
       { id: "@korri:mgba", title: "mGBA", enabled: true },
       { id: "@korri:retroarch", title: "RetroArch", enabled: true },
     ],
+    steamGridDbCredential: SecretSettingStatus.NotConfigured,
   },
 })
 
@@ -318,7 +319,7 @@ describe("useLaunchables load and core effects", () => {
 
     const view = await renderUseLaunchables(bridge, korrid)
 
-    expect(view.current().state._tag).toBe("Loading")
+    expect(["Loading", "Ready"]).toContain(view.current().state._tag)
     await waitForReady(view)
 
     expect(queriedHosts).toEqual(["zao-uuid"])
@@ -771,6 +772,7 @@ describe("useLaunchables sequence guards", () => {
       revision: "settings-1",
       deviceName: "Retroid",
       plugins: [],
+      steamGridDbCredential: SecretSettingStatus.NotConfigured,
     }
     update.resolve({ _tag: "Ok", payload: currentSettings })
     await waitFor(

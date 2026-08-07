@@ -271,6 +271,15 @@ export interface RetroarchSessionTelemetry {
 	menuSelection: number;
 }
 
+export enum SecretSettingStatus {
+	Configured = "Configured",
+	NotConfigured = "NotConfigured",
+}
+
+export interface SensitiveSettingResult {
+	status: SecretSettingStatus;
+}
+
 export type SessionControlInteraction =
 	| { kind: "command", payload?: undefined }
 	| { kind: "toggle", payload: {
@@ -345,15 +354,6 @@ export interface SessionControlsRequest {
 	launchId: string;
 }
 
-export enum SecretSettingStatus {
-	Configured = "Configured",
-	NotConfigured = "NotConfigured",
-}
-
-export interface SensitiveSettingResult {
-	status: SecretSettingStatus;
-}
-
 export interface SessionPrepareRequest {
 	gameId: string;
 	host?: string;
@@ -403,6 +403,13 @@ export interface SettingsUpdateRequest {
 	value: string;
 }
 
+export interface SteamGridDbCredentialClearRequest {
+}
+
+export interface SteamGridDbCredentialSetRequest {
+	token: string;
+}
+
 export enum AndroidMoonlightEffect {
 	Disconnect = "disconnect",
 	QuitHost = "quit-host",
@@ -422,14 +429,6 @@ export enum AndroidMoonlightEffect {
 	SetFaceButtonFlip = "set-face-button-flip",
 	SetRumble = "set-rumble",
 	SetPictureInPicture = "set-picture-in-picture",
-
-}
-
-export interface SteamGridDbCredentialClearRequest {
-}
-
-export interface SteamGridDbCredentialSetRequest {
-	token: string;
 }
 
 export type CatalogSnapshotOutcome =
