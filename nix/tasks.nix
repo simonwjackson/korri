@@ -17,6 +17,7 @@ let
   };
 
   retroarch = import ../plugins/retroarch/android/sdk.nix { inherit pkgs; };
+  odin2portalStockRepack = import ../clients/android/firmware/odin2portal/sdk.nix { inherit pkgs; };
 
   androidInputs = [
     android.jdk
@@ -158,6 +159,23 @@ let
         ${androidSetup}
         cd "$KORRI_ROOT/clients/android"
         exec ./gradlew testDebugUnitTest "$@"
+      '';
+    };
+
+    odin2portal-stock-repack = {
+      description = "Reconstruct and verify a stock-equivalent Odin 2 Portal super image without device writes.";
+      runtimeInputs = odin2portalStockRepack.runtimeInputs;
+      usageSuffix = " -- <stock-source-directory> <output-directory>";
+      script = ''
+        exec "$KORRI_ROOT/clients/android/firmware/odin2portal/repack.sh" "$@"
+      '';
+    };
+
+    odin2portal-stock-repack-check = {
+      description = "Test the fail-closed, read-only Odin 2 Portal stock reconstruction pipeline.";
+      runtimeInputs = odin2portalStockRepack.runtimeInputs;
+      script = ''
+        exec "$KORRI_ROOT/clients/android/firmware/odin2portal/test-repack.sh"
       '';
     };
 
