@@ -859,8 +859,9 @@ if ! grep -F 'Primary Android game discovery check status was' "$ANDROID_GAME_DI
   exit 1
 fi
 # shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
-if ! grep -F 'appops set '\''$PKG'\'' MANAGE_EXTERNAL_STORAGE '\''$PRIOR_APPOP_MODE'\''' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
-  echo 'android-game-discovery-check.sh must restore the captured MANAGE_EXTERNAL_STORAGE app-op mode on exit' >&2
+if ! grep -F 'cmd appops set --uid '\''$PKG'\'' MANAGE_EXTERNAL_STORAGE '\''$PRIOR_UID_APPOP_MODE'\''' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'Uid mode: MANAGE_EXTERNAL_STORAGE:' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must capture, set, verify, and restore the MANAGE_EXTERNAL_STORAGE UID app-op mode' >&2
   exit 1
 fi
 

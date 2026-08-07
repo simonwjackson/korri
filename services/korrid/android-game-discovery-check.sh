@@ -41,7 +41,7 @@ CONFIG_WAS_PRESENT=false
 LIBRARY_WAS_PRESENT=false
 CHECKPOINT_RESTORE_NEEDED=false
 PRIVATE_STATE_MOVED=false
-PRIOR_APPOP_MODE=""
+PRIOR_UID_APPOP_MODE=""
 PRIOR_TOP_ACTIVITY=""
 RUN_DIR=""
 
@@ -282,25 +282,25 @@ restore_private_state() {
   }
 }
 
-current_appop_mode() {
+current_uid_appop_mode() {
   local line
   local mode
-  line="$(adb_shell_capture "appops get '$PKG' MANAGE_EXTERNAL_STORAGE 2>/dev/null || true" | tr -d '\r' || true)"
-  mode="$(printf '%s\n' "$line" | sed -nE 's/.*MANAGE_EXTERNAL_STORAGE: ([a-z_]+).*/\1/p' | tail -1)"
+  line="$(adb_shell_capture "cmd appops get '$PKG' MANAGE_EXTERNAL_STORAGE 2>/dev/null || true" | tr -d '\r' || true)"
+  mode="$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*Uid mode: MANAGE_EXTERNAL_STORAGE: ([a-z_]+).*/\1/p' | tail -1)"
   printf '%s\n' "${mode:-default}"
 }
 
 capture_appop() {
-  PRIOR_APPOP_MODE="$(current_appop_mode)"
-  printf 'Prior MANAGE_EXTERNAL_STORAGE app-op: %s\n' "$PRIOR_APPOP_MODE"
+  PRIOR_UID_APPOP_MODE="$(current_uid_appop_mode)"
+  printf 'Prior MANAGE_EXTERNAL_STORAGE UID app-op: %s\n' "$PRIOR_UID_APPOP_MODE"
 }
 
 restore_appop() {
-  if [[ -z "$PRIOR_APPOP_MODE" ]]; then
+  if [[ -z "$PRIOR_UID_APPOP_MODE" ]]; then
     return 0
   fi
-  adb_target -s "$SERIAL" shell "appops set '$PKG' MANAGE_EXTERNAL_STORAGE '$PRIOR_APPOP_MODE'" >/dev/null 2>&1 || {
-    echo "Android game discovery check failed to restore MANAGE_EXTERNAL_STORAGE app-op to $PRIOR_APPOP_MODE" >&2
+  adb_target -s "$SERIAL" shell "cmd appops set --uid '$PKG' MANAGE_EXTERNAL_STORAGE '$PRIOR_UID_APPOP_MODE'" >/dev/null 2>&1 || {
+    echo "Android game discovery check failed to restore MANAGE_EXTERNAL_STORAGE UID app-op to $PRIOR_UID_APPOP_MODE" >&2
     return 1
   }
 }
@@ -310,15 +310,15 @@ set_appop_and_require_effective_mode() {
   shift
   local expected_modes=("$@")
   local effective=""
-  adb_target -s "$SERIAL" shell "appops set '$PKG' MANAGE_EXTERNAL_STORAGE '$requested'" >/dev/null
-  effective="$(current_appop_mode)"
+  adb_target -s "$SERIAL" shell "cmd appops set --uid '$PKG' MANAGE_EXTERNAL_STORAGE '$requested'" >/dev/null
+  effective="$(current_uid_appop_mode)"
   for mode in "${expected_modes[@]}"; do
     if [[ "$effective" == "$mode" ]]; then
-      printf 'MANAGE_EXTERNAL_STORAGE app-op after %s: %s\n' "$requested" "$effective"
+      printf 'MANAGE_EXTERNAL_STORAGE UID app-op after %s: %s\n' "$requested" "$effective"
       return 0
     fi
   done
-  echo "Expected MANAGE_EXTERNAL_STORAGE app-op after $requested to be one of: ${expected_modes[*]}; got $effective" >&2
+  echo "Expected MANAGE_EXTERNAL_STORAGE UID app-op after $requested to be one of: ${expected_modes[*]}; got $effective" >&2
   exit 1
 }
 
