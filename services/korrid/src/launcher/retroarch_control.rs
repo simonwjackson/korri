@@ -584,6 +584,7 @@ mod tests {
                 "ROM".into(),
                 "/storage/emulated/0/korri/roms/wl4.gba".into(),
             )]),
+            authorized_content_root: None,
             directories: vec![],
             files: vec![],
             integrity: "verified outside this module".into(),

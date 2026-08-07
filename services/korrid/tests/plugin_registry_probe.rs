@@ -43,14 +43,16 @@ const MGBA_ENABLED_REPORT: &str = concat!(
     "plugin: @korri:mgba\n",
     "registered: yes\n",
     "enabled: yes\n",
-    "registered-session-control: none\n",
+    "registered-session-control: @korri:retroarch/open-menu\n",
+    "registered-session-control: @korri:retroarch/quit\n",
     "provider: @korri:mgba\n",
     "system: gba\n",
     "launcher: none\n",
     "transport: none\n",
     "runtime: @korri:mgba/mgba\n",
     "discovery: @korri:mgba/gba-files\n",
-    "session-control: none\n",
+    "session-control: @korri:retroarch/open-menu\n",
+    "session-control: @korri:retroarch/quit\n",
 );
 
 const RETROARCH_ENABLED_REPORT: &str = concat!(

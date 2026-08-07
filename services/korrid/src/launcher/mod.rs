@@ -508,10 +508,6 @@ mod tests {
             CHECKPOINT_LIBRARY.replace("path: wl4.gba", "path: ../outside.gba"),
             CHECKPOINT_LIBRARY.replace("storage: roms", "storage: outside"),
             CHECKPOINT_LIBRARY.replace(
-                "path: wl4.gba",
-                "path: wl4.gba\n          discovery:\n            first-seen-at: 2026-08-02",
-            ),
-            CHECKPOINT_LIBRARY.replace(
                 "runtime: \"@korri:mgba/mgba\"",
                 "runtime: \"@korri:retroarch/missing\"",
             ),

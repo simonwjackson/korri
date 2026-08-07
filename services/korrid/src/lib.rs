@@ -5499,12 +5499,14 @@ command = ["sh", "-c", "sleep 1"]
         }
 
         let root = tempfile::tempdir().unwrap();
+        let private_root = tempfile::tempdir().unwrap();
         write_wl4_plugin_config(root.path());
         std::fs::create_dir_all(root.path().join("roms")).unwrap();
         std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
         let first_port = start_local_server(
             "https://portal.example",
             root.path().to_str().expect("UTF-8 temp path"),
+            private_root.path().to_str().expect("UTF-8 temp path"),
         )
         .unwrap();
         let _stop = StopServer;
@@ -5532,6 +5534,7 @@ command = ["sh", "-c", "sleep 1"]
         let second_port = start_local_server(
             "https://portal.example",
             root.path().to_str().expect("UTF-8 temp path"),
+            private_root.path().to_str().expect("UTF-8 temp path"),
         )
         .unwrap();
         let second_capability = local_server_capability().unwrap();
