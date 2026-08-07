@@ -372,14 +372,65 @@ register_folder() {
   run_discovery_instrumentation register -e gameFolderPath "$folder"
 }
 
+resumed_activity() {
+  adb_shell_capture "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" | tr -d '\r' || true
+}
+
+retroarch_is_resumed() {
+  local activity="$1"
+  grep -F "$RETROARCH_PKG/" <<<"$activity" >/dev/null
+}
+
+assert_retroarch_not_resumed() {
+  local activity=""
+  activity="$(resumed_activity)"
+  if retroarch_is_resumed "$activity"; then
+    echo "RetroArch is already foreground before launch scheduling: $activity" >&2
+    exit 1
+  fi
+  printf 'Top activity before discovered launch: %s\n' "${activity:-unknown}"
+}
+
+wait_retroarch_resumed_after_launch() {
+  local activity=""
+  for _ in $(seq 1 40); do
+    activity="$(resumed_activity)"
+    if retroarch_is_resumed "$activity"; then
+      printf 'Final top activity after discovered launch: %s\n' "$activity"
+      return 0
+    fi
+    sleep 0.5
+  done
+  printf 'Final top activity after discovered launch: %s\n' "${activity:-unknown}"
+  echo "Discovered launch did not foreground RetroArch package $RETROARCH_PKG" >&2
+  exit 1
+}
+
 launch_local_spec() {
-  local spec_json="$1"
+  local launch_response="$1"
   local compact_spec_json=""
+  local envelope_json=""
   local helper_stderr=""
   local launch_result=""
-  compact_spec_json="$(jq -c . <<<"$spec_json")"
+  compact_spec_json="$(jq -c '.outcome.payload' <<<"$launch_response")"
+  envelope_json="$(
+    {
+      printf '%s\n' "$compact_spec_json"
+      printf '%s\n' "$RPC_PORT"
+      printf '%s' "$RPC_CAPABILITY"
+    } | jq -Rsc '
+      split("\n") as $parts
+      | {
+          expectedSigner: {
+            port: ($parts[1] | tonumber),
+            capability: $parts[2]
+          },
+          spec: ($parts[0] | fromjson)
+        }
+    '
+  )"
   helper_stderr="$(mktemp)"
-  if ! launch_result="$(printf '%s' "$compact_spec_json" \
+  if ! launch_result="$(printf '%s' "$envelope_json" \
     | "$DEBUG_LAUNCH_LOCAL_SH" "$SERIAL" "$PKG" "$DEVTOOLS_HOST_PORT" 2>"$helper_stderr")"; then
     echo 'Trusted same-process portal launchLocal helper failed' >&2
     if [[ -s "$helper_stderr" ]]; then
@@ -389,11 +440,11 @@ launch_local_spec() {
     exit 1
   fi
   rm -f "$helper_stderr"
-  if ! jq -e '. == {"_tag":"Launched"}' <<<"$launch_result" >/dev/null; then
-    echo 'Trusted same-process portal launchLocal helper returned an unexpected result' >&2
+  if ! jq -e '. == {"_tag":"LaunchScheduled"}' <<<"$launch_result" >/dev/null; then
+    echo 'Trusted same-process portal launchLocal helper returned an unexpected schedule ack' >&2
     exit 1
   fi
-  printf 'Trusted same-process portal launchLocal result: Launched\n'
+  printf 'Trusted same-process portal launchLocal schedule ack: LaunchScheduled\n'
 }
 
 recover_rpc_details() {
@@ -615,13 +666,9 @@ if ! jq -e '
   echo "Discovered game did not produce the signed RetroArch+mGBA launch route: $launch_response" >&2
   exit 1
 fi
-launch_local_spec "$(jq -c '.outcome.payload' <<<"$launch_response")"
-top_after_launch="$(adb_shell_capture "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" | tr -d '\r' || true)"
-printf 'Top activity after discovered launch: %s\n' "$top_after_launch"
-if ! grep -F "$RETROARCH_PKG/" <<<"$top_after_launch" >/dev/null; then
-  echo "Discovered launch did not foreground RetroArch: $top_after_launch" >&2
-  exit 1
-fi
+assert_retroarch_not_resumed
+launch_local_spec "$launch_response"
+wait_retroarch_resumed_after_launch
 
 selected_location_ids="$(rpc "selected locations snapshot" '{"_tag":"app.discovery.snapshot","payload":{}}' \
   | jq -c '.outcome.payload.locations | map(.id)')"

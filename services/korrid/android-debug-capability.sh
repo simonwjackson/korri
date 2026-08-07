@@ -36,16 +36,80 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=services/korrid/android-debug-portal-target.sh
 source "$SCRIPT_DIR/android-debug-portal-target.sh"
 
-pid="$("${ADB[@]}" shell pidof "$package" | tr -d '\r\n')"
-[[ "$pid" =~ ^[0-9]+$ ]] || { echo 'Korri process is missing or ambiguous' >&2; exit 1; }
-"${ADB[@]}" forward --remove "tcp:$devtools_port" >/dev/null 2>&1 || true
-"${ADB[@]}" forward "tcp:$devtools_port" "localabstract:webview_devtools_remote_$pid" >/dev/null
-# Invoked by EXIT trap.
-# shellcheck disable=SC2329
+FORWARD_ACTIVE=false
 cleanup() {
-  "${ADB[@]}" forward --remove "tcp:$devtools_port" >/dev/null 2>&1 || true
+  local status=$?
+  local cleanup_status=0
+  trap - EXIT INT TERM
+  set +e
+  if [[ "$FORWARD_ACTIVE" == true ]]; then
+    "$TIMEOUT_BIN" 10 "${ADB[@]}" forward --remove "tcp:$devtools_port" >/dev/null 2>&1
+    cleanup_status=$?
+    FORWARD_ACTIVE=false
+    if [[ "$cleanup_status" -ne 0 ]]; then
+      if [[ "$status" -eq 0 ]]; then
+        echo 'failed to remove trusted portal DevTools forward during cleanup' >&2
+        exit 1
+      fi
+      echo "trusted portal DevTools forward cleanup also failed; preserving primary status $status" >&2
+    fi
+  fi
+  exit "$status"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+bounded_adb_capture() {
+  local output_file="$1"
+  local error_file="$2"
+  shift 2
+  local status=0
+  "$TIMEOUT_BIN" 10 "${ADB[@]}" "$@" >"$output_file" 2>"$error_file"
+  status=$?
+  return "$status"
+}
+
+pid_stdout="$(mktemp)"
+pid_stderr="$(mktemp)"
+pid_status=0
+set +e
+bounded_adb_capture "$pid_stdout" "$pid_stderr" shell pidof "$package"
+pid_status=$?
+set -e
+pid="$(tr -d '\r\n' <"$pid_stdout")"
+if [[ "$pid_status" -ne 0 || ! "$pid" =~ ^[0-9]+$ ]]; then
+  echo 'Korri process is missing or ambiguous' >&2
+  if [[ -s "$pid_stdout" ]]; then
+    sed 's/^/pidof stdout: /' "$pid_stdout" >&2
+  fi
+  if [[ -s "$pid_stderr" ]]; then
+    sed 's/^/pidof stderr: /' "$pid_stderr" >&2
+  fi
+  rm -f "$pid_stdout" "$pid_stderr"
+  exit 1
+fi
+rm -f "$pid_stdout" "$pid_stderr"
+
+stale_forward_stdout="$(mktemp)"
+stale_forward_stderr="$(mktemp)"
+bounded_adb_capture "$stale_forward_stdout" "$stale_forward_stderr" forward --remove "tcp:$devtools_port" || true
+rm -f "$stale_forward_stdout" "$stale_forward_stderr"
+forward_stdout="$(mktemp)"
+forward_stderr="$(mktemp)"
+if ! bounded_adb_capture "$forward_stdout" "$forward_stderr" forward "tcp:$devtools_port" "localabstract:webview_devtools_remote_$pid"; then
+  echo 'failed to acquire trusted portal DevTools forward' >&2
+  if [[ -s "$forward_stdout" ]]; then
+    sed 's/^/forward stdout: /' "$forward_stdout" >&2
+  fi
+  if [[ -s "$forward_stderr" ]]; then
+    sed 's/^/forward stderr: /' "$forward_stderr" >&2
+  fi
+  rm -f "$forward_stdout" "$forward_stderr"
+  exit 1
+fi
+rm -f "$forward_stdout" "$forward_stderr"
+FORWARD_ACTIVE=true
 
 json_targets() {
   "$CURL_BIN" --fail --silent --show-error --connect-timeout 2 --max-time 5 \

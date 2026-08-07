@@ -646,22 +646,37 @@ if grep -F 'launchSpecJson' "$ANDROID_GAME_DISCOVERY" "$ROOT/clients/android/app
   echo 'android-game-discovery launchLocal must not use instrumentation or argv payload transport' >&2
   exit 1
 fi
-launch_local_block="$(sed -n '/launch_local_spec()/,/^}/p' "$ANDROID_GAME_DISCOVERY")"
 mutation_block="$(sed -n '/launch_expression=/,/^launch_result=/p' "$DEBUG_LAUNCH_LOCAL")"
 if ! grep -F 'DEBUG_LAUNCH_LOCAL_SH="${KORRI_ANDROID_DEBUG_LAUNCH_LOCAL_SH:-$CRATE/android-debug-launch-local.sh}"' "$ANDROID_GAME_DISCOVERY" >/dev/null \
-  || ! grep -F "printf '%s' \"\$compact_spec_json\"" <<<"$launch_local_block" >/dev/null \
-  || ! grep -F '| "$DEBUG_LAUNCH_LOCAL_SH" "$SERIAL" "$PKG" "$DEVTOOLS_HOST_PORT"' <<<"$launch_local_block" >/dev/null \
-  || ! grep -F 'Trusted same-process portal launchLocal result: Launched' <<<"$launch_local_block" >/dev/null \
-  || ! grep -F 'spec_input="$(cat)"' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || ! grep -F 'expectedSigner: {' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'capability: $parts[2]' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F "printf '%s' \"\$envelope_json\"" "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F '| "$DEBUG_LAUNCH_LOCAL_SH" "$SERIAL" "$PKG" "$DEVTOOLS_HOST_PORT"' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'Trusted same-process portal launchLocal schedule ack: LaunchScheduled' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'assert_retroarch_not_resumed' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'wait_retroarch_resumed_after_launch' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'envelope_input="$(cat)"' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || ! grep -F 'keys == ["expectedSigner", "spec"]' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || ! grep -F 'keys == ["capability", "port"]' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || ! grep -F 'readiness_matches_expected "$readiness"' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || ! grep -F 'native.korridPort()' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || ! grep -F 'native.korridCapability()' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
   || ! grep -F 'base64 -w 0' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
   || ! grep -F 'source "$SCRIPT_DIR/android-debug-portal-target.sh"' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
   || ! grep -F 'korri_debug_select_main_portal_socket "$targets"' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || ! grep -F 'setTimeout(() => {' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || ! grep -F "return {_tag: 'LaunchScheduled'}" "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || [[ "$(grep -Fo 'native.launchLocal(specJson)' "$DEBUG_LAUNCH_LOCAL" | wc -l | tr -d ' ')" -ne 1 ]] \
+  || ! grep -F '"$TIMEOUT_BIN" 10 "${ADB[@]}"' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || ! grep -F 'pidof stderr:' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || ! grep -F 'failed to remove trusted portal DevTools forward during cleanup' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || grep -F 'LaunchFailed' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
   || ! grep -F 'korri_debug_evaluate_once "$socket" "$launch_expression"' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
   || [[ "$(grep -Fc 'korri_debug_evaluate_once "$socket" "$launch_expression"' "$DEBUG_LAUNCH_LOCAL")" -ne 1 ]] \
-  || ! grep -F 'trusted portal launchLocal response was lost or refused; not retrying' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || ! grep -F 'trusted portal launchLocal schedule ack was lost or refused; not retrying' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
   || ! grep -F 'korri_debug_evaluate_once()' "$DEBUG_PORTAL_TARGET" >/dev/null \
   || grep -Eq 'for |while |until |sleep ' <<<"$mutation_block"; then
-  echo 'launchLocal proof must use trusted same-process DevTools stdin helper with exactly one non-retried mutation evaluation' >&2
+  echo 'launchLocal proof must use trusted same-process DevTools stdin envelope helper with expected signer binding and exactly one scheduled mutation evaluation' >&2
   exit 1
 fi
 if ! grep -F 'app.discovery.registerReceipt' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null; then
