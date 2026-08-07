@@ -62,6 +62,7 @@ bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$ANDROID_INSTRUMENTATION_RESULT" 
   "$CRATE/android-debug-capability.sh" "$CRATE/android-debug-portal-target.sh" \
   "$CRATE/android-debug-reload-portal.sh" "$CRATE/android-debug-focus-portal-game.sh" \
   "$CRATE/test-android-debug-capability.sh" \
+  "$CRATE/test-android-game-discovery-authority-recovery.sh" \
   "$CRATE/test-android-debug-reload-portal.sh" \
   "$CRATE/test-android-debug-focus-portal-game.sh" \
   "$CRATE/test-overlay-acceptance-identity.sh" \
@@ -70,6 +71,7 @@ bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$ANDROID_INSTRUMENTATION_RESULT" 
   "$ROOT/clients/android/local-launch-publication.sh" \
   "$ROOT/clients/android/overlay-evidence-predicates.sh"
 "$CRATE/test-android-debug-capability.sh"
+"$CRATE/test-android-game-discovery-authority-recovery.sh"
 "$CRATE/test-android-debug-reload-portal.sh"
 "$CRATE/test-android-debug-focus-portal-game.sh"
 "$CRATE/test-overlay-acceptance-identity.sh"
@@ -677,6 +679,8 @@ if ! grep -F 'adb_target_once -s "$SERIAL" shell am instrument -w' "$ANDROID_GAM
 fi
 recovery_block="$(sed -n '/recover_rpc_details()/,/^}/p' "$ANDROID_GAME_DISCOVERY")"
 if ! grep -F 'DEBUG_CAPABILITY_SH="${KORRI_ANDROID_DEBUG_CAPABILITY_SH:-$CRATE/android-debug-capability.sh}"' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'for authority_attempt in 1 2 3; do' <<<"$recovery_block" >/dev/null \
+  || ! grep -F 'if [[ "$authority_attempt" -eq 3 ]]; then' <<<"$recovery_block" >/dev/null \
   || ! grep -F '"$DEBUG_CAPABILITY_SH" "$SERIAL" "$PKG" --json "$DEVTOOLS_HOST_PORT"' <<<"$recovery_block" >/dev/null \
   || ! grep -F 'keys == ["capability", "port"]' <<<"$recovery_block" >/dev/null \
   || ! grep -F 'test("^[0-9a-f]{64}$")' <<<"$recovery_block" >/dev/null \
@@ -686,6 +690,14 @@ if ! grep -F 'DEBUG_CAPABILITY_SH="${KORRI_ANDROID_DEBUG_CAPABILITY_SH:-$CRATE/a
 fi
 if grep -Eq 'debug capability=|KorridServer|KorriPortal|listening on 127|logcat' <<<"$recovery_block"; then
   echo 'android-game-discovery-check.sh recover_rpc_details must not read RPC authority from logcat or historical server logs' >&2
+  exit 1
+fi
+if grep -Eq '(^|[[:space:]])(sleep|while|until)([[:space:]]|$)' <<<"$recovery_block"; then
+  echo 'android-game-discovery-check.sh recover_rpc_details must use bounded helper retry attempts without sleeps or unbounded loops' >&2
+  exit 1
+fi
+if grep -Eq 'force-stop|am[[:space:]]+(start|kill)|pm[[:space:]]+(clear|install|uninstall)|adb[[:space:]]+(install|uninstall)' <<<"$recovery_block"; then
+  echo 'android-game-discovery-check.sh recover_rpc_details must not restart, clear, install, or uninstall during helper recovery' >&2
   exit 1
 fi
 if grep -Eq '(echo|printf)[^[:cntrl:]]*\$(authority_json|RPC_CAPABILITY|capability)' <<<"$recovery_block"; then

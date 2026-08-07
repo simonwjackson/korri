@@ -385,14 +385,21 @@ recover_rpc_details() {
   local capability=""
 
   helper_stderr="$(mktemp)"
-  if ! authority_json="$({ "$DEBUG_CAPABILITY_SH" "$SERIAL" "$PKG" --json "$DEVTOOLS_HOST_PORT"; } 2>"$helper_stderr")"; then
-    echo "Could not recover embedded korrid RPC details during $label from trusted portal DevTools" >&2
-    if [[ -s "$helper_stderr" ]]; then
-      sed 's/^/debug authority helper: /' "$helper_stderr" >&2
+  for authority_attempt in 1 2 3; do
+    : >"$helper_stderr"
+    if authority_json="$({ "$DEBUG_CAPABILITY_SH" "$SERIAL" "$PKG" --json "$DEVTOOLS_HOST_PORT"; } 2>"$helper_stderr")"; then
+      break
     fi
-    rm -f "$helper_stderr"
-    exit 1
-  fi
+    authority_json=""
+    if [[ "$authority_attempt" -eq 3 ]]; then
+      echo "Could not recover embedded korrid RPC details during $label from trusted portal DevTools" >&2
+      if [[ -s "$helper_stderr" ]]; then
+        sed 's/^/debug authority helper: /' "$helper_stderr" >&2
+      fi
+      rm -f "$helper_stderr"
+      exit 1
+    fi
+  done
   rm -f "$helper_stderr"
 
   if ! jq -e '
