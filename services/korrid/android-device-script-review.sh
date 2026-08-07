@@ -813,19 +813,19 @@ if ! awk '
   /move_fixture_roots_aside/ { unavailable = NR }
   /restart_portal_and_recover "after selected locations become unavailable"/ { deny_restart = NR }
   /rescan "with selected locations unavailable"/ { denied_rescan = NR }
-  /assert_two_u9_games_listable "while selected locations are unavailable"/ { preserved = NR }
+  /assert_two_u9_games_unavailable "while selected locations are unavailable"/ { unavailable_routes = NR }
   /restore_fixture_roots/ { restored = NR }
   /set_appop_and_require_effective_mode allow allow/ { allow = NR }
   /restart_portal_and_recover "after all-files recovery"/ { allow_restart = NR }
   /rescan "after all-files recovery"/ { recovery_rescan = NR }
   END {
     exit !(deny && unavailable > deny && deny_restart > unavailable
-      && denied_rescan > deny_restart && preserved > denied_rescan
-      && restored > preserved && allow > restored && allow_restart > allow
+      && denied_rescan > deny_restart && unavailable_routes > denied_rescan
+      && restored > unavailable_routes && allow > restored && allow_restart > allow
       && recovery_rescan > allow_restart)
   }
 ' "$ANDROID_GAME_DISCOVERY"; then
-  echo 'android-game-discovery-check.sh must make only its fixtures unavailable under ignored access, preserve games, restore fixtures, and recover fresh RPC authority' >&2
+  echo 'android-game-discovery-check.sh must make only its fixtures unavailable, report unavailable routes, restore fixtures, and recover fresh RPC authority' >&2
   exit 1
 fi
 if ! grep -F 'local log_file="$RUN_DIR/instrument-$action.log"' "$ANDROID_GAME_DISCOVERY" >/dev/null \
@@ -864,10 +864,11 @@ if ! grep -F 'Primary Android game discovery check status was' "$ANDROID_GAME_DI
   exit 1
 fi
 # shellcheck disable=SC2016 # Literal grep needle; this reviews script text.
+cleanup_block="$(sed -n '/cleanup()/,/^}/p' "$ANDROID_GAME_DISCOVERY")"
 if ! grep -F 'cmd appops set --uid '\''$PKG'\'' MANAGE_EXTERNAL_STORAGE '\''$PRIOR_UID_APPOP_MODE'\''' "$ANDROID_GAME_DISCOVERY" >/dev/null \
   || ! grep -F 'cmd appops set --uid '\''$PKG'\'' MANAGE_EXTERNAL_STORAGE '\''$requested'\''' "$ANDROID_GAME_DISCOVERY" >/dev/null \
   || ! grep -F 'Uid mode: MANAGE_EXTERNAL_STORAGE:' "$ANDROID_GAME_DISCOVERY" >/dev/null \
-  || ! grep -F 'rm -rf '\''$FIXTURE_A'\'' '\''$FIXTURE_B'\'' '\''$FIXTURE_A_UNAVAILABLE'\'' '\''$FIXTURE_B_UNAVAILABLE'\''' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  || ! grep -F 'rm -rf '\''$FIXTURE_A'\'' '\''$FIXTURE_B'\'' '\''$FIXTURE_A_UNAVAILABLE'\'' '\''$FIXTURE_B_UNAVAILABLE'\''' <<<"$cleanup_block" >/dev/null; then
   echo 'android-game-discovery-check.sh must capture, set, verify, and restore the MANAGE_EXTERNAL_STORAGE UID app-op mode' >&2
   exit 1
 fi

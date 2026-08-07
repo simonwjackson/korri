@@ -552,6 +552,25 @@ assert_two_u9_games_listable() {
   printf 'Local games %s: %s\n' "$label" "$response"
 }
 
+assert_two_u9_games_unavailable() {
+  local label="$1"
+  local response
+  response="$(rpc "$label local-games list" '{"_tag":"app.local-games.list","payload":{}}')"
+  if ! jq -e --argjson selectedLocationIds "$selected_location_ids" '
+    .outcome._tag == "Ok"
+    and (.outcome.payload.games | length) == 0
+    and (.outcome.payload.failures | length) == 2
+    and all(.outcome.payload.failures[];
+      .code == "LocalRouteUnavailable"
+      and (.message as $message
+        | any($selectedLocationIds[]; . as $locationId | $message | contains($locationId))))
+  ' <<<"$response" >/dev/null; then
+    echo "Expected two unavailable selected-location routes $label: $response" >&2
+    exit 1
+  fi
+  printf 'Unavailable local games %s: %s\n' "$label" "$response"
+}
+
 u9_game_id() {
   rpc "lookup U9 game id" '{"_tag":"app.local-games.list","payload":{}}' \
     | jq -r '.outcome.payload.games[] | select(.title == "U9 First") | .id' \
@@ -683,7 +702,7 @@ if ! jq -e --argjson selectedLocationIds "$selected_location_ids" '
   echo "Unavailable selected locations did not yield a storage diagnostic under ignored all-files access: $denied_snapshot selectedLocationIds=$selected_location_ids" >&2
   exit 1
 fi
-assert_two_u9_games_listable "while selected locations are unavailable"
+assert_two_u9_games_unavailable "while selected locations are unavailable"
 restore_fixture_roots
 set_appop_and_require_effective_mode allow allow
 restart_portal_and_recover "after all-files recovery"
