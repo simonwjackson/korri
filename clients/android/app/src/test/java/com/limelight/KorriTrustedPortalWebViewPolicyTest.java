@@ -29,10 +29,12 @@ public class KorriTrustedPortalWebViewPolicyTest {
             "localGameAssetUrl",
             "openGameFolderPicker",
             "openNotificationSettings",
+            "openOverlaySettings",
             "openPairing",
             "openStorageAccessSettings",
             "queryStreamApps",
             "queryStreamHosts",
+            "overlayPermission",
             "requestBackgroundNotice",
             "startStream",
             "storageAccess",
@@ -62,9 +64,11 @@ public class KorriTrustedPortalWebViewPolicyTest {
         assertEquals("https://appassets.androidplatform.net/assets/portal/index.html",
                 policy.portalUrl());
         assertEquals("https://appassets.androidplatform.net", policy.portalOrigin());
-        assertTrue(policy.isTrustedPortalAsset(Uri.parse(
+        assertTrue(policy.isTrustedPortalResource(Uri.parse(
                 "https://appassets.androidplatform.net:443/assets/portal/index.html")));
-        assertTrue(policy.isTrustedPortalAsset(Uri.parse(
+        assertTrue(policy.isBundledPortalAsset(Uri.parse(
+                "https://appassets.androidplatform.net:443/assets/portal/index.html")));
+        assertTrue(policy.isTrustedPortalResource(Uri.parse(
                 "https://APPASSETS.ANDROIDPLATFORM.NET/assets/portal/chunk.js")));
         assertTrue(policy.isTrustedLocalGameAsset(Uri.parse(
                 "https://appassets.androidplatform.net/game-assets/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png")));
@@ -89,17 +93,17 @@ public class KorriTrustedPortalWebViewPolicyTest {
 
     @Test
     public void subframesAndResourcesMustStayOnTheTrustedAssetOrigin() {
-        assertTrue(policy.isTrustedPortalAsset(Uri.parse(
+        assertTrue(policy.isTrustedPortalResource(Uri.parse(
                 "https://appassets.androidplatform.net/assets/portal/style.css")));
-        assertFalse(policy.isTrustedPortalAsset(Uri.parse(
+        assertFalse(policy.isTrustedPortalResource(Uri.parse(
                 "https://appassets.androidplatform.net.evil/assets/portal/style.css")));
-        assertFalse(policy.isTrustedPortalAsset(Uri.parse(
+        assertFalse(policy.isTrustedPortalResource(Uri.parse(
                 "http://appassets.androidplatform.net/assets/portal/style.css")));
-        assertFalse(policy.isTrustedPortalAsset(Uri.parse(
+        assertFalse(policy.isTrustedPortalResource(Uri.parse(
                 "https://appassets.androidplatform.net:444/assets/portal/style.css")));
-        assertFalse(policy.isTrustedPortalAsset(Uri.parse(
+        assertFalse(policy.isTrustedPortalResource(Uri.parse(
                 "https://appassets.androidplatform.net/assetsevil/portal/style.css")));
-        assertFalse(policy.isTrustedPortalAsset(Uri.parse(
+        assertFalse(policy.isTrustedPortalResource(Uri.parse(
                 "https://example.com/assets/portal/style.css")));
 
         assertEquals(
@@ -108,10 +112,49 @@ public class KorriTrustedPortalWebViewPolicyTest {
     }
 
     @Test
+    public void releaseRuntimeIgnoresDebugPortalOverride() {
+        KorriTrustedPortalWebViewPolicy releasePolicy =
+                KorriTrustedPortalWebViewPolicy.forRuntime(false, "http://192.0.2.10:5173/");
+
+        assertEquals(KorriTrustedPortalWebViewPolicy.TRUSTED_PORTAL_URL,
+                releasePolicy.portalUrl());
+        assertEquals("https://appassets.androidplatform.net", releasePolicy.portalOrigin());
+        assertFalse(releasePolicy.isTrustedPortalResource(Uri.parse("http://192.0.2.10:5173/")));
+        assertEquals(
+                KorriTrustedPortalWebViewPolicy.NavigationAction.OPEN_EXTERNALLY,
+                releasePolicy.navigationAction(Uri.parse("http://192.0.2.10:5173/"), true));
+    }
+
+    @Test
+    public void debugRuntimeTrustsOnlyTheConfiguredNetworkPortalOrigin() {
+        KorriTrustedPortalWebViewPolicy debugPolicy =
+                KorriTrustedPortalWebViewPolicy.forRuntime(true, "http://192.0.2.10:5173/portal/");
+
+        assertEquals("http://192.0.2.10:5173/portal/", debugPolicy.portalUrl());
+        assertEquals("http://192.0.2.10:5173", debugPolicy.portalOrigin());
+        assertTrue(debugPolicy.isTrustedPortalResource(Uri.parse("http://192.0.2.10:5173/src/main.ts")));
+        assertTrue(debugPolicy.isTrustedPortalResource(Uri.parse("http://192.0.2.10:5173/assets/app.css")));
+        assertFalse("dev resources are fetched by WebView, not the appassets loader",
+                debugPolicy.isBundledPortalAsset(Uri.parse("http://192.0.2.10:5173/assets/app.css")));
+        assertFalse(debugPolicy.isTrustedPortalResource(Uri.parse("http://192.0.2.10:5174/src/main.ts")));
+        assertFalse(debugPolicy.isTrustedPortalResource(Uri.parse("http://192.0.2.10.evil:5173/src/main.ts")));
+        assertFalse(debugPolicy.isTrustedPortalResource(Uri.parse("https://192.0.2.10:5173/src/main.ts")));
+        assertEquals(
+                KorriTrustedPortalWebViewPolicy.NavigationAction.ALLOW_IN_WEBVIEW,
+                debugPolicy.navigationAction(Uri.parse("http://192.0.2.10:5173/portal/"), true));
+    }
+
+    @Test
     public void localGameAssetsAllowOnlyOneExactUnencodedContentAddressedPath() {
         String good = "https://appassets.androidplatform.net/game-assets/"
                 + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png";
         assertTrue(policy.isTrustedLocalGameAsset(Uri.parse(good)));
+
+        KorriTrustedPortalWebViewPolicy debugPolicy =
+                KorriTrustedPortalWebViewPolicy.forRuntime(true, "http://192.0.2.10:5173/");
+        assertTrue(debugPolicy.isTrustedLocalGameAsset(Uri.parse(good)));
+        assertFalse(debugPolicy.isTrustedLocalGameAsset(Uri.parse(
+                "http://192.0.2.10:5173/game-assets/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png")));
 
         for (String url : Arrays.asList(
                 good + "?v=1",

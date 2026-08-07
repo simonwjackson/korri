@@ -7,9 +7,10 @@ import java.util.Locale;
 /**
  * Main-shell WebView policy for the privileged Korri portal.
  *
- * The broad KorriNative bridge exposes localhost/native authority. It is safe
- * only for the bundled portal origin, so navigation and resource decisions are
- * made from parsed URL components rather than string-prefix checks.
+ * The broad KorriNative bridge exposes localhost/native authority. Release
+ * builds therefore trust only the bundled appassets portal. Debug builds may
+ * opt into one configured http(s) portal origin for live development, while
+ * game-art assets remain pinned to the fixed appassets route.
  */
 final class KorriTrustedPortalWebViewPolicy {
     static final String TRUSTED_PORTAL_URL =
@@ -21,36 +22,71 @@ final class KorriTrustedPortalWebViewPolicy {
         BLOCK
     }
 
-    private final Origin trustedOrigin;
+    private final Uri portalUrl;
+    private final Origin portalOrigin;
+    private final boolean bundledPortal;
 
     KorriTrustedPortalWebViewPolicy() {
-        this(Uri.parse(TRUSTED_PORTAL_URL));
+        this(Uri.parse(TRUSTED_PORTAL_URL), true);
     }
 
-    KorriTrustedPortalWebViewPolicy(Uri portalUrl) {
+    KorriTrustedPortalWebViewPolicy(Uri portalUrl, boolean bundledPortal) {
         Origin origin = Origin.from(portalUrl);
-        if (origin == null || !isTrustedAssetPath(portalUrl)) {
-            throw new IllegalArgumentException("portal URL must be a trusted asset URL");
+        if (origin == null) {
+            throw new IllegalArgumentException("portal URL has no origin");
         }
-        trustedOrigin = origin;
+        if (bundledPortal) {
+            if (!origin.equals(Origin.from(Uri.parse(TRUSTED_PORTAL_URL)))
+                    || !isTrustedAssetPath(portalUrl)) {
+                throw new IllegalArgumentException("bundled portal URL must be a trusted asset URL");
+            }
+        } else if (!isHttpOrHttps(origin)) {
+            throw new IllegalArgumentException("debug portal URL must be http(s)");
+        }
+        this.portalUrl = portalUrl;
+        this.portalOrigin = origin;
+        this.bundledPortal = bundledPortal;
+    }
+
+    static KorriTrustedPortalWebViewPolicy forRuntime(boolean debugBuild, String devPortalUrl) {
+        if (debugBuild && devPortalUrl != null && !devPortalUrl.isEmpty()) {
+            return new KorriTrustedPortalWebViewPolicy(Uri.parse(devPortalUrl), false);
+        }
+        return new KorriTrustedPortalWebViewPolicy();
     }
 
     String portalUrl() {
-        return TRUSTED_PORTAL_URL;
+        return portalUrl.toString();
     }
 
     String portalOrigin() {
-        return trustedOrigin.toString();
+        return portalOrigin.toString();
     }
 
-    boolean isTrustedPortalAsset(Uri uri) {
+    boolean isBundledPortalAsset(Uri uri) {
         Origin origin = Origin.from(uri);
-        return origin != null && trustedOrigin.equals(origin) && isTrustedAssetPath(uri);
+        return origin != null
+                && origin.equals(Origin.from(Uri.parse(TRUSTED_PORTAL_URL)))
+                && isTrustedAssetPath(uri);
+    }
+
+    boolean isTrustedPortalResource(Uri uri) {
+        Origin origin = Origin.from(uri);
+        if (origin == null || !portalOrigin.equals(origin)) {
+            return false;
+        }
+        if (bundledPortal) {
+            return isTrustedAssetPath(uri);
+        }
+        return true;
     }
 
     boolean isTrustedLocalGameAsset(Uri uri) {
         Origin origin = Origin.from(uri);
-        if (origin == null || !trustedOrigin.equals(origin) || uri == null || uri.isOpaque()) {
+        if (origin == null
+                || !origin.equals(Origin.from(Uri.parse(TRUSTED_PORTAL_URL)))
+                || uri == null
+                || uri.isOpaque()) {
             return false;
         }
         if (uri.getQuery() != null || uri.getFragment() != null) {
@@ -70,7 +106,7 @@ final class KorriTrustedPortalWebViewPolicy {
     }
 
     NavigationAction navigationAction(Uri uri, boolean mainFrame) {
-        if (isTrustedPortalAsset(uri)) {
+        if (isTrustedPortalResource(uri)) {
             return NavigationAction.ALLOW_IN_WEBVIEW;
         }
         if (mainFrame && isExternalBrowserUrl(uri)) {
@@ -92,6 +128,10 @@ final class KorriTrustedPortalWebViewPolicy {
         if (origin == null || origin.isLoopback()) {
             return false;
         }
+        return isHttpOrHttps(origin);
+    }
+
+    private static boolean isHttpOrHttps(Origin origin) {
         return "https".equals(origin.scheme) || "http".equals(origin.scheme);
     }
 

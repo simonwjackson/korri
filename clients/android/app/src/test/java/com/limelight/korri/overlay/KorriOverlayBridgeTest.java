@@ -236,7 +236,7 @@ public class KorriOverlayBridgeTest {
                 StandardCharsets.UTF_8);
 
         assertTrue(shell.contains(
-                "KorriBrainService.ensureRunning(\n                this, portalOrigin(portalUrl)"));
+                "KorriBrainService.ensureRunning(\n                this, portalPolicy.portalOrigin()"));
         assertTrue(bridge.contains(
                 "ASSET_ORIGIN = \"https://appassets.androidplatform.net\""));
         assertFalse(shell.contains("allowOrigin(\"*\")"));

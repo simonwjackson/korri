@@ -103,7 +103,9 @@ public class KorriShellActivity extends AppCompatActivity {
         // Embedded korrid: only this exact portal origin may present the
         // per-server capability to the localhost brain.
         final KorriTrustedPortalWebViewPolicy portalPolicy =
-                new KorriTrustedPortalWebViewPolicy();
+                KorriTrustedPortalWebViewPolicy.forRuntime(
+                        BuildConfig.DEBUG,
+                        BuildConfig.PORTAL_DEV_URL);
         final String portalUrl = portalPolicy.portalUrl();
         final KorriNativeBridgeLifecycle nativeBridgeLifecycle = new KorriNativeBridgeLifecycle();
         final File privateStateRoot = new File(KorriBrainService.privateStateRoot(this));
@@ -150,12 +152,16 @@ public class KorriShellActivity extends AppCompatActivity {
                     // script/image/subframe resource loading.
                     return null;
                 }
-                if (!portalPolicy.isTrustedPortalAsset(request.getUrl())
-                        && !portalPolicy.isTrustedLocalGameAsset(request.getUrl())) {
-                    return blockedWebResource();
+                Uri uri = request.getUrl();
+                if (portalPolicy.isBundledPortalAsset(uri)
+                        || portalPolicy.isTrustedLocalGameAsset(uri)) {
+                    WebResourceResponse response = assetLoader.shouldInterceptRequest(uri);
+                    return response != null ? response : blockedWebResource();
                 }
-                WebResourceResponse response = assetLoader.shouldInterceptRequest(request.getUrl());
-                return response != null ? response : blockedWebResource();
+                if (portalPolicy.isTrustedPortalResource(uri)) {
+                    return null;
+                }
+                return blockedWebResource();
             }
 
             @Override

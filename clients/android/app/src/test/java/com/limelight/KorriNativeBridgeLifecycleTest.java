@@ -52,6 +52,22 @@ public class KorriNativeBridgeLifecycleTest {
         assertEquals(Arrays.asList("add", "remove"), operations.calls);
     }
 
+    @Test
+    public void debugConfiguredPortalOriginControlsBridgeLifecycle() {
+        KorriTrustedPortalWebViewPolicy debugPolicy =
+                KorriTrustedPortalWebViewPolicy.forRuntime(true, "http://192.0.2.10:5173/portal/");
+        RecordingBridgeOperations operations = new RecordingBridgeOperations();
+
+        lifecycle.installBeforeInitialLoad(Uri.parse(debugPolicy.portalUrl()), debugPolicy, operations);
+        lifecycle.onMainFramePageStarted(Uri.parse("http://192.0.2.10:5173/src/main.ts"),
+                debugPolicy, operations);
+        lifecycle.onMainFramePageStarted(Uri.parse("http://192.0.2.10:5174/src/main.ts"),
+                debugPolicy, operations);
+        lifecycle.onMainFramePageFinished();
+
+        assertEquals(Arrays.asList("add", "remove"), operations.calls);
+    }
+
     private static final class RecordingBridgeOperations
             implements KorriNativeBridgeLifecycle.Operations {
         private final List<String> calls = new ArrayList<>();

@@ -20,7 +20,7 @@ final class KorriNativeBridgeLifecycle {
             Uri uri,
             KorriTrustedPortalWebViewPolicy portalPolicy,
             Operations operations) {
-        if (portalPolicy.isTrustedPortalAsset(uri)) {
+        if (portalPolicy.isTrustedPortalResource(uri)) {
             operations.addJavascriptInterface();
         }
     }
@@ -29,7 +29,7 @@ final class KorriNativeBridgeLifecycle {
             Uri uri,
             KorriTrustedPortalWebViewPolicy portalPolicy,
             Operations operations) {
-        if (!portalPolicy.isTrustedPortalAsset(uri)) {
+        if (!portalPolicy.isTrustedPortalResource(uri)) {
             operations.removeJavascriptInterface();
         }
     }
