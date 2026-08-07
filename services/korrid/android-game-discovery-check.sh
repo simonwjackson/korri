@@ -30,6 +30,8 @@ LOCK_OWNER_REMOTE="$LOCK_REMOTE/owner"
 BACKUP_REMOTE="$ANDROID_STORAGE_ROOT/.android-game-discovery-check-backup-$$"
 FIXTURE_A="/sdcard/korri-u9-discovery-a-$$"
 FIXTURE_B="/sdcard/korri-u9-discovery-b-$$"
+FIXTURE_A_UNAVAILABLE="${FIXTURE_A}.unavailable"
+FIXTURE_B_UNAVAILABLE="${FIXTURE_B}.unavailable"
 CONFIG_REMOTE="$ANDROID_STORAGE_ROOT/config.yaml"
 LIBRARY_REMOTE="$ANDROID_STORAGE_ROOT/library.yaml"
 APK="$ROOT/clients/android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk"
@@ -193,7 +195,7 @@ cleanup() {
 
   clear_rpc_forward
   adb_target -s "$SERIAL" shell "am force-stop '$PKG'; am force-stop '$TEST_PKG'; am force-stop '$RETROARCH_PKG'" >/dev/null 2>&1 || true
-  adb_target -s "$SERIAL" shell "rm -rf '$FIXTURE_A' '$FIXTURE_B'" >/dev/null 2>&1 || cleanup_failed=true
+  adb_target -s "$SERIAL" shell "rm -rf '$FIXTURE_A' '$FIXTURE_B' '$FIXTURE_A_UNAVAILABLE' '$FIXTURE_B_UNAVAILABLE'" >/dev/null 2>&1 || cleanup_failed=true
   restore_checkpoint_files || cleanup_failed=true
   restore_private_state || cleanup_failed=true
   restore_appop || cleanup_failed=true
@@ -334,9 +336,17 @@ YAML
 stage_fixtures() {
   printf 'KORRI-U9-FIRST-ROM\n' >"$RUN_DIR/U9 First.gba"
   printf 'KORRI-U9-SECOND-ROM\n' >"$RUN_DIR/U9 Second.gba"
-  adb_target -s "$SERIAL" shell "rm -rf '$FIXTURE_A' '$FIXTURE_B'; mkdir -p '$FIXTURE_A' '$FIXTURE_B'"
+  adb_target -s "$SERIAL" shell "rm -rf '$FIXTURE_A' '$FIXTURE_B' '$FIXTURE_A_UNAVAILABLE' '$FIXTURE_B_UNAVAILABLE'; mkdir -p '$FIXTURE_A' '$FIXTURE_B'"
   adb_target -s "$SERIAL" push "$RUN_DIR/U9 First.gba" "$FIXTURE_A/U9 First.gba" >/dev/null
   adb_target -s "$SERIAL" push "$RUN_DIR/U9 Second.gba" "$FIXTURE_B/U9 Second.gba" >/dev/null
+}
+
+move_fixture_roots_aside() {
+  adb_target -s "$SERIAL" shell "set -e; mv '$FIXTURE_A' '$FIXTURE_A_UNAVAILABLE'; mv '$FIXTURE_B' '$FIXTURE_B_UNAVAILABLE'"
+}
+
+restore_fixture_roots() {
+  adb_target -s "$SERIAL" shell "set -e; mv '$FIXTURE_A_UNAVAILABLE' '$FIXTURE_A'; mv '$FIXTURE_B_UNAVAILABLE' '$FIXTURE_B'"
 }
 
 build_and_install_instrumentation() {
@@ -654,8 +664,12 @@ if ! jq -e 'length > 0' <<<"$selected_location_ids" >/dev/null; then
   exit 1
 fi
 set_appop_and_require_effective_mode ignore ignore
-restart_portal_and_recover "after all-files denial"
-rescan "with all-files denied"
+# TrebleDroid's userdebug FUSE layer still exposes adb-created files to this
+# debug package under UID mode ignore. Move only this run's PID-unique fixture
+# roots aside to exercise the same unavailable-location and recovery behavior.
+move_fixture_roots_aside
+restart_portal_and_recover "after selected locations become unavailable"
+rescan "with selected locations unavailable"
 denied_snapshot="$(rpc "denied all-files snapshot" '{"_tag":"app.discovery.snapshot","payload":{}}')"
 if ! jq -e --argjson selectedLocationIds "$selected_location_ids" '
   .outcome._tag == "Ok"
@@ -666,10 +680,11 @@ if ! jq -e --argjson selectedLocationIds "$selected_location_ids" '
     and (.locationId as $locationId
       | $locationId != null and ($selectedLocationIds | index($locationId))))
 ' <<<"$denied_snapshot" >/dev/null; then
-  echo "Denied all-files access did not yield a selected-location storage diagnostic: $denied_snapshot selectedLocationIds=$selected_location_ids" >&2
+  echo "Unavailable selected locations did not yield a storage diagnostic under ignored all-files access: $denied_snapshot selectedLocationIds=$selected_location_ids" >&2
   exit 1
 fi
-assert_two_u9_games_listable "while all-files access is denied"
+assert_two_u9_games_listable "while selected locations are unavailable"
+restore_fixture_roots
 set_appop_and_require_effective_mode allow allow
 restart_portal_and_recover "after all-files recovery"
 rescan "after all-files recovery"
