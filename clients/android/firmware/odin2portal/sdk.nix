@@ -1,5 +1,14 @@
 { pkgs }:
 {
+  markerRuntimeInputs = [
+    pkgs.android-tools
+    pkgs.coreutils
+    pkgs.diffutils
+    pkgs.e2fsprogs
+    pkgs.gawk
+    pkgs.gnugrep
+  ];
+
   rollbackRuntimeInputs = [
     pkgs.coreutils
     pkgs.diffutils

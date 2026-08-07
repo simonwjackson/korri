@@ -162,6 +162,23 @@ let
       '';
     };
 
+    odin2portal-marker-dry-run = {
+      description = "Build and verify a non-flashable one-comment Odin 2 Portal image mutation.";
+      runtimeInputs = odin2portalStockRepack.markerRuntimeInputs;
+      usageSuffix = " -- <stock-source-directory> <output-directory>";
+      script = ''
+        exec "$KORRI_ROOT/clients/android/firmware/odin2portal/marker-dry-run.sh" "$@"
+      '';
+    };
+
+    odin2portal-marker-dry-run-check = {
+      description = "Test the Odin 2 Portal marker mutation and, when configured, its full private-source pipeline.";
+      runtimeInputs = odin2portalStockRepack.markerRuntimeInputs;
+      script = ''
+        exec "$KORRI_ROOT/clients/android/firmware/odin2portal/test-marker-dry-run.sh"
+      '';
+    };
+
     odin2portal-rollback-bundle = {
       description = "Stage the exact Odin 2 Portal stock Android rollback images without device writes.";
       runtimeInputs = odin2portalStockRepack.rollbackRuntimeInputs;
