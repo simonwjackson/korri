@@ -17,6 +17,7 @@ KORRI_SHELL="$ROOT/clients/android/app/src/main/java/com/limelight/KorriShellAct
 ANDROID_GAME="$ROOT/clients/android/app/src/main/java/com/limelight/Game.java"
 OVERLAY_SERVICE="$ROOT/clients/android/app/src/main/java/com/limelight/korri/overlay/KorriOverlayService.java"
 DEBUG_AUTHORITY="$CRATE/android-debug-capability.sh"
+DEBUG_LAUNCH_LOCAL="$CRATE/android-debug-launch-local.sh"
 DEBUG_PORTAL_TARGET="$CRATE/android-debug-portal-target.sh"
 DEBUG_PORTAL_RELOAD="$CRATE/android-debug-reload-portal.sh"
 DEBUG_PORTAL_FOCUS_GAME="$CRATE/android-debug-focus-portal-game.sh"
@@ -40,6 +41,7 @@ unset \
   KORRI_ANDROID_DEBUG_AUTHORITY_JSON \
   KORRI_ANDROID_DEBUG_CAPABILITY \
   KORRI_ANDROID_DEBUG_CAPABILITY_SH \
+  KORRI_ANDROID_DEBUG_LAUNCH_LOCAL_SH \
   KORRI_ANDROID_DEBUG_PORTAL_RELOAD_SH \
   KORRI_ANDROID_DEBUG_PORTAL_FOCUS_GAME_SH \
   KORRI_ANDROID_GAME_DISCOVERY_DEVTOOLS_HOST_PORT \
@@ -59,11 +61,12 @@ export KORRI_ANDROID_DEBUG_CAPABILITY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$ANDROID_INSTRUMENTATION_RESULT" "$JOURNEY_RESUME" \
   "$OVERLAY_ACCEPTANCE" "$RETROARCH_ACCEPTANCE" \
-  "$CRATE/android-debug-capability.sh" "$CRATE/android-debug-portal-target.sh" \
-  "$CRATE/android-debug-reload-portal.sh" "$CRATE/android-debug-focus-portal-game.sh" \
+  "$CRATE/android-debug-capability.sh" "$CRATE/android-debug-launch-local.sh" \
+  "$CRATE/android-debug-portal-target.sh" "$CRATE/android-debug-reload-portal.sh" \
+  "$CRATE/android-debug-focus-portal-game.sh" \
   "$CRATE/test-android-debug-capability.sh" \
+  "$CRATE/test-android-debug-launch-local.sh" \
   "$CRATE/test-android-game-discovery-authority-recovery.sh" \
-  "$CRATE/test-android-game-discovery-launch-transport.sh" \
   "$CRATE/test-android-debug-reload-portal.sh" \
   "$CRATE/test-android-debug-focus-portal-game.sh" \
   "$CRATE/test-overlay-acceptance-identity.sh" \
@@ -72,8 +75,8 @@ bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$ANDROID_INSTRUMENTATION_RESULT" 
   "$ROOT/clients/android/local-launch-publication.sh" \
   "$ROOT/clients/android/overlay-evidence-predicates.sh"
 "$CRATE/test-android-debug-capability.sh"
+"$CRATE/test-android-debug-launch-local.sh"
 "$CRATE/test-android-game-discovery-authority-recovery.sh"
-"$CRATE/test-android-game-discovery-launch-transport.sh"
 "$CRATE/test-android-debug-reload-portal.sh"
 "$CRATE/test-android-debug-focus-portal-game.sh"
 "$CRATE/test-overlay-acceptance-identity.sh"
@@ -151,7 +154,7 @@ grep -F "https://appassets.androidplatform.net/assets/portal/index.html" "$DEBUG
 grep -F '({port: KorriNative.korridPort(), capability: KorriNative.korridCapability()})' "$DEBUG_AUTHORITY" >/dev/null
 grep -F 'keys == ["capability", "port"]' "$DEBUG_AUTHORITY" >/dev/null
 grep -F 'test("^[0-9a-f]{64}$")' "$DEBUG_AUTHORITY" >/dev/null
-for helper in "$DEBUG_AUTHORITY" "$DEBUG_PORTAL_RELOAD" "$DEBUG_PORTAL_FOCUS_GAME"; do
+for helper in "$DEBUG_AUTHORITY" "$DEBUG_LAUNCH_LOCAL" "$DEBUG_PORTAL_RELOAD" "$DEBUG_PORTAL_FOCUS_GAME"; do
   grep -F 'android-debug-portal-target.sh' "$helper" >/dev/null
 done
 grep -F "const hasNative = typeof native === 'object'" "$DEBUG_PORTAL_TARGET" >/dev/null
@@ -601,7 +604,8 @@ if grep -F 'debug capability=' "$KORRI_SHELL" "$ANDROID_SMOKE" "$ANDROID_APP_ROU
   exit 1
 fi
 
-bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$ANDROID_GAME_DISCOVERY" "$ANDROID_INSTRUMENTATION_RESULT" "$JOURNEY_RESUME"
+bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$ANDROID_GAME_DISCOVERY" \
+  "$ANDROID_INSTRUMENTATION_RESULT" "$JOURNEY_RESUME" "$DEBUG_LAUNCH_LOCAL"
 
 if ! grep -F 'usage: android-game-discovery-check.sh --serial <adb-serial>' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
   echo 'android-game-discovery-check.sh must require an explicit --serial argument' >&2
@@ -635,19 +639,29 @@ if ! grep -F 'KorriGameDiscoveryDebugTest' "$ANDROID_GAME_DISCOVERY" >/dev/null;
   echo 'android-game-discovery-check.sh must target the debug discovery instrumentation test' >&2
   exit 1
 fi
-if grep -F 'launchSpecJson' "$ANDROID_GAME_DISCOVERY" "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null; then
-  echo 'launchLocal instrumentation must not use the raw launchSpecJson transport' >&2
+if grep -F 'launchSpecJson' "$ANDROID_GAME_DISCOVERY" "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null \
+  || grep -F 'launchSpecBase64' "$ANDROID_GAME_DISCOVERY" "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null \
+  || grep -F '"launchLocal".equals(action)' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null \
+  || grep -F 'run_discovery_instrumentation launchLocal' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery launchLocal must not use instrumentation or argv payload transport' >&2
   exit 1
 fi
-if ! grep -F 'launchSpecBase64' "$ANDROID_GAME_DISCOVERY" >/dev/null \
-  || ! grep -F 'base64 -w 0' "$ANDROID_GAME_DISCOVERY" >/dev/null \
-  || ! grep -F 'launchSpecBase64' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null \
-  || ! grep -F 'Base64.NO_WRAP' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null \
-  || ! grep -F 'MAX_LAUNCH_SPEC_BYTES' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null \
-  || ! grep -F 'MAX_LAUNCH_SPEC_BASE64_CHARS' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null \
-  || ! grep -F 'CodingErrorAction.REPORT' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null \
-  || ! grep -F 'new JSONObject(launchSpecText)' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null; then
-  echo 'launchLocal instrumentation must use bounded no-wrap base64 transport decoded as valid UTF-8 JSON' >&2
+launch_local_block="$(sed -n '/launch_local_spec()/,/^}/p' "$ANDROID_GAME_DISCOVERY")"
+mutation_block="$(sed -n '/launch_expression=/,/^launch_result=/p' "$DEBUG_LAUNCH_LOCAL")"
+if ! grep -F 'DEBUG_LAUNCH_LOCAL_SH="${KORRI_ANDROID_DEBUG_LAUNCH_LOCAL_SH:-$CRATE/android-debug-launch-local.sh}"' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F "printf '%s' \"\$compact_spec_json\"" <<<"$launch_local_block" >/dev/null \
+  || ! grep -F '| "$DEBUG_LAUNCH_LOCAL_SH" "$SERIAL" "$PKG" "$DEVTOOLS_HOST_PORT"' <<<"$launch_local_block" >/dev/null \
+  || ! grep -F 'Trusted same-process portal launchLocal result: Launched' <<<"$launch_local_block" >/dev/null \
+  || ! grep -F 'spec_input="$(cat)"' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || ! grep -F 'base64 -w 0' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || ! grep -F 'source "$SCRIPT_DIR/android-debug-portal-target.sh"' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || ! grep -F 'korri_debug_select_main_portal_socket "$targets"' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || ! grep -F 'korri_debug_evaluate_once "$socket" "$launch_expression"' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || [[ "$(grep -Fc 'korri_debug_evaluate_once "$socket" "$launch_expression"' "$DEBUG_LAUNCH_LOCAL")" -ne 1 ]] \
+  || ! grep -F 'trusted portal launchLocal response was lost or refused; not retrying' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || ! grep -F 'korri_debug_evaluate_once()' "$DEBUG_PORTAL_TARGET" >/dev/null \
+  || grep -Eq 'for |while |until |sleep ' <<<"$mutation_block"; then
+  echo 'launchLocal proof must use trusted same-process DevTools stdin helper with exactly one non-retried mutation evaluation' >&2
   exit 1
 fi
 if ! grep -F 'app.discovery.registerReceipt' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null; then
@@ -728,9 +742,9 @@ if ! grep -F 'DEVTOOLS_HOST_PORT="${KORRI_ANDROID_GAME_DISCOVERY_DEVTOOLS_HOST_P
   echo 'android-game-discovery-check.sh must use bounded distinct host ports for RPC and DevTools forwards' >&2
   exit 1
 fi
-if ! grep -F 'websocat' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+if ! grep -F 'websocat' "$DEBUG_AUTHORITY" "$DEBUG_LAUNCH_LOCAL" >/dev/null \
   || ! sed -n '/android-game-discovery-check = {/,/^    };/p' "$ROOT/nix/tasks.nix" | grep -F 'pkgs.websocat' >/dev/null; then
-  echo 'android-game-discovery-check task must put websocat on PATH for trusted portal DevTools authority recovery' >&2
+  echo 'android-game-discovery-check task must put websocat on PATH for trusted portal DevTools helpers' >&2
   exit 1
 fi
 restart_block="$(sed -n '/restart_portal_after_registration()/,/^}/p' "$ANDROID_GAME_DISCOVERY")"

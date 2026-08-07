@@ -23,6 +23,7 @@ RETROARCH_PKG="${KORRI_RETROARCH_PACKAGE:-com.korri.retroarch}"
 HOST_PORT="${KORRI_ANDROID_GAME_DISCOVERY_HOST_PORT:-43124}"
 DEVTOOLS_HOST_PORT="${KORRI_ANDROID_GAME_DISCOVERY_DEVTOOLS_HOST_PORT:-43120}"
 DEBUG_CAPABILITY_SH="${KORRI_ANDROID_DEBUG_CAPABILITY_SH:-$CRATE/android-debug-capability.sh}"
+DEBUG_LAUNCH_LOCAL_SH="${KORRI_ANDROID_DEBUG_LAUNCH_LOCAL_SH:-$CRATE/android-debug-launch-local.sh}"
 ANDROID_STORAGE_ROOT="/sdcard/korri"
 LOCK_REMOTE="$ANDROID_STORAGE_ROOT/.android-game-discovery-check.lock"
 LOCK_OWNER_REMOTE="$LOCK_REMOTE/owner"
@@ -374,11 +375,25 @@ register_folder() {
 launch_local_spec() {
   local spec_json="$1"
   local compact_spec_json=""
-  local launch_spec_base64=""
+  local helper_stderr=""
+  local launch_result=""
   compact_spec_json="$(jq -c . <<<"$spec_json")"
-  printf '%s' "$compact_spec_json" >"$RUN_DIR/launch-spec.json"
-  launch_spec_base64="$(printf '%s' "$compact_spec_json" | base64 -w 0)"
-  run_discovery_instrumentation launchLocal -e launchSpecBase64 "$launch_spec_base64"
+  helper_stderr="$(mktemp)"
+  if ! launch_result="$(printf '%s' "$compact_spec_json" \
+    | "$DEBUG_LAUNCH_LOCAL_SH" "$SERIAL" "$PKG" "$DEVTOOLS_HOST_PORT" 2>"$helper_stderr")"; then
+    echo 'Trusted same-process portal launchLocal helper failed' >&2
+    if [[ -s "$helper_stderr" ]]; then
+      sed 's/^/launchLocal helper: /' "$helper_stderr" >&2
+    fi
+    rm -f "$helper_stderr"
+    exit 1
+  fi
+  rm -f "$helper_stderr"
+  if ! jq -e '. == {"_tag":"Launched"}' <<<"$launch_result" >/dev/null; then
+    echo 'Trusted same-process portal launchLocal helper returned an unexpected result' >&2
+    exit 1
+  fi
+  printf 'Trusted same-process portal launchLocal result: Launched\n'
 }
 
 recover_rpc_details() {

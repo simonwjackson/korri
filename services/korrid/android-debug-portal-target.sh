@@ -15,27 +15,42 @@ korri_debug_socket_valid() {
 # an empty reply is a retryable transport outcome rather than a verdict about
 # the page. Retry a bounded number of times and state the failure explicitly:
 # propagating jq's bare exit status hid this as a silent non-zero exit.
+korri_debug_evaluate_request() {
+  local expression="$1"
+  "$JQ_BIN" -cn --arg expression "$expression" \
+    '{id:1,method:"Runtime.evaluate",params:{expression:$expression,returnByValue:true,awaitPromise:false}}'
+}
+
+korri_debug_response_value() {
+  local response="$1"
+  "$JQ_BIN" -ce '
+    select(.id == 1)
+    | select(.error == null)
+    | select(.result.exceptionDetails == null)
+    | .result.result.value
+  ' <<<"$response" | tail -1
+}
+
+korri_debug_response_refused() {
+  local response="$1"
+  "$JQ_BIN" -e 'select(.id == 1) | (.error != null or .result.exceptionDetails != null)' \
+    <<<"$response" >/dev/null 2>&1
+}
+
 korri_debug_evaluate() {
   local socket="$1"
   local expression="$2"
   local request response value attempt
-  request="$("$JQ_BIN" -cn --arg expression "$expression" \
-    '{id:1,method:"Runtime.evaluate",params:{expression:$expression,returnByValue:true,awaitPromise:false}}')"
+  request="$(korri_debug_evaluate_request "$expression")"
   for attempt in 1 2 3 4 5; do
     response="$(printf '%s\n' "$request" | "$TIMEOUT_BIN" 5 "$WEBSOCAT_BIN" -1 "$socket" || true)"
     if [[ -n "$response" ]]; then
-      if value="$("$JQ_BIN" -ce '
-        select(.id == 1)
-        | select(.error == null)
-        | select(.result.exceptionDetails == null)
-        | .result.result.value
-      ' <<<"$response" | tail -1)" && [[ -n "$value" ]]; then
+      if value="$(korri_debug_response_value "$response")" && [[ -n "$value" ]]; then
         printf '%s\n' "$value"
         return 0
       fi
       # A structured refusal is the page's answer and must not be retried.
-      if "$JQ_BIN" -e 'select(.id == 1) | (.error != null or .result.exceptionDetails != null)' \
-        <<<"$response" >/dev/null 2>&1; then
+      if korri_debug_response_refused "$response"; then
         echo 'trusted portal evaluation was refused by the page' >&2
         return 1
       fi
@@ -43,6 +58,26 @@ korri_debug_evaluate() {
     sleep 0.25
   done
   echo 'trusted portal target did not answer a bounded evaluation request' >&2
+  return 1
+}
+
+korri_debug_evaluate_once() {
+  local socket="$1"
+  local expression="$2"
+  local request response value
+  request="$(korri_debug_evaluate_request "$expression")"
+  response="$(printf '%s\n' "$request" | "$TIMEOUT_BIN" 5 "$WEBSOCAT_BIN" -1 "$socket" || true)"
+  if [[ -n "$response" ]]; then
+    if value="$(korri_debug_response_value "$response")" && [[ -n "$value" ]]; then
+      printf '%s\n' "$value"
+      return 0
+    fi
+    if korri_debug_response_refused "$response"; then
+      echo 'trusted portal one-shot evaluation was refused by the page' >&2
+      return 1
+    fi
+  fi
+  echo 'trusted portal one-shot evaluation did not return a value' >&2
   return 1
 }
 
