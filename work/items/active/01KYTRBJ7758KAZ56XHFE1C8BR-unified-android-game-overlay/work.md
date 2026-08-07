@@ -59,3 +59,44 @@ The brief blank/reappear transition observed before the sheet slide remains a
 pending UX investigation. Abrupt force-stop/crash retirement is not claimed;
 it is deferred to `01KZBYHCA4R9C8QK131HK0VWSA`. Moonlight parity and U8
 cutover remain pending, so the legacy overlay files stay in place.
+
+## Session: unified overlay stream scope and gate repairs
+
+### Installed-device outcomes
+- Direct-launch negative passed twice with captured evidence: stock RetroArch
+  (`com.retroarch.aarch64`) foreground, physical Guide pressed, no Shift window,
+  no active launch. Evidence: `direct-launch-negative.{png,txt}`.
+- Measured and now asserted automatically: `com.korri.retroarch` publishes no
+  launcher activity and gates starting on a signature permission, so it cannot
+  be started outside Korri at all. The earlier checkpoint asked for something
+  impossible on this device.
+- The operator reported the Shift sheet working over a live zao stream and
+  exercised several overlay controls. That report is **not** recorded as gate
+  evidence: the run ended before the streaming checkpoint was confirmed, so no
+  control set, window record, or session identity was captured.
+- One measured side effect of that manual session: `seekbar_sgsr_sharpness`
+  moved 50 -> 0 and persisted. The gate refused to overwrite Korri preferences
+  and retained a read-only backup; the operator chose to keep the new value.
+
+### Gate defects found and fixed
+- `korri_debug_evaluate` propagated jq's bare exit status when a DevTools target
+  accepted the socket but never answered, so gates died silently (~1 run in 3).
+  Now bounded-retried, with structured refusals still terminal.
+- Three review contracts demanded superseded evidence (tile-center Library
+  activation, blanket no-tolerance inside `capture_evidence`, rc=124-only UDP
+  wording). The whole review exited early and therefore gated nothing.
+- Foreground assertions failed with no output; they now state expected versus
+  observed, which immediately revealed a Daijishou foreground and a sleeping
+  display as the real causes of two "silent" failures.
+- Positive overlay evidence required a legacy `request-show` record that
+  physical Guide never emits; it now requires the accepted Guide-up event plus
+  successful overlay window creation.
+
+### Environment
+- zao ran an older korrid whose `app.session.prepare` reply omitted `launchId`,
+  which this build requires; redeployed at `d1faf88f`. A device-side Tailscale
+  outage also contributed to the operator-visible launch failure.
+
+### Still unproven for cutover
+- Streaming overlay evidence, connection-loss reattachment, graceful return,
+  control parity, and the accessibility revoke/recover pair.
