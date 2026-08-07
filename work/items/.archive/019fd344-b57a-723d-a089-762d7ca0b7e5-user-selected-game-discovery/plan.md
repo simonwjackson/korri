@@ -1,7 +1,7 @@
 ---
 title: "feat: Add user-selected game discovery"
 type: feat
-status: active
+status: completed
 date: 2026-08-05
 deepened: 2026-08-05
 verify_command: "nix run .#korrid-check"
