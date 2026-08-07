@@ -39,8 +39,10 @@ unset \
   KORRI_ANDROID_DEVICE \
   KORRI_ANDROID_DEBUG_AUTHORITY_JSON \
   KORRI_ANDROID_DEBUG_CAPABILITY \
+  KORRI_ANDROID_DEBUG_CAPABILITY_SH \
   KORRI_ANDROID_DEBUG_PORTAL_RELOAD_SH \
   KORRI_ANDROID_DEBUG_PORTAL_FOCUS_GAME_SH \
+  KORRI_ANDROID_GAME_DISCOVERY_DEVTOOLS_HOST_PORT \
   KORRI_ANDROID_GAME_DISCOVERY_HOST_PORT \
   KORRI_ANDROID_SMOKE_LIBRARY \
   KORRI_ANDROID_UPSTREAMS_CONFIG \
@@ -674,10 +676,32 @@ if ! grep -F 'adb_target_once -s "$SERIAL" shell am instrument -w' "$ANDROID_GAM
   exit 1
 fi
 recovery_block="$(sed -n '/recover_rpc_details()/,/^}/p' "$ANDROID_GAME_DISCOVERY")"
-if ! grep -F 'process_pid="$(adb_shell_capture "pidof '\''$PKG'\''"' <<<"$recovery_block" >/dev/null \
-  || ! grep -F 'logcat -d --pid="$process_pid" -s KorridServer:I' <<<"$recovery_block" >/dev/null \
-  || ! grep -F 'logcat -d --pid="$process_pid" -s KorriPortal:I' <<<"$recovery_block" >/dev/null; then
-  echo 'android-game-discovery-check.sh must recover RPC details only from the current Korri process logs' >&2
+if ! grep -F 'DEBUG_CAPABILITY_SH="${KORRI_ANDROID_DEBUG_CAPABILITY_SH:-$CRATE/android-debug-capability.sh}"' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F '"$DEBUG_CAPABILITY_SH" "$SERIAL" "$PKG" --json "$DEVTOOLS_HOST_PORT"' <<<"$recovery_block" >/dev/null \
+  || ! grep -F 'keys == ["capability", "port"]' <<<"$recovery_block" >/dev/null \
+  || ! grep -F 'test("^[0-9a-f]{64}$")' <<<"$recovery_block" >/dev/null \
+  || ! grep -F 'host tcp:%s -> device tcp:%s via trusted portal DevTools' <<<"$recovery_block" >/dev/null; then
+  echo 'android-game-discovery-check.sh must recover current RPC authority through trusted portal DevTools helper JSON' >&2
+  exit 1
+fi
+if grep -Eq 'debug capability=|KorridServer|KorriPortal|listening on 127|logcat' <<<"$recovery_block"; then
+  echo 'android-game-discovery-check.sh recover_rpc_details must not read RPC authority from logcat or historical server logs' >&2
+  exit 1
+fi
+if grep -Eq '(echo|printf)[^[:cntrl:]]*\$(authority_json|RPC_CAPABILITY|capability)' <<<"$recovery_block"; then
+  echo 'android-game-discovery-check.sh must never print recovered RPC capability material' >&2
+  exit 1
+fi
+if ! grep -F 'DEVTOOLS_HOST_PORT="${KORRI_ANDROID_GAME_DISCOVERY_DEVTOOLS_HOST_PORT:-43120}"' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'validate_host_forward_port KORRI_ANDROID_GAME_DISCOVERY_HOST_PORT "$HOST_PORT"' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'validate_host_forward_port KORRI_ANDROID_GAME_DISCOVERY_DEVTOOLS_HOST_PORT "$DEVTOOLS_HOST_PORT"' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'if [[ "$HOST_PORT" == "$DEVTOOLS_HOST_PORT" ]]; then' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
+  echo 'android-game-discovery-check.sh must use bounded distinct host ports for RPC and DevTools forwards' >&2
+  exit 1
+fi
+if ! grep -F 'websocat' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! sed -n '/android-game-discovery-check = {/,/^    };/p' "$ROOT/nix/tasks.nix" | grep -F 'pkgs.websocat' >/dev/null; then
+  echo 'android-game-discovery-check task must put websocat on PATH for trusted portal DevTools authority recovery' >&2
   exit 1
 fi
 restart_block="$(sed -n '/restart_portal_after_registration()/,/^}/p' "$ANDROID_GAME_DISCOVERY")"

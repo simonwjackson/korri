@@ -317,6 +317,7 @@ let
         pkgs.gnused
         pkgs.jq
         pkgs.nix
+        pkgs.websocat
       ];
       env = androidEnv // {
         KORRI_PORTAL_BUNDLE = "${packages.portal-bundle}/bin/portal-bundle";

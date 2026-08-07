@@ -1,5 +1,5 @@
 #!/usr/bin/env nix-shell
-#! nix-shell -i bash -p bash android-tools coreutils curl gnugrep gnused jq
+#! nix-shell -i bash -p bash android-tools coreutils curl gnugrep gnused jq websocat
 # shellcheck shell=bash
 # Explicit-device Android proof for user-selected game discovery.
 #
@@ -21,6 +21,8 @@ PKG="com.simonwjackson.korri.debug"
 TEST_PKG="$PKG.test"
 RETROARCH_PKG="${KORRI_RETROARCH_PACKAGE:-com.korri.retroarch}"
 HOST_PORT="${KORRI_ANDROID_GAME_DISCOVERY_HOST_PORT:-43124}"
+DEVTOOLS_HOST_PORT="${KORRI_ANDROID_GAME_DISCOVERY_DEVTOOLS_HOST_PORT:-43120}"
+DEBUG_CAPABILITY_SH="${KORRI_ANDROID_DEBUG_CAPABILITY_SH:-$CRATE/android-debug-capability.sh}"
 ANDROID_STORAGE_ROOT="/sdcard/korri"
 LOCK_REMOTE="$ANDROID_STORAGE_ROOT/.android-game-discovery-check.lock"
 LOCK_OWNER_REMOTE="$LOCK_REMOTE/owner"
@@ -64,6 +66,22 @@ while [[ $# -gt 0 ]]; do
 done
 if [[ -z "$SERIAL" ]]; then
   usage
+  exit 1
+fi
+
+validate_host_forward_port() {
+  local name="$1"
+  local value="$2"
+  if [[ ! "$value" =~ ^[0-9]+$ || "$value" -lt 1024 || "$value" -gt 65535 ]]; then
+    echo "$name must be a TCP port in 1024..65535, got '$value'" >&2
+    exit 1
+  fi
+}
+
+validate_host_forward_port KORRI_ANDROID_GAME_DISCOVERY_HOST_PORT "$HOST_PORT"
+validate_host_forward_port KORRI_ANDROID_GAME_DISCOVERY_DEVTOOLS_HOST_PORT "$DEVTOOLS_HOST_PORT"
+if [[ "$HOST_PORT" == "$DEVTOOLS_HOST_PORT" ]]; then
+  echo "KORRI_ANDROID_GAME_DISCOVERY_HOST_PORT and KORRI_ANDROID_GAME_DISCOVERY_DEVTOOLS_HOST_PORT must be distinct" >&2
   exit 1
 fi
 
@@ -361,37 +379,43 @@ launch_local_spec() {
 
 recover_rpc_details() {
   local label="${1:-embedded korrid RPC}"
-  local process_pid=""
+  local authority_json=""
+  local helper_stderr=""
   local port=""
   local capability=""
-  local portal_ready=""
-  for _ in $(seq 1 20); do
-    local server_logcat_output=""
-    local portal_logcat_output=""
-    process_pid="$(adb_shell_capture "pidof '$PKG'" 2>/dev/null | tr -d '\r' | awk '{print $1}' || true)"
-    if [[ -z "$process_pid" ]]; then
-      sleep 1
-      continue
+
+  helper_stderr="$(mktemp)"
+  if ! authority_json="$({ "$DEBUG_CAPABILITY_SH" "$SERIAL" "$PKG" --json "$DEVTOOLS_HOST_PORT"; } 2>"$helper_stderr")"; then
+    echo "Could not recover embedded korrid RPC details during $label from trusted portal DevTools" >&2
+    if [[ -s "$helper_stderr" ]]; then
+      sed 's/^/debug authority helper: /' "$helper_stderr" >&2
     fi
-    server_logcat_output="$(adb_capture logcat -d --pid="$process_pid" -s KorridServer:I 2>/dev/null || true)"
-    portal_logcat_output="$(adb_capture logcat -d --pid="$process_pid" -s KorriPortal:I 2>/dev/null || true)"
-    port="$(printf '%s\n' "$server_logcat_output" | grep 'listening on 127.0.0.1:' | tail -1 | sed -n 's/.*127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p' || true)"
-    capability="$(printf '%s\n' "$server_logcat_output" | grep 'debug capability=' | tail -1 | sed -n 's/.*debug capability=\([0-9a-f][0-9a-f]*\).*/\1/p' || true)"
-    portal_ready="$(printf '%s\n' "$portal_logcat_output" | grep 'title="Korri"' | tail -1 || true)"
-    if [[ -n "$port" && -n "$capability" && -n "$portal_ready" ]]; then
-      RPC_PORT="$port"
-      RPC_CAPABILITY="$capability"
-      clear_rpc_forward
-      adb_target -s "$SERIAL" forward "tcp:$HOST_PORT" "tcp:$RPC_PORT"
-      FORWARD_ACTIVE=true
-      printf 'Recovered %s: host tcp:%s -> device tcp:%s; portal=%s\n' "$label" "$HOST_PORT" "$RPC_PORT" "$portal_ready"
-      return 0
-    fi
-    sleep 1
-  done
-  echo "Could not recover embedded korrid RPC details during $label (pid='${process_pid:-missing}', port='$port', capability=${capability:+present}, portal=${portal_ready:+ready})" >&2
-  adb_capture logcat -d -t 300 >&2 || true
-  exit 1
+    rm -f "$helper_stderr"
+    exit 1
+  fi
+  rm -f "$helper_stderr"
+
+  if ! jq -e '
+    type == "object" and (keys == ["capability", "port"])
+    and (.port | type == "number" and floor == . and . >= 1 and . <= 65535)
+    and (.capability | type == "string" and test("^[0-9a-f]{64}$"))
+  ' <<<"$authority_json" >/dev/null; then
+    echo "Debug authority helper returned invalid RPC authority JSON during $label" >&2
+    exit 1
+  fi
+  port="$(jq -er '.port' <<<"$authority_json")"
+  capability="$(jq -er '.capability' <<<"$authority_json")"
+  if [[ ! "$port" =~ ^[0-9]+$ || "$port" -lt 1 || "$port" -gt 65535 || ! "$capability" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "Debug authority helper returned invalid RPC authority fields during $label" >&2
+    exit 1
+  fi
+
+  RPC_PORT="$port"
+  RPC_CAPABILITY="$capability"
+  clear_rpc_forward
+  adb_target -s "$SERIAL" forward "tcp:$HOST_PORT" "tcp:$RPC_PORT"
+  FORWARD_ACTIVE=true
+  printf 'Recovered %s: host tcp:%s -> device tcp:%s via trusted portal DevTools\n' "$label" "$HOST_PORT" "$RPC_PORT"
 }
 
 restart_portal_after_registration() {
