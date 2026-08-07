@@ -145,6 +145,9 @@ fi
 rm -f "$pid_stdout" "$pid_stderr"
 
 remove_stale_forward
+# A timed-out adb may have registered the forward before losing its response.
+# Mark cleanup as needed before acquisition so every partial result is removed.
+FORWARD_ACTIVE=true
 forward_stdout="$(mktemp)"
 forward_stderr="$(mktemp)"
 if ! bounded_adb_capture "$forward_stdout" "$forward_stderr" forward "tcp:$devtools_port" "localabstract:webview_devtools_remote_$pid"; then
@@ -159,7 +162,6 @@ if ! bounded_adb_capture "$forward_stdout" "$forward_stderr" forward "tcp:$devto
   exit 1
 fi
 rm -f "$forward_stdout" "$forward_stderr"
-FORWARD_ACTIVE=true
 
 json_targets() {
   "$CURL_BIN" --fail --silent --show-error --connect-timeout 2 --max-time 5 \
@@ -229,15 +231,23 @@ done
 }
 
 launch_spec_base64_js="$(printf '%s' "$launch_spec_base64" | json_string)"
+expected_capability_js="$(printf '%s' "$expected_capability" | json_string)"
 launch_expression="(() => {
   const expectedUrl = $url_js;
+  const expectedPort = $expected_port;
+  const expectedCapability = $expected_capability_js;
   const encodedLaunchSpec = $launch_spec_base64_js;
-  if (location.href !== expectedUrl) throw new Error('not the trusted main portal');
-  const native = window.KorriNative;
-  if (typeof native !== 'object' || native === null
-      || typeof native.launchLocal !== 'function') {
-    throw new Error('launchLocal is not available');
-  }
+  const signerMatches = () => {
+    const currentNative = window.KorriNative;
+    return location.href === expectedUrl
+      && typeof currentNative === 'object' && currentNative !== null
+      && typeof currentNative.korridPort === 'function'
+      && typeof currentNative.korridCapability === 'function'
+      && typeof currentNative.launchLocal === 'function'
+      && currentNative.korridPort() === expectedPort
+      && currentNative.korridCapability() === expectedCapability;
+  };
+  if (!signerMatches()) throw new Error('trusted portal signer changed before launch scheduling');
   const binary = atob(encodedLaunchSpec);
   const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
   const specJson = new TextDecoder('utf-8', {fatal: true}).decode(bytes);
@@ -246,7 +256,8 @@ launch_expression="(() => {
     throw new Error('launch spec is not a JSON object');
   }
   setTimeout(() => {
-    native.launchLocal(specJson);
+    if (!signerMatches()) return;
+    window.KorriNative.launchLocal(specJson);
   }, 0);
   return {_tag: 'LaunchScheduled'};
 })()"

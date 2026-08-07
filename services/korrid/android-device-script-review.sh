@@ -666,7 +666,11 @@ if ! grep -F 'DEBUG_LAUNCH_LOCAL_SH="${KORRI_ANDROID_DEBUG_LAUNCH_LOCAL_SH:-$CRA
   || ! grep -F 'korri_debug_select_main_portal_socket "$targets"' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
   || ! grep -F 'setTimeout(() => {' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
   || ! grep -F "return {_tag: 'LaunchScheduled'}" "$DEBUG_LAUNCH_LOCAL" >/dev/null \
-  || [[ "$(grep -Fo 'native.launchLocal(specJson)' "$DEBUG_LAUNCH_LOCAL" | wc -l | tr -d ' ')" -ne 1 ]] \
+  || ! grep -F 'const expectedPort = $expected_port;' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || ! grep -F 'const expectedCapability = $expected_capability_js;' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
+  || [[ "$(grep -Fc 'signerMatches()' "$DEBUG_LAUNCH_LOCAL")" -lt 2 ]] \
+  || [[ "$(grep -Fo 'launchLocal(specJson)' "$DEBUG_LAUNCH_LOCAL" | wc -l | tr -d ' ')" -ne 1 ]] \
+  || ! grep -F 'FORWARD_ACTIVE=true' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
   || ! grep -F '"$TIMEOUT_BIN" 10 "${ADB[@]}"' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
   || ! grep -F 'pidof stderr:' "$DEBUG_LAUNCH_LOCAL" >/dev/null \
   || ! grep -F 'failed to remove trusted portal DevTools forward during cleanup' "$DEBUG_LAUNCH_LOCAL" >/dev/null \

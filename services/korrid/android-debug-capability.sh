@@ -98,6 +98,9 @@ stale_forward_stdout="$(mktemp)"
 stale_forward_stderr="$(mktemp)"
 bounded_adb_capture "$stale_forward_stdout" "$stale_forward_stderr" forward --remove "tcp:$devtools_port" || true
 rm -f "$stale_forward_stdout" "$stale_forward_stderr"
+# A timed-out adb may have registered the forward before losing its response.
+# Mark cleanup as needed before acquisition so every partial result is removed.
+FORWARD_ACTIVE=true
 forward_stdout="$(mktemp)"
 forward_stderr="$(mktemp)"
 if ! bounded_adb_capture "$forward_stdout" "$forward_stderr" forward "tcp:$devtools_port" "localabstract:webview_devtools_remote_$pid"; then
@@ -112,7 +115,6 @@ if ! bounded_adb_capture "$forward_stdout" "$forward_stderr" forward "tcp:$devto
   exit 1
 fi
 rm -f "$forward_stdout" "$forward_stderr"
-FORWARD_ACTIVE=true
 
 json_targets() {
   "$CURL_BIN" --fail --silent --show-error --connect-timeout 2 --max-time 5 \

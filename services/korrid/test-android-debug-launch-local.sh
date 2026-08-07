@@ -80,7 +80,7 @@ elif grep -Fq 'hasLaunchLocal:' <<<"$expression"; then
     --argjson port "${FAKE_SIGNER_PORT:-43211}" \
     --arg capability "${FAKE_SIGNER_CAPABILITY:-$FAKE_EXPECTED_CAPABILITY}" \
     '{href:"https://appassets.androidplatform.net/assets/portal/index.html",exactPortal:true,readyState:"complete",hasNative:true,hasPort:true,hasCapability:true,hasLaunchLocal:true,port:$port,capability:$capability}')"
-elif grep -Fq 'setTimeout(() =>' <<<"$expression" && grep -Fq 'native.launchLocal(specJson)' <<<"$expression"; then
+elif grep -Fq 'setTimeout(() =>' <<<"$expression" && grep -Fq 'launchLocal(specJson)' <<<"$expression"; then
   encoded="$(awk -F'"' '/const encodedLaunchSpec = /{print $2; exit}' <<<"$expression")"
   printf '%s\n' "$socket" >>"$FAKE_LAUNCH_LOG"
   printf '%s' "$encoded" >>"$FAKE_LAUNCH_BASE64_LOG"
@@ -156,7 +156,10 @@ launch_count() {
 assert_one_main_launch() {
   [[ "$(launch_count)" == 1 ]]
   grep -Fx 'ws://127.0.0.1:43120/devtools/page/main' "$FAKE_LAUNCH_LOG" >/dev/null
-  [[ "$(grep -o 'native.launchLocal(specJson)' "$FAKE_EVAL_LOG" | wc -l | tr -d ' ')" == 1 ]]
+  [[ "$(grep -o 'launchLocal(specJson)' "$FAKE_EVAL_LOG" | wc -l | tr -d ' ')" == 1 ]]
+  jq -r '.expression' "$FAKE_EVAL_LOG" | grep -F 'const expectedPort = 43211;' >/dev/null
+  jq -r '.expression' "$FAKE_EVAL_LOG" | grep -F "const expectedCapability = \"$secret_capability\";" >/dev/null
+  [[ "$(jq -r '.expression' "$FAKE_EVAL_LOG" | grep -Fo 'signerMatches()' | wc -l | tr -d ' ')" -ge 2 ]]
 }
 
 envelope() {

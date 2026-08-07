@@ -373,7 +373,7 @@ register_folder() {
 }
 
 resumed_activity() {
-  adb_shell_capture "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" | tr -d '\r' || true
+  adb_shell_capture "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])((topResumedActivity|mResumedActivity)[:=]|Resumed:)'" | tr -d '\r'
 }
 
 retroarch_is_resumed() {
@@ -383,7 +383,10 @@ retroarch_is_resumed() {
 
 assert_retroarch_not_resumed() {
   local activity=""
-  activity="$(resumed_activity)"
+  if ! activity="$(resumed_activity)" || [[ -z "$activity" ]]; then
+    echo 'Could not confirm the foreground activity before launch scheduling' >&2
+    exit 1
+  fi
   if retroarch_is_resumed "$activity"; then
     echo "RetroArch is already foreground before launch scheduling: $activity" >&2
     exit 1
@@ -394,8 +397,7 @@ assert_retroarch_not_resumed() {
 wait_retroarch_resumed_after_launch() {
   local activity=""
   for _ in $(seq 1 40); do
-    activity="$(resumed_activity)"
-    if retroarch_is_resumed "$activity"; then
+    if activity="$(resumed_activity)" && retroarch_is_resumed "$activity"; then
       printf 'Final top activity after discovered launch: %s\n' "$activity"
       return 0
     fi
