@@ -497,7 +497,7 @@ recover_rpc_details() {
   printf 'Recovered %s: host tcp:%s -> device tcp:%s via trusted portal DevTools\n' "$label" "$HOST_PORT" "$RPC_PORT"
 }
 
-restart_portal_after_registration() {
+restart_portal_and_recover() {
   local label="$1"
   clear_rpc_forward
   # Preserve the scan metric emitted by instrumentation, but do not reuse its
@@ -627,11 +627,11 @@ printf 'SteamGridDB credential status during gate: NotConfigured\n'
 
 adb_target -s "$SERIAL" logcat -c
 register_folder "$FIXTURE_A"
-restart_portal_after_registration "after first folder registration"
+restart_portal_and_recover "after first folder registration"
 wait_discovery_idle "after first folder registration"
 assert_latest_hashed_bytes_nonzero "after first folder registration"
 register_folder "$FIXTURE_B"
-restart_portal_after_registration "after second folder registration"
+restart_portal_and_recover "after second folder registration"
 wait_discovery_idle "after second folder registration"
 assert_two_u9_games_listable "after two folder registrations"
 assert_latest_hashed_bytes_nonzero "after second folder registration"
@@ -654,6 +654,7 @@ if ! jq -e 'length > 0' <<<"$selected_location_ids" >/dev/null; then
   exit 1
 fi
 set_appop_and_require_effective_mode deny deny ignore
+restart_portal_and_recover "after all-files denial"
 rescan "with all-files denied"
 denied_snapshot="$(rpc "denied all-files snapshot" '{"_tag":"app.discovery.snapshot","payload":{}}')"
 if ! jq -e --argjson selectedLocationIds "$selected_location_ids" '
@@ -670,6 +671,7 @@ if ! jq -e --argjson selectedLocationIds "$selected_location_ids" '
 fi
 assert_two_u9_games_listable "while all-files access is denied"
 set_appop_and_require_effective_mode allow allow
+restart_portal_and_recover "after all-files recovery"
 rescan "after all-files recovery"
 assert_two_u9_games_listable "after all-files recovery"
 

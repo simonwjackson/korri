@@ -685,10 +685,18 @@ if ! grep -F 'DEBUG_LAUNCH_LOCAL_SH="${KORRI_ANDROID_DEBUG_LAUNCH_LOCAL_SH:-$CRA
 fi
 if ! awk '
   /assert_two_u9_games_listable "after all-files recovery"/ { recovery = NR }
-  /launch_local_spec "\$launch_response"/ { launch = NR }
-  END { exit !(recovery && launch > recovery) }
+  /launch_local_spec "\$launch_response"/ { launch = NR; after_launch = 1; next }
+  after_launch && (/rpc "/ || /rescan "/ || /wait_discovery_idle/ || /assert_two_u9_games_listable/) {
+    rpc_dependent_after_launch = 1
+  }
+  /Android game discovery check passed on/ { success = NR }
+  END { exit !(recovery && launch > recovery && success > launch && !rpc_dependent_after_launch) }
 ' "$ANDROID_GAME_DISCOVERY"; then
   echo 'android-game-discovery launch must remain the terminal proof after every RPC-based recovery assertion' >&2
+  exit 1
+fi
+if [[ "$(grep -Fc '|Resumed:)' "$ANDROID_GAME_DISCOVERY")" -lt 2 ]]; then
+  echo 'android-game-discovery-check.sh must recognize TrebleDroid current-activity Resumed evidence in preflight and launch verification' >&2
   exit 1
 fi
 if ! grep -F 'app.discovery.registerReceipt' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null; then
@@ -774,8 +782,8 @@ if ! grep -F 'websocat' "$DEBUG_AUTHORITY" "$DEBUG_LAUNCH_LOCAL" >/dev/null \
   echo 'android-game-discovery-check task must put websocat on PATH for trusted portal DevTools helpers' >&2
   exit 1
 fi
-restart_block="$(sed -n '/restart_portal_after_registration()/,/^}/p' "$ANDROID_GAME_DISCOVERY")"
-if ! grep -F 'restart_portal_after_registration()' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+restart_block="$(sed -n '/restart_portal_and_recover()/,/^}/p' "$ANDROID_GAME_DISCOVERY")"
+if ! grep -F 'restart_portal_and_recover()' "$ANDROID_GAME_DISCOVERY" >/dev/null \
   || ! grep -F 'clear_rpc_forward' <<<"$restart_block" >/dev/null \
   || grep -F 'logcat -c' <<<"$restart_block" >/dev/null \
   || ! grep -F "am force-stop '\$PKG'" <<<"$restart_block" >/dev/null \
@@ -786,14 +794,29 @@ if ! grep -F 'restart_portal_after_registration()' "$ANDROID_GAME_DISCOVERY" >/d
 fi
 if ! awk '
   /register_folder "\$FIXTURE_A"/ { saw_a = NR }
-  /restart_portal_after_registration "after first folder registration"/ { if (saw_a && !wait_a) restart_a = NR }
+  /restart_portal_and_recover "after first folder registration"/ { if (saw_a && !wait_a) restart_a = NR }
   /wait_discovery_idle "after first folder registration"/ { wait_a = NR }
   /register_folder "\$FIXTURE_B"/ { saw_b = NR }
-  /restart_portal_after_registration "after second folder registration"/ { if (saw_b && !wait_b) restart_b = NR }
+  /restart_portal_and_recover "after second folder registration"/ { if (saw_b && !wait_b) restart_b = NR }
   /wait_discovery_idle "after second folder registration"/ { wait_b = NR }
   END { exit !(saw_a && restart_a > saw_a && wait_a > restart_a && saw_b && restart_b > saw_b && wait_b > restart_b) }
 ' "$ANDROID_GAME_DISCOVERY"; then
   echo 'android-game-discovery-check.sh must recover portal/RPC after each registration before polling discovery idle' >&2
+  exit 1
+fi
+if ! awk '
+  /set_appop_and_require_effective_mode deny deny ignore/ { deny = NR }
+  /restart_portal_and_recover "after all-files denial"/ { deny_restart = NR }
+  /rescan "with all-files denied"/ { denied_rescan = NR }
+  /set_appop_and_require_effective_mode allow allow/ { allow = NR }
+  /restart_portal_and_recover "after all-files recovery"/ { allow_restart = NR }
+  /rescan "after all-files recovery"/ { recovery_rescan = NR }
+  END {
+    exit !(deny && deny_restart > deny && denied_rescan > deny_restart
+      && allow > denied_rescan && allow_restart > allow && recovery_rescan > allow_restart)
+  }
+' "$ANDROID_GAME_DISCOVERY"; then
+  echo 'android-game-discovery-check.sh must recover fresh RPC authority after each app-op transition before rescanning' >&2
   exit 1
 fi
 if ! grep -F 'local log_file="$RUN_DIR/instrument-$action.log"' "$ANDROID_GAME_DISCOVERY" >/dev/null \
