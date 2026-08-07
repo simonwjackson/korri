@@ -673,6 +673,13 @@ if ! grep -F 'adb_target_once -s "$SERIAL" shell am instrument -w' "$ANDROID_GAM
   echo 'android-game-discovery-check.sh must not blindly retry non-idempotent instrumentation RPC mutations' >&2
   exit 1
 fi
+recovery_block="$(sed -n '/recover_rpc_details()/,/^}/p' "$ANDROID_GAME_DISCOVERY")"
+if ! grep -F 'process_pid="$(adb_shell_capture "pidof '\''$PKG'\''"' <<<"$recovery_block" >/dev/null \
+  || ! grep -F 'logcat -d --pid="$process_pid" -s KorridServer:I' <<<"$recovery_block" >/dev/null \
+  || ! grep -F 'logcat -d --pid="$process_pid" -s KorriPortal:I' <<<"$recovery_block" >/dev/null; then
+  echo 'android-game-discovery-check.sh must recover RPC details only from the current Korri process logs' >&2
+  exit 1
+fi
 restart_block="$(sed -n '/restart_portal_after_registration()/,/^}/p' "$ANDROID_GAME_DISCOVERY")"
 if ! grep -F 'restart_portal_after_registration()' "$ANDROID_GAME_DISCOVERY" >/dev/null \
   || ! grep -F 'clear_rpc_forward' <<<"$restart_block" >/dev/null \

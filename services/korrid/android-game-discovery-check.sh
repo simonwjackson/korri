@@ -361,14 +361,20 @@ launch_local_spec() {
 
 recover_rpc_details() {
   local label="${1:-embedded korrid RPC}"
+  local process_pid=""
   local port=""
   local capability=""
   local portal_ready=""
   for _ in $(seq 1 20); do
     local server_logcat_output=""
     local portal_logcat_output=""
-    server_logcat_output="$(adb_capture logcat -d -s KorridServer:I 2>/dev/null || true)"
-    portal_logcat_output="$(adb_capture logcat -d -s KorriPortal:I 2>/dev/null || true)"
+    process_pid="$(adb_shell_capture "pidof '$PKG'" 2>/dev/null | tr -d '\r' | awk '{print $1}' || true)"
+    if [[ -z "$process_pid" ]]; then
+      sleep 1
+      continue
+    fi
+    server_logcat_output="$(adb_capture logcat -d --pid="$process_pid" -s KorridServer:I 2>/dev/null || true)"
+    portal_logcat_output="$(adb_capture logcat -d --pid="$process_pid" -s KorriPortal:I 2>/dev/null || true)"
     port="$(printf '%s\n' "$server_logcat_output" | grep 'listening on 127.0.0.1:' | tail -1 | sed -n 's/.*127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p' || true)"
     capability="$(printf '%s\n' "$server_logcat_output" | grep 'debug capability=' | tail -1 | sed -n 's/.*debug capability=\([0-9a-f][0-9a-f]*\).*/\1/p' || true)"
     portal_ready="$(printf '%s\n' "$portal_logcat_output" | grep 'title="Korri"' | tail -1 || true)"
@@ -383,7 +389,7 @@ recover_rpc_details() {
     fi
     sleep 1
   done
-  echo "Could not recover embedded korrid RPC details during $label (port='$port', capability=${capability:+present}, portal=${portal_ready:+ready})" >&2
+  echo "Could not recover embedded korrid RPC details during $label (pid='${process_pid:-missing}', port='$port', capability=${capability:+present}, portal=${portal_ready:+ready})" >&2
   adb_capture logcat -d -t 300 >&2 || true
   exit 1
 }
