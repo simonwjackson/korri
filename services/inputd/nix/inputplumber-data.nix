@@ -4,6 +4,7 @@ let
   inherit (pkgs) lib;
   selectedDeviceProfile = "60-xbox_one_gamepad.yaml";
   selectedDeviceName = "Microsoft X-Box One pad";
+  resolvedProfile = "korri-${selectedDeviceProfile}";
   shortcutMappings = ./inputplumber-korri-dbus-shortcuts.yaml;
 
   transformSelectedProfile =
@@ -11,6 +12,7 @@ let
     ''
       selected_device="${inputplumberRoot}/devices/${selectedDeviceProfile}"
       default_profile="${inputplumberRoot}/profiles/default.yaml"
+      resolved_profile="${inputplumberRoot}/profiles/${resolvedProfile}"
 
       test -f "$selected_device" || {
         echo "selected upstream profile ${selectedDeviceProfile} is missing" >&2
@@ -38,15 +40,22 @@ let
           exit 1
         }
 
+      test ! -e "$resolved_profile" || {
+        echo "Korri resolved profile ${resolvedProfile} already exists upstream" >&2
+        exit 1
+      }
+
       yq eval -i '.target_devices = ["xb360", "mouse", "keyboard", "dbus"]' "$selected_device"
-      cat ${shortcutMappings} >> "$default_profile"
+      cp "$default_profile" "$resolved_profile"
+      yq eval -i '.name = "Korri ${selectedDeviceName}"' "$resolved_profile"
+      cat ${shortcutMappings} >> "$resolved_profile"
 
       test "$(yq eval -o=json -I=0 '.target_devices' "$selected_device")" = '["xb360","mouse","keyboard","dbus"]' || {
         echo "selected profile target transform produced unexpected data" >&2
         exit 1
       }
-      test "$(yq eval '[.mapping[] | select(.source_event.gamepad.button == "Guide") | .target_events[] | select(.dbus == "ui_guide")] | length' "$default_profile")" = 1 \
-        && test "$(yq eval '[.mapping[] | select(.source_event.gamepad.button == "Guide") | .target_events[] | select(has("gamepad"))] | length' "$default_profile")" = 0 || {
+      test "$(yq eval '[.mapping[] | select(.source_event.gamepad.button == "Guide") | .target_events[] | select(.dbus == "ui_guide")] | length' "$resolved_profile")" = 1 \
+        && test "$(yq eval '[.mapping[] | select(.source_event.gamepad.button == "Guide") | .target_events[] | select(has("gamepad"))] | length' "$resolved_profile")" = 0 || {
           echo "Korri Guide route must be DBus-only and composed exactly once" >&2
           exit 1
         }
@@ -65,8 +74,8 @@ let
       do
         button="''${route%%:*}"
         capability="''${route#*:}"
-        test "$(BUTTON="$button" yq eval '[.mapping[] | select(.source_event.gamepad.button == env(BUTTON)) | .target_events[] | select(.gamepad.button == env(BUTTON))] | length' "$default_profile")" = 1 \
-          && test "$(BUTTON="$button" CAPABILITY="$capability" yq eval '[.mapping[] | select(.source_event.gamepad.button == env(BUTTON)) | .target_events[] | select(.dbus == env(CAPABILITY))] | length' "$default_profile")" = 1 || {
+        test "$(BUTTON="$button" yq eval '[.mapping[] | select(.source_event.gamepad.button == env(BUTTON)) | .target_events[] | select(.gamepad.button == env(BUTTON))] | length' "$resolved_profile")" = 1 \
+          && test "$(BUTTON="$button" CAPABILITY="$capability" yq eval '[.mapping[] | select(.source_event.gamepad.button == env(BUTTON)) | .target_events[] | select(.dbus == env(CAPABILITY))] | length' "$resolved_profile")" = 1 || {
             echo "Korri $button route must retain gameplay and add exactly one $capability DBus copy" >&2
             exit 1
           }
@@ -85,7 +94,7 @@ let
         nativeBuildInputs = [ pkgs.yq-go ];
         passthru = {
           upstream = inputplumberRuntime.upstream;
-          inherit selectedDeviceProfile additionalDataPackages;
+          inherit selectedDeviceProfile resolvedProfile additionalDataPackages;
         };
         meta = inputplumberRuntime.meta // {
           description = "Pinned InputPlumber with Korri's resolved input data root";
@@ -121,5 +130,5 @@ let
       '';
 in
 {
-  inherit compose transformSelectedProfile selectedDeviceProfile;
+  inherit compose transformSelectedProfile selectedDeviceProfile resolvedProfile;
 }

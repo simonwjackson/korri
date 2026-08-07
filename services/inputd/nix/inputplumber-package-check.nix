@@ -39,6 +39,7 @@ pkgs.runCommand "inputplumber-korri-package-check"
     inputplumber_root="${inputplumberKorri}/share/inputplumber"
     selected_device="$inputplumber_root/devices/${data.selectedDeviceProfile}"
     default_profile="$inputplumber_root/profiles/default.yaml"
+    resolved_profile="$inputplumber_root/profiles/${data.resolvedProfile}"
 
     test -x "$inputplumber_bin" || {
       echo "inputplumber-korri must expose bin/inputplumber" >&2
@@ -70,11 +71,34 @@ pkgs.runCommand "inputplumber-korri-package-check"
       exit 1
     }
 
-    test "$(yq eval '[.mapping[] | select(.source_event.gamepad.button == "Guide") | .target_events[] | select(.dbus == "ui_guide")] | length' "$default_profile")" = 1 || {
+    cmp "${inputplumberRuntime}/share/inputplumber/profiles/default.yaml" "$default_profile" || {
+      echo "the shared upstream default profile must remain unchanged" >&2
+      exit 1
+    }
+    test -f "$resolved_profile" || {
+      echo "the selected device must have a Korri-specific resolved profile" >&2
+      exit 1
+    }
+    for profile in "$inputplumber_root"/profiles/*.yaml; do
+      if test "$profile" = "$resolved_profile"; then
+        continue
+      fi
+      profile_name="$(basename "$profile")"
+      cmp "${inputplumberRuntime}/share/inputplumber/profiles/$profile_name" "$profile" || {
+        echo "unselected profile $profile_name must remain unchanged" >&2
+        exit 1
+      }
+      if grep -q '^  - name: Korri ' "$profile"; then
+        echo "unselected profile $profile_name contains Korri routes" >&2
+        exit 1
+      fi
+    done
+
+    test "$(yq eval '[.mapping[] | select(.source_event.gamepad.button == "Guide") | .target_events[] | select(.dbus == "ui_guide")] | length' "$resolved_profile")" = 1 || {
       echo "Guide must route to DBus exactly once" >&2
       exit 1
     }
-    test "$(yq eval '[.mapping[] | select(.source_event.gamepad.button == "Guide") | .target_events[] | select(has("gamepad"))] | length' "$default_profile")" = 0 || {
+    test "$(yq eval '[.mapping[] | select(.source_event.gamepad.button == "Guide") | .target_events[] | select(has("gamepad"))] | length' "$resolved_profile")" = 0 || {
       echo "Guide must be DBus-only" >&2
       exit 1
     }
@@ -93,11 +117,11 @@ pkgs.runCommand "inputplumber-korri-package-check"
     do
       button="''${route%%:*}"
       capability="''${route#*:}"
-      test "$(BUTTON="$button" yq eval '[.mapping[] | select(.source_event.gamepad.button == env(BUTTON)) | .target_events[] | select(.gamepad.button == env(BUTTON))] | length' "$default_profile")" = 1 || {
+      test "$(BUTTON="$button" yq eval '[.mapping[] | select(.source_event.gamepad.button == env(BUTTON)) | .target_events[] | select(.gamepad.button == env(BUTTON))] | length' "$resolved_profile")" = 1 || {
         echo "$button must retain exactly one gameplay route" >&2
         exit 1
       }
-      test "$(BUTTON="$button" CAPABILITY="$capability" yq eval '[.mapping[] | select(.source_event.gamepad.button == env(BUTTON)) | .target_events[] | select(.dbus == env(CAPABILITY))] | length' "$default_profile")" = 1 || {
+      test "$(BUTTON="$button" CAPABILITY="$capability" yq eval '[.mapping[] | select(.source_event.gamepad.button == env(BUTTON)) | .target_events[] | select(.dbus == env(CAPABILITY))] | length' "$resolved_profile")" = 1 || {
         echo "$button must have exactly one $capability DBus route" >&2
         exit 1
       }

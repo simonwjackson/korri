@@ -1,5 +1,5 @@
   # Harvested from legacy:product/systems/nixos/images/inputplumber-korri-dbus-shortcuts.yaml.
-  # Appended to the InputPlumber 0.75.2 Default profile's mapping list.
+  # Appended only to Korri's resolved Xbox One gamepad profile mapping list.
   - name: Korri Home to DBus
     source_event:
       gamepad:
