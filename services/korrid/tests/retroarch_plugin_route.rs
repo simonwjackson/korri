@@ -103,6 +103,7 @@ fn explicit_storage_root_file_target_launches_through_retroarch() {
         FileProvisionMode::Deferred,
         &state,
         &registry(true, true),
+        50000,
     )
     .expect("explicit storage launch spec");
 
