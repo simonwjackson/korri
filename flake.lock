@@ -33,6 +33,22 @@
         "type": "github"
       }
     },
+    "inputplumber-nixpkgs": {
+      "locked": {
+        "lastModified": 1773268795,
+        "narHash": "sha256-Uf9UIDZE1Obwn2JLNo9pgZBNWxWLqukNYaAKetVmL28=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "9a37a7b2ae651b6182ef08d0d446a964339bcdfe",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "9a37a7b2ae651b6182ef08d0d446a964339bcdfe",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1766309749,
@@ -70,6 +86,7 @@
       "inputs": {
         "crane": "crane",
         "flake-utils": "flake-utils",
+        "inputplumber-nixpkgs": "inputplumber-nixpkgs",
         "nixpkgs": "nixpkgs",
         "proseql": "proseql",
         "rust-overlay": "rust-overlay"

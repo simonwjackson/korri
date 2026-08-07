@@ -3,6 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    inputplumber-nixpkgs.url = "github:NixOS/nixpkgs/9a37a7b2ae651b6182ef08d0d446a964339bcdfe";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
@@ -22,6 +23,7 @@
     {
       self,
       nixpkgs,
+      inputplumber-nixpkgs,
       flake-utils,
       rust-overlay,
       crane,
@@ -39,6 +41,10 @@
             allowUnfree = true;
           };
         };
+        inputplumber = import ./services/inputd/nix {
+          inherit pkgs system;
+          inputplumberNixpkgs = inputplumber-nixpkgs;
+        };
       in
       {
         apps = import ./nix/tasks.nix { inherit pkgs proseql; };
@@ -46,10 +52,14 @@
         devShells.portal = import ./clients/portal/devshell.nix { inherit pkgs; };
         devShells.korrid = import ./services/korrid/devshell.nix { inherit pkgs proseql; };
         devShells.retroarch = import ./plugins/retroarch/android/devshell.nix { inherit pkgs; };
-        packages.korrid = import ./services/korrid/package.nix {
-          inherit pkgs proseql crane;
-        };
-        packages.default = self.packages.${system}.korrid;
+        packages = {
+          korrid = import ./services/korrid/package.nix {
+            inherit pkgs proseql crane;
+          };
+          default = self.packages.${system}.korrid;
+        }
+        // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux inputplumber.packages;
+        checks = pkgs.lib.optionalAttrs pkgs.stdenv.isLinux inputplumber.checks;
       }
     );
 }
