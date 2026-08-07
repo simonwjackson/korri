@@ -373,8 +373,12 @@ register_folder() {
 
 launch_local_spec() {
   local spec_json="$1"
-  printf '%s' "$spec_json" >"$RUN_DIR/launch-spec.json"
-  run_discovery_instrumentation launchLocal -e launchSpecJson "$spec_json"
+  local compact_spec_json=""
+  local launch_spec_base64=""
+  compact_spec_json="$(jq -c . <<<"$spec_json")"
+  printf '%s' "$compact_spec_json" >"$RUN_DIR/launch-spec.json"
+  launch_spec_base64="$(printf '%s' "$compact_spec_json" | base64 -w 0)"
+  run_discovery_instrumentation launchLocal -e launchSpecBase64 "$launch_spec_base64"
 }
 
 recover_rpc_details() {

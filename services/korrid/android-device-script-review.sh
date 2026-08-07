@@ -63,6 +63,7 @@ bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$ANDROID_INSTRUMENTATION_RESULT" 
   "$CRATE/android-debug-reload-portal.sh" "$CRATE/android-debug-focus-portal-game.sh" \
   "$CRATE/test-android-debug-capability.sh" \
   "$CRATE/test-android-game-discovery-authority-recovery.sh" \
+  "$CRATE/test-android-game-discovery-launch-transport.sh" \
   "$CRATE/test-android-debug-reload-portal.sh" \
   "$CRATE/test-android-debug-focus-portal-game.sh" \
   "$CRATE/test-overlay-acceptance-identity.sh" \
@@ -72,6 +73,7 @@ bash -n "$ANDROID_SMOKE" "$ANDROID_APP_ROUTE" "$ANDROID_INSTRUMENTATION_RESULT" 
   "$ROOT/clients/android/overlay-evidence-predicates.sh"
 "$CRATE/test-android-debug-capability.sh"
 "$CRATE/test-android-game-discovery-authority-recovery.sh"
+"$CRATE/test-android-game-discovery-launch-transport.sh"
 "$CRATE/test-android-debug-reload-portal.sh"
 "$CRATE/test-android-debug-focus-portal-game.sh"
 "$CRATE/test-overlay-acceptance-identity.sh"
@@ -631,6 +633,21 @@ if ! grep -F 'am instrument -w' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
 fi
 if ! grep -F 'KorriGameDiscoveryDebugTest' "$ANDROID_GAME_DISCOVERY" >/dev/null; then
   echo 'android-game-discovery-check.sh must target the debug discovery instrumentation test' >&2
+  exit 1
+fi
+if grep -F 'launchSpecJson' "$ANDROID_GAME_DISCOVERY" "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null; then
+  echo 'launchLocal instrumentation must not use the raw launchSpecJson transport' >&2
+  exit 1
+fi
+if ! grep -F 'launchSpecBase64' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'base64 -w 0' "$ANDROID_GAME_DISCOVERY" >/dev/null \
+  || ! grep -F 'launchSpecBase64' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null \
+  || ! grep -F 'Base64.NO_WRAP' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null \
+  || ! grep -F 'MAX_LAUNCH_SPEC_BYTES' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null \
+  || ! grep -F 'MAX_LAUNCH_SPEC_BASE64_CHARS' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null \
+  || ! grep -F 'CodingErrorAction.REPORT' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null \
+  || ! grep -F 'new JSONObject(launchSpecText)' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null; then
+  echo 'launchLocal instrumentation must use bounded no-wrap base64 transport decoded as valid UTF-8 JSON' >&2
   exit 1
 fi
 if ! grep -F 'app.discovery.registerReceipt' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null; then

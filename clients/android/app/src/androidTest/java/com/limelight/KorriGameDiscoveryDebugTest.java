@@ -1,6 +1,7 @@
 package com.limelight;
 
 import android.os.SystemClock;
+import android.util.Base64;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
@@ -12,6 +13,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import com.simonwjackson.korri.korrid.KorridServer;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -23,6 +25,10 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -40,7 +46,9 @@ import static org.junit.Assert.fail;
 public class KorriGameDiscoveryDebugTest {
     private static final String ACTION_ARGUMENT = "korriDebugDiscoveryAction";
     private static final String FOLDER_PATH_ARGUMENT = "gameFolderPath";
-    private static final String LAUNCH_SPEC_ARGUMENT = "launchSpecJson";
+    private static final String LAUNCH_SPEC_ARGUMENT = "launchSpecBase64";
+    private static final int MAX_LAUNCH_SPEC_BYTES = 64 * 1024;
+    private static final int MAX_LAUNCH_SPEC_BASE64_CHARS = ((MAX_LAUNCH_SPEC_BYTES + 2) / 3) * 4;
     private static final long BRIDGE_READY_TIMEOUT_MS = 15_000;
     private static final long DISCOVERY_SETTLE_TIMEOUT_MS = 60_000;
     private static final long JAVASCRIPT_TIMEOUT_MS = 5_000;
@@ -62,7 +70,8 @@ public class KorriGameDiscoveryDebugTest {
                 return;
             }
             if ("launchLocal".equals(action)) {
-                launchLocalThroughNativeBridge(webView.get(), requiredArgument(LAUNCH_SPEC_ARGUMENT));
+                launchLocalThroughNativeBridge(webView.get(), decodeLaunchSpecArgument(
+                        requiredArgument(LAUNCH_SPEC_ARGUMENT)));
                 return;
             }
             fail("Unsupported " + ACTION_ARGUMENT + ": " + action);
@@ -185,10 +194,55 @@ public class KorriGameDiscoveryDebugTest {
         return titles;
     }
 
-    private static void launchLocalThroughNativeBridge(WebView webView, String launchSpecJson)
+    private static String decodeLaunchSpecArgument(String encodedLaunchSpec) throws Exception {
+        if (encodedLaunchSpec.indexOf('\n') >= 0 || encodedLaunchSpec.indexOf('\r') >= 0) {
+            fail("Launch spec base64 argument must use no-wrap base64");
+        }
+        if (encodedLaunchSpec.length() > MAX_LAUNCH_SPEC_BASE64_CHARS) {
+            fail("Launch spec base64 argument exceeds " + MAX_LAUNCH_SPEC_BASE64_CHARS + " characters");
+        }
+        byte[] bytes;
+        try {
+            bytes = Base64.decode(encodedLaunchSpec, Base64.NO_WRAP);
+        } catch (IllegalArgumentException error) {
+            fail("Launch spec base64 argument must be valid no-wrap base64");
+            throw error;
+        }
+        if (bytes.length == 0) {
+            fail("Decoded launch spec must not be empty");
+        }
+        if (bytes.length > MAX_LAUNCH_SPEC_BYTES) {
+            fail("Decoded launch spec exceeds " + MAX_LAUNCH_SPEC_BYTES + " bytes");
+        }
+
+        String launchSpecText;
+        try {
+            launchSpecText = decodeUtf8(bytes);
+        } catch (CharacterCodingException error) {
+            fail("Decoded launch spec must be valid UTF-8");
+            throw error;
+        }
+        try {
+            new JSONObject(launchSpecText);
+        } catch (JSONException error) {
+            fail("Decoded launch spec must be a valid JSON object");
+            throw error;
+        }
+        return launchSpecText;
+    }
+
+    private static String decodeUtf8(byte[] bytes) throws CharacterCodingException {
+        CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
+        return decoder.decode(ByteBuffer.wrap(bytes)).toString();
+    }
+
+    private static void launchLocalThroughNativeBridge(WebView webView, String launchSpecText)
             throws Exception {
         String result = evaluateJavascript(webView,
-                "window.KorriNative.launchLocal(" + JSONObject.quote(launchSpecJson) + ")");
+                "window.KorriNative.launchLocal(" + JSONObject.quote(launchSpecText) + ")",
+                "window.KorriNative.launchLocal(<decoded launch spec>)");
         String decoded = new JSONObject("{\"value\":" + result + "}").getString("value");
         JSONObject envelope = new JSONObject(decoded);
         assertEquals("Launched", envelope.getString("_tag"));
@@ -256,6 +310,11 @@ public class KorriGameDiscoveryDebugTest {
     }
 
     private static String evaluateJavascript(WebView webView, String script) throws Exception {
+        return evaluateJavascript(webView, script, script);
+    }
+
+    private static String evaluateJavascript(WebView webView, String script, String description)
+            throws Exception {
         CountDownLatch callback = new CountDownLatch(1);
         AtomicReference<String> result = new AtomicReference<>();
 
@@ -265,7 +324,7 @@ public class KorriGameDiscoveryDebugTest {
                     callback.countDown();
                 }));
 
-        assertTrue("Timed out waiting for JavaScript result: " + script,
+        assertTrue("Timed out waiting for JavaScript result: " + description,
                 callback.await(JAVASCRIPT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
         return result.get();
     }
