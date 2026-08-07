@@ -683,6 +683,14 @@ if ! grep -F 'DEBUG_LAUNCH_LOCAL_SH="${KORRI_ANDROID_DEBUG_LAUNCH_LOCAL_SH:-$CRA
   echo 'launchLocal proof must use trusted same-process DevTools stdin envelope helper with expected signer binding and exactly one scheduled mutation evaluation' >&2
   exit 1
 fi
+if ! awk '
+  /assert_two_u9_games_listable "after all-files recovery"/ { recovery = NR }
+  /launch_local_spec "\$launch_response"/ { launch = NR }
+  END { exit !(recovery && launch > recovery) }
+' "$ANDROID_GAME_DISCOVERY"; then
+  echo 'android-game-discovery launch must remain the terminal proof after every RPC-based recovery assertion' >&2
+  exit 1
+fi
 if ! grep -F 'app.discovery.registerReceipt' "$ROOT/clients/android/app/src/androidTest/java/com/limelight/KorriGameDiscoveryDebugTest.java" >/dev/null; then
   echo 'KorriGameDiscoveryDebugTest must register through the production registerReceipt RPC' >&2
   exit 1

@@ -600,7 +600,7 @@ if ! timeout 15 "$ADB_BIN" -s "$SERIAL" wait-for-device; then
   exit 1
 fi
 RUN_DIR="$(mktemp -d)"
-PRIOR_TOP_ACTIVITY="$(adb_shell_capture "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])(topResumedActivity|mResumedActivity)[:=]'" | tr -d '\r' || true)"
+PRIOR_TOP_ACTIVITY="$(adb_shell_capture "dumpsys activity activities 2>/dev/null | grep -m1 -E '(^|[[:space:]])((topResumedActivity|mResumedActivity)[:=]|Resumed:)'" | tr -d '\r' || true)"
 printf 'Prior top activity: %s\n' "${PRIOR_TOP_ACTIVITY:-unknown}"
 capture_appop
 
@@ -647,31 +647,6 @@ assert_latest_hashed_bytes_nonzero "duplicate-content rescan"
 rescan "unchanged duplicate-content rescan"
 assert_latest_hashed_bytes 0 "unchanged duplicate-content rescan"
 
-if ! adb_shell_capture "pm path '$RETROARCH_PKG'" | grep -q '^package:'; then
-  echo "Required RetroArch package is not installed: $RETROARCH_PKG" >&2
-  exit 1
-fi
-game_id="$(u9_game_id)"
-if [[ -z "$game_id" ]]; then
-  echo "Could not find discovered U9 First game id" >&2
-  exit 1
-fi
-launch_response="$(rpc "launch discovered U9 First" "{\"_tag\":\"app.local-games.launch\",\"payload\":{\"gameId\":$(jq -n --arg id "$game_id" '$id')}}")"
-if ! jq -e '
-  .outcome._tag == "Ok"
-  and .outcome.payload.launcherId == "retroarch"
-  and .outcome.payload.component.packageName == "com.korri.retroarch"
-  and .outcome.payload.extras.LIBRETRO == "/data/data/com.korri.retroarch/cores/mgba_libretro_android.so"
-  and (.outcome.payload.extras.ROM | endswith("/U9 First.gba"))
-  and (.outcome.payload.integrity | type == "string" and length > 0)
-' <<<"$launch_response" >/dev/null; then
-  echo "Discovered game did not produce the signed RetroArch+mGBA launch route: $launch_response" >&2
-  exit 1
-fi
-assert_retroarch_not_resumed
-launch_local_spec "$launch_response"
-wait_retroarch_resumed_after_launch
-
 selected_location_ids="$(rpc "selected locations snapshot" '{"_tag":"app.discovery.snapshot","payload":{}}' \
   | jq -c '.outcome.payload.locations | map(.id)')"
 if ! jq -e 'length > 0' <<<"$selected_location_ids" >/dev/null; then
@@ -697,5 +672,32 @@ assert_two_u9_games_listable "while all-files access is denied"
 set_appop_and_require_effective_mode allow allow
 rescan "after all-files recovery"
 assert_two_u9_games_listable "after all-files recovery"
+
+# Launch is the terminal proof. Android may retire the background Korri process
+# after RetroArch takes focus, so no later assertion may depend on its RPC.
+if ! adb_shell_capture "pm path '$RETROARCH_PKG'" | grep -q '^package:'; then
+  echo "Required RetroArch package is not installed: $RETROARCH_PKG" >&2
+  exit 1
+fi
+game_id="$(u9_game_id)"
+if [[ -z "$game_id" ]]; then
+  echo "Could not find discovered U9 First game id" >&2
+  exit 1
+fi
+launch_response="$(rpc "launch discovered U9 First" "{\"_tag\":\"app.local-games.launch\",\"payload\":{\"gameId\":$(jq -n --arg id "$game_id" '$id')}}")"
+if ! jq -e '
+  .outcome._tag == "Ok"
+  and .outcome.payload.launcherId == "retroarch"
+  and .outcome.payload.component.packageName == "com.korri.retroarch"
+  and .outcome.payload.extras.LIBRETRO == "/data/data/com.korri.retroarch/cores/mgba_libretro_android.so"
+  and (.outcome.payload.extras.ROM | endswith("/U9 First.gba"))
+  and (.outcome.payload.integrity | type == "string" and length > 0)
+' <<<"$launch_response" >/dev/null; then
+  echo "Discovered game did not produce the signed RetroArch+mGBA launch route: $launch_response" >&2
+  exit 1
+fi
+assert_retroarch_not_resumed
+launch_local_spec "$launch_response"
+wait_retroarch_resumed_after_launch
 
 printf 'Android game discovery check passed on %s\n' "$SERIAL"
