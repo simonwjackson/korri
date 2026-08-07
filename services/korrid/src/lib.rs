@@ -3917,7 +3917,9 @@ mod tests {
             launcher::FileProvisionMode::Direct,
             signing_key.clone(),
             Arc::new(Mutex::new(launcher::LaunchPublicationReservations::new())),
-            Arc::new(Mutex::new(launcher::MoonlightLaunchAuthority::new(signing_key))),
+            Arc::new(Mutex::new(launcher::MoonlightLaunchAuthority::new(
+                signing_key,
+            ))),
             Arc::new(Mutex::new(None)),
             Arc::new(Mutex::new(None)),
             Arc::new(Mutex::new(None)),
