@@ -1,5 +1,12 @@
-import { describe, expect, test } from "bun:test"
-import { act, fireEvent, render, screen, within } from "@testing-library/react"
+import { afterEach, describe, expect, test } from "bun:test"
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react"
 import { readFileSync } from "node:fs"
 import type {
   SurfaceGameplayOverlayPresentation,
@@ -13,11 +20,14 @@ import {
   shiftHomeGamesFromCatalog,
   ShiftSurface,
 } from "../src/ShiftSurface"
+import { shiftPartPreviews } from "../src/preview"
 
 const model = (overrides: Partial<SurfaceModel> = {}): SurfaceModel => ({
   ...fixtureModel,
   ...overrides,
 })
+
+afterEach(() => cleanup())
 
 describe("ShiftSurface", () => {
   test("keeps the full catalog in Library instead of pouring it onto Home", () => {
@@ -136,7 +146,7 @@ describe("ShiftSurface", () => {
   })
 
   test("a failure is shown against its own game, not the focused hero", () => {
-    render(
+    const { container } = render(
       <ShiftSurface
         model={model({
           status: {
@@ -153,7 +163,8 @@ describe("ShiftSurface", () => {
     )
 
     // Home focuses Skate 3 first, so an unattributed failure would name it.
-    const hero = document.querySelector("[data-korri-part='shift.cine-hero']")
+    // Scope to this render: sibling suites leave their own heroes mounted.
+    const hero = container.querySelector("[data-korri-part='shift.cine-hero']")
     expect(hero?.getAttribute("data-korri-instance-id")).toBe("local-game:wl4")
     expect(screen.getByText("Couldn't start Wario Land 4")).toBeDefined()
   })
@@ -233,6 +244,26 @@ describe("ShiftSurface", () => {
     fireEvent.click(screen.getByRole("button", { name: "Stop" }))
     expect(host.calls).toEqual(["game-action:now-playing:L1:stop"])
     expect(screen.queryByRole("dialog")).toBeNull()
+  })
+
+  test("disabled game actions stay visible but native activation cannot run them", () => {
+    const host = createFixtureHost({
+      "now-playing:L1": [
+        { id: "resume", label: "Continue playing", enabled: false },
+      ],
+    })
+    render(<ShiftSurface model={model()} host={host} />)
+
+    act(() => host.press("options"))
+
+    const action = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Continue playing",
+    })
+    expect(action.disabled).toBe(true)
+    fireEvent.click(action)
+    action.click()
+
+    expect(host.calls).toEqual([])
   })
 })
 
@@ -907,6 +938,59 @@ describe("Shift settings", () => {
     expect(host.calls).toEqual(["setting:device-name:pocket"])
   })
 
+  test("saving a setting disables duplicate submission until the model changes", () => {
+    const host = createFixtureHost()
+    const rendered = render(
+      <ShiftSurface
+        model={model({
+          settingsStatus: { _tag: "Saving", settingId: "device-name" },
+        })}
+        host={host}
+      />,
+    )
+    openSettings()
+
+    fireEvent.click(screen.getByRole("button", { name: "Name: usu" }))
+    const input = screen.getByRole<HTMLInputElement>("textbox", { name: "Name" })
+    const save = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Saving…",
+    })
+
+    expect(input.disabled).toBe(true)
+    expect(save.disabled).toBe(true)
+    fireEvent.click(save)
+    save.click()
+    expect(host.calls).toEqual([])
+
+    rendered.rerender(<ShiftSurface model={model()} host={host} />)
+    expect(screen.queryByRole("dialog", { name: "Change Name" })).toBeNull()
+  })
+
+  test("an editor-level settings problem is dismissible without changing the value", () => {
+    const host = createFixtureHost()
+    const rendered = render(<ShiftSurface model={model()} host={host} />)
+    openSettings()
+    fireEvent.click(screen.getByRole("button", { name: "Name: usu" }))
+
+    rendered.rerender(
+      <ShiftSurface
+        model={model({
+          settingsStatus: {
+            _tag: "Problem",
+            settingId: "device-name",
+            message: "Name already changed elsewhere",
+          },
+        })}
+        host={host}
+      />,
+    )
+
+    expect(screen.getByText("Name already changed elsewhere")).toBeDefined()
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }))
+
+    expect(host.calls).toEqual(["settings-dismiss"])
+  })
+
   test("a background refresh does not erase an unfinished text edit", () => {
     const host = createFixtureHost()
     const rendered = render(<ShiftSurface model={model()} host={host} />)
@@ -942,6 +1026,30 @@ describe("Shift settings", () => {
     expect(host.calls).toEqual(["action:storage-access"])
   })
 
+  test("a page-level settings problem is visible and dismissible", () => {
+    const host = createFixtureHost()
+    render(
+      <ShiftSurface
+        model={model({
+          settingsStatus: {
+            _tag: "Problem",
+            settingId: "storage-access",
+            message: "Android settings could not open",
+          },
+        })}
+        host={host}
+      />,
+    )
+    openSettings()
+
+    expect(screen.queryByRole("dialog")).toBeNull()
+    fireEvent.click(
+      screen.getByRole("button", { name: "Android settings could not open" }),
+    )
+
+    expect(host.calls).toEqual(["settings-dismiss"])
+  })
+
   test("back returns to the games without touching the host", () => {
     const host = createFixtureHost()
     render(<ShiftSurface model={model()} host={host} />)
@@ -951,5 +1059,16 @@ describe("Shift settings", () => {
 
     expect(screen.getByRole("button", { name: "Library" })).toBeDefined()
     expect(host.calls).toEqual([])
+  })
+
+  test("publishes every currently rendered design part as a preview", () => {
+    expect(shiftPartPreviews).toHaveLength(49)
+    expect(shiftPartPreviews.map(part => part.id)).toContain("shift.clock")
+    expect(shiftPartPreviews.map(part => part.id)).toContain(
+      "shift.library-tile",
+    )
+    expect(new Set(shiftPartPreviews.map(part => part.id)).size).toBe(
+      shiftPartPreviews.length,
+    )
   })
 })

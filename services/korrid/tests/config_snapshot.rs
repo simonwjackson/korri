@@ -35,10 +35,11 @@ fn empty_storage_root_creates_only_canonical_fixed_documents_and_loads_empty_sna
         EMPTY_DOCUMENT_BYTES
     );
 
-    let names: Vec<String> = fs::read_dir(root.path())
+    let mut names: Vec<String> = fs::read_dir(root.path())
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
+    names.sort();
     assert_eq!(names, vec![CONFIG_FILE_NAME, LIBRARY_FILE_NAME]);
 }
 

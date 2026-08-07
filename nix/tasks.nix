@@ -4,9 +4,16 @@
 let
   proseqlSource = import ../services/korrid/proseql-source.nix { inherit pkgs proseql; };
   android = import ../clients/android/sdk.nix { inherit pkgs; };
+  androidBridgeEmulator = import ../clients/android/sdk.nix {
+    inherit pkgs;
+    bridgeEmulatorProfile = true;
+  };
 
   rustToolchain = pkgs.rust-bin.stable.latest.default.override {
     targets = [ "aarch64-linux-android" ];
+  };
+  androidBridgeRustToolchain = pkgs.rust-bin.stable.latest.default.override {
+    targets = [ "x86_64-linux-android" ];
   };
 
   retroarch = import ../plugins/retroarch/android/sdk.nix { inherit pkgs; };
@@ -32,6 +39,30 @@ let
     # shellcheck source=/dev/null
     source "$KORRI_ROOT/nix/android-sdk-env.sh"
   '';
+  androidBridgeInputs = androidInputs ++ [
+    androidBridgeEmulator.androidSdk
+    androidBridgeRustToolchain
+    pkgs.android-tools
+    pkgs.bun
+    pkgs.cargo-ndk
+    pkgs.clang
+    pkgs.gawk
+    pkgs.gnugrep
+    pkgs.gnused
+    pkgs.llvmPackages.libclang
+    pkgs.util-linux
+  ];
+  androidBridgeEnv = androidEnv // {
+    ANDROID_NDK_HOME = android.ndkRoot;
+    ANDROID_NDK_ROOT = android.ndkRoot;
+    BINDGEN_EXTRA_CLANG_ARGS = "--target=x86_64-linux-android21 --sysroot=${android.ndkRoot}/toolchains/llvm/prebuilt/linux-x86_64/sysroot";
+    BINDGEN_EXTRA_CLANG_ARGS_x86_64_linux_android = "--target=x86_64-linux-android21 --sysroot=${android.ndkRoot}/toolchains/llvm/prebuilt/linux-x86_64/sysroot";
+    CC_x86_64_unknown_linux_gnu = "${pkgs.clang}/bin/clang";
+    HOST_CC = "${pkgs.clang}/bin/clang";
+    KORRI_BRIDGE_AVD_PACKAGE = androidBridgeEmulator.bridgeEmulatorAvdPackage;
+    KORRI_EMULATOR_NIX_SDK = androidBridgeEmulator.sdkRoot;
+    LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+  };
 
   retroarchInputs = [
     retroarch.jdk
@@ -119,13 +150,38 @@ let
       '';
     };
 
+    android-jvm-check = {
+      description = "Run the Android debug JVM/Robolectric test suite.";
+      runtimeInputs = androidInputs;
+      env = androidEnv;
+      script = ''
+        ${androidSetup}
+        cd "$KORRI_ROOT/clients/android"
+        exec ./gradlew testDebugUnitTest "$@"
+      '';
+    };
+
+    android-bridge-contract-check = {
+      description = "Run the native bridge contract check in an isolated API 34 x86_64 emulator.";
+      needsProseql = true;
+      runtimeInputs = androidBridgeInputs;
+      env = androidBridgeEnv // {
+        KORRI_PORTAL_BUNDLE = "${packages.portal-bundle}/bin/portal-bundle";
+      };
+      script = ''
+        ${androidSetup}
+        export CARGO_TARGET_DIR="$KORRI_ROOT/.cache/korrid-target"
+        exec bash "$KORRI_ROOT/clients/android/bridge-contract-check.sh" "$@"
+      '';
+    };
+
     korrid-check = {
       description = "Run the full host, contracts, portal, and Android check.";
       needsProseql = true;
       runtimeInputs = [ pkgs.nix ];
       env.KORRI_PORTAL_BUNDLE = "${packages.portal-bundle}/bin/portal-bundle";
       script = ''
-        exec "$KORRI_ROOT/services/korrid/check.sh" "$@"
+        exec bash "$KORRI_ROOT/services/korrid/check.sh" "$@"
       '';
     };
 
@@ -380,7 +436,10 @@ let
         pkgs.coreutils
       ];
       script = ''
+        cd "$KORRI_ROOT/surfaces/shift"
+        bun install --frozen-lockfile --ignore-scripts
         cd "$KORRI_ROOT/clients/portal"
+        bun install --frozen-lockfile --ignore-scripts
         bun run build
         rm -rf "$KORRI_ROOT/clients/android/app/src/main/assets/portal"
         cp -r dist "$KORRI_ROOT/clients/android/app/src/main/assets/portal"
@@ -391,7 +450,10 @@ let
       description = "Run portal unit tests and typecheck.";
       runtimeInputs = [ pkgs.bun ];
       script = ''
+        cd "$KORRI_ROOT/surfaces/shift"
+        bun install --frozen-lockfile --ignore-scripts
         cd "$KORRI_ROOT/clients/portal"
+        bun install --frozen-lockfile --ignore-scripts
         bun test
         bun run typecheck
       '';
@@ -402,6 +464,7 @@ let
       runtimeInputs = [ pkgs.bun ];
       script = ''
         cd "$KORRI_ROOT/surfaces/shift"
+        bun install --frozen-lockfile --ignore-scripts
         bun test
         bun run typecheck
       '';

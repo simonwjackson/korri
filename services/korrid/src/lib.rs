@@ -2831,10 +2831,30 @@ mod tests {
 
     const WL4_PLUGIN_LIBRARY: &str =
         include_str!("../../../docs/research/retroarch-plugin-route/library-wl4.yaml");
+    const CHECKPOINT_ANDROID_CONFIG: &str =
+        include_str!("../../../docs/research/android-app-plugin-schema-checkpoint/config.yaml");
+    const CHECKPOINT_ANDROID_LIBRARY: &str =
+        include_str!("../../../docs/research/android-app-plugin-schema-checkpoint/library.yaml");
+
+    /// The embedded server is a process singleton, so the tests that start it
+    /// must not overlap. Poisoning is irrelevant here: the guard only orders
+    /// them, so a panicking test still hands the next one a usable lock.
+    static EMBEDDED_SERVER_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    fn embedded_server_guard() -> std::sync::MutexGuard<'static, ()> {
+        EMBEDDED_SERVER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 
     fn write_wl4_plugin_config(root: &Path) {
         std::fs::write(root.join("config.yaml"), "{}\n").unwrap();
         std::fs::write(root.join("library.yaml"), WL4_PLUGIN_LIBRARY).unwrap();
+    }
+
+    fn write_checkpoint_android_config(root: &Path) {
+        std::fs::write(root.join("config.yaml"), CHECKPOINT_ANDROID_CONFIG).unwrap();
+        std::fs::write(root.join("library.yaml"), CHECKPOINT_ANDROID_LIBRARY).unwrap();
     }
 
     #[test]
@@ -3772,7 +3792,8 @@ command = ["sh", "-c", "sleep 1"]
     }
 
     #[tokio::test]
-    async fn running_server_verifies_only_its_untampered_launch_spec() {
+    async fn running_server_verifies_only_its_current_launch_specs_and_capability() {
+        let _serialized = embedded_server_guard();
         struct StopServer;
         impl Drop for StopServer {
             fn drop(&mut self) {
@@ -4757,6 +4778,258 @@ command = ["sh", "-c", "sleep 1"]
                 &serde_json::to_string(&prepared_before_disable).unwrap()
             ),
             MoonlightLaunchAuthorization::Stale
+        );
+    }
+
+    #[tokio::test]
+    async fn restarting_the_server_rotates_capability_and_invalidates_old_specs() {
+        let _serialized = embedded_server_guard();
+        struct StopServer;
+        impl Drop for StopServer {
+            fn drop(&mut self) {
+                let _ = stop_local_server();
+            }
+        }
+
+        async fn launch_wl4(
+            client: &reqwest::Client,
+            url: &str,
+            capability: &str,
+        ) -> serde_json::Value {
+            for _ in 0..20 {
+                match client
+                    .post(url)
+                    .bearer_auth(capability)
+                    .json(&serde_json::json!({
+                        "_tag": "app.local-games.launch",
+                        "payload": { "gameId": "wl4" }
+                    }))
+                    .send()
+                    .await
+                {
+                    Ok(value) => return value.json::<serde_json::Value>().await.unwrap(),
+                    Err(_) => std::thread::sleep(std::time::Duration::from_millis(10)),
+                }
+            }
+            panic!("embedded server response");
+        }
+
+        let root = tempfile::tempdir().unwrap();
+        write_wl4_plugin_config(root.path());
+        std::fs::create_dir_all(root.path().join("roms")).unwrap();
+        std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
+        let first_port = start_local_server(
+            "https://portal.example",
+            root.path().to_str().expect("UTF-8 temp path"),
+        )
+        .unwrap();
+        let _stop = StopServer;
+        let first_capability = local_server_capability().unwrap();
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+            .unwrap();
+        let first_url = format!("http://127.0.0.1:{first_port}/rpc");
+        let response = launch_wl4(&client, &first_url, &first_capability).await;
+        let mut spec = response["outcome"]["payload"].clone();
+        let first_spec_json = serde_json::to_string(&spec).unwrap();
+        assert!(verify_local_launch_spec(&first_spec_json));
+
+        spec["files"][0]["content"] = serde_json::Value::String("tampered".into());
+        assert!(!verify_local_launch_spec(
+            &serde_json::to_string(&spec).unwrap()
+        ));
+
+        stop_local_server().unwrap();
+        assert!(local_server_port().is_none());
+        assert!(local_server_capability().is_none());
+        assert!(!verify_local_launch_spec(&first_spec_json));
+
+        let second_port = start_local_server(
+            "https://portal.example",
+            root.path().to_str().expect("UTF-8 temp path"),
+        )
+        .unwrap();
+        let second_capability = local_server_capability().unwrap();
+        assert!(
+            first_capability != second_capability,
+            "server restart must rotate the capability"
+        );
+        let second_url = format!("http://127.0.0.1:{second_port}/rpc");
+        let second_response = launch_wl4(&client, &second_url, &second_capability).await;
+        let second_spec_json =
+            serde_json::to_string(&second_response["outcome"]["payload"]).unwrap();
+        assert!(verify_local_launch_spec(&second_spec_json));
+        assert!(!verify_local_launch_spec(&first_spec_json));
+
+        let old_capability_response = client
+            .post(&second_url)
+            .bearer_auth(&first_capability)
+            .json(&serde_json::json!({
+                "_tag": "system.health",
+                "payload": {}
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(old_capability_response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn settings_update_changes_public_android_route_availability() {
+        fn listed_game_ids(body: &serde_json::Value) -> Vec<String> {
+            body["outcome"]["payload"]["games"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|game| game["id"].as_str().unwrap().to_owned())
+                .collect()
+        }
+
+        fn plugin_enabled(body: &serde_json::Value, plugin_id: &str) -> bool {
+            body["outcome"]["payload"]["plugins"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|plugin| plugin["id"] == plugin_id)
+                .and_then(|plugin| plugin["enabled"].as_bool())
+                .unwrap()
+        }
+
+        let root = tempfile::tempdir().unwrap();
+        write_checkpoint_android_config(root.path());
+        let app = router_with_capability_and_local_root(
+            "right-token",
+            "https://portal.example",
+            root.path(),
+        );
+
+        let listed = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"app.local-games.list","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(listed["outcome"]["_tag"], "Ok");
+        assert_eq!(listed_game_ids(&listed), ["tmnt-shredders-revenge"]);
+
+        let launched = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"app.local-games.launch","payload":{"gameId":"tmnt-shredders-revenge"}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(launched["outcome"]["_tag"], "Ok");
+        assert_eq!(launched["outcome"]["payload"]["launcherId"], "android-app");
+
+        let before = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"system.settings.snapshot","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert!(plugin_enabled(
+            &before,
+            plugin_policy::ANDROID_APP_PLUGIN_ID
+        ));
+        let revision = before["outcome"]["payload"]["revision"].as_str().unwrap();
+        let disable_request = serde_json::json!({
+            "_tag": "system.settings.update",
+            "payload": {
+                "expectedRevision": revision,
+                "settingId": plugin_policy::ANDROID_APP_PLUGIN_ID,
+                "value": "false"
+            }
+        })
+        .to_string();
+        let disabled =
+            rpc_body_authorized(app.clone(), &disable_request, Some("right-token")).await;
+        assert_eq!(disabled["outcome"]["_tag"], "Ok");
+        assert!(!plugin_enabled(
+            &disabled,
+            plugin_policy::ANDROID_APP_PLUGIN_ID
+        ));
+        let disabled_revision = disabled["outcome"]["payload"]["revision"].as_str().unwrap();
+
+        let disabled_list = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"app.local-games.list","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(disabled_list["outcome"]["_tag"], "Ok");
+        assert!(listed_game_ids(&disabled_list).is_empty());
+
+        let disabled_launch = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"app.local-games.launch","payload":{"gameId":"tmnt-shredders-revenge"}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(disabled_launch["outcome"]["_tag"], "Err");
+        assert_eq!(
+            disabled_launch["outcome"]["payload"]["code"],
+            "LocalRouteUnavailable"
+        );
+
+        let stale_enable_request = serde_json::json!({
+            "_tag": "system.settings.update",
+            "payload": {
+                "expectedRevision": revision,
+                "settingId": plugin_policy::ANDROID_APP_PLUGIN_ID,
+                "value": "true"
+            }
+        })
+        .to_string();
+        let stale_enable =
+            rpc_body_authorized(app.clone(), &stale_enable_request, Some("right-token")).await;
+        assert_eq!(stale_enable["outcome"]["_tag"], "Err");
+        assert_eq!(
+            stale_enable["outcome"]["payload"]["code"],
+            "SettingsConflict"
+        );
+        let still_disabled = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"app.local-games.list","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert!(listed_game_ids(&still_disabled).is_empty());
+
+        let enable_request = serde_json::json!({
+            "_tag": "system.settings.update",
+            "payload": {
+                "expectedRevision": disabled_revision,
+                "settingId": plugin_policy::ANDROID_APP_PLUGIN_ID,
+                "value": "true"
+            }
+        })
+        .to_string();
+        let enabled = rpc_body_authorized(app.clone(), &enable_request, Some("right-token")).await;
+        assert_eq!(enabled["outcome"]["_tag"], "Ok");
+        assert!(plugin_enabled(
+            &enabled,
+            plugin_policy::ANDROID_APP_PLUGIN_ID
+        ));
+
+        let relisted = rpc_body_authorized(
+            app.clone(),
+            r#"{"_tag":"app.local-games.list","payload":{}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(listed_game_ids(&relisted), ["tmnt-shredders-revenge"]);
+
+        let relaunched = rpc_body_authorized(
+            app,
+            r#"{"_tag":"app.local-games.launch","payload":{"gameId":"tmnt-shredders-revenge"}}"#,
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(relaunched["outcome"]["_tag"], "Ok");
+        assert_eq!(
+            relaunched["outcome"]["payload"]["launcherId"],
+            "android-app"
         );
     }
 
