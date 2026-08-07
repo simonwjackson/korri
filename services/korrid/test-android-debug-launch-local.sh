@@ -252,6 +252,17 @@ unset FAKE_PIDOF_BEHAVIOR
 
 set_targets shell-overlay
 reset_logs
+export FAKE_PIDOF_BEHAVIOR=ambiguous
+if run_helper "$TMP/pidof-ambiguous.out" "$TMP/pidof-ambiguous.err"; then
+  echo 'launchLocal helper accepted multiple Korri processes' >&2
+  exit 1
+fi
+grep -F 'Korri process is missing or ambiguous' "$TMP/pidof-ambiguous.err" >/dev/null
+[[ "$(launch_count)" == 0 ]]
+unset FAKE_PIDOF_BEHAVIOR
+
+set_targets shell-overlay
+reset_logs
 export FAKE_TIMEOUT_BEHAVIOR=pidof
 if run_helper "$TMP/pidof-timeout.out" "$TMP/pidof-timeout.err"; then
   echo 'launchLocal helper accepted a hanging pidof' >&2

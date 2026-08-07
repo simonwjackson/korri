@@ -77,8 +77,11 @@ set +e
 bounded_adb_capture "$pid_stdout" "$pid_stderr" shell pidof "$package"
 pid_status=$?
 set -e
-pid="$(tr -d '\r\n' <"$pid_stdout")"
-if [[ "$pid_status" -ne 0 || ! "$pid" =~ ^[0-9]+$ ]]; then
+pid_output="$(tr '\r\n\t' '   ' <"$pid_stdout")"
+pid_tokens=()
+read -r -a pid_tokens <<<"$pid_output"
+pid="${pid_tokens[0]:-}"
+if [[ "$pid_status" -ne 0 || "${#pid_tokens[@]}" -ne 1 || ! "$pid" =~ ^[0-9]+$ ]]; then
   echo 'Korri process is missing or ambiguous' >&2
   if [[ -s "$pid_stdout" ]]; then
     sed 's/^/pidof stdout: /' "$pid_stdout" >&2
