@@ -259,6 +259,7 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
         games={[]}
         {...(model.clockLabel === undefined ? {} : { time: model.clockLabel })}
         status={model.status}
+        statusGames={allGames}
         actions={railActions}
         onAction={runRailAction}
         onRetry={() => host.retry()}
@@ -271,6 +272,7 @@ export function ShiftSurface({ model, host }: ShiftSurfaceProps) {
         games={games}
         {...(model.clockLabel === undefined ? {} : { time: model.clockLabel })}
         status={model.status}
+        statusGames={allGames}
         onOpenLibrary={() => setScreen("library")}
         actions={railActions}
         onLaunch={requestLaunch}

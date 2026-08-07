@@ -138,6 +138,8 @@ export interface ShiftCinematicHomeProps {
   readonly onLaunch?: (gameId: string) => void
   /** Host-reduced launch feedback. Browsing (or omitted) = normal hero. */
   readonly status?: SurfaceStatus
+  /** Full catalog lookup for a status that belongs to a game outside Home. */
+  readonly statusGames?: readonly ShiftCinematicGame[]
   /** Retry the failed launch (A while a failure is shown). */
   readonly onRetry?: () => void
   /** Dismiss the launch feedback and return to browsing (B). */
@@ -160,6 +162,7 @@ export function ShiftCinematicHome({
   onGameFocus,
   onLaunch,
   status: surfaceStatus,
+  statusGames = games,
   onRetry,
   onDismiss,
   onOpenLibrary,
@@ -267,8 +270,8 @@ export function ShiftCinematicHome({
   // hero would attribute one game's failure to another game's title.
   const statusGame = useMemo(() => {
     if (status?.gameId === undefined) return game
-    return games.find(candidate => candidate.id === status.gameId) ?? game
-  }, [status, games, game])
+    return statusGames.find(candidate => candidate.id === status.gameId) ?? game
+  }, [status, statusGames, game])
 
   const confirm = useCallback(() => {
     // An affordance slot owns its confirm regardless of any lingering launch

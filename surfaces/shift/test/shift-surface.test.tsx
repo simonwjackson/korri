@@ -267,27 +267,35 @@ describe("ShiftSurface", () => {
   })
 
   test("a failure is shown against its own game, not the focused hero", () => {
-    const { container } = render(
-      <ShiftSurface
-        model={model({
-          status: {
-            _tag: "Problem",
-            kicker: "Couldn't start Wario Land 4",
-            reason: "ActiveSessionConflict: a session must end",
-            canRetry: false,
-            gameId: "local-game:wl4",
-            gameTitle: "Wario Land 4",
-          },
-        })}
-        host={createFixtureHost()}
-      />,
-    )
+    const originalRandom = Math.random
+    Math.random = () => 0.99
+    try {
+      const { container } = render(
+        <ShiftSurface
+          model={model({
+            status: {
+              _tag: "Problem",
+              kicker: "Couldn't start Wario Land 4",
+              reason: "ActiveSessionConflict: a session must end",
+              canRetry: false,
+              gameId: "local-game:wl4",
+              gameTitle: "Wario Land 4",
+            },
+          })}
+          host={createFixtureHost()}
+        />,
+      )
 
-    // Home focuses Skate 3 first, so an unattributed failure would name it.
-    // Scope to this render: sibling suites leave their own heroes mounted.
-    const hero = container.querySelector("[data-korri-part='shift.cine-hero']")
-    expect(hero?.getAttribute("data-korri-instance-id")).toBe("local-game:wl4")
-    expect(screen.getByText("Couldn't start Wario Land 4")).toBeDefined()
+      // Home focuses Skate 3 and the seeded random slot picks Neverball, so
+      // Wario Land 4 is outside the rendered Home rail.
+      expect(screen.queryByRole("button", { name: "Wario Land 4" })).toBeNull()
+      // Scope to this render: sibling suites leave their own heroes mounted.
+      const hero = container.querySelector("[data-korri-part='shift.cine-hero']")
+      expect(hero?.getAttribute("data-korri-instance-id")).toBe("local-game:wl4")
+      expect(screen.getByText("Couldn't start Wario Land 4")).toBeDefined()
+    } finally {
+      Math.random = originalRandom
+    }
   })
 
   test("a retryable problem routes A to retry", () => {
@@ -1061,7 +1069,16 @@ describe("Shift settings", () => {
 
   test("saving a setting disables duplicate submission until the model changes", () => {
     const host = createFixtureHost()
-    const rendered = render(
+    const rendered = render(<ShiftSurface model={model()} host={host} />)
+    openSettings()
+
+    fireEvent.click(screen.getByRole("button", { name: "Name: usu" }))
+    const input = screen.getByRole<HTMLInputElement>("textbox", { name: "Name" })
+    fireEvent.change(input, { target: { value: "pocket" } })
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+    expect(host.calls).toEqual(["setting:device-name:pocket"])
+
+    rendered.rerender(
       <ShiftSurface
         model={model({
           settingsStatus: { _tag: "Saving", settingId: "device-name" },
@@ -1069,21 +1086,32 @@ describe("Shift settings", () => {
         host={host}
       />,
     )
-    openSettings()
-
-    fireEvent.click(screen.getByRole("button", { name: "Name: usu" }))
-    const input = screen.getByRole<HTMLInputElement>("textbox", { name: "Name" })
+    const savingInput = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Name",
+    })
     const save = screen.getByRole<HTMLButtonElement>("button", {
       name: "Saving…",
     })
 
-    expect(input.disabled).toBe(true)
+    expect(savingInput.disabled).toBe(true)
     expect(save.disabled).toBe(true)
     fireEvent.click(save)
     save.click()
-    expect(host.calls).toEqual([])
+    expect(host.calls).toEqual(["setting:device-name:pocket"])
 
-    rendered.rerender(<ShiftSurface model={model()} host={host} />)
+    const savedSettings = fixtureModel.settings.map(group =>
+      group.title === "Device"
+        ? {
+            ...group,
+            items: group.items.map(item =>
+              item.id === "device-name" ? { ...item, value: "pocket" } : item,
+            ),
+          }
+        : group,
+    )
+    rendered.rerender(
+      <ShiftSurface model={model({ settings: savedSettings })} host={host} />,
+    )
     expect(screen.queryByRole("dialog", { name: "Change Name" })).toBeNull()
   })
 
