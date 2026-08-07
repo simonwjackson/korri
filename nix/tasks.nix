@@ -162,6 +162,23 @@ let
       '';
     };
 
+    odin2portal-rollback-bundle = {
+      description = "Stage the exact Odin 2 Portal stock Android rollback images without device writes.";
+      runtimeInputs = odin2portalStockRepack.rollbackRuntimeInputs;
+      usageSuffix = " -- <stock-source-directory> <output-directory>";
+      script = ''
+        exec "$KORRI_ROOT/clients/android/firmware/odin2portal/rollback-bundle.sh" "$@"
+      '';
+    };
+
+    odin2portal-rollback-bundle-check = {
+      description = "Test the fail-closed, non-executing Odin 2 Portal rollback bundle staging.";
+      runtimeInputs = odin2portalStockRepack.rollbackRuntimeInputs;
+      script = ''
+        exec "$KORRI_ROOT/clients/android/firmware/odin2portal/test-rollback-bundle.sh"
+      '';
+    };
+
     odin2portal-stock-repack = {
       description = "Reconstruct and verify a stock-equivalent Odin 2 Portal super image without device writes.";
       runtimeInputs = odin2portalStockRepack.runtimeInputs;

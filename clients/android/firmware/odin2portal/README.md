@@ -29,6 +29,18 @@ The output contains:
 
 The pipeline deletes intermediate logical images after verification because the source `super.img` remains the immutable rollback input.
 
+## Stage a rollback bundle
+
+```console
+nix run .#odin2portal-rollback-bundle -- \
+  /path/to/odin2portal-stock-130 \
+  /path/to/rollback-bundle
+```
+
+This task accepts the same exact stock contract. It copies only the 15 verified Android images and the captured build, active-slot, checksum, and layout records. It adds the non-executing procedure from `ROLLBACK.md`. The task does not contain or call a device tool.
+
+The output is a private directory with mode `0700`. It must be copied to encrypted offline storage before the first later flash. Local staging on the same disk is not a backup.
+
 ## Guarantees
 
 Before publishing output, the command proves:
@@ -55,6 +67,7 @@ The cost is a temporary second 5.68 GB `super.img` plus unpacked working data. A
 
 ```console
 nix run .#odin2portal-stock-repack-check
+nix run .#odin2portal-rollback-bundle-check
 ```
 
-The test uses small fake images and tools. It checks successful publication, source immutability, checksum rejection before unpacking, layout rejection, and refusal to overwrite output.
+The tests use small fake images and tools. They check successful publication, source immutability, exact build and slot gates, checksum and layout rejection, and refusal to overwrite output.

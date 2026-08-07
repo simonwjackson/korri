@@ -1,5 +1,12 @@
 { pkgs }:
 {
+  rollbackRuntimeInputs = [
+    pkgs.coreutils
+    pkgs.diffutils
+    pkgs.findutils
+    pkgs.gnugrep
+  ];
+
   runtimeInputs = [
     pkgs.android-tools
     pkgs.coreutils
