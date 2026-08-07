@@ -1,5 +1,5 @@
 use korri_input_core::controls::{Control, ControlEvent};
-use korri_input_core::hold::{HoldConfig, HoldPhase, HoldPolicy};
+use korri_input_core::hold::{HoldConfig, HoldConfigError, HoldPhase, HoldPolicy};
 use korri_input_core::shortcuts::{ShortcutDefinition, ShortcutPolicy};
 
 fn policy() -> HoldPolicy {
@@ -7,6 +7,7 @@ fn policy() -> HoldPolicy {
         tap_ms: 200,
         hold_ms: 2_000,
     })
+    .expect("test hold duration is valid")
 }
 
 fn phases(updates: &[korri_input_core::hold::HoldUpdate]) -> Vec<HoldPhase> {
@@ -79,14 +80,15 @@ fn holding_through_threshold_fires_once_and_release_has_no_second_outcome() {
 }
 
 #[test]
-fn release_after_threshold_fires_even_if_no_timer_tick_was_delivered() {
+fn release_after_threshold_cancels_if_advance_never_fired() {
     let mut policy = policy();
     policy.engage("kill-current-game", 1_000);
 
     let updates = policy.release("kill-current-game", 3_100);
 
-    assert_eq!(phases(&updates), [HoldPhase::Fired]);
+    assert_eq!(phases(&updates), [HoldPhase::Cancel]);
     assert_eq!(updates[0].elapsed_ms, 2_100);
+    assert_eq!(updates[0].progress, 1.0);
 }
 
 #[test]
@@ -114,23 +116,25 @@ fn release_rearms_the_hold_for_a_future_chord_lifecycle() {
 }
 
 #[test]
-fn tap_threshold_is_bounded_by_hold_threshold_and_zero_hold_fires_immediately() {
+fn tap_threshold_is_bounded_by_hold_threshold() {
     let mut bounded = HoldPolicy::new(HoldConfig {
         tap_ms: 500,
         hold_ms: 100,
-    });
+    })
+    .expect("positive hold duration is valid");
     bounded.engage("kill", 0);
     assert_eq!(phases(&bounded.release("kill", 50)), [HoldPhase::Tap]);
+}
 
-    let mut immediate = HoldPolicy::new(HoldConfig {
-        tap_ms: 250,
-        hold_ms: 0,
-    });
-    assert_eq!(
-        phases(&immediate.engage("kill", 10)),
-        [HoldPhase::Press, HoldPhase::Fired]
-    );
-    assert!(immediate.release("kill", 10).is_empty());
+#[test]
+fn zero_destructive_hold_duration_is_rejected() {
+    assert!(matches!(
+        HoldPolicy::new(HoldConfig {
+            tap_ms: 250,
+            hold_ms: 0,
+        }),
+        Err(HoldConfigError::ZeroHoldDuration)
+    ));
 }
 
 #[test]
@@ -144,6 +148,11 @@ fn exact_destructive_chord_only_becomes_destructive_after_the_hold() {
     );
     let mut hold = policy();
 
+    for control in [Control::L1, Control::R1, Control::Start, Control::Select] {
+        assert!(shortcuts
+            .handle(ControlEvent::released("dbus-target", control))
+            .is_empty());
+    }
     for control in [Control::L1, Control::R1, Control::Start] {
         assert!(shortcuts
             .handle(ControlEvent::pressed("dbus-target", control))

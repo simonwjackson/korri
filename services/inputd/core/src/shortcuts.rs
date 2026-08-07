@@ -85,23 +85,35 @@ pub struct ShortcutPolicy {
     sources: BTreeMap<String, SourceState>,
     fired_ids: BTreeSet<String>,
     consumed_taps: BTreeSet<Control>,
+    destructive_controls: BTreeSet<Control>,
+    destructive_disarmed_controls: BTreeSet<Control>,
 }
 
 impl ShortcutPolicy {
     pub fn new(shortcuts: Vec<ShortcutDefinition>, taps: Vec<TapDefinition>) -> Self {
+        let destructive_controls = shortcuts
+            .iter()
+            .filter(|shortcut| shortcut.source_rule == SourceRule::Same)
+            .flat_map(|shortcut| shortcut.required_controls.iter().copied())
+            .collect::<BTreeSet<_>>();
         Self {
             shortcuts,
             taps,
             sources: BTreeMap::new(),
             fired_ids: BTreeSet::new(),
             consumed_taps: BTreeSet::new(),
+            destructive_disarmed_controls: destructive_controls.clone(),
+            destructive_controls,
         }
     }
 
     pub fn handle(&mut self, event: ControlEvent) -> Vec<ShortcutMatch> {
         match event.transition {
             ControlTransition::Pressed => self.press(event.source, event.control),
-            ControlTransition::Released => self.release(&event.source, event.control),
+            ControlTransition::Released => {
+                self.destructive_disarmed_controls.remove(&event.control);
+                self.release(&event.source, event.control)
+            }
         }
     }
 
@@ -163,6 +175,7 @@ impl ShortcutPolicy {
                 .values()
                 .any(|state| state.pressed.contains(control))
         });
+        self.disarm_destructive_matching();
     }
 
     pub fn is_pressed(&self, control: Control) -> bool {
@@ -175,6 +188,7 @@ impl ShortcutPolicy {
         self.sources.clear();
         self.fired_ids.clear();
         self.consumed_taps.clear();
+        self.disarm_destructive_matching();
     }
 
     fn press(&mut self, source: String, control: Control) -> Vec<ShortcutMatch> {
@@ -244,13 +258,17 @@ impl ShortcutPolicy {
                     .all(|control| active.contains(control))
                     && (!shortcut.exact || active.len() == shortcut.required_controls.len())
             }
-            SourceRule::Same => self.sources.get(source).is_some_and(|state| {
-                shortcut
-                    .required_controls
-                    .iter()
-                    .all(|control| state.pressed.contains(control))
-                    && (!shortcut.exact || state.pressed.len() == shortcut.required_controls.len())
-            }),
+            SourceRule::Same => {
+                self.destructive_disarmed_controls.is_empty()
+                    && self.sources.get(source).is_some_and(|state| {
+                        shortcut
+                            .required_controls
+                            .iter()
+                            .all(|control| state.pressed.contains(control))
+                            && (!shortcut.exact
+                                || state.pressed.len() == shortcut.required_controls.len())
+                    })
+            }
         }
     }
 
@@ -290,5 +308,9 @@ impl ShortcutPolicy {
         self.sources.retain(|_, state| {
             !state.pressed.is_empty() || state.horizontal.is_some() || state.vertical.is_some()
         });
+    }
+
+    fn disarm_destructive_matching(&mut self) {
+        self.destructive_disarmed_controls = self.destructive_controls.clone();
     }
 }

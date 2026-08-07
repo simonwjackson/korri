@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, error::Error, fmt};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HoldConfig {
@@ -14,6 +14,23 @@ impl Default for HoldConfig {
         }
     }
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HoldConfigError {
+    ZeroHoldDuration,
+}
+
+impl fmt::Display for HoldConfigError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ZeroHoldDuration => {
+                formatter.write_str("hold duration must be greater than zero")
+            }
+        }
+    }
+}
+
+impl Error for HoldConfigError {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HoldPhase {
@@ -44,14 +61,17 @@ pub struct HoldPolicy {
 }
 
 impl HoldPolicy {
-    pub fn new(config: HoldConfig) -> Self {
-        Self {
+    pub fn new(config: HoldConfig) -> Result<Self, HoldConfigError> {
+        if config.hold_ms == 0 {
+            return Err(HoldConfigError::ZeroHoldDuration);
+        }
+        Ok(Self {
             config: HoldConfig {
                 tap_ms: config.tap_ms.min(config.hold_ms),
                 hold_ms: config.hold_ms,
             },
             holds: BTreeMap::new(),
-        }
+        })
     }
 
     pub fn engage(&mut self, id: impl Into<String>, now_ms: u64) -> Vec<HoldUpdate> {
@@ -60,30 +80,20 @@ impl HoldPolicy {
             return Vec::new();
         }
 
-        let fired = self.config.hold_ms == 0;
         self.holds.insert(
             id.clone(),
             HoldState {
                 started_at_ms: now_ms,
-                fired,
+                fired: false,
             },
         );
 
-        let mut updates = vec![HoldUpdate {
-            id: id.clone(),
+        vec![HoldUpdate {
+            id,
             phase: HoldPhase::Press,
             progress: 0.0,
             elapsed_ms: 0,
-        }];
-        if fired {
-            updates.push(HoldUpdate {
-                id,
-                phase: HoldPhase::Fired,
-                progress: 1.0,
-                elapsed_ms: 0,
-            });
-        }
-        updates
+        }]
     }
 
     pub fn advance(&mut self, now_ms: u64) -> Vec<HoldUpdate> {
@@ -126,14 +136,6 @@ impl HoldPolicy {
         }
 
         let elapsed_ms = now_ms.saturating_sub(state.started_at_ms);
-        if elapsed_ms >= self.config.hold_ms {
-            return vec![HoldUpdate {
-                id: id.to_owned(),
-                phase: HoldPhase::Fired,
-                progress: 1.0,
-                elapsed_ms,
-            }];
-        }
         if elapsed_ms < self.config.tap_ms {
             return vec![HoldUpdate {
                 id: id.to_owned(),

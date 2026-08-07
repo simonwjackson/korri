@@ -34,6 +34,20 @@ fn release(policy: &mut ShortcutPolicy, source: &str, control: Control) -> Vec<S
         .collect()
 }
 
+fn release_destructive_controls(policy: &mut ShortcutPolicy, source: &str) {
+    for control in [Control::L1, Control::R1, Control::Start, Control::Select] {
+        assert!(release(policy, source, control).is_empty());
+    }
+}
+
+fn press_destructive_chord(policy: &mut ShortcutPolicy, source: &str) -> Vec<String> {
+    let mut matches = Vec::new();
+    for control in [Control::L1, Control::R1, Control::Start, Control::Select] {
+        matches.extend(press(policy, source, control));
+    }
+    matches
+}
+
 #[test]
 fn guide_and_left_bumper_fire_once_and_suppress_the_guide_tap() {
     let mut policy = policy();
@@ -64,8 +78,64 @@ fn non_destructive_chords_can_compose_across_sources() {
 }
 
 #[test]
+fn startup_requires_every_destructive_control_release_but_non_destructive_actions_work() {
+    let mut policy = policy();
+
+    press(&mut policy, "pad", Control::Home);
+    assert_eq!(press(&mut policy, "pad", Control::L1), ["workspace-prev"]);
+    release(&mut policy, "pad", Control::Home);
+    release(&mut policy, "pad", Control::L1);
+
+    assert!(press_destructive_chord(&mut policy, "pad").is_empty());
+    release_destructive_controls(&mut policy, "pad");
+    assert_eq!(
+        press_destructive_chord(&mut policy, "pad"),
+        ["kill-current-game"]
+    );
+}
+
+#[test]
+fn reset_disarms_destructive_matching_until_every_control_is_released() {
+    let mut policy = policy();
+    release_destructive_controls(&mut policy, "pad");
+    assert_eq!(
+        press_destructive_chord(&mut policy, "pad"),
+        ["kill-current-game"]
+    );
+
+    policy.reset();
+
+    assert!(press_destructive_chord(&mut policy, "pad").is_empty());
+    release_destructive_controls(&mut policy, "pad");
+    assert_eq!(
+        press_destructive_chord(&mut policy, "pad"),
+        ["kill-current-game"]
+    );
+}
+
+#[test]
+fn source_loss_disarms_destructive_matching_until_every_control_is_released() {
+    let mut policy = policy();
+    release_destructive_controls(&mut policy, "pad");
+    assert_eq!(
+        press_destructive_chord(&mut policy, "pad"),
+        ["kill-current-game"]
+    );
+
+    policy.clear_source("pad");
+
+    assert!(press_destructive_chord(&mut policy, "pad").is_empty());
+    release_destructive_controls(&mut policy, "pad");
+    assert_eq!(
+        press_destructive_chord(&mut policy, "pad"),
+        ["kill-current-game"]
+    );
+}
+
+#[test]
 fn destructive_chord_is_exact_and_from_one_logical_source() {
     let mut policy = policy();
+    release_destructive_controls(&mut policy, "pad-a");
 
     press(&mut policy, "pad-a", Control::L1);
     press(&mut policy, "pad-a", Control::R1);
@@ -73,6 +143,7 @@ fn destructive_chord_is_exact_and_from_one_logical_source() {
     assert!(press(&mut policy, "pad-b", Control::Select).is_empty());
 
     policy.reset();
+    release_destructive_controls(&mut policy, "pad-a");
     press(&mut policy, "pad-a", Control::L1);
     press(&mut policy, "pad-a", Control::R1);
     press(&mut policy, "pad-a", Control::Start);
@@ -90,6 +161,7 @@ fn destructive_chord_is_exact_and_from_one_logical_source() {
 #[test]
 fn repeated_presses_fire_once_until_a_required_control_is_released() {
     let mut policy = policy();
+    release_destructive_controls(&mut policy, "pad");
 
     press(&mut policy, "pad", Control::L1);
     press(&mut policy, "pad", Control::R1);
