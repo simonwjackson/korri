@@ -224,9 +224,12 @@ remote_temporary_artifacts_dirty() {
 }
 
 remote_unit_value() {
-  local scope="$1" unit="$2" property="$3" prefix=()
-  [[ "$scope" == user ]] && prefix=(--user)
-  systemctl "${prefix[@]}" show "$unit" -p "$property" --value 2>/dev/null || true
+  local scope="$1" unit="$2" property="$3"
+  if [[ "$scope" == user ]]; then
+    remote_user_systemctl show "$unit" -p "$property" --value 2>/dev/null || true
+  else
+    systemctl show "$unit" -p "$property" --value 2>/dev/null || true
+  fi
 }
 
 remote_catalog_health() {
@@ -698,6 +701,11 @@ attempt_nonce='' attempt_boot_id=''
 old_user_was_active=false old_user_was_enabled=false failure_resume_boot_id='' verification_resume_state=''
 write_state() {
   local next="$1" boot_id="${2:-}" resume_state="${3:-}" attempt_nonce="${4:-}"
+  case "$next" in
+    pending-mutation|pending-mutation-starting|rollback-reboot-verifying|rollback-reboot-verifying-starting|candidate-reboot-verifying|candidate-reboot-verifying-starting)
+      [[ "$attempt_nonce" =~ ^[0-9a-f]{64}$ ]] || fail "in-progress state $next requires an exact private attempt nonce"
+      ;;
+  esac
   {
     printf 'state=%s\n' "$next"
     printf 'machine_id=%s\n' "$actual_machine_id"
@@ -805,9 +813,7 @@ fi
 if [[ "$MODE" == candidate-reboot-verify && "$state" == candidate-await-reboot ]]; then
   prior_boot="$(awk -F= '$1 == "boot_id" {print $2}' "$state_file")"
   failure_resume_boot_id="$prior_boot"
-  verification_active=true
   verification_resume_state='candidate-await-reboot'
-  write_state candidate-reboot-verifying "$prior_boot" candidate-await-reboot ''
 fi
 
 preflight="$(run_remote_deadlined preflight "$CANDIDATE" "$ROLLBACK" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE")"
@@ -848,11 +854,13 @@ old_user_was_enabled="$(awk -F= '$1 == "old-user.enabled" {print $2}' "$LEDGER/b
 
 resume_after_failure="$state"
 start_attempt() {
+  local in_progress_state="$1"
   attempt_nonce="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
   [[ "$attempt_nonce" =~ ^[0-9a-f]{64}$ ]] || fail 'could not generate attempt nonce'
-  write_state "$1" "$attempt_boot_id" "$resume_after_failure" "$attempt_nonce"
+  write_state "${in_progress_state}-starting" "$attempt_boot_id" "$resume_after_failure" "$attempt_nonce"
   run_remote_control attempt-start-root "$attempt_nonce" "$CANDIDATE" "$ATTEMPT_TIMEOUT"
   attempt_remote_active=true
+  write_state "$in_progress_state" "$attempt_boot_id" "$resume_after_failure" "$attempt_nonce"
 }
 finish_attempt() {
   run_remote_control attempt-finish-root "$attempt_nonce" "$CANDIDATE"
@@ -884,7 +892,7 @@ compare_baseline() {
 
 if [[ "$MODE" == reconcile ]]; then
   case "$state" in
-    failed-needs-inspection|pending-mutation|rollback-reboot-verifying|candidate-reboot-verifying) ;;
+    failed-needs-inspection|pending-mutation|pending-mutation-starting|rollback-reboot-verifying|rollback-reboot-verifying-starting|candidate-reboot-verifying|candidate-reboot-verifying-starting) ;;
     *) fail 'reconcile requires a failed or in-progress ledger state' ;;
   esac
   grep -q '^resume_state=' "$state_file" || fail 'reconcile requires an explicit ledger resume state'
@@ -892,17 +900,17 @@ if [[ "$MODE" == reconcile ]]; then
   resume="$(awk -F= '$1 == "resume_state" {print $2}' "$state_file")"
   resume_boot="$(awk -F= '$1 == "boot_id" {print $2}' "$state_file")"
   case "$state" in
-    pending-mutation)
+    pending-mutation|pending-mutation-starting)
       case "$resume" in
         ''|candidate-green|automatic-rollback-green|rollback-reboot-green) ;;
         *) fail 'pending mutation ledger has an invalid resume state' ;;
       esac
       ;;
-    rollback-reboot-verifying)
+    rollback-reboot-verifying|rollback-reboot-verifying-starting)
       [[ "$resume" == rollback-await-reboot ]] \
         || fail 'rollback reboot verification ledger has an invalid resume state'
       ;;
-    candidate-reboot-verifying)
+    candidate-reboot-verifying|candidate-reboot-verifying-starting)
       [[ "$resume" == candidate-await-reboot ]] \
         || fail 'candidate reboot verification ledger has an invalid resume state'
       if ! grep -Fx "expected_controller_id=$EXPECTED_CONTROLLER_ID" "$state_file" >/dev/null \
@@ -913,7 +921,9 @@ if [[ "$MODE" == reconcile ]]; then
   esac
   if [[ "$stale_nonce" =~ ^[0-9a-f]{64}$ ]]; then
     require_stale_marker=false
-    [[ "$state" == failed-needs-inspection ]] || require_stale_marker=true
+    case "$state" in
+      pending-mutation|rollback-reboot-verifying|candidate-reboot-verifying) require_stale_marker=true ;;
+    esac
     run_remote_control attempt-reconcile-root "$stale_nonce" "$CANDIDATE" "$require_stale_marker"
   elif [[ "$state" != failed-needs-inspection ]]; then
     fail 'in-progress reconcile requires an exact private attempt nonce'
@@ -925,7 +935,7 @@ if [[ "$MODE" == reconcile ]]; then
     attempt_nonce="$stale_nonce"
   fi
   case "$state" in
-    candidate-reboot-verifying)
+    candidate-reboot-verifying|candidate-reboot-verifying-starting)
       [[ "$(run_remote_deadlined current-generation)" == "$CANDIDATE" ]] \
         || fail 'candidate reboot reconcile requires the candidate generation to remain active'
       grep -Fx 'expected-controller=yes' <<<"$preflight" >/dev/null \
@@ -944,7 +954,7 @@ if [[ "$MODE" == reconcile ]]; then
       verification_active=false
       write_state "$resume" "$resume_boot"
       ;;
-    rollback-reboot-verifying)
+    rollback-reboot-verifying|rollback-reboot-verifying-starting)
       [[ "$(run_remote_deadlined current-generation)" == "$ROLLBACK" ]] \
         || fail 'rollback reboot reconcile requires the rollback generation to be active'
       attempt_boot_id="$(run_remote_deadlined boot-id)"
@@ -960,7 +970,7 @@ if [[ "$MODE" == reconcile ]]; then
       verification_active=false
       write_state "$resume" "$resume_boot"
       ;;
-    pending-mutation)
+    pending-mutation|pending-mutation-starting)
       [[ "$(run_remote_deadlined current-generation)" == "$ROLLBACK" ]] \
         || fail 'pending mutation reconcile requires the rollback generation to be active'
       compare_baseline
@@ -1091,6 +1101,7 @@ case "$MODE" in
     ;;
   candidate-reboot-verify)
     [[ "$state" == candidate-await-reboot ]] || fail 'candidate reboot verification requires candidate-await-reboot ledger state'
+    verification_active=true
     current_boot="$(run_remote_deadlined boot-id)"
     [[ "$current_boot" != "$prior_boot" ]] || fail 'candidate reboot verification requires a new boot ID'
     [[ "$(run_remote_deadlined current-generation)" == "$CANDIDATE" ]] || fail 'rebooted system is not the candidate generation'

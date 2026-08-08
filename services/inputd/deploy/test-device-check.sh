@@ -3,6 +3,46 @@ set -Eeuo pipefail
 
 # This file is also the modeled SSH endpoint used by the tests below.
 case "$(basename "$0")" in
+  id)
+    [[ "${1:-}" == -u ]] && printf '0\n' && exit 0
+    exit 1
+    ;;
+  sudo)
+    [[ "${1:-}" == -n ]] && shift
+    if [[ "${1:-}" == -u ]]; then
+      shift 2
+      export HARNESS_MODELED_USER=gameplay
+    fi
+    exec "$@"
+    ;;
+  systemctl)
+    scope=system property=''
+    for arg in "$@"; do
+      [[ "$arg" != --user ]] || scope=user
+    done
+    while [[ $# -gt 0 ]]; do
+      if [[ "$1" == -p ]]; then
+        property="${2:-}"
+        break
+      fi
+      shift
+    done
+    if [[ "$scope" == user && "${HARNESS_MODELED_USER:-root}" == gameplay ]]; then
+      active=active enabled=enabled
+    elif [[ "$scope" == user ]]; then
+      active=inactive enabled=disabled
+    else
+      active=active enabled=enabled
+    fi
+    case "$property" in
+      ActiveState) printf '%s\n' "$active" ;;
+      UnitFileState) printf '%s\n' "$enabled" ;;
+      LoadState) printf 'loaded\n' ;;
+      SubState) printf 'running\n' ;;
+      StatusText) printf '\n' ;;
+    esac
+    exit 0
+    ;;
   ssh-command-harness)
     command="${*: -1}"
     printf 'ssh-command=%s\n' "$command" >>"$HARNESS_LOG"
@@ -126,8 +166,16 @@ case "$(basename "$0")" in
             printf 'device gate: another device-gate attempt marker already exists\n' >&2
             exit 77
           fi
+          if [[ "${HARNESS_ATTEMPT_START_PAUSE:-}" == pre-marker ]]; then
+            : >"${HARNESS_PAUSE_MARKER:?}"
+            sleep "${HARNESS_PAUSE_SECONDS:-30}"
+          fi
           printf 'nonce=%s\ncandidate=%s\n' "$nonce" "$candidate" >"$HARNESS_ATTEMPT_MARKER"
           : >"$HARNESS_ATTEMPT_LEASE"
+          if [[ "${HARNESS_ATTEMPT_START_PAUSE:-}" == post-marker ]]; then
+            : >"${HARNESS_PAUSE_MARKER:?}"
+            sleep "${HARNESS_PAUSE_SECONDS:-30}"
+          fi
           exit 0
           ;;
         attempt-finish-root)
@@ -177,13 +225,23 @@ case "$(basename "$0")" in
           printf 'generation current=%s default=%s\n' "$ROLLBACK" "$ROLLBACK"
           printf 'units:\nsystem/inputplumber.service LoadState=loaded ActiveState=active SubState=running UnitFileState=enabled StatusText=\n'
           printf 'user/korrid.service LoadState=loaded ActiveState=inactive SubState=dead UnitFileState=disabled StatusText=\n'
-          printf 'user/sunshine.service LoadState=loaded ActiveState=active SubState=running UnitFileState=enabled StatusText=\n'
+          printf 'user/sunshine.service LoadState=loaded ActiveState=%s SubState=running UnitFileState=%s StatusText=\n' \
+            "${HARNESS_GAMEPLAY_SUNSHINE_ACTIVE:-active}" "${HARNESS_GAMEPLAY_SUNSHINE_ENABLED:-enabled}"
           printf 'temporary-artifacts-dirty=%s catalog=Ok\n' "${HARNESS_DIRTY:-no}"
           printf 'physical-controller-candidates:\n'
           printf 'controller-candidate identity=%s name=Observed_Controller sysfs=/sys/devices/pci0000:00/input/input8/event8 event=event8\n' \
             "${HARNESS_CONTROLLER_ID:-0003:045e:02ea:050b}"
           ;;
         predicates)
+          if [[ "${1:-}" == "${HARNESS_GAMEPLAY_USER:-gameplay}" ]]; then
+            sunshine_active="${HARNESS_GAMEPLAY_SUNSHINE_ACTIVE:-active}"
+            sunshine_enabled="${HARNESS_GAMEPLAY_SUNSHINE_ENABLED:-enabled}"
+            printf 'predicates-user=gameplay wrapper=%s\n' "$wrapper" >>"$HARNESS_LOG"
+          else
+            sunshine_active="${HARNESS_ROOT_SUNSHINE_ACTIVE:-inactive}"
+            sunshine_enabled="${HARNESS_ROOT_SUNSHINE_ENABLED:-disabled}"
+            printf 'predicates-user=root wrapper=%s\n' "$wrapper" >>"$HARNESS_LOG"
+          fi
           printf 'generation.current=%s\n' "${HARNESS_PREDICATE_GENERATION:-$ROLLBACK}"
           printf 'generation.default=%s\n' "${HARNESS_PREDICATE_DEFAULT:-$ROLLBACK}"
           printf 'old-user.active=%s\n' "${HARNESS_OLD_ACTIVE:-false}"
@@ -194,8 +252,8 @@ case "$(basename "$0")" in
           printf 'input.sources-artifacts=%s\n' "${HARNESS_ARTIFACTS_BASELINE:-artifacts-clean}"
           printf 'inputplumber.active=%s\n' "${HARNESS_IP_ACTIVE:-active}"
           printf 'inputplumber.enabled=%s\n' "${HARNESS_IP_ENABLED:-enabled}"
-          printf 'sunshine.active=%s\n' "${HARNESS_SUNSHINE_ACTIVE:-active}"
-          printf 'sunshine.enabled=%s\n' "${HARNESS_SUNSHINE_ENABLED:-enabled}"
+          printf 'sunshine.active=%s\n' "$sunshine_active"
+          printf 'sunshine.enabled=%s\n' "$sunshine_enabled"
           printf 'catalog.health=%s\n' "${HARNESS_CATALOG:-Ok}"
           ;;
         preflight)
@@ -363,9 +421,18 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 SELF="$(realpath "$0")"
 ln -s "$SELF" "$TMP/ssh-command-harness"
+mkdir "$TMP/user-scope-bin"
+ln -s "$SELF" "$TMP/user-scope-bin/user-scope-id"
+ln -s "$SELF" "$TMP/user-scope-bin/user-scope-sudo"
+ln -s "$SELF" "$TMP/user-scope-bin/user-scope-systemctl"
+ln -s user-scope-id "$TMP/user-scope-bin/id"
+ln -s user-scope-sudo "$TMP/user-scope-bin/sudo"
+ln -s user-scope-systemctl "$TMP/user-scope-bin/systemctl"
 export KORRI_DEVICE_GATE_SSH="$TMP/ssh-command-harness"
 export HARNESS_LOG="$TMP/commands.log" HARNESS_GATE_SOURCE="$GATE"
 export HARNESS_ATTEMPT_MARKER="$TMP/remote-attempt" HARNESS_ATTEMPT_LEASE="$TMP/remote-attempt.lease"
+export HARNESS_GAMEPLAY_USER=gameplay HARNESS_GAMEPLAY_SUNSHINE_ACTIVE=active HARNESS_GAMEPLAY_SUNSHINE_ENABLED=enabled
+export HARNESS_ROOT_SUNSHINE_ACTIVE=inactive HARNESS_ROOT_SUNSHINE_ENABLED=disabled
 MACHINE_ID=0123456789abcdef0123456789abcdef
 HOSTNAME=u7-test-host
 CANDIDATE=/nix/store/00000000000000000000000000000000-nixos-system-u7-test-host-1
@@ -411,6 +478,14 @@ common_for() {
     --expected-controller-id "$CONTROLLER_ID" --production-profile "$PRODUCTION_PROFILE"
 }
 confirm="CONFIRM-$(printf '%s' "$MACHINE_ID|$HOSTNAME|$CANDIDATE" | sha256sum | cut -c1-16)"
+
+# Exercise the production user-unit read path as a modeled sudo/root attempt.
+# Root and gameplay have different Sunshine states. The root attempt must use
+# SUDO_UID and the gameplay user's systemd manager.
+user_scope_predicates="$(PATH="$TMP/user-scope-bin:$PATH" HARNESS_MODELED_USER=root SUDO_UID=1000 \
+  "$GATE" --remote predicates "$GAMEPLAY_USER")"
+grep -Fx 'sunshine.active=active' <<<"$user_scope_predicates" >/dev/null
+grep -Fx 'sunshine.enabled=enabled' <<<"$user_scope_predicates" >/dev/null
 
 : >"$HARNESS_LOG"
 assert_fails_with 'an explicit --host is required' "$GATE" --expected-machine-id "$MACHINE_ID" --expected-hostname "$HOSTNAME"
@@ -619,6 +694,38 @@ run_abrupt_kill() {
   unset HARNESS_PAUSE_ACTION HARNESS_PAUSE_MARKER
 }
 
+run_startup_abrupt_kill() {
+  local mode="$1" window="$2" ledger_state="$3" ledger="$4"
+  shift 4
+  local pause_marker="$TMP/startup-abrupt-$RANDOM.ready" pid
+  export HARNESS_ATTEMPT_START_PAUSE="$window" HARNESS_PAUSE_MARKER="$pause_marker"
+  setsid "$GATE" --host "$HOSTNAME" --expected-machine-id "$MACHINE_ID" --expected-hostname "$HOSTNAME" \
+    --mode "$mode" "$@" >"$pause_marker.stdout" 2>"$pause_marker.stderr" &
+  pid=$!
+  for _ in $(seq 1 500); do
+    if [[ -e "$pause_marker" ]] && grep -Fx "state=$ledger_state" "$ledger/state" >/dev/null 2>&1; then
+      break
+    fi
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.01
+  done
+  [[ -e "$pause_marker" ]]
+  grep -Fx "state=$ledger_state" "$ledger/state" >/dev/null
+  nonce="$(awk -F= '$1 == "attempt_nonce" {print $2}' "$ledger/state")"
+  [[ "$nonce" =~ ^[0-9a-f]{64}$ ]]
+  if [[ "$window" == pre-marker ]]; then
+    [[ ! -e "$HARNESS_ATTEMPT_MARKER" && ! -e "$HARNESS_ATTEMPT_LEASE" ]]
+  else
+    grep -Fx "nonce=$nonce" "$HARNESS_ATTEMPT_MARKER" >/dev/null
+    grep -Fx "candidate=$CANDIDATE" "$HARNESS_ATTEMPT_MARKER" >/dev/null
+    [[ -e "$HARNESS_ATTEMPT_LEASE" ]]
+  fi
+  kill -KILL -- "-$pid"
+  wait "$pid" 2>/dev/null || true
+  rmdir "$HARNESS_LOG.lock" 2>/dev/null || true
+  unset HARNESS_ATTEMPT_START_PAUSE HARNESS_PAUSE_MARKER
+}
+
 run_stalled_interactive() {
   local ledger="$1" transcript="$2"
   shift 2
@@ -703,6 +810,33 @@ export HARNESS_LEDGER="$live_reconcile_ledger"
 run_gate --mode reconcile "${live_reconcile_args[@]}" >/dev/null
 [[ ! -e "$HARNESS_ATTEMPT_MARKER" ]]
 
+# Attempt startup is two-phase. SIGKILL before marker creation leaves a nonce-
+# bearing starting state that reconciles without a marker. SIGKILL after marker
+# creation but before the durable in-progress transition honors the exact lease,
+# rejects a mismatch, and reconciles only after that exact lease is inactive.
+for startup_window in pre-marker post-marker; do
+  startup_pending_ledger="$TMP/startup-pending-$startup_window-ledger"
+  mapfile -d '' -t startup_pending_args < <(common_for "$startup_pending_ledger")
+  export HARNESS_LEDGER="$startup_pending_ledger"
+  : >"$HARNESS_LOG"
+  run_startup_abrupt_kill candidate-test "$startup_window" pending-mutation-starting \
+    "$startup_pending_ledger" "${startup_pending_args[@]}" --confirm "$confirm"
+  if [[ "$startup_window" == post-marker ]]; then
+    assert_fails_with 'attempt is still live; reconcile refuses to race it' run_gate --mode reconcile \
+      "${startup_pending_args[@]}"
+    startup_nonce="$(awk -F= '$1 == "attempt_nonce" {print $2}' "$startup_pending_ledger/state")"
+    rm -f "$HARNESS_ATTEMPT_LEASE"
+    printf 'nonce=%s\ncandidate=%s\n' "f${startup_nonce:1}" "$CANDIDATE" >"$HARNESS_ATTEMPT_MARKER"
+    assert_fails_with 'marker does not match this private attempt' run_gate --mode reconcile \
+      "${startup_pending_args[@]}"
+    printf 'nonce=%s\ncandidate=%s\n' "$startup_nonce" "$CANDIDATE" >"$HARNESS_ATTEMPT_MARKER"
+  fi
+  run_gate --mode reconcile "${startup_pending_args[@]}" >/dev/null
+  grep -Fx 'state=' "$startup_pending_ledger/state" >/dev/null
+  grep -E 'wrapper=deadline .*action=predicates' "$HARNESS_LOG" >/dev/null
+  [[ ! -e "$HARNESS_ATTEMPT_MARKER" && ! -e "$HARNESS_ATTEMPT_LEASE" ]]
+done
+
 # SIGKILL bypasses every local cleanup trap. A stale pending mutation remains
 # blocked while its matching remote lease is active. Once inactive, reconcile
 # requires the exact marker nonce/candidate and the complete rollback baseline.
@@ -733,9 +867,17 @@ grep -E 'wrapper=deadline .*action=predicates' "$HARNESS_LOG" >/dev/null
 flow_ledger="$TMP/flow-ledger"
 mapfile -d '' -t flow_args < <(common_for "$flow_ledger")
 export HARNESS_LEDGER="$flow_ledger"
+: >"$HARNESS_LOG"
 run_interactive candidate-test pending-mutation "$flow_ledger" "$TMP/candidate.tty" \
   "${flow_args[@]}" --confirm "$confirm"
 grep -Fx 'state=candidate-green' "$flow_ledger/state" >/dev/null
+grep -Fx 'sunshine.active=active' "$flow_ledger/baseline.predicates" >/dev/null
+grep -Fx 'sunshine.enabled=enabled' "$flow_ledger/baseline.predicates" >/dev/null
+grep -F 'predicates-user=gameplay wrapper=attempt-command' "$HARNESS_LOG" >/dev/null
+if grep -F 'predicates-user=root' "$HARNESS_LOG" >/dev/null; then
+  printf 'rollback comparison read root Sunshine state instead of gameplay-user state\n' >&2
+  exit 1
+fi
 [[ "$(stat -c %a "$flow_ledger")" == 700 ]]
 [[ "$(stat -c %a "$flow_ledger/baseline.predicates")" == 600 ]]
 [[ "$(wc -l <"$flow_ledger/consumed-gates")" -eq 7 ]]
@@ -745,6 +887,29 @@ grep -Fx 'state=automatic-rollback-green' "$flow_ledger/state" >/dev/null
 run_gate --mode rollback "${flow_args[@]}" --confirm "$confirm" >/dev/null
 grep -Fx 'state=rollback-await-reboot' "$flow_ledger/state" >/dev/null
 export HARNESS_BOOT_ID=boot-two HARNESS_CURRENT_GENERATION="$ROLLBACK"
+
+# Both reboot verification states have the same two recoverable startup
+# windows. Reconcile reruns the state-specific checks before it restores the
+# explicit resume state.
+for startup_window in pre-marker post-marker; do
+  startup_rollback_ledger="$TMP/startup-rollback-$startup_window-ledger"
+  cp -a "$flow_ledger" "$startup_rollback_ledger"
+  mapfile -d '' -t startup_rollback_args < <(common_for "$startup_rollback_ledger")
+  export HARNESS_LEDGER="$startup_rollback_ledger"
+  : >"$HARNESS_LOG"
+  run_startup_abrupt_kill rollback-reboot-verify "$startup_window" rollback-reboot-verifying-starting \
+    "$startup_rollback_ledger" "${startup_rollback_args[@]}" --confirm "$confirm"
+  if [[ "$startup_window" == post-marker ]]; then
+    assert_fails_with 'attempt is still live; reconcile refuses to race it' run_gate --mode reconcile \
+      "${startup_rollback_args[@]}"
+    rm -f "$HARNESS_ATTEMPT_LEASE"
+  fi
+  run_gate --mode reconcile "${startup_rollback_args[@]}" >/dev/null
+  grep -Fx 'state=rollback-await-reboot' "$startup_rollback_ledger/state" >/dev/null
+  grep -E 'wrapper=attempt-command .*action=rollback-gates' "$HARNESS_LOG" >/dev/null
+  grep -E 'wrapper=attempt-command .*action=predicates' "$HARNESS_LOG" >/dev/null
+  [[ ! -e "$HARNESS_ATTEMPT_MARKER" && ! -e "$HARNESS_ATTEMPT_LEASE" ]]
+done
 
 # A SIGKILL during rollback reboot verification leaves its explicit resume
 # state intact. Reconcile refuses the live lease, then reruns rollback gates
@@ -774,6 +939,27 @@ run_interactive persistent-switch pending-mutation "$flow_ledger" "$TMP/persiste
   "${flow_args[@]}" --confirm "$confirm"
 grep -Fx 'state=candidate-await-reboot' "$flow_ledger/state" >/dev/null
 export HARNESS_BOOT_ID=boot-three HARNESS_CURRENT_GENERATION="$CANDIDATE"
+
+for startup_window in pre-marker post-marker; do
+  startup_candidate_ledger="$TMP/startup-candidate-$startup_window-ledger"
+  cp -a "$flow_ledger" "$startup_candidate_ledger"
+  mapfile -d '' -t startup_candidate_args < <(common_for "$startup_candidate_ledger")
+  export HARNESS_LEDGER="$startup_candidate_ledger"
+  : >"$HARNESS_LOG"
+  run_startup_abrupt_kill candidate-reboot-verify "$startup_window" candidate-reboot-verifying-starting \
+    "$startup_candidate_ledger" "${startup_candidate_args[@]}" --confirm "$confirm"
+  grep -Eq '^attempt_nonce=[0-9a-f]{64}$' "$startup_candidate_ledger/state"
+  if [[ "$startup_window" == post-marker ]]; then
+    assert_fails_with 'attempt is still live; reconcile refuses to race it' run_gate --mode reconcile \
+      "${startup_candidate_args[@]}"
+    rm -f "$HARNESS_ATTEMPT_LEASE"
+  fi
+  run_gate --mode reconcile "${startup_candidate_args[@]}" >/dev/null
+  grep -Fx 'state=candidate-await-reboot' "$startup_candidate_ledger/state" >/dev/null
+  grep -E 'wrapper=attempt-command .*action=automated-gates' "$HARNESS_LOG" >/dev/null
+  grep -E 'wrapper=attempt-command .*action=acceptance-fingerprint' "$HARNESS_LOG" >/dev/null
+  [[ ! -e "$HARNESS_ATTEMPT_MARKER" && ! -e "$HARNESS_ATTEMPT_LEASE" ]]
+done
 
 # A SIGKILL during candidate reboot verification preserves candidate-await-
 # reboot. Reconcile refuses the live lease, then checks the candidate generation,
