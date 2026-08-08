@@ -8,6 +8,18 @@
     pkgs.gnugrep
   ];
 
+  launcherRuntimeInputs = [
+    pkgs.android-tools
+    pkgs.coreutils
+    pkgs.diffutils
+    pkgs.e2fsprogs
+    pkgs.findutils
+    pkgs.gawk
+    pkgs.gnugrep
+    pkgs.openssl
+    pkgs.python3
+  ];
+
   signedAvbRuntimeInputs = [
     pkgs.android-tools
     pkgs.coreutils

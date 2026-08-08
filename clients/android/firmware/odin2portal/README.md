@@ -72,6 +72,24 @@ The command preserves the AYN `boot` and `recovery` chain keys. It replaces the 
 
 This output is not flashable. Read `SIGNED-AVB-NOT-FLASHABLE.md`. The selected home and Towada key copies are private but not encrypted. The user owns the separate encrypted offline backup.
 
+## Build the Korri launcher image dry run
+
+Build an arm64 release APK that declares Korri as a HOME candidate and sign it with the selected Korri Android release key. The approved signer certificate SHA-256 is pinned in `contract/korri-release-cert-SHA256.txt`.
+
+```console
+nix run .#odin2portal-launcher-image-dry-run -- \
+  /path/to/odin2portal-stock-130 \
+  /private/path/Korri-arm64-release.apk \
+  /private/path/korri-odin2portal-avb.pem \
+  /path/to/launcher-image-output
+```
+
+The host-only pipeline verifies the exact APK package, one release signer, non-debuggable manifest, `MAIN+HOME+DEFAULT` activity, and arm64 native code. It self-derives from verified stock, retains the marker, inserts only `/product/app/Korri/Korri.apk`, signs the existing Korri AVB chain, and proves every other logical partition is unchanged. It preserves Android Settings, the AYN launcher, and AYN services.
+
+The output is quarantined under `NON_FLASHABLE_ARTIFACTS/`, contains no private key, states `flash ready: no`, and never calls ADB or fastboot. Read `LAUNCHER-NOT-FLASHABLE.md`.
+
+The image adds Korri as a HOME candidate but does not alter the existing user's preferred HOME. `HOME-PROVISIONING.md` defines the separate, auditable package-manager operation and the AYN-launcher fallback. That operation requires separate approval.
+
 ## Review installation readiness
 
 Read `INSTALL.md`. It defines the proposed write order, stop conditions, first-boot checks, and stock rollback sequence. It does not approve or execute an installation.
@@ -115,6 +133,7 @@ nix run .#odin2portal-stock-repack-check
 nix run .#odin2portal-rollback-bundle-check
 nix run .#odin2portal-marker-dry-run-check
 nix run .#odin2portal-signed-avb-dry-run-check
+nix run .#odin2portal-launcher-image-dry-run-check
 nix run .#odin2portal-install-readiness-check
 ```
 

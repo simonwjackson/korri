@@ -179,6 +179,27 @@ let
       '';
     };
 
+    odin2portal-launcher-image-dry-run = {
+      description = "Build and host-verify a quarantined Odin 2 Portal Korri launcher image.";
+      runtimeInputs = androidInputs ++ odin2portalStockRepack.launcherRuntimeInputs;
+      env = androidEnv;
+      usageSuffix = " -- <stock-source> <signed-arm64-release-apk> <private-avb-key> <output>";
+      script = ''
+        ${androidSetup}
+        exec "$KORRI_ROOT/clients/android/firmware/odin2portal/launcher-image-dry-run.sh" "$@"
+      '';
+    };
+
+    odin2portal-launcher-image-dry-run-check = {
+      description = "Test Korri launcher manifest, APK, quarantine, and host-only image guards.";
+      runtimeInputs = androidInputs ++ odin2portalStockRepack.launcherRuntimeInputs;
+      env = androidEnv;
+      script = ''
+        ${androidSetup}
+        exec "$KORRI_ROOT/clients/android/firmware/odin2portal/test-launcher-image-dry-run.sh"
+      '';
+    };
+
     odin2portal-signed-avb-dry-run = {
       description = "Build and verify a non-flashable signed AVB chain for the Odin 2 Portal marker image.";
       runtimeInputs = odin2portalStockRepack.signedAvbRuntimeInputs;
