@@ -54,32 +54,16 @@ let
         echo "selected profile target transform produced unexpected data" >&2
         exit 1
       }
-      test "$(yq eval '[.mapping[] | select(.source_event.gamepad.button == "Guide") | .target_events[] | select(.dbus == "ui_guide")] | length' "$resolved_profile")" = 1 \
-        && test "$(yq eval '[.mapping[] | select(.source_event.gamepad.button == "Guide") | .target_events[] | select(has("gamepad"))] | length' "$resolved_profile")" = 0 || {
-          echo "Korri Guide route must be DBus-only and composed exactly once" >&2
+      upstream_mapping_count="$(yq eval '.mapping | length' "$default_profile")"
+      shortcut_mapping_count="$(yq eval 'length' ${shortcutMappings})"
+      test "$shortcut_mapping_count" -gt 0 \
+        && test "$(yq eval '.mapping | length' "$resolved_profile")" \
+          -eq "$((upstream_mapping_count + shortcut_mapping_count))" \
+        && test "$(yq eval -o=json -I=0 ".mapping | .[$upstream_mapping_count:]" "$resolved_profile")" \
+          = "$(yq eval -o=json -I=0 '.' ${shortcutMappings})" || {
+          echo "Korri resolved profile must append the authoritative shortcut mappings exactly once" >&2
           exit 1
         }
-
-      for route in \
-        'LeftBumper:ui_l1' \
-        'RightBumper:ui_r1' \
-        'LeftStick:ui_l3' \
-        'RightStick:ui_r3' \
-        'DPadUp:ui_up' \
-        'DPadDown:ui_down' \
-        'DPadLeft:ui_left' \
-        'DPadRight:ui_right' \
-        'Start:ui_option' \
-        'Select:ui_select'
-      do
-        button="''${route%%:*}"
-        capability="''${route#*:}"
-        test "$(BUTTON="$button" yq eval '[.mapping[] | select(.source_event.gamepad.button == env(BUTTON)) | .target_events[] | select(.gamepad.button == env(BUTTON))] | length' "$resolved_profile")" = 1 \
-          && test "$(BUTTON="$button" CAPABILITY="$capability" yq eval '[.mapping[] | select(.source_event.gamepad.button == env(BUTTON)) | .target_events[] | select(.dbus == env(CAPABILITY))] | length' "$resolved_profile")" = 1 || {
-            echo "Korri $button route must retain gameplay and add exactly one $capability DBus copy" >&2
-            exit 1
-          }
-      done
     '';
 
   compose =

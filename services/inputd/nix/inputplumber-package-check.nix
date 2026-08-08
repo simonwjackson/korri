@@ -35,6 +35,20 @@ pkgs.runCommand "inputplumber-korri-package-check"
   ''
     set -euo pipefail
 
+    route_source_count=0
+    route_source=""
+    for candidate in ${./.}/*; do
+      if test -f "$candidate" && grep -Eq 'ui_[[:alpha:]]' "$candidate"; then
+        route_source_count=$((route_source_count + 1))
+        route_source="$(basename "$candidate")"
+      fi
+    done
+    test "$route_source_count" = 1 \
+      && test "$route_source" = inputplumber-korri-dbus-shortcuts.yaml || {
+        echo "shortcut routes must have one authoritative mapping source" >&2
+        exit 1
+      }
+
     inputplumber_bin="${inputplumberKorri}/bin/inputplumber"
     inputplumber_root="${inputplumberKorri}/share/inputplumber"
     selected_device="$inputplumber_root/devices/${data.selectedDeviceProfile}"
@@ -94,38 +108,30 @@ pkgs.runCommand "inputplumber-korri-package-check"
       fi
     done
 
-    test "$(yq eval '[.mapping[] | select(.source_event.gamepad.button == "Guide") | .target_events[] | select(.dbus == "ui_guide")] | length' "$resolved_profile")" = 1 || {
-      echo "Guide must route to DBus exactly once" >&2
-      exit 1
-    }
-    test "$(yq eval '[.mapping[] | select(.source_event.gamepad.button == "Guide") | .target_events[] | select(has("gamepad"))] | length' "$resolved_profile")" = 0 || {
-      echo "Guide must be DBus-only" >&2
-      exit 1
-    }
+    upstream_mapping_count="$(yq eval '.mapping | length' "$default_profile")"
+    shortcut_mapping_count="$(yq eval 'length' ${./inputplumber-korri-dbus-shortcuts.yaml})"
+    test "$(yq eval '.mapping | length' "$resolved_profile")" \
+      -eq "$((upstream_mapping_count + shortcut_mapping_count))" \
+      && test "$(yq eval -o=json -I=0 ".mapping | .[$upstream_mapping_count:]" "$resolved_profile")" \
+        = "$(yq eval -o=json -I=0 '.' ${./inputplumber-korri-dbus-shortcuts.yaml})" || {
+        echo "resolved profile must contain the authoritative shortcut mappings exactly once" >&2
+        exit 1
+      }
 
-    for route in \
-      'LeftBumper:ui_l1' \
-      'RightBumper:ui_r1' \
-      'LeftStick:ui_l3' \
-      'RightStick:ui_r3' \
-      'DPadUp:ui_up' \
-      'DPadDown:ui_down' \
-      'DPadLeft:ui_left' \
-      'DPadRight:ui_right' \
-      'Start:ui_option' \
-      'Select:ui_select'
-    do
-      button="''${route%%:*}"
-      capability="''${route#*:}"
-      test "$(BUTTON="$button" yq eval '[.mapping[] | select(.source_event.gamepad.button == env(BUTTON)) | .target_events[] | select(.gamepad.button == env(BUTTON))] | length' "$resolved_profile")" = 1 || {
-        echo "$button must retain exactly one gameplay route" >&2
+    test "$(yq eval '[.[] | select(.source_event.gamepad.button == "Guide")] | length' ${./inputplumber-korri-dbus-shortcuts.yaml})" = 1 \
+      && test "$(yq eval '[.[] | select(.source_event.gamepad.button == "Guide") | .target_events[] | select(has("dbus"))] | length' ${./inputplumber-korri-dbus-shortcuts.yaml})" = 1 \
+      && test "$(yq eval '[.[] | select(.source_event.gamepad.button == "Guide") | .target_events[] | select(has("gamepad"))] | length' ${./inputplumber-korri-dbus-shortcuts.yaml})" = 0 || {
+        echo "Guide must have one DBus-only authoritative route" >&2
         exit 1
       }
-      test "$(BUTTON="$button" CAPABILITY="$capability" yq eval '[.mapping[] | select(.source_event.gamepad.button == env(BUTTON)) | .target_events[] | select(.dbus == env(CAPABILITY))] | length' "$resolved_profile")" = 1 || {
-        echo "$button must have exactly one $capability DBus route" >&2
-        exit 1
-      }
-    done
+
+    while IFS= read -r button; do
+      test "$(BUTTON="$button" yq eval '[.[] | select(.source_event.gamepad.button == env(BUTTON)) | .target_events[] | select(.gamepad.button == env(BUTTON))] | length' ${./inputplumber-korri-dbus-shortcuts.yaml})" = 1 \
+        && test "$(BUTTON="$button" yq eval '[.[] | select(.source_event.gamepad.button == env(BUTTON)) | .target_events[] | select(has("dbus"))] | length' ${./inputplumber-korri-dbus-shortcuts.yaml})" = 1 || {
+          echo "$button must retain gameplay and have one DBus route" >&2
+          exit 1
+        }
+    done < <(yq eval -r '.[] | select(.source_event.gamepad.button != "Guide") | .source_event.gamepad.button' ${./inputplumber-korri-dbus-shortcuts.yaml})
 
     additional_root="${inputplumberWithAdditionalData}/share/inputplumber"
     test -f "$additional_root/devices/02-ayn-controller.yaml" || {
