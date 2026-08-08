@@ -66,6 +66,44 @@ let
         }
     '';
 
+  composeResolved =
+    {
+      inputplumberKorri,
+      additionalDataPackages ? [ ],
+    }:
+    pkgs.runCommand "inputplumber-korri-resolved-${inputplumberKorri.version}"
+      {
+        pname = "inputplumber-korri";
+        version = inputplumberKorri.version;
+        passthru = (inputplumberKorri.passthru or { }) // {
+          inherit additionalDataPackages;
+        };
+        meta = inputplumberKorri.meta;
+      }
+      ''
+        set -euo pipefail
+        cp -a ${inputplumberKorri} "$out"
+        chmod -R u+w "$out"
+        inputplumber_root="$out/share/inputplumber"
+        ${lib.concatMapStringsSep "\n" (dataPackage: ''
+          additional_root="${dataPackage}/share/inputplumber"
+          test -d "$additional_root" || {
+            echo "additional InputPlumber data package ${dataPackage} has no share/inputplumber root" >&2
+            exit 1
+          }
+          while IFS= read -r -d $'\0' additional_file; do
+            relative_path="''${additional_file#"$additional_root/"}"
+            destination="$inputplumber_root/$relative_path"
+            if test -e "$destination" || test -L "$destination"; then
+              echo "additional InputPlumber data collides with resolved path $relative_path" >&2
+              exit 1
+            fi
+            mkdir -p "$(dirname "$destination")"
+            cp -a "$additional_file" "$destination"
+          done < <(find "$additional_root" \( -type f -o -type l \) -print0 | sort -z)
+        '') additionalDataPackages}
+      '';
+
   compose =
     {
       inputplumberRuntime,
@@ -114,5 +152,11 @@ let
       '';
 in
 {
-  inherit compose transformSelectedProfile selectedDeviceProfile resolvedProfile;
+  inherit
+    compose
+    composeResolved
+    transformSelectedProfile
+    selectedDeviceProfile
+    resolvedProfile
+    ;
 }

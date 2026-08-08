@@ -29,7 +29,16 @@
       crane,
       proseql,
     }:
-    flake-utils.lib.eachDefaultSystem (
+    let
+      nixosModules = {
+        korri-input = import ./services/inputd/nix/korri-input.nix { korri = self; };
+        korrid-linux-host = import ./services/korrid/nixos-module.nix { korri = self; };
+      };
+    in
+    {
+      inherit nixosModules;
+    }
+    // flake-utils.lib.eachDefaultSystem (
       system:
       let
         pkgs = import nixpkgs {
@@ -41,9 +50,19 @@
             allowUnfree = true;
           };
         };
+        korridPackage = import ./services/korrid/package.nix {
+          inherit pkgs proseql crane;
+        };
         inputplumber = import ./services/inputd/nix {
-          inherit pkgs system;
+          inherit
+            pkgs
+            system
+            crane
+            korridPackage
+            ;
           inputplumberNixpkgs = inputplumber-nixpkgs;
+          korriInputModule = nixosModules.korri-input;
+          korridHostModule = nixosModules.korrid-linux-host;
         };
       in
       {
@@ -51,11 +70,10 @@
         devShells.android = import ./clients/android/devshell.nix { inherit pkgs; };
         devShells.portal = import ./clients/portal/devshell.nix { inherit pkgs; };
         devShells.korrid = import ./services/korrid/devshell.nix { inherit pkgs proseql; };
+        devShells.inputd = import ./services/inputd/devshell.nix { inherit pkgs; };
         devShells.retroarch = import ./plugins/retroarch/android/devshell.nix { inherit pkgs; };
         packages = {
-          korrid = import ./services/korrid/package.nix {
-            inherit pkgs proseql crane;
-          };
+          korrid = korridPackage;
           default = self.packages.${system}.korrid;
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux inputplumber.packages;

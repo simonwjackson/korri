@@ -116,7 +116,8 @@ let
       runtimeInputs = [
         pkgs.android-tools
         pkgs.coreutils
-      ] ++ (task.runtimeInputs or [ ]);
+      ]
+      ++ (task.runtimeInputs or [ ]);
       script = ''
         serial="''${1:?usage: ${name} <adb-serial>}"
         ${adbPreflight}
@@ -327,6 +328,14 @@ let
       env.KORRI_PORTAL_BUNDLE = "${packages.portal-bundle}/bin/portal-bundle";
       script = ''
         exec bash "$KORRI_ROOT/services/korrid/check.sh" "$@"
+      '';
+    };
+
+    inputd-check = {
+      description = "Run inputd Rust, portability, package, and NixOS module checks.";
+      runtimeInputs = [ pkgs.nix ];
+      script = ''
+        exec bash "$KORRI_ROOT/services/inputd/check.sh" "$@"
       '';
     };
 
