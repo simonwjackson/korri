@@ -74,7 +74,7 @@ This output is not flashable. Read `SIGNED-AVB-NOT-FLASHABLE.md`. The selected h
 
 ## Build the Korri launcher image dry run
 
-Build an arm64 release APK that declares Korri as a HOME candidate and sign it with the selected Korri Android release key. The approved signer certificate SHA-256 is pinned in `contract/korri-release-cert-SHA256.txt`.
+Build an arm64 release APK that declares Korri as a HOME candidate and sign it with the selected Korri Android release key. The approved signer certificate SHA-256 is pinned in `contract/korri-release-cert-SHA256.txt`. The exact approved APK SHA-256 is pinned in `contract/korri-launcher-apk-SHA256.txt`; a new APK requires an explicit contract update.
 
 ```console
 nix run .#odin2portal-launcher-image-dry-run -- \
@@ -84,7 +84,7 @@ nix run .#odin2portal-launcher-image-dry-run -- \
   /path/to/launcher-image-output
 ```
 
-The host-only pipeline verifies the exact APK package, one release signer, non-debuggable manifest, `MAIN+HOME+DEFAULT` activity, and arm64 native code. It self-derives from verified stock, retains the marker, inserts only `/product/app/Korri/Korri.apk`, signs the existing Korri AVB chain, and proves every other logical partition is unchanged. It preserves Android Settings, the AYN launcher, and AYN services.
+The host-only pipeline verifies the exact APK package, one release signer, non-debuggable and enabled application, enabled `MAIN+HOME+DEFAULT` activity, defined activity bytecode, bundled portal content, and arm64-only native code. It self-derives from verified stock, retains the marker, inserts only `/product/app/Korri/Korri.apk`, signs the existing Korri AVB chain, and proves every other logical partition is unchanged. It preserves Android Settings, the AYN launcher, and AYN services.
 
 The output is quarantined under `NON_FLASHABLE_ARTIFACTS/`, contains no private key, states `flash ready: no`, and never calls ADB or fastboot. Read `LAUNCHER-NOT-FLASHABLE.md`.
 
@@ -146,6 +146,11 @@ ODIN2PORTAL_STOCK_SOURCE=/path/to/odin2portal-stock-130 \
 ODIN2PORTAL_STOCK_SOURCE=/path/to/odin2portal-stock-130 \
 ODIN2PORTAL_AVB_PRIVATE_KEY=/private/path/korri-odin2portal-avb.pem \
   nix run .#odin2portal-signed-avb-dry-run-check
+
+ODIN2PORTAL_STOCK_SOURCE=/path/to/odin2portal-stock-130 \
+ODIN2PORTAL_LAUNCHER_APK=/private/path/Korri-arm64-release.apk \
+ODIN2PORTAL_AVB_PRIVATE_KEY=/private/path/korri-odin2portal-avb.pem \
+  nix run .#odin2portal-launcher-image-dry-run-check
 ```
 
 The checks cover successful publication, source immutability, exact build and slot gates, checksum and layout rejection, and refusal to overwrite output.

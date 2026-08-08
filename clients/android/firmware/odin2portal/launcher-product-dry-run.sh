@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+report_error() {
+  local status=$?
+  printf 'launcher product dry run failed at line %s: %s\n' "$1" "$2" >&2
+  exit "$status"
+}
+trap 'report_error "$LINENO" "$BASH_COMMAND"' ERR
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE="${1:?usage: launcher-product-dry-run.sh <stock-source> <signed-launcher-apk> <output>}"
@@ -14,6 +20,10 @@ APK_PARENT="$(cd "$(dirname "$APK")" && pwd -P)"
 APK="$APK_PARENT/$(basename "$APK")"
 OUTPUT_PARENT="$(cd "$(dirname "$OUTPUT")" && pwd -P)"
 OUTPUT="$OUTPUT_PARENT/$(basename "$OUTPUT")"
+if [[ "$OUTPUT_PARENT" =~ [[:space:]] ]]; then
+  echo 'output parent must not contain whitespace because debugfs cannot safely parse host paths with spaces' >&2
+  exit 1
+fi
 case "$OUTPUT/" in
   "$SOURCE/"*)
     echo 'output must be outside the source directory' >&2
@@ -84,7 +94,8 @@ mkdir -p "$STAGING/evidence" "$STAGING/logical/source" "$STAGING/logical/rebuilt
   "$STAGING/avb-verify" "$STAGING/verified-source"
 cp "$APK" "$STAGING/verified-source/Korri.apk"
 STAGED_APK="$STAGING/verified-source/Korri.apk"
-"$HERE/verify-korri-launcher-apk.sh" "$STAGED_APK" "$STAGING/evidence/apk"
+"$HERE/verify-korri-launcher-apk.sh" "$STAGED_APK" "$STAGING/evidence/apk" \
+  > "$STAGING/evidence/apk-verifier.stdout.txt"
 apk_sha256="$(sha256sum "$STAGED_APK" | awk '{print $1}')"
 # Copy every source artifact used to derive output, then verify the copies. This
 # closes the interval between the initial source gate and later tool reads.
@@ -175,6 +186,8 @@ printf 'u:object_r:system_file:s0\0' > "$selinux_xattr"
 {
   debugfs -w -R 'mkdir /app/Korri' "$custom_product"
   debugfs -w -R "write $STAGED_APK /app/Korri/Korri.apk" "$custom_product"
+  debugfs -w -R 'set_inode_field /app/Korri mode 040755' "$custom_product"
+  debugfs -w -R 'set_inode_field /app/Korri/Korri.apk mode 0100644' "$custom_product"
   debugfs -w -R "ea_set -f $selinux_xattr /app/Korri security.selinux" "$custom_product"
   debugfs -w -R "ea_set -f $selinux_xattr /app/Korri/Korri.apk security.selinux" "$custom_product"
 } > "$STAGING/evidence/apk-install.txt" 2>&1

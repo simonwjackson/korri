@@ -3,12 +3,17 @@ set -Eeuo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../../../.." && pwd)"
-VERIFY="$HERE/verify-korri-launcher-apk.sh"
+VERIFY_SOURCE="$HERE/verify-korri-launcher-apk.sh"
 PIPELINE="$HERE/launcher-image-dry-run.sh"
 PRODUCT="$HERE/launcher-product-dry-run.sh"
 MANIFEST="$ROOT/clients/android/app/src/main/AndroidManifest.xml"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+mkdir -p "$TMP/verifier/contract"
+cp "$VERIFY_SOURCE" "$TMP/verifier/verify-korri-launcher-apk.sh"
+cp "$HERE/contract/korri-release-cert-SHA256.txt" \
+  "$TMP/verifier/contract/korri-release-cert-SHA256.txt"
+VERIFY="$TMP/verifier/verify-korri-launcher-apk.sh"
 
 python3 - "$MANIFEST" <<'PY'
 import sys
@@ -48,10 +53,13 @@ if [[ "$1 $2" == 'manifest print' ]]; then
   package="${MOCK_PACKAGE:-com.simonwjackson.korri}"
   home="${MOCK_HOME_CATEGORY:-android.intent.category.HOME}"
   debuggable="${MOCK_DEBUGGABLE:-false}"
+  application_enabled="${MOCK_APPLICATION_ENABLED:-true}"
+  activity_enabled="${MOCK_ACTIVITY_ENABLED:-true}"
+  activity_name="${MOCK_ACTIVITY_NAME:-com.limelight.KorriShellActivity}"
   cat <<XML
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="$package">
-  <application android:debuggable="$debuggable">
-    <activity android:name="com.limelight.KorriShellActivity" android:exported="true">
+  <application android:debuggable="$debuggable" android:enabled="$application_enabled">
+    <activity android:name="$activity_name" android:exported="true" android:enabled="$activity_enabled">
       <intent-filter>
         <action android:name="android.intent.action.MAIN"/>
         <category android:name="$home"/>
@@ -61,12 +69,33 @@ if [[ "$1 $2" == 'manifest print' ]]; then
   </application>
 </manifest>
 XML
+elif [[ "$1 $2" == 'files list' ]]; then
+  printf '%s\n' \
+    "${MOCK_ABI_FILE:-/lib/arm64-v8a/libmoonlight-core.so}" \
+    "${MOCK_PORTAL_INDEX:-/assets/portal/index.html}" \
+    "${MOCK_PORTAL_SCRIPT_FILE:-/assets/portal/assets/index.js}" \
+    "${MOCK_PORTAL_STYLE_FILE:-/assets/portal/assets/index.css}" \
+    "${MOCK_PORTAL_FONT_FILE:-/assets/portal/assets/font.woff2}"
+elif [[ "$1 $2" == 'files cat' ]]; then
+  if [[ "${4:-}" == *.css ]]; then
+    printf '%s\n' "${MOCK_PORTAL_CSS:-@font-face { src: url(./font.woff2); }}"
+  elif [[ "${4:-}" == *.js ]]; then
+    printf '%s\n' "${MOCK_PORTAL_JS:-console.log('ok');}"
+  else
+    cat <<HTML
+<div id="${MOCK_PORTAL_ROOT:-app}"></div>
+<script type="module" src="${MOCK_PORTAL_SCRIPT_REF:-./assets/index.js}"></script>
+<link rel="stylesheet" href="${MOCK_PORTAL_STYLE_REF:-./assets/index.css}">
+HTML
+  fi
 else
-  printf '%s\n' "${MOCK_ABI_FILE:-/lib/arm64-v8a/libmoonlight-core.so}"
+  printf '%s\n' "${MOCK_HOME_CLASS:-C d 1 1 1 com.limelight.KorriShellActivity}"
 fi
 SCRIPT
 chmod +x "$TMP/sdk/build-tools/35.0.0/apksigner" "$TMP/sdk/cmdline-tools/19.0/bin/apkanalyzer"
 printf 'fixture apk\n' > "$TMP/Korri.apk"
+sha256sum "$TMP/Korri.apk" | awk '{print $1}' \
+  > "$TMP/verifier/contract/korri-launcher-apk-SHA256.txt"
 
 ANDROID_HOME="$TMP/sdk" "$VERIFY" "$TMP/Korri.apk" "$TMP/pass"
 grep -Fx KORRI_LAUNCHER_APK_VERIFIED "$TMP/pass/RESULT.txt" >/dev/null
@@ -74,20 +103,42 @@ grep -Fx KORRI_LAUNCHER_APK_VERIFIED "$TMP/pass/RESULT.txt" >/dev/null
 expect_rejection() {
   local name="$1"
   shift
-  if env ANDROID_HOME="$TMP/sdk" "$@" "$VERIFY" "$TMP/Korri.apk" "$TMP/$name" >/dev/null 2>&1; then
+  if env ANDROID_HOME="$TMP/sdk" "$@" "$VERIFY" "$TMP/Korri.apk" "$TMP/$name" \
+    >/dev/null 2>&1; then
     echo "launcher APK verifier accepted $name" >&2
     exit 1
   fi
   [[ ! -e "$TMP/$name" ]]
 }
+printf 'wrong hash\n' > "$TMP/wrong-hash.apk"
+if ANDROID_HOME="$TMP/sdk" "$VERIFY" "$TMP/wrong-hash.apk" "$TMP/wrong-hash" \
+  >/dev/null 2>&1; then
+  echo 'launcher APK verifier accepted an unapproved artifact hash' >&2
+  exit 1
+fi
+[[ ! -e "$TMP/wrong-hash" ]]
+
 expect_rejection wrong-signer MOCK_CERT=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 expect_rejection extra-signer MOCK_SIGNER_COUNT=2
 expect_rejection wrong-package MOCK_PACKAGE=com.simonwjackson.korri.debug
 expect_rejection missing-home MOCK_HOME_CATEGORY=android.intent.category.LAUNCHER
 expect_rejection debuggable MOCK_DEBUGGABLE=true
+expect_rejection disabled-application MOCK_APPLICATION_ENABLED=false
+expect_rejection disabled-activity MOCK_ACTIVITY_ENABLED=false
+expect_rejection relative-home-class MOCK_ACTIVITY_NAME=.KorriShellActivity
 expect_rejection wrong-abi MOCK_ABI_FILE=/lib/x86_64/libmoonlight-core.so
+expect_rejection missing-home-class MOCK_HOME_CLASS='C d 1 1 1 com.limelight.OtherActivity'
+expect_rejection missing-portal-index MOCK_PORTAL_INDEX=/assets/portal/index.html.bak
+expect_rejection missing-portal-script MOCK_PORTAL_SCRIPT_FILE=/assets/other.js
+expect_rejection missing-portal-style MOCK_PORTAL_STYLE_FILE=/assets/other.css
+expect_rejection missing-portal-root MOCK_PORTAL_ROOT=missing
+expect_rejection external-portal-script MOCK_PORTAL_SCRIPT_REF=https://example.invalid/index.js
+expect_rejection missing-portal-font MOCK_PORTAL_FONT_FILE=/assets/other.woff2
+expect_rejection external-portal-font MOCK_PORTAL_CSS='@font-face { src: url(https://example.invalid/font.woff2); }'
+expect_rejection imported-portal-css MOCK_PORTAL_CSS='@import "./theme.css";'
+expect_rejection imported-portal-js MOCK_PORTAL_JS='import("./chunk.js");'
 
-for script in "$VERIFY" "$PIPELINE" "$PRODUCT"; do
+for script in "$VERIFY_SOURCE" "$PIPELINE" "$PRODUCT"; do
   if grep -Eq '(^|[[:space:]])(adb|fastboot)([[:space:]]|$)' "$script"; then
     echo "device tool found in host-only launcher pipeline: $script" >&2
     exit 1
@@ -98,5 +149,36 @@ grep -F '/app/Korri/Korri.apk' "$PRODUCT" >/dev/null
 grep -F 'NON_FLASHABLE_ARTIFACTS' "$PIPELINE" >/dev/null
 grep -Fx 'f46183b71944a33c4c3d2fde42471846ff8d41d22f33b14c1dcf2265d1c7e8ad' \
   "$HERE/contract/korri-release-cert-SHA256.txt" >/dev/null
+
+integration_inputs=(
+  "${ODIN2PORTAL_STOCK_SOURCE:-}"
+  "${ODIN2PORTAL_LAUNCHER_APK:-}"
+  "${ODIN2PORTAL_AVB_PRIVATE_KEY:-}"
+)
+configured=0
+for input in "${integration_inputs[@]}"; do
+  [[ -z "$input" ]] || configured=$((configured + 1))
+done
+if [[ "$configured" -ne 0 && "$configured" -ne 3 ]]; then
+  echo 'set all three launcher integration variables or none of them' >&2
+  exit 1
+fi
+if [[ "$configured" -eq 3 ]]; then
+  integration_output="$TMP/integration-output"
+  "$PIPELINE" \
+    "${integration_inputs[0]}" \
+    "${integration_inputs[1]}" \
+    "${integration_inputs[2]}" \
+    "$integration_output"
+  grep -Fx ODIN2PORTAL_LAUNCHER_IMAGE_DRY_RUN_VERIFIED \
+    "$integration_output/RESULT.txt" >/dev/null
+  grep -Fx 'device writes: none' "$integration_output/RESULT.txt" >/dev/null
+  (
+    cd "$integration_output"
+    sha256sum --check MANIFEST-SHA256SUMS >/dev/null
+  )
+else
+  echo 'odin2portal launcher image integration skipped: set all three private inputs'
+fi
 
 echo 'odin2portal launcher image guards: PASS'

@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+report_error() {
+  local status=$?
+  printf 'launcher image dry run failed at line %s: %s\n' "$1" "$2" >&2
+  exit "$status"
+}
+trap 'report_error "$LINENO" "$BASH_COMMAND"' ERR
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE="${1:?usage: launcher-image-dry-run.sh <stock-source> <signed-launcher-apk> <private-key> <output>}"
@@ -18,6 +24,10 @@ PRIVATE_KEY_PARENT="$(cd "$(dirname "$PRIVATE_KEY")" && pwd -P)"
 PRIVATE_KEY="$PRIVATE_KEY_PARENT/$(basename "$PRIVATE_KEY")"
 OUTPUT_PARENT="$(cd "$(dirname "$OUTPUT")" && pwd -P)"
 OUTPUT="$OUTPUT_PARENT/$(basename "$OUTPUT")"
+if [[ "$OUTPUT_PARENT" =~ [[:space:]] ]]; then
+  echo 'output parent must not contain whitespace because debugfs cannot safely parse host paths with spaces' >&2
+  exit 1
+fi
 case "$OUTPUT/" in
   "$SOURCE/"*)
     echo 'output must be outside the source directory' >&2
@@ -170,7 +180,8 @@ cmp "$STAGING/evidence/build.prop.expected" "$STAGING/evidence/build.prop.custom
 debugfs -R "dump -p /app/Korri/Korri.apk $STAGING/evidence/Korri.extracted.apk" "$CUSTOM_PRODUCT" >/dev/null 2>&1
 cmp "$APK" "$STAGING/evidence/Korri.extracted.apk"
 [[ "$(sha256sum "$STAGING/evidence/Korri.extracted.apk" | awk '{print $1}')" == "$apk_sha256" ]]
-"$HERE/verify-korri-launcher-apk.sh" "$STAGING/evidence/Korri.extracted.apk" "$STAGING/evidence/extracted-apk-verification"
+"$HERE/verify-korri-launcher-apk.sh" "$STAGING/evidence/Korri.extracted.apk" "$STAGING/evidence/extracted-apk-verification" \
+  > "$STAGING/evidence/extracted-apk-verifier.stdout.txt"
 rm "$STAGING/evidence/Korri.extracted.apk"
 
 "$HERE/extract-vbmeta-public-key.py" \
