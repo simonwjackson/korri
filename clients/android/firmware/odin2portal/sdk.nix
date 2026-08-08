@@ -1,5 +1,13 @@
 { pkgs }:
 {
+  installRuntimeInputs = [
+    pkgs.coreutils
+    pkgs.diffutils
+    pkgs.findutils
+    pkgs.gawk
+    pkgs.gnugrep
+  ];
+
   signedAvbRuntimeInputs = [
     pkgs.android-tools
     pkgs.coreutils

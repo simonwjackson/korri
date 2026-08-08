@@ -70,7 +70,21 @@ The command first rebuilds the marker image from the verified stock source. It d
 
 The command preserves the AYN `boot` and `recovery` chain keys. It replaces the root signing key and the `vbmeta_system` chain key with the Korri key. The bootloader must stay unlocked.
 
-This output is not flashable. Read `SIGNED-AVB-NOT-FLASHABLE.md`. The selected home and Towada key copies are private but not encrypted. Complete the separate offline encryption before any installation.
+This output is not flashable. Read `SIGNED-AVB-NOT-FLASHABLE.md`. The selected home and Towada key copies are private but not encrypted. The user owns the separate encrypted offline backup.
+
+## Review installation readiness
+
+Read `INSTALL.md`. It defines the proposed write order, stop conditions, first-boot checks, and stock rollback sequence. It does not approve or execute an installation.
+
+Run the host-only artifact gate:
+
+```console
+nix run .#odin2portal-install-readiness -- \
+  /path/to/odin2portal-stock-130-signed-avb-dry-run \
+  /path/to/odin2portal-stock-130-rollback-bundle
+```
+
+This command verifies both complete artifact sets. It does not call ADB or fastboot. Live device gates remain incomplete until Odin 2 Portal `ef201f64` is connected in bootloader fastboot mode.
 
 ## Stock repack guarantees
 
@@ -101,6 +115,7 @@ nix run .#odin2portal-stock-repack-check
 nix run .#odin2portal-rollback-bundle-check
 nix run .#odin2portal-marker-dry-run-check
 nix run .#odin2portal-signed-avb-dry-run-check
+nix run .#odin2portal-install-readiness-check
 ```
 
 The public checks use small fixtures for mutation and rejection behavior. The marker check also runs the full pipeline when the private stock capture is supplied:

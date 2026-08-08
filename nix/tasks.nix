@@ -196,6 +196,23 @@ let
       '';
     };
 
+    odin2portal-install-readiness = {
+      description = "Verify signed and rollback artifacts for the non-executing Odin 2 Portal installation plan.";
+      runtimeInputs = odin2portalStockRepack.installRuntimeInputs;
+      usageSuffix = " -- <signed-avb-output> <rollback-bundle>";
+      script = ''
+        exec "$KORRI_ROOT/clients/android/firmware/odin2portal/install-readiness.sh" "$@"
+      '';
+    };
+
+    odin2portal-install-readiness-check = {
+      description = "Test the host-only Odin 2 Portal installation readiness gate.";
+      runtimeInputs = odin2portalStockRepack.installRuntimeInputs;
+      script = ''
+        exec "$KORRI_ROOT/clients/android/firmware/odin2portal/test-install-readiness.sh"
+      '';
+    };
+
     odin2portal-rollback-bundle = {
       description = "Stage the exact Odin 2 Portal stock Android rollback images without device writes.";
       runtimeInputs = odin2portalStockRepack.rollbackRuntimeInputs;
