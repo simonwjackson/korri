@@ -1,0 +1,3 @@
+# node|name|provenance|joystick|gameplay-readable
+/dev/input/event9|Microsoft X-Box 360 pad|normalized-inputplumber|yes|yes
+/dev/input/event8|Microsoft X-Box 360 pad|physical-raw|yes|yes

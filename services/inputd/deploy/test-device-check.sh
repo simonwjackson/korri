@@ -137,9 +137,18 @@ case "$(basename "$0")" in
           exit 0
           ;;
         attempt-reconcile-root)
-          [[ -e "$HARNESS_ATTEMPT_MARKER" ]] || exit 0
-          grep -Fx "nonce=$1" "$HARNESS_ATTEMPT_MARKER" >/dev/null \
-            && grep -Fx "candidate=$2" "$HARNESS_ATTEMPT_MARKER" >/dev/null || exit 76
+          if [[ ! -e "$HARNESS_ATTEMPT_MARKER" ]]; then
+            [[ "${3:-false}" == false ]] || {
+              printf 'device gate: in-progress device-gate marker is missing\n' >&2
+              exit 76
+            }
+            exit 0
+          fi
+          if ! grep -Fx "nonce=$1" "$HARNESS_ATTEMPT_MARKER" >/dev/null \
+            || ! grep -Fx "candidate=$2" "$HARNESS_ATTEMPT_MARKER" >/dev/null; then
+            printf 'device gate: stale device-gate marker does not match this private attempt\n' >&2
+            exit 76
+          fi
           [[ ! -e "$HARNESS_ATTEMPT_LEASE" ]] || {
             printf 'device gate: device-gate attempt is still live; reconcile refuses to race it\n' >&2
             exit 78
@@ -148,6 +157,10 @@ case "$(basename "$0")" in
           exit 0
           ;;
       esac
+      if [[ "${HARNESS_PAUSE_ACTION:-}" == "$action" ]]; then
+        : >"${HARNESS_PAUSE_MARKER:?}"
+        sleep "${HARNESS_PAUSE_SECONDS:-30}"
+      fi
       if [[ "${HARNESS_FAIL_ACTION_ONCE:-}" == "$action" ]]; then
         fail_marker="${HARNESS_FAIL_ACTION_MARKER:?}"
         if [[ ! -e "$fail_marker" ]]; then
@@ -240,6 +253,27 @@ case "$(basename "$0")" in
             printf 'modeled gameplay ACL exposes raw input\n' >&2
             exit 63
           }
+          if [[ -n "${HARNESS_TOPOLOGY_FIXTURE:-}" ]]; then
+            normalized_node=''
+            readable_raw=0
+            while IFS='|' read -r fixture_node fixture_name fixture_provenance fixture_joystick fixture_readable; do
+              [[ -n "$fixture_node" && "$fixture_node" != \#* ]] || continue
+              [[ "$fixture_name" == 'Microsoft X-Box 360 pad' ]] || exit 62
+              if [[ "$fixture_provenance" == normalized-inputplumber ]]; then
+                [[ -z "$normalized_node" ]] || exit 61
+                normalized_node="$fixture_node"
+                continue
+              fi
+              if [[ "$fixture_joystick" == yes && "$fixture_readable" == yes ]]; then
+                readable_raw=$((readable_raw + 1))
+              fi
+            done <"$HARNESS_TOPOLOGY_FIXTURE"
+            [[ "$normalized_node" == /dev/input/event9 ]] || exit 62
+            [[ "$readable_raw" -eq 0 ]] || {
+              printf 'device gate: gameplay user can read %s raw controller node(s)\n' "$readable_raw" >&2
+              exit 63
+            }
+          fi
           [[ "${HARNESS_DELEGATE:-yes}" == yes ]] || {
             printf 'device gate: inputd Delegate is not enabled\n' >&2
             exit 66
@@ -450,6 +484,8 @@ run_failure_model() {
 run_failure_model topology HARNESS_TOPOLOGY_MODEL two 'modeled topology has two normalized targets'
 run_failure_model provenance HARNESS_PROVENANCE_MODEL invalid 'modeled target provenance/capability fingerprint is invalid'
 run_failure_model acl HARNESS_ACL_MODEL raw-readable 'modeled gameplay ACL exposes raw input'
+run_failure_model same-name-raw HARNESS_TOPOLOGY_FIXTURE \
+  "$HERE/fixtures/topology-same-name-raw.txt" 'gameplay user can read 1 raw controller node'
 run_failure_model delegate HARNESS_DELEGATE no 'inputd Delegate is not enabled'
 run_failure_model delegate-controllers HARNESS_DELEGATE_CONTROLLERS cpu 'DelegateControllers does not contain pids'
 
@@ -557,6 +593,32 @@ run_interactive() {
   return "$status"
 }
 
+run_abrupt_kill() {
+  local mode="$1" pause_action="$2" ledger_state="$3" ledger="$4"
+  shift 4
+  local pause_marker="$TMP/abrupt-$RANDOM.ready" pid
+  export HARNESS_PAUSE_ACTION="$pause_action" HARNESS_PAUSE_MARKER="$pause_marker"
+  setsid "$GATE" --host "$HOSTNAME" --expected-machine-id "$MACHINE_ID" --expected-hostname "$HOSTNAME" \
+    --mode "$mode" "$@" >"$pause_marker.stdout" 2>"$pause_marker.stderr" &
+  pid=$!
+  for _ in $(seq 1 500); do
+    if [[ -e "$pause_marker" && -e "$HARNESS_ATTEMPT_MARKER" && -e "$HARNESS_ATTEMPT_LEASE" ]] \
+      && grep -Fx "state=$ledger_state" "$ledger/state" >/dev/null 2>&1; then
+      break
+    fi
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.01
+  done
+  [[ -e "$pause_marker" && -e "$HARNESS_ATTEMPT_MARKER" && -e "$HARNESS_ATTEMPT_LEASE" ]]
+  grep -Fx "state=$ledger_state" "$ledger/state" >/dev/null
+  kill -KILL -- "-$pid"
+  wait "$pid" 2>/dev/null || true
+  # The real flock is released by SIGKILL. The mkdir-based harness needs the
+  # equivalent modeled release because its EXIT trap cannot run after SIGKILL.
+  rmdir "$HARNESS_LOG.lock" 2>/dev/null || true
+  unset HARNESS_PAUSE_ACTION HARNESS_PAUSE_MARKER
+}
+
 run_stalled_interactive() {
   local ledger="$1" transcript="$2"
   shift 2
@@ -641,6 +703,33 @@ export HARNESS_LEDGER="$live_reconcile_ledger"
 run_gate --mode reconcile "${live_reconcile_args[@]}" >/dev/null
 [[ ! -e "$HARNESS_ATTEMPT_MARKER" ]]
 
+# SIGKILL bypasses every local cleanup trap. A stale pending mutation remains
+# blocked while its matching remote lease is active. Once inactive, reconcile
+# requires the exact marker nonce/candidate and the complete rollback baseline.
+abrupt_pending_ledger="$TMP/abrupt-pending-ledger"
+mapfile -d '' -t abrupt_pending_args < <(common_for "$abrupt_pending_ledger")
+export HARNESS_LEDGER="$abrupt_pending_ledger"
+: >"$HARNESS_LOG"
+run_abrupt_kill candidate-test activate-test pending-mutation "$abrupt_pending_ledger" \
+  "${abrupt_pending_args[@]}" --confirm "$confirm"
+assert_fails_with 'attempt is still live; reconcile refuses to race it' run_gate --mode reconcile \
+  "${abrupt_pending_args[@]}"
+pending_nonce="$(awk -F= '$1 == "attempt_nonce" {print $2}' "$abrupt_pending_ledger/state")"
+bad_pending_nonce="f${pending_nonce:1}"
+[[ "$bad_pending_nonce" != "$pending_nonce" ]] || bad_pending_nonce="e${pending_nonce:1}"
+printf 'nonce=%s\ncandidate=%s\n' "$bad_pending_nonce" "$CANDIDATE" >"$HARNESS_ATTEMPT_MARKER"
+rm -f "$HARNESS_ATTEMPT_LEASE"
+assert_fails_with 'marker does not match this private attempt' run_gate --mode reconcile \
+  "${abrupt_pending_args[@]}"
+printf 'nonce=%s\ncandidate=%s\n' "$pending_nonce" "$ROLLBACK" >"$HARNESS_ATTEMPT_MARKER"
+assert_fails_with 'marker does not match this private attempt' run_gate --mode reconcile \
+  "${abrupt_pending_args[@]}"
+printf 'nonce=%s\ncandidate=%s\n' "$pending_nonce" "$CANDIDATE" >"$HARNESS_ATTEMPT_MARKER"
+run_gate --mode reconcile "${abrupt_pending_args[@]}" >/dev/null
+grep -Fx 'state=' "$abrupt_pending_ledger/state" >/dev/null
+grep -E 'wrapper=deadline .*action=predicates' "$HARNESS_LOG" >/dev/null
+[[ ! -e "$HARNESS_ATTEMPT_MARKER" && ! -e "$HARNESS_ATTEMPT_LEASE" ]]
+
 flow_ledger="$TMP/flow-ledger"
 mapfile -d '' -t flow_args < <(common_for "$flow_ledger")
 export HARNESS_LEDGER="$flow_ledger"
@@ -656,6 +745,27 @@ grep -Fx 'state=automatic-rollback-green' "$flow_ledger/state" >/dev/null
 run_gate --mode rollback "${flow_args[@]}" --confirm "$confirm" >/dev/null
 grep -Fx 'state=rollback-await-reboot' "$flow_ledger/state" >/dev/null
 export HARNESS_BOOT_ID=boot-two HARNESS_CURRENT_GENERATION="$ROLLBACK"
+
+# A SIGKILL during rollback reboot verification leaves its explicit resume
+# state intact. Reconcile refuses the live lease, then reruns rollback gates
+# and the complete baseline before restoring rollback-await-reboot.
+abrupt_rollback_ledger="$TMP/abrupt-rollback-ledger"
+cp -a "$flow_ledger" "$abrupt_rollback_ledger"
+mapfile -d '' -t abrupt_rollback_args < <(common_for "$abrupt_rollback_ledger")
+export HARNESS_LEDGER="$abrupt_rollback_ledger"
+: >"$HARNESS_LOG"
+run_abrupt_kill rollback-reboot-verify rollback-gates rollback-reboot-verifying \
+  "$abrupt_rollback_ledger" "${abrupt_rollback_args[@]}" --confirm "$confirm"
+assert_fails_with 'attempt is still live; reconcile refuses to race it' run_gate --mode reconcile \
+  "${abrupt_rollback_args[@]}"
+rm -f "$HARNESS_ATTEMPT_LEASE"
+run_gate --mode reconcile "${abrupt_rollback_args[@]}" >/dev/null
+grep -Fx 'state=rollback-await-reboot' "$abrupt_rollback_ledger/state" >/dev/null
+grep -E 'wrapper=attempt-command .*action=rollback-gates' "$HARNESS_LOG" >/dev/null
+grep -E 'wrapper=attempt-command .*action=predicates' "$HARNESS_LOG" >/dev/null
+[[ ! -e "$HARNESS_ATTEMPT_MARKER" && ! -e "$HARNESS_ATTEMPT_LEASE" ]]
+
+export HARNESS_LEDGER="$flow_ledger"
 run_gate --mode rollback-reboot-verify "${flow_args[@]}" --confirm "$confirm" >/dev/null
 grep -Fx 'state=rollback-reboot-green' "$flow_ledger/state" >/dev/null
 grep -E 'wrapper=attempt-command .*action=rollback-gates' "$HARNESS_LOG" >/dev/null
@@ -664,6 +774,25 @@ run_interactive persistent-switch pending-mutation "$flow_ledger" "$TMP/persiste
   "${flow_args[@]}" --confirm "$confirm"
 grep -Fx 'state=candidate-await-reboot' "$flow_ledger/state" >/dev/null
 export HARNESS_BOOT_ID=boot-three HARNESS_CURRENT_GENERATION="$CANDIDATE"
+
+# A SIGKILL during candidate reboot verification preserves candidate-await-
+# reboot. Reconcile refuses the live lease, then checks the candidate generation,
+# exact controller/profile, automated topology, and acceptance fingerprint.
+abrupt_candidate_ledger="$TMP/abrupt-candidate-ledger"
+cp -a "$flow_ledger" "$abrupt_candidate_ledger"
+mapfile -d '' -t abrupt_candidate_args < <(common_for "$abrupt_candidate_ledger")
+export HARNESS_LEDGER="$abrupt_candidate_ledger"
+: >"$HARNESS_LOG"
+run_abrupt_kill candidate-reboot-verify automated-gates candidate-reboot-verifying \
+  "$abrupt_candidate_ledger" "${abrupt_candidate_args[@]}" --confirm "$confirm"
+assert_fails_with 'attempt is still live; reconcile refuses to race it' run_gate --mode reconcile \
+  "${abrupt_candidate_args[@]}"
+rm -f "$HARNESS_ATTEMPT_LEASE"
+run_gate --mode reconcile "${abrupt_candidate_args[@]}" >/dev/null
+grep -Fx 'state=candidate-await-reboot' "$abrupt_candidate_ledger/state" >/dev/null
+grep -E 'wrapper=attempt-command .*action=automated-gates' "$HARNESS_LOG" >/dev/null
+grep -E 'wrapper=attempt-command .*action=acceptance-fingerprint' "$HARNESS_LOG" >/dev/null
+[[ ! -e "$HARNESS_ATTEMPT_MARKER" && ! -e "$HARNESS_ATTEMPT_LEASE" ]]
 
 # A mistyped reboot HITL token is a resumable verification failure. Reconcile
 # returns to candidate-await-reboot without rolling back the accepted candidate.

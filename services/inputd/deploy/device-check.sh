@@ -383,7 +383,7 @@ remote_acceptance_fingerprint() {
 
 remote_automated_gates() {
   local gameplay_user="$1" expected_identity="$2" profile="$3" require_physical="$4"
-  local fingerprint controller_evidence acceptance delegate delegate_controllers node event name readable_raw=0
+  local fingerprint current_fingerprint controller_evidence acceptance delegate delegate_controllers node event event_node readable_raw=0
   remote_wait_unit inputplumber.service
   remote_wait_unit korri-inputd.service Ready
   remote_wait_unit korrid.service
@@ -397,10 +397,13 @@ remote_automated_gates() {
   sudo -n -u "$gameplay_user" test -r "$node" || fail 'gameplay user cannot read normalized target'
   shopt -s nullglob
   for event in /sys/class/input/event*; do
-    name="$(cat "$event/device/name" 2>/dev/null || true)"
-    [[ "$name" == "$NORMALIZED_NAME" ]] && continue
-    if udevadm info --query=property --name="/dev/input/${event##*/}" 2>/dev/null | grep -Fx 'ID_INPUT_JOYSTICK=1' >/dev/null \
-      && sudo -n -u "$gameplay_user" test -r "/dev/input/${event##*/}"; then
+    event_node="/dev/input/${event##*/}"
+    if [[ "$event_node" == "$node" ]]; then
+      current_fingerprint="$(remote_normalized_fingerprint)" || current_fingerprint=''
+      [[ "$current_fingerprint" != "$fingerprint" ]] || continue
+    fi
+    if udevadm info --query=property --name="$event_node" 2>/dev/null | grep -Fx 'ID_INPUT_JOYSTICK=1' >/dev/null \
+      && sudo -n -u "$gameplay_user" test -r "$event_node"; then
       readable_raw=$((readable_raw + 1))
     fi
   done
@@ -505,8 +508,11 @@ remote_attempt_finish_root() {
 }
 
 remote_attempt_reconcile_root() {
-  local nonce="$1" candidate="$2"
-  [[ -e "$ATTEMPT_MARKER" ]] || return 0
+  local nonce="$1" candidate="$2" require_marker="${3:-false}"
+  if [[ ! -e "$ATTEMPT_MARKER" ]]; then
+    [[ "$require_marker" == false ]] || fail 'in-progress device-gate marker is missing'
+    return 0
+  fi
   remote_attempt_validate "$nonce" "$candidate" || fail 'stale device-gate marker does not match this private attempt'
   ! systemctl is-active --quiet "$ATTEMPT_UNIT" \
     || fail 'device-gate attempt is still live; reconcile refuses to race it'
@@ -567,7 +573,7 @@ if [[ "${1:-}" == --remote ]]; then
     bitmap-codes) remote_bitmap_codes "${1:?}" "${2:-}" ;;
     attempt-start-root) remote_attempt_start_root "${1:?}" "${2:?}" "${3:?}" ;;
     attempt-finish-root) remote_attempt_finish_root "${1:?}" "${2:?}" ;;
-    attempt-reconcile-root) remote_attempt_reconcile_root "${1:?}" "${2:?}" ;;
+    attempt-reconcile-root) remote_attempt_reconcile_root "${1:?}" "${2:?}" "${3:-false}" ;;
     attempt-execute-root) remote_attempt_execute_root "${1:?}" "${2:?}" "${3:?}" "${@:4}" ;;
     attempt-holder)
       remote_attempt_validate "${1:?}" "${2:?}" || exit 1
@@ -687,7 +693,7 @@ actual_hostname="$(ssh_exec_deadlined hostname | tr -d '\r\n')" || fail 'could n
 [[ "$actual_hostname" == "$EXPECTED_HOSTNAME" ]] || fail "remote hostname mismatch for $HOST"
 
 local_temp_ledger=''
-mutation_active=false verification_active=false attempt_remote_active=false rollback_persistent=false state_file=''
+mutation_active=false verification_active=false reconcile_active=false attempt_remote_active=false rollback_persistent=false state_file=''
 attempt_nonce='' attempt_boot_id=''
 old_user_was_active=false old_user_was_enabled=false failure_resume_boot_id='' verification_resume_state=''
 write_state() {
@@ -748,6 +754,9 @@ cleanup() {
     else
       printf 'device gate: rollback reboot verification failed; fresh reconcile is required before retry\n' >&2
     fi
+  elif [[ "$reconcile_active" == true && -n "$state_file" ]]; then
+    write_state failed-needs-inspection "${failure_resume_boot_id:-}" "$verification_resume_state" "$attempt_nonce"
+    printf 'device gate: stale attempt reconciliation failed; inspection is required before retry\n' >&2
   fi
   [[ -z "$local_temp_ledger" ]] || rm -rf -- "$local_temp_ledger"
   exit "$status"
@@ -837,6 +846,28 @@ old_user_was_enabled="$(awk -F= '$1 == "old-user.enabled" {print $2}' "$LEDGER/b
 [[ "$old_user_was_active" == true || "$old_user_was_active" == false ]] || fail 'invalid baseline old user active predicate'
 [[ "$old_user_was_enabled" == true || "$old_user_was_enabled" == false ]] || fail 'invalid baseline old user enabled predicate'
 
+resume_after_failure="$state"
+start_attempt() {
+  attempt_nonce="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+  [[ "$attempt_nonce" =~ ^[0-9a-f]{64}$ ]] || fail 'could not generate attempt nonce'
+  write_state "$1" "$attempt_boot_id" "$resume_after_failure" "$attempt_nonce"
+  run_remote_control attempt-start-root "$attempt_nonce" "$CANDIDATE" "$ATTEMPT_TIMEOUT"
+  attempt_remote_active=true
+}
+finish_attempt() {
+  run_remote_control attempt-finish-root "$attempt_nonce" "$CANDIDATE"
+  attempt_remote_active=false
+}
+verify_fingerprint_unchanged() {
+  local evidence="$1" require_physical="$2"
+  awk -F= '$1 == "acceptance-fingerprint" {print substr($0, index($0, "=") + 1)}' "$evidence" >"$LEDGER/fingerprint.expected"
+  run_remote_attempt acceptance-fingerprint "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" "$require_physical" \
+    >"$LEDGER/fingerprint.current"
+  cmp -s "$LEDGER/fingerprint.expected" "$LEDGER/fingerprint.current" \
+    || fail 'normalized target or expected physical controller proof changed before acceptance'
+  chmod 0600 "$LEDGER/fingerprint.expected" "$LEDGER/fingerprint.current"
+}
+
 compare_baseline() {
   if [[ "$attempt_remote_active" == true ]]; then
     run_remote_attempt predicates "$GAMEPLAY_USER" >"$LEDGER/current.predicates.next"
@@ -852,24 +883,105 @@ compare_baseline() {
 }
 
 if [[ "$MODE" == reconcile ]]; then
-  [[ "$state" == failed-needs-inspection ]] || fail 'reconcile requires failed-needs-inspection ledger state'
+  case "$state" in
+    failed-needs-inspection|pending-mutation|rollback-reboot-verifying|candidate-reboot-verifying) ;;
+    *) fail 'reconcile requires a failed or in-progress ledger state' ;;
+  esac
+  grep -q '^resume_state=' "$state_file" || fail 'reconcile requires an explicit ledger resume state'
   stale_nonce="$(awk -F= '$1 == "attempt_nonce" {print $2}' "$state_file")"
-  if [[ "$stale_nonce" =~ ^[0-9a-f]{64}$ ]]; then
-    run_remote_control attempt-reconcile-root "$stale_nonce" "$CANDIDATE"
-  fi
   resume="$(awk -F= '$1 == "resume_state" {print $2}' "$state_file")"
   resume_boot="$(awk -F= '$1 == "boot_id" {print $2}' "$state_file")"
-  if [[ "$resume" == candidate-await-reboot ]]; then
-    [[ "$(run_remote_deadlined current-generation)" == "$CANDIDATE" ]] \
-      || fail 'candidate reboot reconcile requires the candidate generation to remain active'
-    grep -Fx 'expected-controller=yes' <<<"$preflight" >/dev/null \
-      || fail 'candidate reboot reconcile requires the exact expected physical controller and production profile'
-    write_state candidate-await-reboot "$resume_boot"
-  else
-    [[ "$(run_remote_deadlined current-generation)" == "$ROLLBACK" ]] || fail 'reconcile requires the rollback generation to be active'
-    compare_baseline
-    write_state "$resume"
+  case "$state" in
+    pending-mutation)
+      case "$resume" in
+        ''|candidate-green|automatic-rollback-green|rollback-reboot-green) ;;
+        *) fail 'pending mutation ledger has an invalid resume state' ;;
+      esac
+      ;;
+    rollback-reboot-verifying)
+      [[ "$resume" == rollback-await-reboot ]] \
+        || fail 'rollback reboot verification ledger has an invalid resume state'
+      ;;
+    candidate-reboot-verifying)
+      [[ "$resume" == candidate-await-reboot ]] \
+        || fail 'candidate reboot verification ledger has an invalid resume state'
+      if ! grep -Fx "expected_controller_id=$EXPECTED_CONTROLLER_ID" "$state_file" >/dev/null \
+        || ! grep -Fx "production_profile=$PRODUCTION_PROFILE" "$state_file" >/dev/null; then
+        fail 'candidate reboot verification ledger lacks the exact controller and profile'
+      fi
+      ;;
+  esac
+  if [[ "$stale_nonce" =~ ^[0-9a-f]{64}$ ]]; then
+    require_stale_marker=false
+    [[ "$state" == failed-needs-inspection ]] || require_stale_marker=true
+    run_remote_control attempt-reconcile-root "$stale_nonce" "$CANDIDATE" "$require_stale_marker"
+  elif [[ "$state" != failed-needs-inspection ]]; then
+    fail 'in-progress reconcile requires an exact private attempt nonce'
   fi
+  if [[ "$state" != failed-needs-inspection ]]; then
+    reconcile_active=true
+    verification_resume_state="$resume"
+    failure_resume_boot_id="$resume_boot"
+    attempt_nonce="$stale_nonce"
+  fi
+  case "$state" in
+    candidate-reboot-verifying)
+      [[ "$(run_remote_deadlined current-generation)" == "$CANDIDATE" ]] \
+        || fail 'candidate reboot reconcile requires the candidate generation to remain active'
+      grep -Fx 'expected-controller=yes' <<<"$preflight" >/dev/null \
+        || fail 'candidate reboot reconcile requires the exact expected physical controller and production profile'
+      attempt_boot_id="$(run_remote_deadlined boot-id)"
+      resume_after_failure="$resume"
+      failure_resume_boot_id="$resume_boot"
+      verification_resume_state="$resume"
+      reconcile_active=false
+      verification_active=true
+      start_attempt candidate-reboot-verifying
+      run_remote_attempt automated-gates "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" true \
+        | tee "$LEDGER/reconcile-candidate-reboot.txt"
+      verify_fingerprint_unchanged "$LEDGER/reconcile-candidate-reboot.txt" true
+      finish_attempt
+      verification_active=false
+      write_state "$resume" "$resume_boot"
+      ;;
+    rollback-reboot-verifying)
+      [[ "$(run_remote_deadlined current-generation)" == "$ROLLBACK" ]] \
+        || fail 'rollback reboot reconcile requires the rollback generation to be active'
+      attempt_boot_id="$(run_remote_deadlined boot-id)"
+      resume_after_failure="$resume"
+      failure_resume_boot_id="$resume_boot"
+      verification_resume_state="$resume"
+      reconcile_active=false
+      verification_active=true
+      start_attempt rollback-reboot-verifying
+      run_remote_attempt rollback-gates | tee "$LEDGER/reconcile-rollback-reboot.txt"
+      compare_baseline
+      finish_attempt
+      verification_active=false
+      write_state "$resume" "$resume_boot"
+      ;;
+    pending-mutation)
+      [[ "$(run_remote_deadlined current-generation)" == "$ROLLBACK" ]] \
+        || fail 'pending mutation reconcile requires the rollback generation to be active'
+      compare_baseline
+      write_state "$resume"
+      reconcile_active=false
+      ;;
+    failed-needs-inspection)
+      if [[ "$resume" == candidate-await-reboot ]]; then
+        [[ "$(run_remote_deadlined current-generation)" == "$CANDIDATE" ]] \
+          || fail 'candidate reboot reconcile requires the candidate generation to remain active'
+        grep -Fx 'expected-controller=yes' <<<"$preflight" >/dev/null \
+          || fail 'candidate reboot reconcile requires the exact expected physical controller and production profile'
+        write_state candidate-await-reboot "$resume_boot"
+      else
+        [[ "$(run_remote_deadlined current-generation)" == "$ROLLBACK" ]] \
+          || fail 'reconcile requires the rollback generation to be active'
+        compare_baseline
+        write_state "$resume"
+      fi
+      ;;
+  esac
   printf 'device-gate mode=reconcile state=%s host=%s mutation=none\n' "${resume:-baseline}" "$actual_hostname"
   exit 0
 fi
@@ -900,39 +1012,17 @@ require_hitl() {
   done
 }
 
-resume_after_failure="$state"
-start_attempt() {
-  attempt_nonce="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
-  [[ "$attempt_nonce" =~ ^[0-9a-f]{64}$ ]] || fail 'could not generate attempt nonce'
-  write_state "$1" "$attempt_boot_id" "$resume_after_failure" "$attempt_nonce"
-  run_remote_control attempt-start-root "$attempt_nonce" "$CANDIDATE" "$ATTEMPT_TIMEOUT"
-  attempt_remote_active=true
-}
 begin_mutation() {
   rollback_persistent="$1"
   attempt_boot_id="$(run_remote_deadlined boot-id)"
   mutation_active=true
   start_attempt pending-mutation
 }
-finish_attempt() {
-  run_remote_control attempt-finish-root "$attempt_nonce" "$CANDIDATE"
-  attempt_remote_active=false
-}
 accept_and_disarm() {
   finish_attempt
   mutation_active=false
   write_state "$1" "${2:-}"
 }
-verify_fingerprint_unchanged() {
-  local evidence="$1" require_physical="$2"
-  awk -F= '$1 == "acceptance-fingerprint" {print substr($0, index($0, "=") + 1)}' "$evidence" >"$LEDGER/fingerprint.expected"
-  run_remote_attempt acceptance-fingerprint "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" "$require_physical" \
-    >"$LEDGER/fingerprint.current"
-  cmp -s "$LEDGER/fingerprint.expected" "$LEDGER/fingerprint.current" \
-    || fail 'normalized target or expected physical controller proof changed before acceptance'
-  chmod 0600 "$LEDGER/fingerprint.expected" "$LEDGER/fingerprint.current"
-}
-
 case "$MODE" in
   candidate-test)
     [[ -z "$state" || "$state" == candidate-green ]] || fail "candidate-test cannot follow ledger state $state"
