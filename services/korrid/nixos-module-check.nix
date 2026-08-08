@@ -49,7 +49,7 @@ let
   sameUid = evaluate {
     services.korridLinuxHost = {
       enable = true;
-      uid = lib.mkForce 1001;
+      gameplayUid = lib.mkForce 976;
     };
   };
   broadGame = evaluate {

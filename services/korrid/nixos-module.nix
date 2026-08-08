@@ -56,6 +56,15 @@ in
         message = "korrid's service UID must differ from the untrusted gameplay UID.";
       }
       {
+        assertion =
+          let
+            user = config.users.users.${cfg.gameplayUser} or { };
+            group = config.users.groups.${user.group or ""} or { };
+          in
+          (user.uid or null) == cfg.gameplayUid && (group.gid or null) == cfg.gameplayGid;
+        message = "configured gameplay UID/GID must exactly match the gameplay user's primary identity.";
+      }
+      {
         assertion = cfg.gid != cfg.gameplayGid && cfg.controlGid != cfg.gameplayGid;
         message = "korrid and local-control GIDs must differ from the gameplay GID.";
       }

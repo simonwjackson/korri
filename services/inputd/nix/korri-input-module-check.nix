@@ -113,6 +113,12 @@ let
       allowBroadRawInput = true;
     };
   };
+  mismatchedActionIdentity = withInputd {
+    services.korri.input.inputd = {
+      enable = true;
+      actionUid = lib.mkForce 1002;
+    };
+  };
   unsafeHide = evaluate {
     services.korri.input.provider = {
       enable = true;
@@ -207,6 +213,8 @@ assert !(lib.hasInfix "SUBSYSTEM==\"input\", KERNEL==\"event*\", MODE" combinedR
 assert lib.any (path: lib.hasInfix "korri-inputplumber-dbus-policy" path) dbusPackages;
 assert hasFailedAssertion "requires its configured provider" contradictory;
 assert hasFailedAssertion "broad raw-input" broad;
+assert hasFailedAssertion "must exactly match the action user's primary identity"
+  mismatchedActionIdentity;
 assert hasFailedAssertion "same-filesystem supported layout" unsafeHide;
 assert hasFailedAssertion "invalid action identifier" invalidAction;
 assert hasFailedAssertion "unreachable or destructive" unreachableAction;
@@ -214,6 +222,7 @@ assert hasFailedAssertion "unreachable or destructive" destructiveAction;
 assert hasFailedAssertion "immutable absolute Nix-store argv" mutableAction;
 assert evaluationRejected contradictory;
 assert evaluationRejected broad;
+assert evaluationRejected mismatchedActionIdentity;
 assert evaluationRejected unsafeHide;
 assert evaluationRejected invalidAction;
 assert evaluationRejected unreachableAction;

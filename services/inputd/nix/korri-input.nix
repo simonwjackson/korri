@@ -248,6 +248,15 @@ in
           message = "inputd action GID must differ from the primary control GID.";
         }
         {
+          assertion =
+            let
+              user = config.users.users.${cfg.inputd.actionUser} or { };
+              group = config.users.groups.${user.group or ""} or { };
+            in
+            (user.uid or null) == cfg.inputd.actionUid && (group.gid or null) == cfg.inputd.actionGid;
+          message = "configured action UID/GID must exactly match the action user's primary identity.";
+        }
+        {
           assertion = lib.all (name: builtins.elem name actionNames) configuredActionNames;
           message = "inputd action configuration contains an invalid action identifier.";
         }
