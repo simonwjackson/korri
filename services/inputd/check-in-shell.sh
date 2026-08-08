@@ -7,8 +7,11 @@ export CARGO_TARGET_DIR="$ROOT/.cache/inputd-target"
 
 cd "$ROOT/services/inputd"
 cargo fmt --check
+cargo fmt --manifest-path core/Cargo.toml --check
 cargo clippy --all-targets -- -D warnings
+cargo clippy --manifest-path core/Cargo.toml --all-targets -- -D warnings
 cargo test --all-targets
+cargo test --manifest-path core/Cargo.toml --all-targets
 cargo check --manifest-path core/Cargo.toml --target wasm32-unknown-unknown
 
 cd "$ROOT"
