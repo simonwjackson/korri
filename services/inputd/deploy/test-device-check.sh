@@ -605,6 +605,51 @@ common_for() {
 }
 confirm="CONFIRM-$(printf '%s' "$MACHINE_ID|$HOSTNAME|$CANDIDATE" | sha256sum | cut -c1-16)"
 
+# Exercise the production primary-group policy directly. The remote endpoint
+# model cannot reproduce a forged primary GID without replacing /proc.
+GROUP_POLICY_SOURCE="$(awk '
+  /^remote_process_group_policy\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$GROUP_POLICY_SOURCE" == remote_process_group_policy* ]]
+run_production_group_policy() (
+  local unit="$1" primary_gid="$2" sunshine_supplementary="${3:-yes}"
+  local input_gid=10 uinput_gid=20 control_gid=30 sunshine_gid=40
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  fail() {
+    printf 'device gate: %s\n' "$*" >&2
+    exit 1
+  }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  remote_pid_reject_supplementary_gid() { :; }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  remote_pid_has_supplementary_gid() {
+    [[ "$unit" == sunshine.service && "$sunshine_supplementary" == yes \
+      && "$2" == "$sunshine_gid" ]]
+  }
+  eval "$GROUP_POLICY_SOURCE"
+  remote_process_group_policy "$unit" "$$" "$primary_gid" \
+    "$input_gid" "$uinput_gid" "$control_gid" "$sunshine_gid"
+)
+for credential_unit in korrid.service x11-headless.service sunshine.service \
+  korri-inputd.service korri-game-harness.service 'gameplay user manager'; do
+  assert_fails_with "forbidden input primary group leaked to $credential_unit" \
+    run_production_group_policy "$credential_unit" 10
+  assert_fails_with "forbidden uinput primary group leaked to $credential_unit" \
+    run_production_group_policy "$credential_unit" 20
+done
+run_production_group_policy korri-inputd.service 30
+assert_fails_with 'inputd does not use the control primary group' \
+  run_production_group_policy korri-inputd.service 50
+assert_fails_with 'control primary group leaked to korrid.service' \
+  run_production_group_policy korrid.service 30
+run_production_group_policy sunshine.service 50
+assert_fails_with 'Sunshine dedicated uinput group must be supplementary' \
+  run_production_group_policy sunshine.service 40
+assert_fails_with 'system Sunshine lacks its dedicated uinput group' \
+  run_production_group_policy sunshine.service 50 no
+
 # Exercise the production user-manager and pairing proof paths. Both root
 # without SUDO_UID and a different SSH caller must target the explicit user.
 run_production_predicates() {

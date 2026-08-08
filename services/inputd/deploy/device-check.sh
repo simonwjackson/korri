@@ -428,6 +428,8 @@ remote_service_credentials() {
 
 remote_process_group_policy() {
   local unit="$1" pid="$2" primary_gid="$3" input_gid="$4" uinput_gid="$5" control_gid="$6" sunshine_gid="$7"
+  [[ "$primary_gid" != "$input_gid" ]] || fail "forbidden input primary group leaked to $unit"
+  [[ "$primary_gid" != "$uinput_gid" ]] || fail "forbidden uinput primary group leaked to $unit"
   remote_pid_reject_supplementary_gid "$unit" "$pid" "$input_gid" 'forbidden input'
   remote_pid_reject_supplementary_gid "$unit" "$pid" "$uinput_gid" 'forbidden uinput'
   if [[ "$unit" == korri-inputd.service ]]; then
@@ -447,7 +449,7 @@ remote_process_group_policy() {
 }
 
 remote_candidate_credentials() {
-  local gameplay_user="$1" uid manager_pid unit name pid primary_gid game_units
+  local gameplay_user="$1" uid manager_pid manager_primary_gid unit name pid primary_gid game_units
   local input_gid uinput_gid control_gid sunshine_gid
   uid="$(id -u "$gameplay_user")" || fail 'gameplay user is unavailable'
   input_gid="$(remote_group_gid input)" || fail 'input group is unavailable'
@@ -457,13 +459,16 @@ remote_candidate_credentials() {
   manager_pid="$(systemctl show "user@$uid.service" -p MainPID --value 2>/dev/null || true)"
   [[ "$manager_pid" =~ ^[1-9][0-9]*$ && -r "/proc/$manager_pid/status" ]] \
     || fail 'fresh gameplay user manager is unavailable'
+  manager_primary_gid="$(awk '/^Gid:/ {print $2}' "/proc/$manager_pid/status" 2>/dev/null)" \
+    || fail 'fresh gameplay user manager credentials are unavailable'
+  [[ "$manager_primary_gid" =~ ^[0-9]+$ ]] \
+    || fail 'fresh gameplay user manager credentials are invalid'
   for name in input uinput "$KORRID_CONTROL_GROUP" "$SUNSHINE_UINPUT_GROUP"; do
     ! id -nG "$gameplay_user" | tr ' ' '\n' | grep -Fx "$name" >/dev/null \
       || fail "gameplay user retains forbidden group: $name"
   done
-  for primary_gid in "$input_gid" "$uinput_gid" "$control_gid" "$sunshine_gid"; do
-    remote_pid_reject_supplementary_gid 'gameplay user manager' "$manager_pid" "$primary_gid" 'forbidden'
-  done
+  remote_process_group_policy 'gameplay user manager' "$manager_pid" "$manager_primary_gid" \
+    "$input_gid" "$uinput_gid" "$control_gid" "$sunshine_gid"
   for unit in korrid.service x11-headless.service sunshine.service korri-inputd.service; do
     remote_service_credentials "$unit"
     remote_process_group_policy "$unit" "$REMOTE_SERVICE_PID" "$REMOTE_SERVICE_GID" \
