@@ -4,5 +4,6 @@ pub mod cgroup_sandbox;
 pub mod dbus;
 pub mod devices;
 pub mod direct_runner;
+pub mod health;
 pub mod korrid_client;
 pub mod runtime;

@@ -18,6 +18,7 @@ use crate::{
         resolve_target, validate_opened_descriptor, DeviceDescriptor, OpenedTarget, TargetIdentity,
         TargetProvider, TargetResolution,
     },
+    health::RuntimeHealth,
 };
 
 pub const RECONCILE_INTERVAL: Duration = Duration::from_secs(1);
@@ -46,6 +47,17 @@ pub enum RecoveryReason {
     RequiredTargetUnreadable,
     DescriptorChangedAfterOpen,
     EventStreamLost,
+}
+
+impl From<&RuntimeState> for RuntimeHealth {
+    fn from(state: &RuntimeState) -> Self {
+        match state {
+            RuntimeState::Ready { .. } => Self::Ready,
+            RuntimeState::Missing { .. } => Self::Missing,
+            RuntimeState::Ambiguous { .. } => Self::Ambiguous,
+            RuntimeState::Recovering { .. } => Self::Recovering,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

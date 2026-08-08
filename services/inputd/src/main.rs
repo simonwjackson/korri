@@ -7,6 +7,7 @@ use korri_inputd::{
     },
     dbus::DbusSignalSource,
     devices::EvdevProvider,
+    health::{systemd::SystemdHealthPublisher, HealthPublisher, RuntimeHealth},
     korrid_client::{ExactStopOutcome, KorridClient},
     runtime::{Runtime, RuntimeAction, RECONCILE_INTERVAL},
 };
@@ -44,11 +45,24 @@ async fn main() -> ExitCode {
         }
     };
 
-    run(actions, routes, korrid).await;
+    let mut health = SystemdHealthPublisher::default();
+    if let Err(error) = health.initialized(RuntimeHealth::Recovering) {
+        tracing::warn!(
+            event = "inputd_health_publish_failed",
+            error = %error,
+            "daemon initialized but systemd health publication failed"
+        );
+    }
+    run(actions, routes, korrid, &mut health).await;
     ExitCode::SUCCESS
 }
 
-async fn run(actions: ActionDispatcher, routes: ActionRoutes, korrid: KorridClient) {
+async fn run(
+    actions: ActionDispatcher,
+    routes: ActionRoutes,
+    korrid: KorridClient,
+    health: &mut impl HealthPublisher,
+) {
     let mut runtime = Runtime::with_action_routes(routes);
     let mut provider = EvdevProvider::default();
     let mut dbus = None;
@@ -137,6 +151,13 @@ async fn run(actions: ActionDispatcher, routes: ActionRoutes, korrid: KorridClie
                     ),
                 }
             }
+        }
+        if let Err(error) = health.publish(RuntimeHealth::from(runtime.state())) {
+            tracing::warn!(
+                event = "inputd_health_publish_failed",
+                error = %error,
+                "systemd health publication failed"
+            );
         }
     }
 }
