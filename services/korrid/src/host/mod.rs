@@ -1,6 +1,9 @@
 mod config;
 pub(crate) mod control;
+mod identity;
 mod prepare;
+mod session_state;
+mod systemd_unit;
 
 use crate::{
     config::{
@@ -11,16 +14,16 @@ use crate::{
     plugin_policy, CatalogSnapshot, Game, GameIdentity, RpcFailure, SessionPrepared,
 };
 use config::{HostConfig, HostConfigError};
-#[cfg(test)]
-use control::LaunchUnitBackend;
-use control::{HostSessionControl, HostSessionStatus, HostSessionStop};
 use prepare::HostLauncher;
+use session_state::{HostSessionControl, HostSessionStatus, HostSessionStop};
 #[cfg(test)]
 use std::sync::Arc;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
 };
+#[cfg(test)]
+use systemd_unit::LaunchUnitBackend;
 
 #[derive(Clone)]
 struct DynamicHostGame {
@@ -250,7 +253,7 @@ fn dynamic_failure(message: impl Into<String>) -> RpcFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::host::control::{LaunchUnitError, LaunchUnitState};
+    use crate::host::systemd_unit::{LaunchUnitError, LaunchUnitState};
     use std::{
         collections::{BTreeMap, HashMap},
         fs,

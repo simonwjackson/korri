@@ -1,6 +1,7 @@
 use super::{
     config::{HostConfig, HostGame},
-    control::{HostSessionControl, LaunchUnitBackend, SystemdLaunchUnitBackend},
+    session_state::HostSessionControl,
+    systemd_unit::{LaunchUnitBackend, SystemdLaunchUnitBackend},
 };
 use crate::{RpcFailure, SessionPrepared};
 use std::{collections::HashMap, path::Path, sync::Arc};
@@ -67,7 +68,7 @@ mod tests {
     use super::*;
     use crate::host::{
         config::{HostConfig, HostGame},
-        control::{LaunchUnitError, LaunchUnitState},
+        systemd_unit::{LaunchUnitError, LaunchUnitState},
     };
     use std::{collections::BTreeMap, sync::Mutex};
 
