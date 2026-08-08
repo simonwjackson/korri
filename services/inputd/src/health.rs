@@ -47,9 +47,9 @@ pub mod systemd {
             if self.last == Some(health) {
                 return Ok(());
             }
-            notify(&format!("STATUS={}", health.status()))?;
+            let result = notify(&format!("STATUS={}", health.status()));
             self.last = Some(health);
-            Ok(())
+            result
         }
     }
 
@@ -140,6 +140,10 @@ mod tests {
         publisher.publish(RuntimeHealth::Missing).unwrap();
         let count = socket.recv(&mut message).unwrap();
         assert_eq!(&message[..count], b"STATUS=Missing");
+
+        std::env::set_var("NOTIFY_SOCKET", "");
+        assert!(publisher.publish(RuntimeHealth::Ambiguous).is_err());
+        assert!(publisher.publish(RuntimeHealth::Ambiguous).is_ok());
         std::env::remove_var("NOTIFY_SOCKET");
     }
 }

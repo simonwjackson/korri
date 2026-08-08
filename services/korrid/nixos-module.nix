@@ -6,15 +6,25 @@
   ...
 }:
 let
-  cfg = config.services.korridLinuxHost;
+  cfg = config.services.korridLinuxDevice;
   system = pkgs.stdenv.hostPlatform.system;
   serviceUser = "korrid";
   serviceGroup = "korrid";
   controlGroup = "korri-control";
+  controlDirectory = builtins.dirOf cfg.controlSocket;
+  validAbsolutePath = path:
+    lib.hasPrefix "/" path
+    && path != "/"
+    && !(lib.hasInfix "//" path)
+    && !(lib.hasInfix "/./" path)
+    && !(lib.hasSuffix "/." path)
+    && !(lib.hasInfix "/../" path)
+    && !(lib.hasSuffix "/.." path)
+    && builtins.match ".*[[:space:]].*" path == null;
 in
 {
-  options.services.korridLinuxHost = {
-    enable = lib.mkEnableOption "Linux korrid host system service";
+  options.services.korridLinuxDevice = {
+    enable = lib.mkEnableOption "Linux korrid device service";
     package = lib.mkOption {
       type = lib.types.package;
       default = korri.packages.${system}.korrid;
@@ -29,11 +39,11 @@ in
     controlGid = lib.mkOption { type = lib.types.ints.positive; };
     address = lib.mkOption {
       type = lib.types.str;
-      default = "0.0.0.0:43117";
+      default = "127.0.0.1:43117";
     };
-    hostConfig = lib.mkOption {
+    deviceConfig = lib.mkOption {
       type = lib.types.path;
-      description = "Root-owned immutable host TOML configuration.";
+      description = "Root-owned immutable Linux device TOML configuration.";
     };
     storageRoot = lib.mkOption {
       type = lib.types.str;
@@ -69,12 +79,16 @@ in
         message = "korrid and local-control GIDs must differ from the gameplay GID.";
       }
       {
-        assertion = lib.hasPrefix "/nix/store/" (toString cfg.hostConfig);
-        message = "korrid hostConfig must be an immutable Nix-store path.";
+        assertion = lib.hasPrefix "/nix/store/" (toString cfg.deviceConfig);
+        message = "korrid deviceConfig must be an immutable Nix-store path.";
       }
       {
-        assertion = cfg.controlSocket == "/run/korrid-control/control.sock";
-        message = "the Linux host control socket path is fixed by the private local treaty.";
+        assertion = validAbsolutePath cfg.privateStateRoot;
+        message = "korrid privateStateRoot must be a normalized absolute path.";
+      }
+      {
+        assertion = validAbsolutePath cfg.controlSocket && validAbsolutePath controlDirectory;
+        message = "korrid controlSocket and its directory must be normalized absolute paths.";
       }
       {
         assertion =
@@ -98,10 +112,17 @@ in
 
     environment.systemPackages = [ cfg.package ];
 
+    systemd.tmpfiles.rules = [
+      "d ${controlDirectory} 0750 root ${controlGroup} -"
+      "d ${cfg.privateStateRoot} 0700 ${serviceUser} ${serviceGroup} -"
+    ];
+
     systemd.sockets.korrid-control = {
       description = "Private korrid exact-session control socket";
       wantedBy = [ "sockets.target" ];
       before = [ "korrid.service" ];
+      requires = [ "systemd-tmpfiles-setup.service" ];
+      after = [ "systemd-tmpfiles-setup.service" ];
       socketConfig = {
         ListenStream = cfg.controlSocket;
         SocketUser = "root";
@@ -114,7 +135,7 @@ in
     };
 
     systemd.services.korrid = {
-      description = "Korri Linux host daemon";
+      description = "Korri Linux device daemon";
       wantedBy = [ "multi-user.target" ];
       requires = [ "korrid-control.socket" ];
       after = [
@@ -124,9 +145,11 @@ in
       environment = {
         KORRID_MODE = "host";
         KORRID_ADDRESS = cfg.address;
-        KORRID_HOST_CONFIG = toString cfg.hostConfig;
+        KORRID_HOST_CONFIG = toString cfg.deviceConfig;
         KORRID_STORAGE_ROOT = cfg.storageRoot;
         KORRID_PRIVATE_STATE_ROOT = cfg.privateStateRoot;
+        KORRID_CONTROL_SOCKET = cfg.controlSocket;
+        KORRID_CONTROL_DIRECTORY = controlDirectory;
         KORRID_CONTROL_PEER_UID = toString cfg.inputdUid;
         KORRID_CONTROL_PEER_GID = toString cfg.controlGid;
         KORRID_GAMEPLAY_UID = toString cfg.gameplayUid;

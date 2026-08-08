@@ -5,7 +5,7 @@
 }:
 let
   lib = pkgs.lib;
-  hostConfig = pkgs.writeText "korrid-host.toml" ''
+  deviceConfig = pkgs.writeText "korrid-host.toml" ''
     label = "test"
   '';
   base = {
@@ -15,7 +15,7 @@ let
       uid = 1001;
       group = "games";
     };
-    services.korridLinuxHost = {
+    services.korridLinuxDevice = {
       package = korridPackage;
       uid = 976;
       gid = 976;
@@ -24,7 +24,7 @@ let
       gameplayGid = 1001;
       inputdUid = 977;
       controlGid = 977;
-      inherit hostConfig;
+      inherit deviceConfig;
     };
   };
   evaluate =
@@ -45,16 +45,35 @@ let
         extra
       ];
     };
-  enabled = evaluate { services.korridLinuxHost.enable = true; };
+  enabled = evaluate { services.korridLinuxDevice.enable = true; };
+  customPaths = evaluate {
+    services.korridLinuxDevice = {
+      enable = true;
+      privateStateRoot = "/srv/korri-test/recovery";
+      controlSocket = "/run/korri-test/control/device.sock";
+    };
+  };
   sameUid = evaluate {
-    services.korridLinuxHost = {
+    services.korridLinuxDevice = {
       enable = true;
       gameplayUid = lib.mkForce 976;
     };
   };
   broadGame = evaluate {
-    services.korridLinuxHost.enable = true;
+    services.korridLinuxDevice.enable = true;
     users.users.gameplay.extraGroups = [ "input" ];
+  };
+  invalidPrivatePath = evaluate {
+    services.korridLinuxDevice = {
+      enable = true;
+      privateStateRoot = "/srv/korrid/../recovery";
+    };
+  };
+  invalidControlPath = evaluate {
+    services.korridLinuxDevice = {
+      enable = true;
+      controlSocket = "relative/control.sock";
+    };
   };
   allAssertionsPass = system: lib.all (entry: entry.assertion) system.config.assertions;
   hasFailedAssertion =
@@ -65,6 +84,10 @@ let
   service = enabled.config.systemd.services.korrid;
   socket = enabled.config.systemd.sockets.korrid-control;
   polkit = enabled.config.security.polkit.extraConfig;
+  tmpfiles = enabled.config.systemd.tmpfiles.rules;
+  customService = customPaths.config.systemd.services.korrid;
+  customSocket = customPaths.config.systemd.sockets.korrid-control;
+  customTmpfiles = customPaths.config.systemd.tmpfiles.rules;
 in
 assert allAssertionsPass enabled;
 assert service.serviceConfig.User == "korrid";
@@ -75,12 +98,19 @@ assert service.environment.KORRID_CONTROL_PEER_UID == "977";
 assert service.environment.KORRID_CONTROL_PEER_GID == "977";
 assert service.environment.KORRID_SYSTEMD_RUN == "${pkgs.systemd}/bin/systemd-run";
 assert service.environment.KORRID_SYSTEMCTL == "${pkgs.systemd}/bin/systemctl";
+assert service.environment.KORRID_ADDRESS == "127.0.0.1:43117";
+assert service.environment.KORRID_PRIVATE_STATE_ROOT == "/var/lib/korrid";
+assert service.environment.KORRID_CONTROL_SOCKET == "/run/korrid-control/control.sock";
+assert service.environment.KORRID_CONTROL_DIRECTORY == "/run/korrid-control";
 assert builtins.elem "korrid-control.socket" service.requires;
 assert socket.socketConfig.ListenStream == "/run/korrid-control/control.sock";
 assert socket.socketConfig.SocketUser == "root";
 assert socket.socketConfig.SocketGroup == "korri-control";
 assert socket.socketConfig.SocketMode == "0660";
 assert socket.socketConfig.Service == "korrid.service";
+assert builtins.elem "systemd-tmpfiles-setup.service" socket.requires;
+assert builtins.elem "systemd-tmpfiles-setup.service" socket.after;
+assert builtins.elem "d /run/korrid-control 0750 root korri-control -" tmpfiles;
 assert enabled.config.users.groups.korri-control.gid == 977;
 assert !(builtins.elem "korri-control" enabled.config.users.users.gameplay.extraGroups);
 assert builtins.elem "AF_UNIX" service.serviceConfig.RestrictAddressFamilies;
@@ -89,10 +119,20 @@ assert service.serviceConfig.ProtectProc == "invisible";
 assert service.serviceConfig.ProcSubset == "pid";
 assert lib.hasInfix "subject.system_unit == \"korrid.service\"" polkit;
 assert lib.hasInfix "^korri-game-[0-9a-f]{32}" polkit;
+assert allAssertionsPass customPaths;
+assert customSocket.socketConfig.ListenStream == "/run/korri-test/control/device.sock";
+assert customService.environment.KORRID_PRIVATE_STATE_ROOT == "/srv/korri-test/recovery";
+assert customService.environment.KORRID_CONTROL_SOCKET == "/run/korri-test/control/device.sock";
+assert customService.environment.KORRID_CONTROL_DIRECTORY == "/run/korri-test/control";
+assert builtins.elem "d /run/korri-test/control 0750 root korri-control -" customTmpfiles;
 assert hasFailedAssertion "service UID must differ" sameUid;
 assert hasFailedAssertion "gameplay user must not hold raw input" broadGame;
+assert hasFailedAssertion "privateStateRoot must be a normalized absolute path" invalidPrivatePath;
+assert hasFailedAssertion "controlSocket and its directory must be normalized absolute paths" invalidControlPath;
 assert evaluationRejected sameUid;
 assert evaluationRejected broadGame;
-pkgs.runCommand "korrid-linux-host-module-check" { } ''
+assert evaluationRejected invalidPrivatePath;
+assert evaluationRejected invalidControlPath;
+pkgs.runCommand "korrid-linux-device-module-check" { } ''
   touch "$out"
 ''

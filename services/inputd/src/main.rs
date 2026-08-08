@@ -46,15 +46,20 @@ async fn main() -> ExitCode {
     };
 
     let mut health = SystemdHealthPublisher::default();
-    if let Err(error) = health.initialized(RuntimeHealth::Recovering) {
-        tracing::warn!(
-            event = "inputd_health_publish_failed",
+    if let Err(error) = initialize_health(&mut health) {
+        tracing::error!(
+            event = "inputd_initial_ready_failed",
             error = %error,
-            "daemon initialized but systemd health publication failed"
+            "systemd did not accept initial readiness"
         );
+        return ExitCode::FAILURE;
     }
     run(actions, routes, korrid, &mut health).await;
     ExitCode::SUCCESS
+}
+
+fn initialize_health(health: &mut impl HealthPublisher) -> std::io::Result<()> {
+    health.initialized(RuntimeHealth::Recovering)
 }
 
 async fn run(
@@ -339,4 +344,34 @@ fn required_absolute_path(
         return Err(format!("{name} must be absolute"));
     }
     Ok(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct ConfigurableHealthPublisher {
+        initialization: std::io::Result<()>,
+    }
+
+    impl HealthPublisher for ConfigurableHealthPublisher {
+        fn initialized(&mut self, _health: RuntimeHealth) -> std::io::Result<()> {
+            std::mem::replace(&mut self.initialization, Ok(()))
+        }
+
+        fn publish(&mut self, _health: RuntimeHealth) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn initial_ready_publication_failure_is_fatal_to_startup() {
+        let mut health = ConfigurableHealthPublisher {
+            initialization: Err(std::io::Error::other("notify socket rejected READY")),
+        };
+
+        let error = initialize_health(&mut health).unwrap_err();
+
+        assert_eq!(error.to_string(), "notify socket rejected READY");
+    }
 }

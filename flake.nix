@@ -32,7 +32,7 @@
     let
       nixosModules = {
         korri-input = import ./services/inputd/nix/korri-input.nix { korri = self; };
-        korrid-linux-host = import ./services/korrid/nixos-module.nix { korri = self; };
+        korrid-linux-device = import ./services/korrid/nixos-module.nix { korri = self; };
       };
     in
     {
@@ -62,7 +62,7 @@
             ;
           inputplumberNixpkgs = inputplumber-nixpkgs;
           korriInputModule = nixosModules.korri-input;
-          korridHostModule = nixosModules.korrid-linux-host;
+          korridLinuxDeviceModule = nixosModules.korrid-linux-device;
         };
       in
       {

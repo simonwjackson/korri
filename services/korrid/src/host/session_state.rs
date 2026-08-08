@@ -778,6 +778,7 @@ mod tests {
             "--property=ProtectKernelTunables=yes".into(),
             "--property=ProtectKernelModules=yes".into(),
             "--property=ProtectControlGroups=yes".into(),
+            "--property=InaccessiblePaths=/var/lib/korrid /run/korrid /run/korrid-control/control.sock /run/korrid-control /dev/uinput /dev/inputplumber/sources".into(),
             "--property=RestrictSUIDSGID=yes".into(),
         ] {
             assert!(
@@ -794,6 +795,30 @@ mod tests {
             ["--system", "--no-ask-password", "stop", unit]
         );
         assert!(SystemdLaunchUnitBackend::stop_arguments("game-name").is_err());
+    }
+
+    #[test]
+    fn systemd_game_units_hide_configured_recovery_and_control_paths() {
+        let backend = SystemdLaunchUnitBackend::with_protected_paths(
+            PathBuf::from("/nix/store/systemd/bin/systemd-run"),
+            PathBuf::from("/nix/store/systemd/bin/systemctl"),
+            1001,
+            1002,
+            PathBuf::from("/srv/korri-test/private-recovery"),
+            PathBuf::from("/run/korri-test/control/device.sock"),
+            PathBuf::from("/run/korri-test/control"),
+        )
+        .unwrap();
+        let launch = backend
+            .launch_arguments(
+                "0123456789abcdef0123456789abcdef",
+                &["/games/retroarch".into()],
+                &BTreeMap::new(),
+            )
+            .unwrap();
+        assert!(launch.contains(
+            &"--property=InaccessiblePaths=/srv/korri-test/private-recovery /run/korrid /run/korri-test/control/device.sock /run/korri-test/control /dev/uinput /dev/inputplumber/sources".into()
+        ));
     }
 
     #[test]
@@ -822,6 +847,36 @@ mod tests {
             PathBuf::from("/bin/systemctl"),
             1000,
             0,
+        )
+        .is_err());
+        assert!(SystemdLaunchUnitBackend::with_protected_paths(
+            PathBuf::from("/bin/systemd-run"),
+            PathBuf::from("/bin/systemctl"),
+            1000,
+            1000,
+            PathBuf::from("relative/recovery"),
+            PathBuf::from("/run/control.sock"),
+            PathBuf::from("/run"),
+        )
+        .is_err());
+        assert!(SystemdLaunchUnitBackend::with_protected_paths(
+            PathBuf::from("/bin/systemd-run"),
+            PathBuf::from("/bin/systemctl"),
+            1000,
+            1000,
+            PathBuf::from("/private/recovery"),
+            PathBuf::from("/run/other/control.sock"),
+            PathBuf::from("/run/control"),
+        )
+        .is_err());
+        assert!(SystemdLaunchUnitBackend::with_protected_paths(
+            PathBuf::from("/bin/systemd-run"),
+            PathBuf::from("/bin/systemctl"),
+            1000,
+            1000,
+            PathBuf::from("/private/../recovery"),
+            PathBuf::from("/run/control/device.sock"),
+            PathBuf::from("/run/control"),
         )
         .is_err());
     }

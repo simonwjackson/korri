@@ -2,7 +2,7 @@ use std::{
     collections::BTreeMap,
     io::{self, Read},
     os::fd::AsRawFd,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     process::{Child, ChildStderr, ChildStdout, Command, ExitStatus, Output, Stdio},
     thread,
     time::{Duration, Instant},
@@ -16,6 +16,9 @@ const UNIT_SUFFIX: &str = ".service";
 const DEFAULT_HELPER_TIMEOUT: Duration = Duration::from_secs(10);
 const HELPER_POLL_INTERVAL: Duration = Duration::from_millis(5);
 const MAX_HELPER_OUTPUT_BYTES: u64 = 64 * 1024;
+const DEFAULT_PRIVATE_STATE_ROOT: &str = "/var/lib/korrid";
+const DEFAULT_CONTROL_SOCKET: &str = "/run/korrid-control/control.sock";
+const DEFAULT_CONTROL_DIRECTORY: &str = "/run/korrid-control";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LaunchUnitState {
@@ -62,11 +65,21 @@ pub trait LaunchUnitBackend: Send + Sync {
 }
 
 #[derive(Clone, Debug)]
+struct ProtectedPaths {
+    private_state_root: PathBuf,
+    control_socket: PathBuf,
+    control_directory: PathBuf,
+}
+
+#[derive(Clone, Debug)]
 pub struct SystemdLaunchUnitBackend {
     pub(super) systemd_run: PathBuf,
     pub(super) systemctl: PathBuf,
     gameplay_uid: u32,
     gameplay_gid: u32,
+    private_state_root: PathBuf,
+    control_socket: PathBuf,
+    control_directory: PathBuf,
     helper_timeout: Duration,
 }
 
@@ -128,21 +141,48 @@ impl LaunchUnitBackend for InMemoryLaunchUnitBackend {
 }
 
 impl SystemdLaunchUnitBackend {
+    #[cfg(test)]
     pub fn new(
         systemd_run: PathBuf,
         systemctl: PathBuf,
         gameplay_uid: u32,
         gameplay_gid: u32,
     ) -> Result<Self, LaunchUnitError> {
-        Self::with_timeout(
+        Self::with_protected_paths(
             systemd_run,
             systemctl,
             gameplay_uid,
             gameplay_gid,
+            PathBuf::from(DEFAULT_PRIVATE_STATE_ROOT),
+            PathBuf::from(DEFAULT_CONTROL_SOCKET),
+            PathBuf::from(DEFAULT_CONTROL_DIRECTORY),
+        )
+    }
+
+    pub fn with_protected_paths(
+        systemd_run: PathBuf,
+        systemctl: PathBuf,
+        gameplay_uid: u32,
+        gameplay_gid: u32,
+        private_state_root: PathBuf,
+        control_socket: PathBuf,
+        control_directory: PathBuf,
+    ) -> Result<Self, LaunchUnitError> {
+        Self::with_timeout_and_paths(
+            systemd_run,
+            systemctl,
+            gameplay_uid,
+            gameplay_gid,
+            ProtectedPaths {
+                private_state_root,
+                control_socket,
+                control_directory,
+            },
             DEFAULT_HELPER_TIMEOUT,
         )
     }
 
+    #[cfg(test)]
     pub(super) fn with_timeout(
         systemd_run: PathBuf,
         systemctl: PathBuf,
@@ -150,6 +190,33 @@ impl SystemdLaunchUnitBackend {
         gameplay_gid: u32,
         helper_timeout: Duration,
     ) -> Result<Self, LaunchUnitError> {
+        Self::with_timeout_and_paths(
+            systemd_run,
+            systemctl,
+            gameplay_uid,
+            gameplay_gid,
+            ProtectedPaths {
+                private_state_root: PathBuf::from(DEFAULT_PRIVATE_STATE_ROOT),
+                control_socket: PathBuf::from(DEFAULT_CONTROL_SOCKET),
+                control_directory: PathBuf::from(DEFAULT_CONTROL_DIRECTORY),
+            },
+            helper_timeout,
+        )
+    }
+
+    fn with_timeout_and_paths(
+        systemd_run: PathBuf,
+        systemctl: PathBuf,
+        gameplay_uid: u32,
+        gameplay_gid: u32,
+        paths: ProtectedPaths,
+        helper_timeout: Duration,
+    ) -> Result<Self, LaunchUnitError> {
+        let ProtectedPaths {
+            private_state_root,
+            control_socket,
+            control_directory,
+        } = paths;
         if !systemd_run.is_absolute() || !systemctl.is_absolute() {
             return Err(LaunchUnitError::new(
                 LaunchUnitErrorKind::InvalidConfiguration,
@@ -168,11 +235,32 @@ impl SystemdLaunchUnitBackend {
                 "systemd helper timeout must be positive",
             ));
         }
+        for (name, path) in [
+            ("private state root", &private_state_root),
+            ("control socket", &control_socket),
+            ("control directory", &control_directory),
+        ] {
+            if !valid_protected_path(path) {
+                return Err(LaunchUnitError::new(
+                    LaunchUnitErrorKind::InvalidConfiguration,
+                    format!("{name} must be a normalized absolute path without whitespace"),
+                ));
+            }
+        }
+        if control_socket.parent() != Some(control_directory.as_path()) {
+            return Err(LaunchUnitError::new(
+                LaunchUnitErrorKind::InvalidConfiguration,
+                "control socket must be directly inside the configured control directory",
+            ));
+        }
         Ok(Self {
             systemd_run,
             systemctl,
             gameplay_uid,
             gameplay_gid,
+            private_state_root,
+            control_socket,
+            control_directory,
             helper_timeout,
         })
     }
@@ -188,27 +276,43 @@ impl SystemdLaunchUnitBackend {
             .unwrap_or_else(|| unsafe { libc::geteuid() });
         let gameplay_gid = configured_gameplay_id("KORRID_GAMEPLAY_GID")
             .unwrap_or_else(|| unsafe { libc::getegid() });
-        Self::new(
+        let private_state_root =
+            configured_path("KORRID_PRIVATE_STATE_ROOT", DEFAULT_PRIVATE_STATE_ROOT);
+        let control_socket = configured_path("KORRID_CONTROL_SOCKET", DEFAULT_CONTROL_SOCKET);
+        let control_directory =
+            configured_path("KORRID_CONTROL_DIRECTORY", DEFAULT_CONTROL_DIRECTORY);
+        Self::with_protected_paths(
             systemd_run.clone(),
             systemctl.clone(),
             gameplay_uid,
             gameplay_gid,
+            private_state_root.clone(),
+            control_socket.clone(),
+            control_directory.clone(),
         )
         .unwrap_or(Self {
             systemd_run,
             systemctl,
             gameplay_uid,
             gameplay_gid,
+            private_state_root,
+            control_socket,
+            control_directory,
             helper_timeout: DEFAULT_HELPER_TIMEOUT,
         })
     }
 
     fn validate(&self) -> Result<(), LaunchUnitError> {
-        Self::with_timeout(
+        Self::with_timeout_and_paths(
             self.systemd_run.clone(),
             self.systemctl.clone(),
             self.gameplay_uid,
             self.gameplay_gid,
+            ProtectedPaths {
+                private_state_root: self.private_state_root.clone(),
+                control_socket: self.control_socket.clone(),
+                control_directory: self.control_directory.clone(),
+            },
             self.helper_timeout,
         )
         .map(|_| ())
@@ -448,7 +552,12 @@ impl SystemdLaunchUnitBackend {
             "--property=ProtectControlGroups=yes".into(),
             "--property=ProtectProc=invisible".into(),
             "--property=ProcSubset=pid".into(),
-            "--property=InaccessiblePaths=/var/lib/korrid /run/korrid /run/korrid-control /dev/uinput /dev/inputplumber/sources".into(),
+            format!(
+                "--property=InaccessiblePaths={} /run/korrid {} {} /dev/uinput /dev/inputplumber/sources",
+                self.private_state_root.display(),
+                self.control_socket.display(),
+                self.control_directory.display()
+            ),
             "--property=RestrictSUIDSGID=yes".into(),
         ];
         arguments.extend(
@@ -595,6 +704,29 @@ fn configured_gameplay_id(name: &str) -> Option<u32> {
         .ok()
         .and_then(|value| value.parse::<u32>().ok())
         .filter(|id| *id != 0)
+}
+
+fn configured_path(name: &str, default: &str) -> PathBuf {
+    std::env::var_os(name)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(default))
+}
+
+fn valid_protected_path(path: &Path) -> bool {
+    let Some(value) = path.to_str() else {
+        return false;
+    };
+    path.is_absolute()
+        && path != Path::new("/")
+        && !value.contains("//")
+        && !value.contains("/./")
+        && !value.ends_with("/.")
+        && !value.contains("/../")
+        && !value.ends_with("/..")
+        && !value.chars().any(char::is_whitespace)
+        && path
+            .components()
+            .all(|component| !matches!(component, Component::CurDir | Component::ParentDir))
 }
 
 pub(super) fn validate_launch_id(value: &str) -> Result<(), LaunchUnitError> {

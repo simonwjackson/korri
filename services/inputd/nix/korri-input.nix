@@ -22,6 +22,7 @@ let
   inputdUser = "korri-inputd";
   controlGroup = "korri-control";
   sunshineGroup = "korri-sunshine-uinput";
+  virtualTargetAcl = import ./virtual-target-acl.nix { inherit pkgs; };
   actionNames = [
     "system-panel"
     "volume-up"
@@ -65,6 +66,9 @@ let
     && lib.hasPrefix "/nix/store/" (builtins.head action.command)
     && !(lib.hasInfix "/../" (builtins.head action.command))
     && !(lib.hasSuffix "/.." (builtins.head action.command));
+  renderableActions = lib.filterAttrs (
+    name: action: builtins.hasAttr name actionEnvironmentNames && action.command != [ ]
+  ) cfg.inputd.actions;
   actionEnvironment = lib.mapAttrs' (
     name: action:
     lib.nameValuePair actionEnvironmentNames.${name} (
@@ -74,7 +78,7 @@ let
         environment = action.environment;
       }
     )
-  ) cfg.inputd.actions;
+  ) renderableActions;
   providerDbusPolicy = pkgs.writeTextFile {
     name = "korri-inputplumber-dbus-policy";
     destination = "/share/dbus-1/system.d/korri-inputplumber.conf";
@@ -212,24 +216,13 @@ in
           if cfg.provider.sunshine.enableUinputAccess then "0660" else "0600"
         }", OPTIONS+="static_node=uinput"
 
-      ''
-      + lib.optionalString cfg.inputd.enable ''
-        # Match the complete InputPlumber 0.75.2 xb360 identity validated by devices.rs.
-        SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Microsoft X-Box 360 pad", ATTRS{id/bustype}=="0003", ATTRS{id/vendor}=="045e", ATTRS{id/product}=="028e", ATTRS{id/version}=="0001", OWNER="root", GROUP="root", MODE="0600", RUN+="${pkgs.acl}/bin/setfacl -m u:${toString cfg.inputd.uid}:r,u:${toString cfg.inputd.actionUid}:r $env{DEVNAME}"
       '';
-      services.dbus.packages = [ providerPackage ] ++ lib.optional cfg.inputd.enable providerDbusPolicy;
+      services.dbus.packages = [ providerPackage ];
       security.polkit.enable = true;
-      security.polkit.extraConfig = lib.optionalString cfg.inputd.enable ''
-        polkit.addRule(function(action, subject) {
-          if (subject.user == "${cfg.inputd.actionUser}" && action.id.indexOf("org.shadowblip.") == 0) {
-            return polkit.Result.NO;
-          }
-        });
-      '';
     })
     (lib.mkIf cfg.provider.sunshine.enableUinputAccess {
       users.groups.${sunshineGroup}.gid = cfg.provider.sunshine.gid;
-      systemd.services.${cfg.provider.sunshine.serviceName}.serviceConfig.SupplementaryGroups = [
+      systemd.services.${cfg.provider.sunshine.serviceName}.serviceConfig.SupplementaryGroups = lib.mkAfter [
         sunshineGroup
       ];
     })
@@ -292,7 +285,24 @@ in
         group = controlGroup;
         isSystemUser = true;
       };
-      environment.systemPackages = [ cfg.inputd.package ];
+      environment.systemPackages = [
+        cfg.inputd.package
+        virtualTargetAcl
+      ];
+      # The helper repeats this complete match before changing an ACL. The udev
+      # match limits hotplug invocation and sets a closed base mode first.
+      services.udev.extraRules = ''
+        SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Microsoft X-Box 360 pad", ATTRS{id/bustype}=="0003", ATTRS{id/vendor}=="045e", ATTRS{id/product}=="028e", ATTRS{id/version}=="0001", OWNER="root", GROUP="root", MODE="0600", RUN+="${lib.getExe virtualTargetAcl} grant ${toString cfg.inputd.uid} ${toString cfg.inputd.actionUid} $env{DEVNAME}"
+      '';
+      services.dbus.packages = [ providerDbusPolicy ];
+      security.polkit.enable = true;
+      security.polkit.extraConfig = ''
+        polkit.addRule(function(action, subject) {
+          if (subject.user == "${cfg.inputd.actionUser}" && action.id.indexOf("org.shadowblip.") == 0) {
+            return polkit.Result.NO;
+          }
+        });
+      '';
       systemd.services.korri-inputd = {
         description = "Korri input policy daemon";
         wantedBy = [ "multi-user.target" ];
@@ -312,7 +322,9 @@ in
         serviceConfig = {
           Type = "notify";
           NotifyAccess = "main";
+          ExecStartPre = "+${lib.getExe virtualTargetAcl} reapply ${toString cfg.inputd.uid} ${toString cfg.inputd.actionUid}";
           ExecStart = "${lib.getExe cfg.inputd.package}";
+          ExecStopPost = "+${lib.getExe virtualTargetAcl} revoke";
           User = inputdUser;
           Group = controlGroup;
           Restart = "on-failure";

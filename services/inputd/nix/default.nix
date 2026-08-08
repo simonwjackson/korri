@@ -4,7 +4,7 @@
   inputplumberNixpkgs,
   crane,
   korriInputModule,
-  korridHostModule,
+  korridLinuxDeviceModule,
   korridPackage,
 }:
 
@@ -34,8 +34,8 @@ in
       module = korriInputModule;
       inherit pkgs inputdPackage inputplumberKorri;
     };
-    korrid-linux-host-module = import ../../korrid/nixos-module-check.nix {
-      module = korridHostModule;
+    korrid-linux-device-module = import ../../korrid/nixos-module-check.nix {
+      module = korridLinuxDeviceModule;
       inherit pkgs korridPackage;
     };
   };

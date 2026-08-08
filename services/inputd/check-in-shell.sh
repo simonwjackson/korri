@@ -18,5 +18,5 @@ cd "$ROOT"
 nix build --no-link \
   .#checks."$(nix eval --raw --impure --expr builtins.currentSystem)".inputplumber-korri-package \
   .#checks."$(nix eval --raw --impure --expr builtins.currentSystem)".korri-input-module \
-  .#checks."$(nix eval --raw --impure --expr builtins.currentSystem)".korrid-linux-host-module \
+  .#checks."$(nix eval --raw --impure --expr builtins.currentSystem)".korrid-linux-device-module \
   .#checks."$(nix eval --raw --impure --expr builtins.currentSystem)".korri-inputd-package
