@@ -150,6 +150,12 @@ let
       actions.workspace-next.command = [ "/usr/bin/true" ];
     };
   };
+  dotComponentAction = withInputd {
+    services.korri.input.inputd = {
+      enable = true;
+      actions.workspace-next.command = [ "${pkgs.coreutils}/./bin/true" ];
+    };
+  };
   emptyAction = withInputd {
     services.korri.input.inputd = {
       enable = true;
@@ -258,6 +264,7 @@ assert hasFailedAssertion "invalid action identifier" invalidAction;
 assert hasFailedAssertion "unreachable or destructive" unreachableAction;
 assert hasFailedAssertion "unreachable or destructive" destructiveAction;
 assert hasFailedAssertion "immutable absolute Nix-store argv" mutableAction;
+assert hasFailedAssertion "immutable absolute Nix-store argv" dotComponentAction;
 assert hasFailedAssertion "immutable absolute Nix-store argv" emptyAction;
 assert evaluationRejected contradictory;
 assert evaluationRejected broad;
@@ -267,6 +274,7 @@ assert evaluationRejected invalidAction;
 assert evaluationRejected unreachableAction;
 assert evaluationRejected destructiveAction;
 assert evaluationRejected mutableAction;
+assert evaluationRejected dotComponentAction;
 assert evaluationRejected emptyAction;
 pkgs.runCommand "korri-input-module-check" { } ''
   set -euo pipefail

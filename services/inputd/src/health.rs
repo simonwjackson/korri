@@ -47,9 +47,9 @@ pub mod systemd {
             if self.last == Some(health) {
                 return Ok(());
             }
-            let result = notify(&format!("STATUS={}", health.status()));
+            notify(&format!("STATUS={}", health.status()))?;
             self.last = Some(health);
-            result
+            Ok(())
         }
     }
 
@@ -117,7 +117,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn systemd_adapter_distinguishes_initialization_from_controller_readiness() {
+    fn systemd_adapter_retries_failed_health_after_initialization() {
         use super::systemd::SystemdHealthPublisher;
         use std::{os::unix::net::UnixDatagram, sync::Mutex, time::Duration};
 
@@ -143,7 +143,12 @@ mod tests {
 
         std::env::set_var("NOTIFY_SOCKET", "");
         assert!(publisher.publish(RuntimeHealth::Ambiguous).is_err());
-        assert!(publisher.publish(RuntimeHealth::Ambiguous).is_ok());
+        assert!(publisher.publish(RuntimeHealth::Ambiguous).is_err());
+
+        std::env::set_var("NOTIFY_SOCKET", &path);
+        publisher.publish(RuntimeHealth::Ambiguous).unwrap();
+        let count = socket.recv(&mut message).unwrap();
+        assert_eq!(&message[..count], b"STATUS=Ambiguous");
         std::env::remove_var("NOTIFY_SOCKET");
     }
 }

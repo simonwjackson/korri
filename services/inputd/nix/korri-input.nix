@@ -64,8 +64,9 @@ let
     action:
     action.command != [ ]
     && lib.hasPrefix "/nix/store/" (builtins.head action.command)
-    && !(lib.hasInfix "/../" (builtins.head action.command))
-    && !(lib.hasSuffix "/.." (builtins.head action.command));
+    && lib.all (component: component != "." && component != "..") (
+      lib.splitString "/" (builtins.head action.command)
+    );
   renderableActions = lib.filterAttrs (
     name: action: builtins.hasAttr name actionEnvironmentNames && action.command != [ ]
   ) cfg.inputd.actions;

@@ -205,10 +205,16 @@ impl Mode {
 
     fn default_address(self) -> &'static str {
         match self {
-            Self::Brain => "127.0.0.1:43117",
-            Self::Host => "0.0.0.0:43117",
+            Self::Brain | Self::Host => "127.0.0.1:43117",
         }
     }
+}
+
+fn resolve_address(
+    mode: Mode,
+    configured: Option<&str>,
+) -> Result<SocketAddr, std::net::AddrParseError> {
+    configured.unwrap_or_else(|| mode.default_address()).parse()
 }
 
 fn resolve_host_config_path(
@@ -348,10 +354,9 @@ async fn main() {
             (lan, Some(local))
         }
     };
-    let address: SocketAddr = std::env::var("KORRID_ADDRESS")
-        .unwrap_or_else(|_| mode.default_address().into())
-        .parse()
-        .expect("valid KORRID_ADDRESS");
+    let configured_address = std::env::var("KORRID_ADDRESS").ok();
+    let address =
+        resolve_address(mode, configured_address.as_deref()).expect("valid KORRID_ADDRESS");
     let lan_listener = tokio::net::TcpListener::bind(address)
         .await
         .expect("bind korrid server");
@@ -390,8 +395,19 @@ mod tests {
     fn mode_defaults_to_brain_and_rejects_unknown_values() {
         assert_eq!(Mode::parse(None), Ok(Mode::Brain));
         assert_eq!(Mode::parse(Some("host")), Ok(Mode::Host));
-        assert_eq!(Mode::Host.default_address(), "0.0.0.0:43117");
         assert!(Mode::parse(Some("other")).unwrap_err().contains("other"));
+    }
+
+    #[test]
+    fn host_address_defaults_to_loopback_unless_explicitly_configured() {
+        assert_eq!(
+            resolve_address(Mode::Host, None).unwrap(),
+            "127.0.0.1:43117".parse::<SocketAddr>().unwrap()
+        );
+        assert_eq!(
+            resolve_address(Mode::Host, Some("0.0.0.0:43117")).unwrap(),
+            "0.0.0.0:43117".parse::<SocketAddr>().unwrap()
+        );
     }
 
     #[test]
