@@ -17,7 +17,7 @@ impl HostLauncher {
         Self::with_backend(
             config,
             private_state_root,
-            Arc::new(SystemdLaunchUnitBackend),
+            Arc::new(SystemdLaunchUnitBackend::default()),
         )
     }
 

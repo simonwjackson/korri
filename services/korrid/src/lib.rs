@@ -1807,6 +1807,7 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                     .unwrap_or_else(|error| SessionPrepareOutcome::Err(upstream_failure(error))),
                 (ServerMode::Host(host), RpcSurface::Lan) => host
                     .prepare(&request.game_id)
+                    .await
                     .map(SessionPrepareOutcome::Ok)
                     .unwrap_or_else(SessionPrepareOutcome::Err),
                 (ServerMode::Brain(_), RpcSurface::LocalControl)
@@ -1825,7 +1826,7 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                 session_status_outcome(brain.upstream.session_status().await),
             ),
             (ServerMode::Host(host), RpcSurface::LocalControl) => {
-                RpcResponse::SessionStatus(host_session_status_outcome(host.session_status()))
+                RpcResponse::SessionStatus(host_session_status_outcome(host.session_status().await))
             }
             (ServerMode::Host(_), RpcSurface::Lan)
             | (ServerMode::Brain(_), RpcSurface::LocalControl) => {
@@ -1852,7 +1853,11 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                         code: "ExpectedLaunchIdRequired".into(),
                         message: "expectedLaunchId is required for exact host stop".into(),
                     })
-                    .and_then(|expected| host.session_stop(expected));
+                    .map(|expected| expected.to_owned());
+                let outcome = match outcome {
+                    Ok(expected) => host.session_stop(&expected).await,
+                    Err(failure) => Err(failure),
+                };
                 RpcResponse::SessionStop(host_session_stop_outcome(outcome))
             }
             (ServerMode::Host(_), RpcSurface::Lan)
@@ -2616,7 +2621,7 @@ pub fn host_routers_with_storage_and_private(
     storage_root: Option<impl Into<PathBuf>>,
     private_state_root: impl Into<PathBuf>,
 ) -> (Router, Router) {
-    let runtime = host::HostRuntime::from_paths(
+    let runtime = host::HostRuntime::from_paths_with_private_state(
         config_path.as_ref(),
         storage_root.map(Into::into),
         private_state_root.into(),

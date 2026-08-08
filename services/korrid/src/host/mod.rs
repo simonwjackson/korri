@@ -99,10 +99,14 @@ pub struct HostRuntime {
 
 impl HostRuntime {
     pub fn from_path(path: &Path) -> Self {
-        Self::from_paths(path, None, PathBuf::from("korri-state"))
+        Self::from_paths(path, None)
     }
 
-    pub fn from_paths(
+    pub fn from_paths(path: &Path, storage_root: Option<PathBuf>) -> Self {
+        Self::from_paths_with_private_state(path, storage_root, PathBuf::from("korri-state"))
+    }
+
+    pub fn from_paths_with_private_state(
         path: &Path,
         storage_root: Option<PathBuf>,
         private_state_root: PathBuf,
@@ -175,7 +179,15 @@ impl HostRuntime {
         })
     }
 
-    pub fn prepare(&self, game_id: &str) -> Result<SessionPrepared, RpcFailure> {
+    pub async fn prepare(&self, game_id: &str) -> Result<SessionPrepared, RpcFailure> {
+        let runtime = self.clone();
+        let game_id = game_id.to_owned();
+        tokio::task::spawn_blocking(move || runtime.prepare_blocking(&game_id))
+            .await
+            .map_err(host_worker_failure)?
+    }
+
+    fn prepare_blocking(&self, game_id: &str) -> Result<SessionPrepared, RpcFailure> {
         let launcher = self.launcher.as_ref().ok_or_else(|| {
             config_failure(self.config.as_ref().expect_err("invalid host config"))
         })?;
@@ -195,12 +207,29 @@ impl HostRuntime {
             .ok_or_else(|| config_failure(self.config.as_ref().expect_err("invalid host config")))
     }
 
-    pub fn session_status(&self) -> Result<HostSessionStatus, RpcFailure> {
-        Ok(self.control()?.status())
+    pub async fn session_status(&self) -> Result<HostSessionStatus, RpcFailure> {
+        let runtime = self.clone();
+        tokio::task::spawn_blocking(move || Ok(runtime.control()?.status()))
+            .await
+            .map_err(host_worker_failure)?
     }
 
-    pub fn session_stop(&self, expected_launch_id: &str) -> Result<HostSessionStop, RpcFailure> {
-        Ok(self.control()?.stop(expected_launch_id))
+    pub async fn session_stop(
+        &self,
+        expected_launch_id: &str,
+    ) -> Result<HostSessionStop, RpcFailure> {
+        let runtime = self.clone();
+        let expected_launch_id = expected_launch_id.to_owned();
+        tokio::task::spawn_blocking(move || Ok(runtime.control()?.stop(&expected_launch_id)))
+            .await
+            .map_err(host_worker_failure)?
+    }
+}
+
+fn host_worker_failure(error: tokio::task::JoinError) -> RpcFailure {
+    RpcFailure {
+        code: "HostControlFailed".into(),
+        message: format!("host control worker failed: {error}"),
     }
 }
 
@@ -221,7 +250,103 @@ fn dynamic_failure(message: impl Into<String>) -> RpcFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{collections::HashMap, fs};
+    use crate::host::control::{LaunchUnitError, LaunchUnitState};
+    use std::{
+        collections::{BTreeMap, HashMap},
+        fs,
+        sync::{
+            atomic::{AtomicBool, Ordering},
+            Condvar, Mutex,
+        },
+        thread,
+        time::Duration,
+    };
+
+    struct BlockingEnumerationBackend {
+        entered: AtomicBool,
+        released: (Mutex<bool>, Condvar),
+    }
+
+    impl LaunchUnitBackend for BlockingEnumerationBackend {
+        fn launch(
+            &self,
+            _launch_id: &str,
+            _command: &[String],
+            _environment: &BTreeMap<String, String>,
+        ) -> Result<(), LaunchUnitError> {
+            unreachable!()
+        }
+
+        fn state(&self, _launch_id: &str) -> Result<LaunchUnitState, LaunchUnitError> {
+            unreachable!()
+        }
+
+        fn stop(&self, _launch_id: &str) -> Result<(), LaunchUnitError> {
+            unreachable!()
+        }
+
+        fn live_launch_ids(&self) -> Result<Vec<String>, LaunchUnitError> {
+            self.entered.store(true, Ordering::SeqCst);
+            let (lock, changed) = &self.released;
+            let mut released = lock.lock().unwrap();
+            while !*released {
+                released = changed.wait(released).unwrap();
+            }
+            Ok(Vec::new())
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn systemd_and_identity_operations_run_off_the_async_worker() {
+        let root = tempfile::tempdir().unwrap();
+        let config = root.path().join("host.toml");
+        fs::write(&config, "label = \"zao\"\n").unwrap();
+        let backend = Arc::new(BlockingEnumerationBackend {
+            entered: AtomicBool::new(false),
+            released: (Mutex::new(false), Condvar::new()),
+        });
+        let runtime = HostRuntime::from_paths_with_backend(
+            &config,
+            None,
+            root.path().join("private"),
+            backend.clone(),
+        );
+        let worker_progressed = Arc::new(AtomicBool::new(false));
+        let observed_progress = Arc::new(AtomicBool::new(false));
+        let release_backend = backend.clone();
+        let observe_progress = worker_progressed.clone();
+        let observed = observed_progress.clone();
+        let release = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(100));
+            observed.store(observe_progress.load(Ordering::SeqCst), Ordering::SeqCst);
+            let (lock, changed) = &release_backend.released;
+            *lock.lock().unwrap() = true;
+            changed.notify_all();
+        });
+
+        let status = tokio::spawn(async move { runtime.session_status().await });
+        while !backend.entered.load(Ordering::SeqCst) {
+            tokio::task::yield_now().await;
+        }
+        worker_progressed.store(true, Ordering::SeqCst);
+        assert_eq!(status.await.unwrap().unwrap(), HostSessionStatus::NoActive);
+        release.join().unwrap();
+        assert!(observed_progress.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn public_two_path_constructor_and_named_private_state_constructor_remain_available() {
+        let root = tempfile::tempdir().unwrap();
+        let config = root.path().join("host.toml");
+        fs::write(&config, "label = \"zao\"\n").unwrap();
+
+        let public = HostRuntime::from_paths(&config, None);
+        let private =
+            HostRuntime::from_paths_with_private_state(&config, None, root.path().join("private"));
+
+        assert!(public.catalog_snapshot().is_ok());
+        assert!(private.catalog_snapshot().is_ok());
+    }
 
     #[test]
     fn linux_host_materializes_wario_from_the_shared_plugins() {

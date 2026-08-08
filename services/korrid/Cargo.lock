@@ -1122,6 +1122,7 @@ dependencies = [
  "hmac",
  "image",
  "jni",
+ "libc",
  "oxc",
  "proseql-engine",
  "proseql-formats",

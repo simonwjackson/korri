@@ -1,5 +1,92 @@
-use axum::Router;
-use std::{ffi::OsString, net::SocketAddr, os::fd::FromRawFd, path::PathBuf};
+use axum::{serve::Listener, Router};
+use std::{ffi::OsString, io, net::SocketAddr, os::fd::FromRawFd, path::PathBuf};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ExpectedControlPeer {
+    uid: u32,
+    primary_gid: u32,
+}
+
+impl ExpectedControlPeer {
+    fn from_environment() -> Result<Self, String> {
+        let uid = required_unprivileged_id("KORRID_CONTROL_PEER_UID")?;
+        let primary_gid = required_unprivileged_id("KORRID_CONTROL_PEER_GID")?;
+        Ok(Self { uid, primary_gid })
+    }
+}
+
+fn required_unprivileged_id(name: &str) -> Result<u32, String> {
+    let value = std::env::var(name).map_err(|_| format!("{name} must be set"))?;
+    let id = value
+        .parse::<u32>()
+        .map_err(|_| format!("{name} must be a numeric ID"))?;
+    if id == 0 {
+        return Err(format!("{name} must identify an unprivileged account"));
+    }
+    Ok(id)
+}
+
+fn unix_peer_credentials(stream: &tokio::net::UnixStream) -> io::Result<(u32, u32)> {
+    stream
+        .peer_cred()
+        .map(|credentials| (credentials.uid(), credentials.gid()))
+}
+
+fn authorize_peer_credentials(
+    expected: ExpectedControlPeer,
+    credentials: io::Result<(u32, u32)>,
+) -> bool {
+    matches!(
+        credentials,
+        Ok((uid, gid)) if uid == expected.uid && gid == expected.primary_gid
+    )
+}
+
+struct AuthorizedUnixListener {
+    listener: tokio::net::UnixListener,
+    expected: ExpectedControlPeer,
+}
+
+impl AuthorizedUnixListener {
+    fn new(listener: tokio::net::UnixListener, expected: ExpectedControlPeer) -> Self {
+        Self { listener, expected }
+    }
+}
+
+impl Listener for AuthorizedUnixListener {
+    type Io = tokio::net::UnixStream;
+    type Addr = tokio::net::unix::SocketAddr;
+
+    async fn accept(&mut self) -> (Self::Io, Self::Addr) {
+        loop {
+            match self.listener.accept().await {
+                Ok((stream, address)) => {
+                    if authorize_peer_credentials(self.expected, unix_peer_credentials(&stream)) {
+                        return (stream, address);
+                    }
+                }
+                Err(error) => panic!("local control listener failed: {error}"),
+            }
+        }
+    }
+
+    fn local_addr(&self) -> io::Result<Self::Addr> {
+        self.listener.local_addr()
+    }
+}
+
+async fn first_server_exit<L, R, T>(lan: L, local: R) -> (&'static str, T)
+where
+    L: std::future::Future<Output = T>,
+    R: std::future::Future<Output = T>,
+{
+    tokio::pin!(lan);
+    tokio::pin!(local);
+    tokio::select! {
+        result = &mut lan => ("LAN", result),
+        result = &mut local => ("local control", result),
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Mode {
@@ -165,7 +252,7 @@ async fn main() {
         .unwrap_or_else(|_| mode.default_address().into())
         .parse()
         .expect("valid KORRID_ADDRESS");
-    let listener = tokio::net::TcpListener::bind(address)
+    let lan_listener = tokio::net::TcpListener::bind(address)
         .await
         .expect("bind korrid server");
 
@@ -175,14 +262,20 @@ async fn main() {
         {
             let listener = tokio::net::UnixListener::from_std(listener)
                 .expect("adopt inherited local control listener");
-            tokio::spawn(async move {
-                axum::serve(listener, router)
-                    .await
-                    .expect("serve local korrid control");
-            });
+            let expected = ExpectedControlPeer::from_environment()
+                .unwrap_or_else(|error| panic!("invalid local control peer identity: {error}"));
+            let local_listener = AuthorizedUnixListener::new(listener, expected);
+            let lan_router = router.clone();
+            let lan_server = async move { axum::serve(lan_listener, lan_router).await };
+            let local_server = async move { axum::serve(local_listener, router).await };
+            let (name, result) = first_server_exit(lan_server, local_server).await;
+            result.unwrap_or_else(|error| panic!("serve {name} korrid: {error}"));
+            panic!("{name} korrid server exited unexpectedly");
         }
     }
-    axum::serve(listener, router).await.expect("serve korrid");
+    axum::serve(lan_listener, router)
+        .await
+        .expect("serve korrid");
 }
 
 #[cfg(test)]
@@ -239,6 +332,45 @@ mod tests {
         assert!(validate_socket_activation(Some("41"), Some("1"), 42).is_err());
         assert!(validate_socket_activation(Some("42"), Some("2"), 42).is_err());
         assert!(validate_socket_activation(None, Some("1"), 42).is_err());
+    }
+
+    #[test]
+    fn local_control_peer_requires_exact_uid_and_primary_gid_and_fails_closed() {
+        let expected = ExpectedControlPeer {
+            uid: 1001,
+            primary_gid: 1002,
+        };
+        assert!(authorize_peer_credentials(expected, Ok((1001, 1002))));
+        assert!(!authorize_peer_credentials(expected, Ok((1003, 1002))));
+        assert!(!authorize_peer_credentials(expected, Ok((1001, 1004))));
+        assert!(!authorize_peer_credentials(
+            expected,
+            Err(io::Error::other("SO_PEERCRED unavailable")),
+        ));
+    }
+
+    #[tokio::test]
+    async fn unix_peer_credentials_are_read_from_the_connected_socket() {
+        let (left, _right) = std::os::unix::net::UnixStream::pair().unwrap();
+        left.set_nonblocking(true).unwrap();
+        let stream = tokio::net::UnixStream::from_std(left).unwrap();
+
+        assert_eq!(
+            unix_peer_credentials(&stream).unwrap(),
+            (unsafe { libc::geteuid() }, unsafe { libc::getegid() })
+        );
+    }
+
+    #[tokio::test]
+    async fn local_listener_exit_is_process_visible_to_the_supervisor() {
+        let (name, result) = first_server_exit(
+            std::future::pending::<Result<(), &'static str>>(),
+            std::future::ready(Err("local failed")),
+        )
+        .await;
+
+        assert_eq!(name, "local control");
+        assert_eq!(result, Err("local failed"));
     }
 
     #[test]
