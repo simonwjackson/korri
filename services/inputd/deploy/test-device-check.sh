@@ -15,6 +15,14 @@ case "$(basename "$0")" in
     fi
     exec "$@"
     ;;
+  getent|user-scope-getent)
+    case "${1:-}" in
+      passwd) printf 'gameplay:x:1000:1000::%s:/bin/sh\n' "${HARNESS_GAMEPLAY_HOME:?}" ;;
+      group) printf '%s:x:%s:\n' "${2:-gameplay}" "${2:-1000}" ;;
+      *) exit 1 ;;
+    esac
+    exit 0
+    ;;
   systemctl)
     scope=system property=''
     for arg in "$@"; do
@@ -225,8 +233,26 @@ case "$(basename "$0")" in
           printf 'generation current=%s default=%s\n' "$ROLLBACK" "$ROLLBACK"
           printf 'units:\nsystem/inputplumber.service LoadState=loaded ActiveState=active SubState=running UnitFileState=enabled StatusText=\n'
           printf 'user/korrid.service LoadState=loaded ActiveState=inactive SubState=dead UnitFileState=disabled StatusText=\n'
+          old_sunshine_active="${HARNESS_OLD_SUNSHINE_ACTIVE:-true}"
+          old_sunshine_enabled="${HARNESS_OLD_SUNSHINE_ENABLED:-true}"
+          old_x11_active="${HARNESS_OLD_X11_ACTIVE:-true}"
+          old_x11_enabled="${HARNESS_OLD_X11_ENABLED:-true}"
+          [[ "$old_sunshine_active" != true ]] || old_sunshine_active=active
+          [[ "$old_sunshine_active" != false ]] || old_sunshine_active=inactive
+          [[ "$old_sunshine_enabled" != true ]] || old_sunshine_enabled=enabled
+          [[ "$old_sunshine_enabled" != false ]] || old_sunshine_enabled=disabled
+          [[ "$old_x11_active" != true ]] || old_x11_active=active
+          [[ "$old_x11_active" != false ]] || old_x11_active=inactive
+          [[ "$old_x11_enabled" != true ]] || old_x11_enabled=enabled
+          [[ "$old_x11_enabled" != false ]] || old_x11_enabled=disabled
+          printf 'system/sunshine.service LoadState=loaded ActiveState=%s SubState=dead UnitFileState=%s StatusText=\n' \
+            "${HARNESS_SYSTEM_SUNSHINE_ACTIVE:-inactive}" "${HARNESS_SYSTEM_SUNSHINE_ENABLED:-disabled}"
+          printf 'system/x11-headless.service LoadState=loaded ActiveState=%s SubState=dead UnitFileState=%s StatusText=\n' \
+            "${HARNESS_SYSTEM_X11_ACTIVE:-inactive}" "${HARNESS_SYSTEM_X11_ENABLED:-disabled}"
           printf 'user/sunshine.service LoadState=loaded ActiveState=%s SubState=running UnitFileState=%s StatusText=\n' \
-            "${HARNESS_GAMEPLAY_SUNSHINE_ACTIVE:-active}" "${HARNESS_GAMEPLAY_SUNSHINE_ENABLED:-enabled}"
+            "$old_sunshine_active" "$old_sunshine_enabled"
+          printf 'user/x11-headless.service LoadState=loaded ActiveState=%s SubState=running UnitFileState=%s StatusText=\n' \
+            "$old_x11_active" "$old_x11_enabled"
           printf 'temporary-artifacts-dirty=%s catalog=Ok\n' "${HARNESS_DIRTY:-no}"
           printf 'physical-controller-candidates:\n'
           printf 'controller-candidate identity=%s name=Observed_Controller sysfs=/sys/devices/pci0000:00/input/input8/event8 event=event8\n' \
@@ -234,26 +260,31 @@ case "$(basename "$0")" in
           ;;
         predicates)
           if [[ "${1:-}" == "${HARNESS_GAMEPLAY_USER:-gameplay}" ]]; then
-            sunshine_active="${HARNESS_GAMEPLAY_SUNSHINE_ACTIVE:-active}"
-            sunshine_enabled="${HARNESS_GAMEPLAY_SUNSHINE_ENABLED:-enabled}"
             printf 'predicates-user=gameplay wrapper=%s\n' "$wrapper" >>"$HARNESS_LOG"
           else
-            sunshine_active="${HARNESS_ROOT_SUNSHINE_ACTIVE:-inactive}"
-            sunshine_enabled="${HARNESS_ROOT_SUNSHINE_ENABLED:-disabled}"
             printf 'predicates-user=root wrapper=%s\n' "$wrapper" >>"$HARNESS_LOG"
           fi
           printf 'generation.current=%s\n' "${HARNESS_PREDICATE_GENERATION:-$ROLLBACK}"
           printf 'generation.default=%s\n' "${HARNESS_PREDICATE_DEFAULT:-$ROLLBACK}"
-          printf 'old-user.active=%s\n' "${HARNESS_OLD_ACTIVE:-false}"
-          printf 'old-user.enabled=%s\n' "${HARNESS_OLD_ENABLED:-false}"
+          printf 'old-user.korrid.active=%s\n' "${HARNESS_OLD_KORRID_ACTIVE:-${HARNESS_OLD_ACTIVE:-false}}"
+          printf 'old-user.korrid.enabled=%s\n' "${HARNESS_OLD_KORRID_ENABLED:-${HARNESS_OLD_ENABLED:-false}}"
+          printf 'old-user.sunshine.active=%s\n' "${HARNESS_OLD_SUNSHINE_ACTIVE:-true}"
+          printf 'old-user.sunshine.enabled=%s\n' "${HARNESS_OLD_SUNSHINE_ENABLED:-true}"
+          printf 'old-user.x11-headless.active=%s\n' "${HARNESS_OLD_X11_ACTIVE:-true}"
+          printf 'old-user.x11-headless.enabled=%s\n' "${HARNESS_OLD_X11_ENABLED:-true}"
+          printf 'system.korrid.active=%s\n' "${HARNESS_SYSTEM_KORRID_ACTIVE:-inactive}"
+          printf 'system.korrid.enabled=%s\n' "${HARNESS_SYSTEM_KORRID_ENABLED:-disabled}"
+          printf 'system.sunshine.active=%s\n' "${HARNESS_SYSTEM_SUNSHINE_ACTIVE:-inactive}"
+          printf 'system.sunshine.enabled=%s\n' "${HARNESS_SYSTEM_SUNSHINE_ENABLED:-disabled}"
+          printf 'system.x11-headless.active=%s\n' "${HARNESS_SYSTEM_X11_ACTIVE:-inactive}"
+          printf 'system.x11-headless.enabled=%s\n' "${HARNESS_SYSTEM_X11_ENABLED:-disabled}"
           printf 'topology.target=%s\n' "${HARNESS_TARGET_TOPOLOGY:-target-baseline}"
           printf 'topology.raw=%s\n' "${HARNESS_RAW_TOPOLOGY:-raw-baseline}"
           printf 'input.acl-readability=%s\n' "${HARNESS_ACL_BASELINE:-acl-baseline}"
           printf 'input.sources-artifacts=%s\n' "${HARNESS_ARTIFACTS_BASELINE:-artifacts-clean}"
           printf 'inputplumber.active=%s\n' "${HARNESS_IP_ACTIVE:-active}"
           printf 'inputplumber.enabled=%s\n' "${HARNESS_IP_ENABLED:-enabled}"
-          printf 'sunshine.active=%s\n' "$sunshine_active"
-          printf 'sunshine.enabled=%s\n' "$sunshine_enabled"
+          printf 'sunshine.pairing-state-present=%s\n' "${HARNESS_PAIRING_PRESENT:-true}"
           printf 'catalog.health=%s\n' "${HARNESS_CATALOG:-Ok}"
           ;;
         preflight)
@@ -299,6 +330,14 @@ case "$(basename "$0")" in
             printf 'modeled interruption immediately after activation\n' >&2
             exit 130
           fi
+          [[ "${HARNESS_STALE_MANAGER_CREDENTIALS:-no}" != yes ]] || {
+            printf 'device gate: fresh gameplay user manager retains forbidden group: input\n' >&2
+            exit 80
+          }
+          [[ "${HARNESS_PAIRING_PRESENT:-true}" == true ]] || {
+            printf 'device gate: Sunshine pairing-state file is absent\n' >&2
+            exit 81
+          }
           [[ "${HARNESS_TOPOLOGY_MODEL:-one}" == one ]] || {
             printf 'modeled topology has %s normalized targets\n' "$HARNESS_TOPOLOGY_MODEL" >&2
             exit 61
@@ -351,7 +390,7 @@ case "$(basename "$0")" in
           [[ "${HARNESS_CATALOG:-Ok}" == Ok ]] || exit 64
           normalized="${HARNESS_FINGERPRINT:-node=/dev/input/event9 sysfs=/sys/devices/virtual/input/input9/event9 dev=13:73 inode=1:9 inputplumber=/nix/store/provider/bin/inputplumber version=0.75.2 keys=exact abs=exact ff=yes}"
           physical="identity=$expected_identity event=event8 sysfs=/sys/devices/pci0000:00/input/input8/event8 profile=$profile"
-          printf 'automated-gates=pass raw-readable=0 inputd-status=Ready catalog=Ok delegate=yes controllers=pids\n'
+          printf 'automated-gates=pass raw-readable=0 inputd-status=Ready system-korrid=active system-x11-headless=active system-sunshine=active pairing-state=present credentials=service-specific catalog=Ok delegate=yes controllers=pids\n'
           printf 'normalized-fingerprint=%s\n' "$normalized"
           [[ "$require_physical" != true ]] || printf 'controller-evidence=%s\n' "$physical"
           printf 'acceptance-fingerprint=normalized=%s' "$normalized"
@@ -382,9 +421,41 @@ case "$(basename "$0")" in
             printf 'mutation was not armed in the ledger: %s\n' "$action" >&2
             exit 65
           }
+          case "${HARNESS_ACTIVE_GAME:-none}" in
+            exact-running)
+              printf 'device gate: exact local game status is running; refusing service mutation\n' >&2
+              exit 82
+              ;;
+            exact-stopping)
+              printf 'device gate: exact local game status is stopping; refusing service mutation\n' >&2
+              exit 82
+              ;;
+            unit-live)
+              printf 'device gate: a Korri game unit is live; refusing service mutation\n' >&2
+              exit 82
+              ;;
+          esac
+          if [[ "$action" == activate-test || "$action" == persistent-switch ]]; then
+            [[ "${2:-}" == "${HARNESS_GAMEPLAY_USER:-gameplay}" ]]
+            printf 'candidate-service-mutation=started\n' >>"$HARNESS_LOG"
+            if [[ -n "${HARNESS_CANDIDATE_SERVICE_FAILURE:-}" ]]; then
+              printf 'device gate: timed out waiting for %s ActiveState=active\n' "$HARNESS_CANDIDATE_SERVICE_FAILURE" >&2
+              exit 83
+            fi
+            printf 'user-manager=fresh candidate-services=active credentials=service-specific\n' >>"$HARNESS_LOG"
+          fi
           if [[ "$action" == restore ]]; then
-            [[ "${2:-}" == "${HARNESS_OLD_ACTIVE:-false}" ]]
-            [[ "${3:-}" == "${HARNESS_OLD_ENABLED:-false}" ]]
+            [[ "${2:-}" == false || "${2:-}" == true ]]
+            [[ "${3:-}" == "${HARNESS_GAMEPLAY_USER:-gameplay}" ]]
+            [[ "${4:-}" == "${HARNESS_OLD_KORRID_ACTIVE:-${HARNESS_OLD_ACTIVE:-false}}" ]]
+            [[ "${5:-}" == "${HARNESS_OLD_KORRID_ENABLED:-${HARNESS_OLD_ENABLED:-false}}" ]]
+            [[ "${6:-}" == "${HARNESS_OLD_SUNSHINE_ACTIVE:-true}" ]]
+            [[ "${7:-}" == "${HARNESS_OLD_SUNSHINE_ENABLED:-true}" ]]
+            [[ "${8:-}" == "${HARNESS_OLD_X11_ACTIVE:-true}" ]]
+            [[ "${9:-}" == "${HARNESS_OLD_X11_ENABLED:-true}" ]]
+            printf 'candidate-services=disabled-stopped user-manager=fresh rollback-groups=restored\n' >>"$HARNESS_LOG"
+            printf 'restored-old-user korrid=%s/%s sunshine=%s/%s x11-headless=%s/%s\n' \
+              "$4" "$5" "$6" "$7" "$8" "$9" >>"$HARNESS_LOG"
           fi
           if [[ "$action" == activate-test && "${HARNESS_MUTATION_SLEEP:-0}" != 0 ]]; then
             if ((HARNESS_MUTATION_SLEEP > remote_deadline)); then
@@ -425,14 +496,19 @@ mkdir "$TMP/user-scope-bin"
 ln -s "$SELF" "$TMP/user-scope-bin/user-scope-id"
 ln -s "$SELF" "$TMP/user-scope-bin/user-scope-sudo"
 ln -s "$SELF" "$TMP/user-scope-bin/user-scope-systemctl"
+ln -s "$SELF" "$TMP/user-scope-bin/user-scope-getent"
 ln -s user-scope-id "$TMP/user-scope-bin/id"
 ln -s user-scope-sudo "$TMP/user-scope-bin/sudo"
 ln -s user-scope-systemctl "$TMP/user-scope-bin/systemctl"
+ln -s user-scope-getent "$TMP/user-scope-bin/getent"
 export KORRI_DEVICE_GATE_SSH="$TMP/ssh-command-harness"
 export HARNESS_LOG="$TMP/commands.log" HARNESS_GATE_SOURCE="$GATE"
 export HARNESS_ATTEMPT_MARKER="$TMP/remote-attempt" HARNESS_ATTEMPT_LEASE="$TMP/remote-attempt.lease"
-export HARNESS_GAMEPLAY_USER=gameplay HARNESS_GAMEPLAY_SUNSHINE_ACTIVE=active HARNESS_GAMEPLAY_SUNSHINE_ENABLED=enabled
-export HARNESS_ROOT_SUNSHINE_ACTIVE=inactive HARNESS_ROOT_SUNSHINE_ENABLED=disabled
+export HARNESS_GAMEPLAY_USER=gameplay HARNESS_GAMEPLAY_HOME="$TMP/gameplay-home"
+mkdir -p "$HARNESS_GAMEPLAY_HOME/.config/sunshine"
+: >"$HARNESS_GAMEPLAY_HOME/.config/sunshine/sunshine_state.json"
+export HARNESS_OLD_SUNSHINE_ACTIVE=true HARNESS_OLD_SUNSHINE_ENABLED=true
+export HARNESS_OLD_X11_ACTIVE=true HARNESS_OLD_X11_ENABLED=true
 MACHINE_ID=0123456789abcdef0123456789abcdef
 HOSTNAME=u7-test-host
 CANDIDATE=/nix/store/00000000000000000000000000000000-nixos-system-u7-test-host-1
@@ -484,8 +560,10 @@ confirm="CONFIRM-$(printf '%s' "$MACHINE_ID|$HOSTNAME|$CANDIDATE" | sha256sum | 
 # SUDO_UID and the gameplay user's systemd manager.
 user_scope_predicates="$(PATH="$TMP/user-scope-bin:$PATH" HARNESS_MODELED_USER=root SUDO_UID=1000 \
   "$GATE" --remote predicates "$GAMEPLAY_USER")"
-grep -Fx 'sunshine.active=active' <<<"$user_scope_predicates" >/dev/null
-grep -Fx 'sunshine.enabled=enabled' <<<"$user_scope_predicates" >/dev/null
+grep -Fx 'old-user.sunshine.active=true' <<<"$user_scope_predicates" >/dev/null
+grep -Fx 'old-user.sunshine.enabled=true' <<<"$user_scope_predicates" >/dev/null
+grep -Fx 'old-user.x11-headless.active=true' <<<"$user_scope_predicates" >/dev/null
+grep -Fx 'sunshine.pairing-state-present=true' <<<"$user_scope_predicates" >/dev/null
 
 : >"$HARNESS_LOG"
 assert_fails_with 'an explicit --host is required' "$GATE" --expected-machine-id "$MACHINE_ID" --expected-hostname "$HOSTNAME"
@@ -563,6 +641,63 @@ run_failure_model same-name-raw HARNESS_TOPOLOGY_FIXTURE \
   "$HERE/fixtures/topology-same-name-raw.txt" 'gameplay user can read 1 raw controller node'
 run_failure_model delegate HARNESS_DELEGATE no 'inputd Delegate is not enabled'
 run_failure_model delegate-controllers HARNESS_DELEGATE_CONTROLLERS cpu 'DelegateControllers does not contain pids'
+run_failure_model stale-manager HARNESS_STALE_MANAGER_CREDENTIALS yes 'fresh gameplay user manager retains forbidden group: input'
+run_failure_model pairing-absent HARNESS_PAIRING_PRESENT false 'Sunshine pairing-state file is absent'
+
+# Candidate activation refuses every observed active-game signal before it
+# stops an old user unit or starts a system replacement. Cleanup also refuses
+# to kill the same game.
+for active_game_model in exact-running exact-stopping unit-live; do
+  active_game_ledger="$TMP/active-game-$active_game_model-ledger"
+  mapfile -d '' -t active_game_args < <(common_for "$active_game_ledger")
+  export HARNESS_LEDGER="$active_game_ledger" HARNESS_ACTIVE_GAME="$active_game_model"
+  : >"$HARNESS_LOG"
+  case "$active_game_model" in
+    exact-running) refusal='exact local game status is running' ;;
+    exact-stopping) refusal='exact local game status is stopping' ;;
+    unit-live) refusal='a Korri game unit is live' ;;
+  esac
+  assert_fails_with "$refusal" run_gate --mode candidate-test "${active_game_args[@]}" --confirm "$confirm"
+  if grep -F 'candidate-service-mutation=' "$HARNESS_LOG" >/dev/null; then
+    printf 'active-game refusal reached candidate service mutation: %s\n' "$active_game_model" >&2
+    exit 1
+  fi
+  unset HARNESS_ACTIVE_GAME
+done
+
+# All 64 active/enabled combinations for the three observed user units are
+# captured and handed back to rollback exactly. The modeled Sunshine failure
+# occurs after candidate activation, so cleanup exercises complete restoration.
+for korrid_active in false true; do
+  for korrid_enabled in false true; do
+    for sunshine_active in false true; do
+      for sunshine_enabled in false true; do
+        for x11_active in false true; do
+          for x11_enabled in false true; do
+            combination="$korrid_active$korrid_enabled$sunshine_active$sunshine_enabled$x11_active$x11_enabled"
+            combination_ledger="$TMP/baseline-combination-$combination-ledger"
+            mapfile -d '' -t combination_args < <(common_for "$combination_ledger")
+            export HARNESS_LEDGER="$combination_ledger"
+            export HARNESS_OLD_KORRID_ACTIVE="$korrid_active" HARNESS_OLD_KORRID_ENABLED="$korrid_enabled"
+            export HARNESS_OLD_SUNSHINE_ACTIVE="$sunshine_active" HARNESS_OLD_SUNSHINE_ENABLED="$sunshine_enabled"
+            export HARNESS_OLD_X11_ACTIVE="$x11_active" HARNESS_OLD_X11_ENABLED="$x11_enabled"
+            export HARNESS_CANDIDATE_SERVICE_FAILURE=sunshine.service
+            : >"$HARNESS_LOG"
+            assert_fails_with 'timed out waiting for sunshine.service ActiveState=active' \
+              run_gate --mode candidate-test "${combination_args[@]}" --confirm "$confirm"
+            grep -F "restored-old-user korrid=$korrid_active/$korrid_enabled sunshine=$sunshine_active/$sunshine_enabled x11-headless=$x11_active/$x11_enabled" \
+              "$HARNESS_LOG" >/dev/null
+          done
+        done
+      done
+    done
+  done
+done
+unset HARNESS_OLD_KORRID_ACTIVE HARNESS_OLD_KORRID_ENABLED
+unset HARNESS_OLD_SUNSHINE_ACTIVE HARNESS_OLD_SUNSHINE_ENABLED
+unset HARNESS_OLD_X11_ACTIVE HARNESS_OLD_X11_ENABLED HARNESS_CANDIDATE_SERVICE_FAILURE
+export HARNESS_OLD_SUNSHINE_ACTIVE=true HARNESS_OLD_SUNSHINE_ENABLED=true
+export HARNESS_OLD_X11_ACTIVE=true HARNESS_OLD_X11_ENABLED=true
 
 missing_controller_ledger="$TMP/missing-controller-ledger"
 : >"$HARNESS_LOG"
@@ -871,11 +1006,17 @@ export HARNESS_LEDGER="$flow_ledger"
 run_interactive candidate-test pending-mutation "$flow_ledger" "$TMP/candidate.tty" \
   "${flow_args[@]}" --confirm "$confirm"
 grep -Fx 'state=candidate-green' "$flow_ledger/state" >/dev/null
-grep -Fx 'sunshine.active=active' "$flow_ledger/baseline.predicates" >/dev/null
-grep -Fx 'sunshine.enabled=enabled' "$flow_ledger/baseline.predicates" >/dev/null
+grep -Fx 'old-user.korrid.active=false' "$flow_ledger/baseline.predicates" >/dev/null
+grep -Fx 'old-user.sunshine.active=true' "$flow_ledger/baseline.predicates" >/dev/null
+grep -Fx 'old-user.sunshine.enabled=true' "$flow_ledger/baseline.predicates" >/dev/null
+grep -Fx 'old-user.x11-headless.active=true' "$flow_ledger/baseline.predicates" >/dev/null
+grep -Fx 'old-user.x11-headless.enabled=true' "$flow_ledger/baseline.predicates" >/dev/null
+grep -Fx 'system.sunshine.active=inactive' "$flow_ledger/baseline.predicates" >/dev/null
+grep -Fx 'system.x11-headless.active=inactive' "$flow_ledger/baseline.predicates" >/dev/null
+grep -Fx 'sunshine.pairing-state-present=true' "$flow_ledger/baseline.predicates" >/dev/null
 grep -F 'predicates-user=gameplay wrapper=attempt-command' "$HARNESS_LOG" >/dev/null
 if grep -F 'predicates-user=root' "$HARNESS_LOG" >/dev/null; then
-  printf 'rollback comparison read root Sunshine state instead of gameplay-user state\n' >&2
+  printf 'rollback comparison read root user-unit state instead of gameplay-user state\n' >&2
   exit 1
 fi
 [[ "$(stat -c %a "$flow_ledger")" == 700 ]]

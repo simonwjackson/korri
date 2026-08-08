@@ -18,7 +18,10 @@ The gate is read-only unless `--mode` selects a mutation state. Every invocation
 - Every automated gate and acceptance-fingerprint read after activation has both the remote wall-clock deadline and the longer local SSH deadline while rollback remains armed.
 - The gate rejects another mutation from `failed-needs-inspection`. `reconcile` is read-only. It requires the rollback generation and every sanitized baseline predicate to match before it restores the prior ledger state.
 - The script never retries a switch, profile change, reboot, or destructive command blindly.
-- Every user-scope systemd read runs as the original SSH/gameplay user, including Sunshine inspection and rollback predicates inside root attempt commands. The script preserves the old `korrid.service` user-unit file. Temporary states restart the old unit if it was active. Persistent activation disables the old user unit but does not remove it, so rollback can restore it.
+- Every user-scope systemd read runs as the gameplay user. The gate captures `korrid.service`, `sunshine.service`, and `x11-headless.service` separately. It preserves each old user-unit file and restores each active/enabled pair exactly.
+- Before each candidate or rollback mutation, the gate queries the exact local korrid control socket when it exists and lists live `korri-game-*.service` units. `running`, `stopping`, any unknown local status, or any activating/active/reloading/deactivating Korri game unit blocks mutation. The gate never stops a game to make rollout proceed.
+- Candidate activation stops and disables all three old user units before switching. It then terminates and restarts the gameplay user's systemd manager, starts the system `x11-headless.service`, `korrid.service`, and `sunshine.service` replacements, and verifies their declared process credentials.
+- Rollback stops and disables all three system replacements, restores the exact prior generation, restarts the user manager under rollback groups, and then restores all six old user-unit state predicates. A failed active-game check leaves the current generation and game untouched, so manual inspection is required.
 - The script does not run `reboot`. The operator performs each reboot as a separate HITL action, then runs the matching read-only reboot-verification state.
 
 The cost of this design is more operator steps. It also needs a consuming NixOS configuration to build both generation paths before rollout. The gate cannot make an unsupported controller profile valid.
@@ -29,15 +32,19 @@ The baseline contains no configuration file contents and no journal payloads. It
 
 - the machine ID and hostname;
 - current and default NixOS generation links;
-- InputPlumber, inputd, system korrid, old user korrid, and Sunshine unit summaries;
+- InputPlumber, inputd, and system/user summaries for korrid, Sunshine, and X11 headless;
 - sanitized physical-controller candidate identities, temporary-artifact status, and catalog health;
-- exact old user active and enabled state;
+- exact active and enabled state for each old user korrid, Sunshine, and X11 headless unit;
+- exact active and enabled state for each same-named system unit;
 - normalized and raw topology digests;
 - permissions, ACL, and gameplay-user readability as one digest;
 - moved-source and temporary-artifact topology as one digest;
-- InputPlumber and Sunshine active and enabled state.
+- InputPlumber active and enabled state;
+- Sunshine pairing-state file presence as one boolean.
 
-The gate never reads or records Sunshine pairing material. It never records game paths, catalog titles, game content, private configuration contents, credentials, or environment values.
+The observed Sunshine baseline grounds the presence check at the gameplay user's `.config/sunshine/sunshine_state.json`. The gate only tests that this path is a regular file. It never opens, hashes, copies, moves, prints, or changes the file. It does not read or change `sunshine.conf`, `apps.json`, or other Sunshine configuration. Pairing material and configuration contents stay unchanged and redacted.
+
+The gate never records game paths, catalog titles, game content, private configuration contents, credentials, or environment values.
 
 Delete the private ledger after the final evidence has been transferred to the work ledger in sanitized form. The private ledger is operational evidence, not a repository artifact.
 
@@ -72,11 +79,11 @@ Use one private ledger for the complete sequence. The gate rejects out-of-order 
 |---|---|---:|---|
 | Baseline | `inspect` | No | Identity and sanitized device posture captured. |
 | Failed mutation | `reconcile` | No | A fresh inspection proves the rollback generation and all sanitized predicates exactly match the baseline before retry. |
-| Temporary candidate | `candidate-test` | Temporary | Candidate activates with NixOS `test`, automated and HITL gates pass, then rollback restores the prior generation and old user unit. |
+| Temporary candidate | `candidate-test` | Temporary | Candidate activates with NixOS `test`, automated and HITL gates pass, then rollback restores the prior generation and all three old user units. |
 | Automatic rollback | `inject-health-failure` | Temporary | The provider stops once, inputd publishes `Recovering` or `Missing`, and the prior generation restores automatically. |
 | Explicit rollback | `rollback` | Persistent rollback | Candidate activates temporarily, then the system profile and runtime restore to the rollback generation. |
 | Rebooted rollback | `rollback-reboot-verify` | No | Boot ID changed, rollback generation booted, and automated regression gates pass. |
-| Persistent candidate | `persistent-switch` | Persistent | Candidate becomes the system profile, the old user unit is disabled but retained, and automated gates pass. |
+| Persistent candidate | `persistent-switch` | Persistent | Candidate becomes the system profile, all three old user units stay disabled but retained, the user manager is fresh, and automated gates pass. |
 | Rebooted candidate | `candidate-reboot-verify` | No | Boot ID changed, candidate generation booted, and automated plus HITL gates pass. |
 
 `rollback-reboot-verify` and `candidate-reboot-verify` do not reboot the machine. Reboot only after the preceding mode exits successfully.
@@ -100,20 +107,24 @@ Do not enter a token until the named stage passes.
 | `dbus-spoof-and-exclusive-grab` | Use a bounded exclusive evdev grab. Confirm the raw observer blocks while the authenticated DBus shortcut still fires. Emit the same signal from an unrelated system-bus client and confirm inputd rejects it. |
 | `exact-stop-and-races` | Record one active launch ID. Complete the exact destructive hold and confirm only that launch cgroup stops. Repeat replacement, child-exit/restart, and provider/korrid restart races. Confirm stale holds never stop a replacement and korrid restart does not kill the active launch. |
 | `direct-action-isolation` | Trigger a configured direct action. Inspect the child while active. Confirm separate UID/GID and cgroup, minimal allowlisted environment, closed control descriptors, no control group, no capabilities, bounded output/runtime/concurrency, and cleanup. |
-| `sunshine-video-controller-recovery` | Confirm video and existing pairing presence. Test local and remote controller input through disconnect/reconnect and one Sunshine restart. Confirm one normalized target and no virtual-device feedback loop after repeated reconnects. |
+| `sunshine-video-controller-recovery` | Confirm video and existing pairing presence. Test local and remote controller input through disconnect/reconnect and one system Sunshine restart. Confirm one normalized target and no virtual-device feedback loop after repeated reconnects. |
 | `catalog-and-session` | Confirm the local catalog is healthy without recording titles or paths. Start and stop one session and confirm session recovery remains healthy. |
 
-The automated portion separately checks service activity, `StatusText=Ready`, one exact normalized target, normalized readability, no raw game-user readability, DBus owner/interface, cgroup v2, `Delegate=yes`, `DelegateControllers` containing `pids`, and catalog health. The raw-readable scan skips only the event node whose complete normalized fingerprint still equals the verified fingerprint. A physical joystick with the same `Microsoft X-Box 360 pad` name remains raw and causes failure when the gameplay user can read it. The two systemd properties use the values returned by `systemctl show`; `Delegate=pids` is not a valid substitute for the runtime boolean property.
+The automated portion separately requires active system InputPlumber, inputd, korrid, X11 headless, and Sunshine services. It requires `StatusText=Ready`, the Sunshine pairing-state file presence boolean, one exact normalized target, normalized readability, no raw game-user readability, DBus owner/interface, cgroup v2, `Delegate=yes`, `DelegateControllers` containing `pids`, and catalog health.
+
+For each of the three system replacements, the gate requires an explicit unit `User`, a Nix-store unit fragment, a live main PID, and process UID/GID values that match the unit declaration. The gameplay account and its fresh user-manager process must lack `input`, `uinput`, `korri-control`, and `korri-sunshine-uinput`. System Sunshine must hold `korri-sunshine-uinput`; system korrid and X11 headless must not hold it. This process-level check catches a user manager that retained the gameplay account's removed `input` group.
+
+The raw-readable scan skips only the event node whose complete normalized fingerprint still equals the verified fingerprint. A physical joystick with the same `Microsoft X-Box 360 pad` name remains raw and causes failure when the gameplay user can read it. The two inputd delegation properties use the values returned by `systemctl show`; `Delegate=pids` is not a valid substitute for the runtime boolean property.
 
 ## Failure handling
 
-If a mutating state fails, allow the cleanup trap to run. Do not rerun the failed mutation. Run `reconcile` with the same explicit target, generation, gameplay-user, and ledger arguments. It compares current/default generation links, exact old-user state, target/raw topology, ACL/readability, moved-source and temporary artifacts, InputPlumber/Sunshine state, and catalog health with the private baseline. It does not mutate the device.
+If a mutating state fails, allow the cleanup trap to run. Do not rerun the failed mutation. Run `reconcile` with the same explicit target, generation, gameplay-user, and ledger arguments. It compares current/default generation links, all three old user-unit state pairs, all three system-unit state pairs, target/raw topology, ACL/readability, moved-source and temporary artifacts, InputPlumber state, pairing-state presence, and catalog health with the private baseline. The rebooted rollback uses the same complete comparison. Reconcile does not mutate the device.
 
 SIGKILL can bypass local cleanup and leave `pending-mutation`, `rollback-reboot-verifying`, `candidate-reboot-verifying`, or their `*-starting` states. Marker-required states require the exact nonce/candidate marker. Starting states can reconcile without a marker; an existing marker must match exactly. Any active matching lease blocks reconcile. Pending mutation requires the rollback generation and complete baseline. Rollback reboot verification also reruns rollback gates under a fresh bounded lease. Candidate reboot verification requires the candidate generation, exact controller/profile, complete automated gates, and an unchanged acceptance fingerprint under a fresh bounded lease. Only successful checks restore the ledger's explicit resume state. A failed check records `failed-needs-inspection`.
 
 A gate, HITL token, SSH, or fingerprint failure during `candidate-reboot-verifying` records `failed-needs-inspection` with `resume_state=candidate-await-reboot`. Reconcile requires the candidate generation plus the same exact physical identity and production profile. It then restores `candidate-await-reboot`, so a transient failure can retry verification without repeating the persistent switch.
 
-If cleanup reports that rollback failed, stop. Use the exact rollback generation printed in the private ledger. Do not guess another generation and do not remove the old user unit.
+If cleanup reports that rollback failed, stop. Use the exact rollback generation printed in the private ledger. Do not guess another generation and do not remove any old user unit.
 
 A missing rollback closure, host identity mismatch, missing exact physical-controller proof for persistent states, or any `Korri U7 Synthetic Controller` / `korri-u7-device-gate.*` residue is a hard stop.
 
@@ -127,4 +138,4 @@ Run without SSH or device mutation:
 shellcheck services/inputd/deploy/device-check.sh services/inputd/deploy/test-device-check.sh services/inputd/deploy/test-device-bitmap.sh
 ```
 
-The shell test replaces SSH with a modeled command endpoint. The models cover different root and gameplay-user Sunshine states, two-phase SIGKILL windows, systemd delegation property semantics, physical identity and live production-profile selection, topology count, normalized InputPlumber provenance/capabilities, ACL exposure, baseline drift, target replacement, remote timeout, and interruption. Successful HITL tests run the production `/dev/tty` prompt path through a pseudo-terminal. The tests also prove malicious generation paths stop before SSH, remote argv stays intact, rollback is armed before mutation, a remote mutation that survives transport finishes before lock-serialized rollback, candidate reboot token/SSH failures resume through reconcile, accepted persistent state resumes without repeating mutation, and the nonce is absent from terminal output.
+The shell test replaces SSH with a modeled command endpoint. The models cover all 64 active/enabled combinations for the three old user units, stale user-manager credentials, active-game refusal through exact status and live units, candidate system-service failure, complete replacement shutdown and old-unit restoration, pairing presence, two-phase SIGKILL windows, systemd delegation semantics, physical identity and live production-profile selection, topology count, normalized InputPlumber provenance/capabilities, ACL exposure, baseline drift, target replacement, remote timeout, and interruption. Successful HITL tests run the production `/dev/tty` prompt path through a pseudo-terminal. The tests also prove malicious generation paths stop before SSH, remote argv stays intact, rollback is armed before mutation, a remote mutation that survives transport finishes before lock-serialized rollback, candidate reboot token/SSH failures resume through reconcile, accepted persistent state resumes without repeating mutation, and the nonce is absent from terminal output.
