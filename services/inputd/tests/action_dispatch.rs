@@ -8,10 +8,104 @@ use std::{
     time::Duration,
 };
 
-use korri_inputd::actions::{
-    action_entry, commands_from_environment, ActionCommand, ActionConfigError, ActionDispatcher,
-    ActionId, ActionIdentity, ActionLimits, ActionOutcome, ACTION_CATALOG,
+use korri_inputd::{
+    actions::{
+        action_entry, commands_from_environment, ActionCommand, ActionConfigError,
+        ActionDispatcher, ActionId, ActionIdentity, ActionLimits, ActionOutcome, ACTION_CATALOG,
+    },
+    cgroup_sandbox::{ActionCgroup, ActionCgroupBackend},
 };
+use std::sync::{Arc, Mutex};
+
+#[derive(Default)]
+struct ProcessCgroups {
+    processes: Mutex<BTreeMap<String, Vec<u32>>>,
+}
+
+impl ActionCgroupBackend for ProcessCgroups {
+    fn create(&self, action: ActionId) -> std::io::Result<ActionCgroup> {
+        let name = format!(
+            "{}-{}",
+            action.as_str(),
+            self.processes.lock().unwrap().len()
+        );
+        self.processes
+            .lock()
+            .unwrap()
+            .insert(name.clone(), Vec::new());
+        ActionCgroup::for_backend(name)
+    }
+
+    fn attach(&self, cgroup: &ActionCgroup, pid: u32) -> std::io::Result<()> {
+        self.processes
+            .lock()
+            .unwrap()
+            .get_mut(cgroup.backend_name())
+            .unwrap()
+            .push(pid);
+        Ok(())
+    }
+
+    fn contains(&self, cgroup: &ActionCgroup, pid: u32) -> std::io::Result<bool> {
+        Ok(self.processes.lock().unwrap()[cgroup.backend_name()].contains(&pid))
+    }
+
+    fn kill(&self, cgroup: &ActionCgroup) -> std::io::Result<()> {
+        for pid in &self.processes.lock().unwrap()[cgroup.backend_name()] {
+            unsafe {
+                libc::kill(*pid as i32, libc::SIGKILL);
+            }
+        }
+        Ok(())
+    }
+
+    fn populated(&self, cgroup: &ActionCgroup) -> std::io::Result<bool> {
+        Ok(self.processes.lock().unwrap()[cgroup.backend_name()]
+            .iter()
+            .any(|pid| std::path::Path::new(&format!("/proc/{pid}")).exists()))
+    }
+
+    fn remove(&self, cgroup: &ActionCgroup) -> std::io::Result<()> {
+        self.processes.lock().unwrap().remove(cgroup.backend_name());
+        Ok(())
+    }
+}
+
+struct RejectingCgroups;
+
+impl ActionCgroupBackend for RejectingCgroups {
+    fn create(&self, _action: ActionId) -> std::io::Result<ActionCgroup> {
+        ActionCgroup::for_backend("rejected-1")
+    }
+    fn attach(&self, _cgroup: &ActionCgroup, _pid: u32) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn contains(&self, _cgroup: &ActionCgroup, _pid: u32) -> std::io::Result<bool> {
+        Ok(false)
+    }
+    fn kill(&self, _cgroup: &ActionCgroup) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn populated(&self, _cgroup: &ActionCgroup) -> std::io::Result<bool> {
+        Ok(false)
+    }
+    fn remove(&self, _cgroup: &ActionCgroup) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+fn dispatcher(
+    commands: korri_inputd::actions::ActionCommands,
+    identity: ActionIdentity,
+    limits: ActionLimits,
+) -> Result<ActionDispatcher, ActionConfigError> {
+    ActionDispatcher::with_cgroup_backend(
+        commands,
+        identity,
+        limits,
+        Arc::new(ProcessCgroups::default()),
+    )
+}
 
 fn identity_requiring_privilege_drop() -> ActionIdentity {
     let uid = unsafe { libc::geteuid() };
@@ -221,8 +315,38 @@ fn environment_is_an_explicit_allowlist() {
 }
 
 #[tokio::test]
+async fn untrusted_exec_never_begins_when_cgroup_membership_cannot_be_proven() {
+    let root = tempfile::tempdir().unwrap();
+    let marker = root.path().join("executed");
+    let executable = std::fs::canonicalize("/run/current-system/sw/bin/sh").unwrap();
+    let command = ActionCommand::new(
+        executable,
+        [
+            OsString::from("-c"),
+            OsString::from(format!("printf executed > {}", marker.display())),
+        ],
+        BTreeMap::new(),
+    )
+    .unwrap();
+    let mut commands = korri_inputd::actions::ActionCommands::default();
+    commands.insert(ActionId::WorkspaceNext, command);
+    let outcome = ActionDispatcher::with_cgroup_backend(
+        commands,
+        identity_requiring_privilege_drop(),
+        ActionLimits::default(),
+        Arc::new(RejectingCgroups),
+    )
+    .unwrap()
+    .dispatch(ActionId::WorkspaceNext)
+    .await;
+
+    assert!(matches!(outcome, ActionOutcome::ContainmentFailed(_)));
+    assert!(!marker.exists());
+}
+
+#[tokio::test]
 async fn unconfigured_action_is_a_bounded_no_op() {
-    let dispatcher = ActionDispatcher::new(
+    let dispatcher = dispatcher(
         Default::default(),
         identity_requiring_privilege_drop(),
         ActionLimits::default(),
@@ -318,7 +442,7 @@ async fn action_child_cannot_retain_or_reopen_local_control_authority() {
     let mut commands = korri_inputd::actions::ActionCommands::default();
     commands.insert(ActionId::WorkspaceNext, command);
     let identity = identity_requiring_privilege_drop();
-    let dispatcher = ActionDispatcher::new(
+    let dispatcher = dispatcher(
         commands,
         identity,
         ActionLimits {
@@ -352,7 +476,7 @@ async fn child_fails_closed_when_group_drop_cannot_be_proven() {
     let command = ActionCommand::new(executable, [], BTreeMap::new()).unwrap();
     let mut commands = korri_inputd::actions::ActionCommands::default();
     commands.insert(ActionId::WorkspaceNext, command);
-    let dispatcher = ActionDispatcher::new(
+    let dispatcher = dispatcher(
         commands,
         identity_requiring_privilege_drop(),
         ActionLimits {

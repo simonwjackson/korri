@@ -1,6 +1,8 @@
 pub mod action_catalog;
 pub mod actions;
+pub mod cgroup_sandbox;
 pub mod dbus;
 pub mod devices;
+pub mod direct_runner;
 pub mod korrid_client;
 pub mod runtime;

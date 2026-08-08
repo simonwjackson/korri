@@ -245,6 +245,12 @@ fn dispatch_actions(
                     error,
                     "input action child was rejected"
                 ),
+                ActionOutcome::ContainmentFailed(error) => tracing::error!(
+                    event = "inputd_action_containment_failed",
+                    action = %action_id,
+                    error,
+                    "input action containment failed closed"
+                ),
             }
         });
     }
