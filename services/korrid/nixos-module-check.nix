@@ -60,6 +60,8 @@ let
   hasFailedAssertion =
     needle: system:
     lib.any (entry: !entry.assertion && lib.hasInfix needle entry.message) system.config.assertions;
+  evaluationRejected =
+    system: !(builtins.tryEval system.config.system.build.toplevel.drvPath).success;
   service = enabled.config.systemd.services.korrid;
   socket = enabled.config.systemd.sockets.korrid-control;
   polkit = enabled.config.security.polkit.extraConfig;
@@ -89,6 +91,8 @@ assert lib.hasInfix "subject.system_unit == \"korrid.service\"" polkit;
 assert lib.hasInfix "^korri-game-[0-9a-f]{32}" polkit;
 assert hasFailedAssertion "service UID must differ" sameUid;
 assert hasFailedAssertion "gameplay user must not hold raw input" broadGame;
+assert evaluationRejected sameUid;
+assert evaluationRejected broadGame;
 pkgs.runCommand "korrid-linux-host-module-check" { } ''
   touch "$out"
 ''
