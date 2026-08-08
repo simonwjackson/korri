@@ -56,7 +56,7 @@ Build the candidate through the consuming NixOS configuration. Import `nixosModu
 
 Keep the active pre-rollout system closure as the rollback generation. Both paths must contain `bin/switch-to-configuration` and remain available until all reboot gates pass.
 
-Mutation modes require the first eight arguments below. `persistent-switch`, `candidate-reboot-verify`, and reconcile after a candidate reboot verification failure also require the final two controller arguments:
+Mutation modes require the first eight arguments below. `candidate-test`, `persistent-switch`, `candidate-reboot-verify`, and reconcile after candidate verification also require the final two controller arguments:
 
 ```text
 --host HOST
@@ -90,7 +90,7 @@ Use one private ledger for the complete sequence. The gate rejects out-of-order 
 
 `rollback-reboot-verify` and `candidate-reboot-verify` do not reboot the machine. Reboot only after the preceding mode exits successfully.
 
-Persistent and candidate-reboot modes have no default controller. The operator must copy one sanitized candidate identity from `inspect`, check it against the physical controller, and pass its exact lowercase `BUS:VENDOR:PRODUCT:VERSION`. These modes accept exactly one live matching event node. The node must have non-virtual sysfs provenance, a matching live device major/minor, and `ID_INPUT_JOYSTICK=1`. The live InputPlumber composite must list that exact `/dev/input/eventN` in `SourceDevicePaths` and its `ProfilePath` must be the production package's `korri-60-xbox_one_gamepad.yaml`. The acceptance fingerprint rechecks this proof.
+Candidate, persistent, and candidate-reboot modes have no default controller. The operator copies one sanitized identity from `inspect`, checks it against the physical controller, and passes its exact lowercase `BUS:VENDOR:PRODUCT:VERSION`. Pre-activation validates exactly one live non-virtual node with that identity, matching device major/minor, and `ID_INPUT_JOYSTICK=1`; it does not require the rollback provider to expose the candidate profile. While the candidate is active, its InputPlumber composite must list that exact `/dev/input/eventN` in `SourceDevicePaths`, and its `ProfilePath` must be the production package's `korri-60-xbox_one_gamepad.yaml`. Candidate-test records this proof. Persistent switch requires that prior evidence and rechecks the live physical identity before activation; the acceptance fingerprint rechecks full profile selection after activation.
 
 A synthetic controller can be used only during separate temporary preflight work. Use the exact name `Korri U7 Synthetic Controller` and a private path matching `korri-u7-device-gate.*` only for that bounded preflight. Remove both before invoking a mutation mode. The gate refuses either artifact before mutation. Synthetic, virtual, stale, unsupported, generic-joystick, and identity-mismatched evidence never satisfies persistence or reboot acceptance.
 

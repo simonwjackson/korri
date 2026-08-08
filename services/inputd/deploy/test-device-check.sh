@@ -789,7 +789,8 @@ quoted_ledger="$TMP/ledger with quote'and space"
 export HARNESS_LEDGER="$quoted_ledger"
 : >"$HARNESS_LOG"
 assert_fails_with 'confirmation token is missing' run_gate --mode candidate-test \
-  --candidate "$quoted_candidate" --rollback-generation "$ROLLBACK" --gameplay-user "$GAMEPLAY_USER" --ledger "$quoted_ledger"
+  --candidate "$quoted_candidate" --rollback-generation "$ROLLBACK" --gameplay-user "$GAMEPLAY_USER" --ledger "$quoted_ledger" \
+  --expected-controller-id "$CONTROLLER_ID" --production-profile "$PRODUCTION_PROFILE"
 grep -F "$(printf '%q' "$quoted_candidate")" "$HARNESS_LOG" >/dev/null
 assert_no_mutation
 rm -rf "$quoted_ledger"
@@ -911,7 +912,7 @@ for controller_model in synthetic virtual unsupported stale generic-joystick two
   mapfile -d '' -t controller_args < <(common_for "$controller_ledger")
   export HARNESS_LEDGER="$controller_ledger" HARNESS_CONTROLLER_MODEL="$controller_model"
   : >"$HARNESS_LOG"
-  assert_fails_with 'expected physical controller is not live, supported, and selected with the production profile' \
+  assert_fails_with 'expected supported physical controller identity is not uniquely live' \
     run_gate --mode persistent-switch "${controller_args[@]}" --confirm "$confirm"
   assert_no_mutation
   unset HARNESS_CONTROLLER_MODEL

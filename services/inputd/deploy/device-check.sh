@@ -300,7 +300,7 @@ remote_profile_selects_event() {
 }
 
 remote_physical_controller_evidence() {
-  local expected_identity="$1" profile="$2" event node name identity properties sysfs dev_sys dev_stat count=0
+  local expected_identity="$1" profile="$2" require_profile="${3:-true}" event node name identity properties sysfs dev_sys dev_stat count=0
   [[ "$profile" == "$SUPPORTED_PRODUCTION_PROFILE" ]] || return 1
   shopt -s nullglob
   for event in /sys/class/input/event*; do
@@ -318,8 +318,10 @@ remote_physical_controller_evidence() {
     dev_stat="$(stat -Lc '%t:%T' "$node" 2>/dev/null || true)"
     [[ "$dev_stat" =~ ^[0-9a-fA-F]+:[0-9a-fA-F]+$ ]] || continue
     [[ "$dev_sys" == "$((16#${dev_stat%:*})):$((16#${dev_stat#*:}))" ]] || continue
-    remote_profile_selects_event "${event##*/}" "$profile" || continue
-    printf 'identity=%s event=%s sysfs=%s profile=%s\n' "$expected_identity" "${event##*/}" "$sysfs" "$profile"
+    if [[ "$require_profile" == true ]]; then
+      remote_profile_selects_event "${event##*/}" "$profile" || continue
+    fi
+    printf 'identity=%s event=%s sysfs=%s profile=%s\n' "$expected_identity" "${event##*/}" "$sysfs" "$([[ "$require_profile" == true ]] && printf '%s' "$profile" || printf pending-candidate)"
     count=$((count + 1))
   done
   [[ "$count" -eq 1 ]]
@@ -659,7 +661,7 @@ remote_preflight() {
   printf 'rollback-switch=%s\n' "$([[ -x "$rollback_real/bin/switch-to-configuration" ]] && printf yes || printf no)"
   printf 'temporary-artifacts-dirty=%s\n' "$(remote_temporary_artifacts_dirty && printf yes || printf no)"
   if [[ -n "$expected_identity" && -n "$profile" ]]; then
-    if evidence="$(remote_physical_controller_evidence "$expected_identity" "$profile" 2>/dev/null)"; then
+    if evidence="$(remote_physical_controller_evidence "$expected_identity" "$profile" false 2>/dev/null)"; then
       printf 'expected-controller=yes\n'
       printf 'controller-evidence=%s\n' "$evidence"
     else
@@ -989,9 +991,9 @@ valid_generation_path "$CANDIDATE" || fail 'candidate must be a strictly valid N
   || fail 'expected controller identity must be exact lowercase BUS:VENDOR:PRODUCT:VERSION hexadecimal'
 [[ -z "$PRODUCTION_PROFILE" || "$PRODUCTION_PROFILE" == "$SUPPORTED_PRODUCTION_PROFILE" ]] \
   || fail "unsupported production profile; this gate supports only $SUPPORTED_PRODUCTION_PROFILE"
-if [[ "$MODE" == persistent-switch || "$MODE" == candidate-reboot-verify ]]; then
+if [[ "$MODE" == candidate-test || "$MODE" == persistent-switch || "$MODE" == candidate-reboot-verify ]]; then
   [[ -n "$EXPECTED_CONTROLLER_ID" && -n "$PRODUCTION_PROFILE" ]] \
-    || fail 'persistent and candidate reboot modes require an explicit expected controller identity and production profile'
+    || fail 'candidate, persistent, and reboot modes require an explicit expected controller identity and production profile'
 fi
 [[ -n "$GAMEPLAY_USER" && "$GAMEPLAY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] \
   || fail 'every mode requires an explicit gameplay user'
@@ -1173,9 +1175,9 @@ remote_rollback="$(awk -F= '$1 == "rollback" {print substr($0, index($0, "=") + 
 grep -Fx 'candidate-switch=yes' <<<"$preflight" >/dev/null || fail 'candidate has no switch-to-configuration executable'
 grep -Fx 'rollback-switch=yes' <<<"$preflight" >/dev/null || fail 'rollback generation has no switch-to-configuration executable'
 grep -Fx 'temporary-artifacts-dirty=no' <<<"$preflight" >/dev/null || fail 'dirty or untracked U7 temporary devices/profiles are present'
-if [[ "$MODE" == persistent-switch || "$MODE" == candidate-reboot-verify ]]; then
+if [[ "$MODE" == candidate-test || "$MODE" == persistent-switch || "$MODE" == candidate-reboot-verify ]]; then
   grep -Fx 'expected-controller=yes' <<<"$preflight" >/dev/null \
-    || fail 'expected physical controller is not live, supported, and selected with the production profile'
+    || fail 'expected supported physical controller identity is not uniquely live'
 fi
 
 identity_key="$actual_machine_id|$actual_hostname|$CANDIDATE"
@@ -1398,9 +1400,9 @@ case "$MODE" in
     [[ -z "$state" || "$state" == candidate-green ]] || fail "candidate-test cannot follow ledger state $state"
     begin_mutation false
     run_remote_attempt activate-test "$CANDIDATE" "$GAMEPLAY_USER"
-    run_remote_attempt automated-gates "$GAMEPLAY_USER" '' '' false | tee "$LEDGER/candidate-automated.txt"
+    run_remote_attempt automated-gates "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" true | tee "$LEDGER/candidate-automated.txt"
     require_hitl pending-mutation
-    verify_fingerprint_unchanged "$LEDGER/candidate-automated.txt" false
+    verify_fingerprint_unchanged "$LEDGER/candidate-automated.txt" true
     run_remote_attempt restore "$ROLLBACK" false "$GAMEPLAY_USER" \
       "$old_korrid_active" "$old_korrid_enabled" "$old_sunshine_active" "$old_sunshine_enabled" \
       "$old_x11_active" "$old_x11_enabled" "$old_pairing_config_mode" "$old_pairing_state_mode"
@@ -1446,6 +1448,8 @@ case "$MODE" in
     write_state rollback-reboot-green "$current_boot"
     ;;
   persistent-switch)
+    grep -F 'controller-evidence=' "$LEDGER/candidate-automated.txt" >/dev/null \
+      || fail 'persistent switch requires prior candidate proof with the exact production controller profile'
     if [[ "$state" == candidate-accepted-pending-boot ]]; then
       current_boot="$(run_remote_deadlined boot-id)"
       write_state candidate-await-reboot "$current_boot"
