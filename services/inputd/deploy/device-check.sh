@@ -354,7 +354,7 @@ remote_catalog_health() {
     | jq -r 'if .outcome._tag == "Ok" then "Ok" else "unhealthy" end' 2>/dev/null || printf unavailable
 }
 
-remote_pairing_state_present() {
+remote_pairing_state_modes() {
   local gameplay_user="$1" uid home home_real config_tree config_dir state_file
   local config_real state_real config_stat state_stat config_mode state_mode
   uid="$(id -u "$gameplay_user")" || return 1
@@ -371,10 +371,30 @@ remote_pairing_state_present() {
   config_mode="${config_stat##*:}"
   state_mode="${state_stat##*:}"
   [[ "$config_mode" =~ ^[0-7]{3,4}$ && "$state_mode" =~ ^[0-7]{3,4}$ ]] || return 1
-  (( (8#$config_mode & 8#077) == 0 && (8#$state_mode & 8#077) == 0 )) || return 1
   config_real="$(realpath -e -- "$config_dir" 2>/dev/null)" || return 1
   state_real="$(realpath -e -- "$state_file" 2>/dev/null)" || return 1
-  [[ "$config_real" == "$config_tree/"* && "$state_real" == "$config_real/sunshine_state.json" ]]
+  [[ "$config_real" == "$config_tree/"* && "$state_real" == "$config_real/sunshine_state.json" ]] || return 1
+  printf '%s:%s\n' "$config_mode" "$state_mode"
+}
+
+remote_pairing_state_present() {
+  local modes config_mode state_mode
+  modes="$(remote_pairing_state_modes "$1")" || return 1
+  config_mode="${modes%%:*}"
+  state_mode="${modes#*:}"
+  (( (8#$config_mode & 8#077) == 0 && (8#$state_mode & 8#077) == 0 ))
+}
+
+remote_set_pairing_state_modes() {
+  local gameplay_user="$1" config_mode="$2" state_mode="$3" before after home
+  [[ "$config_mode" =~ ^[0-7]{3,4}$ && "$state_mode" =~ ^[0-7]{3,4}$ ]] || return 1
+  before="$(remote_pairing_state_modes "$gameplay_user")" || return 1
+  home="$(getent passwd "$gameplay_user" | cut -d: -f6)" || return 1
+  chmod "$config_mode" -- "$home/.config/sunshine"
+  chmod "$state_mode" -- "$home/.config/sunshine/sunshine_state.json"
+  after="$(remote_pairing_state_modes "$gameplay_user")" || return 1
+  [[ "$after" == "$config_mode:$state_mode" ]] || return 1
+  printf 'pairing-modes=%s->%s\n' "$before" "$after"
 }
 
 remote_group_gid() {
@@ -586,6 +606,7 @@ remote_predicates() {
   printf 'input.sources-artifacts=%s\n' "$(remote_source_artifacts_digest)"
   printf 'inputplumber.active=%s\n' "$(remote_unit_value system '' inputplumber.service ActiveState)"
   printf 'inputplumber.enabled=%s\n' "$(remote_unit_value system '' inputplumber.service UnitFileState)"
+  printf 'sunshine.pairing-state-modes=%s\n' "$(remote_pairing_state_modes "$gameplay_user" 2>/dev/null || printf invalid)"
   printf 'sunshine.pairing-state-present=%s\n' "$(remote_pairing_state_present "$gameplay_user" && printf true || printf false)"
   printf 'catalog.health=%s\n' "$(remote_catalog_health)"
 }
@@ -652,6 +673,7 @@ remote_activate_test() {
   remote_refuse_active_game
   remote_stop_old_user_units "$gameplay_user"
   sudo -n "$candidate/bin/switch-to-configuration" test
+  remote_set_pairing_state_modes "$gameplay_user" 0700 0600 >/dev/null
   remote_restart_user_manager "$gameplay_user"
   remote_start_candidate_services "$gameplay_user"
 }
@@ -659,7 +681,7 @@ remote_activate_test() {
 remote_restore() {
   local rollback="$1" persistent="$2" gameplay_user="$3"
   shift 3
-  [[ "$#" -eq 6 ]] || fail 'rollback requires all three old user-unit states'
+  [[ "$#" -eq 8 ]] || fail 'rollback requires all old user-unit states and pairing modes'
   remote_refuse_active_game
   if [[ "$(remote_generation)" != "$rollback" ]]; then
     remote_stop_candidate_services
@@ -670,6 +692,7 @@ remote_restore() {
   else
     sudo -n "$rollback/bin/switch-to-configuration" test
   fi
+  remote_set_pairing_state_modes "$gameplay_user" "$7" "$8" >/dev/null
   remote_restart_user_manager "$gameplay_user"
   remote_restore_old_user_units "$gameplay_user" "$1" "$2" "$3" "$4" "$5" "$6"
   [[ "$(remote_generation)" == "$rollback" ]]
@@ -769,6 +792,7 @@ remote_persistent_switch() {
   remote_stop_old_user_units "$gameplay_user"
   sudo -n nix-env -p /nix/var/nix/profiles/system --set "$candidate"
   sudo -n "$candidate/bin/switch-to-configuration" switch
+  remote_set_pairing_state_modes "$gameplay_user" 0700 0600 >/dev/null
   remote_restart_user_manager "$gameplay_user"
   remote_start_candidate_services "$gameplay_user"
   [[ "$(remote_generation)" == "$candidate" ]]
@@ -1020,6 +1044,7 @@ attempt_nonce='' attempt_boot_id=''
 old_korrid_active=false old_korrid_enabled=false
 old_sunshine_active=false old_sunshine_enabled=false
 old_x11_active=false old_x11_enabled=false
+old_pairing_config_mode='' old_pairing_state_mode=''
 failure_resume_boot_id='' verification_resume_state=''
 write_state() {
   local next="$1" boot_id="${2:-}" resume_state="${3:-}" attempt_nonce="${4:-}"
@@ -1065,7 +1090,7 @@ cleanup() {
     if [[ "$attempt_remote_active" == true ]]; then
       if run_remote_attempt restore "$ROLLBACK" "$rollback_persistent" "$GAMEPLAY_USER" \
         "$old_korrid_active" "$old_korrid_enabled" "$old_sunshine_active" "$old_sunshine_enabled" \
-        "$old_x11_active" "$old_x11_enabled" >/dev/null 2>&1; then
+        "$old_x11_active" "$old_x11_enabled" "$old_pairing_config_mode" "$old_pairing_state_mode" >/dev/null 2>&1; then
         rollback_ok=true
       else
         printf 'device gate: cleanup rollback failed or could not acquire the root gate lock; inspect the recorded rollback generation without retrying mutation\n' >&2
@@ -1177,6 +1202,11 @@ old_sunshine_active="$(awk -F= '$1 == "old-user.sunshine.active" {print $2}' "$L
 old_sunshine_enabled="$(awk -F= '$1 == "old-user.sunshine.enabled" {print $2}' "$LEDGER/baseline.predicates")"
 old_x11_active="$(awk -F= '$1 == "old-user.x11-headless.active" {print $2}' "$LEDGER/baseline.predicates")"
 old_x11_enabled="$(awk -F= '$1 == "old-user.x11-headless.enabled" {print $2}' "$LEDGER/baseline.predicates")"
+old_pairing_modes="$(awk -F= '$1 == "sunshine.pairing-state-modes" {print $2}' "$LEDGER/baseline.predicates")"
+old_pairing_config_mode="${old_pairing_modes%%:*}"
+old_pairing_state_mode="${old_pairing_modes#*:}"
+[[ "$old_pairing_config_mode" =~ ^[0-7]{3,4}$ && "$old_pairing_state_mode" =~ ^[0-7]{3,4}$ ]] \
+  || fail 'invalid baseline Sunshine pairing-state modes'
 for old_state in "$old_korrid_active" "$old_korrid_enabled" "$old_sunshine_active" \
   "$old_sunshine_enabled" "$old_x11_active" "$old_x11_enabled"; do
   [[ "$old_state" == true || "$old_state" == false ]] || fail 'invalid baseline old user-unit predicate'
@@ -1373,7 +1403,7 @@ case "$MODE" in
     verify_fingerprint_unchanged "$LEDGER/candidate-automated.txt" false
     run_remote_attempt restore "$ROLLBACK" false "$GAMEPLAY_USER" \
       "$old_korrid_active" "$old_korrid_enabled" "$old_sunshine_active" "$old_sunshine_enabled" \
-      "$old_x11_active" "$old_x11_enabled"
+      "$old_x11_active" "$old_x11_enabled" "$old_pairing_config_mode" "$old_pairing_state_mode"
     compare_baseline
     accept_and_disarm candidate-green "$attempt_boot_id"
     ;;
@@ -1383,7 +1413,7 @@ case "$MODE" in
     run_remote_attempt activate-test "$CANDIDATE" "$GAMEPLAY_USER"
     run_remote_attempt inject-health-failure "$ROLLBACK" false "$GAMEPLAY_USER" \
       "$old_korrid_active" "$old_korrid_enabled" "$old_sunshine_active" "$old_sunshine_enabled" \
-      "$old_x11_active" "$old_x11_enabled"
+      "$old_x11_active" "$old_x11_enabled" "$old_pairing_config_mode" "$old_pairing_state_mode"
     compare_baseline
     accept_and_disarm automatic-rollback-green "$attempt_boot_id"
     ;;
@@ -1393,7 +1423,7 @@ case "$MODE" in
     run_remote_attempt activate-test "$CANDIDATE" "$GAMEPLAY_USER"
     run_remote_attempt restore "$ROLLBACK" true "$GAMEPLAY_USER" \
       "$old_korrid_active" "$old_korrid_enabled" "$old_sunshine_active" "$old_sunshine_enabled" \
-      "$old_x11_active" "$old_x11_enabled"
+      "$old_x11_active" "$old_x11_enabled" "$old_pairing_config_mode" "$old_pairing_state_mode"
     compare_baseline
     accept_and_disarm rollback-await-reboot "$attempt_boot_id"
     ;;

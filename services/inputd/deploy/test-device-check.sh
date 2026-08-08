@@ -301,6 +301,7 @@ case "$(basename "$0")" in
           printf 'input.sources-artifacts=%s\n' "${HARNESS_ARTIFACTS_BASELINE:-artifacts-clean}"
           printf 'inputplumber.active=%s\n' "${HARNESS_IP_ACTIVE:-active}"
           printf 'inputplumber.enabled=%s\n' "${HARNESS_IP_ENABLED:-enabled}"
+          printf 'sunshine.pairing-state-modes=%s\n' "${HARNESS_PAIRING_MODES:-700:600}"
           printf 'sunshine.pairing-state-present=%s\n' "${HARNESS_PAIRING_PRESENT:-true}"
           printf 'catalog.health=%s\n' "${HARNESS_CATALOG:-Ok}"
           ;;
@@ -478,7 +479,10 @@ case "$(basename "$0")" in
             [[ "${7:-}" == "${HARNESS_OLD_SUNSHINE_ENABLED:-true}" ]]
             [[ "${8:-}" == "${HARNESS_OLD_X11_ACTIVE:-true}" ]]
             [[ "${9:-}" == "${HARNESS_OLD_X11_ENABLED:-true}" ]]
-            printf 'candidate-services=disabled-stopped user-manager=fresh rollback-groups=restored\n' >>"$HARNESS_LOG"
+            pairing_modes="${HARNESS_PAIRING_MODES:-700:600}"
+            [[ "${10:-}" == "${pairing_modes%%:*}" ]]
+            [[ "${11:-}" == "${pairing_modes#*:}" ]]
+            printf 'candidate-services=disabled-stopped user-manager=fresh rollback-groups=restored pairing-modes=%s:%s\n' "${10:-}" "${11:-}" >>"$HARNESS_LOG"
             printf 'restore-enable x11-headless=%s sunshine=%s korrid=%s\n' "$9" "$7" "$5" >>"$HARNESS_LOG"
             if [[ "${HARNESS_RESTORE_ORDER:-dependency}" == sunshine-first ]]; then
               restore_units=(sunshine x11-headless korrid)
@@ -700,6 +704,7 @@ done
 pairing_secret='PAIRING-CONTENTS-MUST-STAY-PRIVATE'
 printf '%s\n' "$pairing_secret" >"$HARNESS_GAMEPLAY_HOME/.config/sunshine/sunshine_state.json"
 predicates="$(run_production_predicates)"
+grep -Fx 'sunshine.pairing-state-modes=700:600' <<<"$predicates" >/dev/null
 grep -Fx 'sunshine.pairing-state-present=true' <<<"$predicates" >/dev/null
 if grep -F "$pairing_secret" <<<"$predicates" >/dev/null; then
   printf 'pairing-state contents leaked into predicates\n' >&2
@@ -1049,6 +1054,10 @@ run_startup_abrupt_kill() {
   fi
   kill -KILL -- "-$pid"
   wait "$pid" 2>/dev/null || true
+  # Production leases are systemd units and survive the local gate process.
+  # The shell harness shares a process group with its modeled holder, so restore
+  # the already-proven live marker after SIGKILL to model that ownership exactly.
+  [[ "$window" != post-marker ]] || : >"$HARNESS_ATTEMPT_LEASE"
   rmdir "$HARNESS_LOG.lock" 2>/dev/null || true
   unset HARNESS_ATTEMPT_START_PAUSE HARNESS_PAUSE_MARKER
 }
@@ -1193,7 +1202,7 @@ grep -E 'wrapper=deadline .*action=predicates' "$HARNESS_LOG" >/dev/null
 
 flow_ledger="$TMP/flow-ledger"
 mapfile -d '' -t flow_args < <(common_for "$flow_ledger")
-export HARNESS_LEDGER="$flow_ledger"
+export HARNESS_LEDGER="$flow_ledger" HARNESS_PAIRING_MODES=755:644
 : >"$HARNESS_LOG"
 run_interactive candidate-test pending-mutation "$flow_ledger" "$TMP/candidate.tty" \
   "${flow_args[@]}" --confirm "$confirm"
@@ -1205,6 +1214,8 @@ grep -Fx 'old-user.x11-headless.active=true' "$flow_ledger/baseline.predicates" 
 grep -Fx 'old-user.x11-headless.enabled=true' "$flow_ledger/baseline.predicates" >/dev/null
 grep -Fx 'system.sunshine.active=inactive' "$flow_ledger/baseline.predicates" >/dev/null
 grep -Fx 'system.x11-headless.active=inactive' "$flow_ledger/baseline.predicates" >/dev/null
+grep -Fx 'sunshine.pairing-state-modes=755:644' "$flow_ledger/baseline.predicates" >/dev/null
+grep -F 'pairing-modes=755:644' "$HARNESS_LOG" >/dev/null
 grep -Fx 'sunshine.pairing-state-present=true' "$flow_ledger/baseline.predicates" >/dev/null
 grep -F 'predicates-user=gameplay wrapper=attempt-command' "$HARNESS_LOG" >/dev/null
 if grep -F 'predicates-user=root' "$HARNESS_LOG" >/dev/null; then

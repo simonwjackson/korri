@@ -40,9 +40,9 @@ The baseline contains no configuration file contents and no journal payloads. It
 - permissions, ACL, and gameplay-user readability as one digest;
 - moved-source and temporary-artifact topology as one digest;
 - InputPlumber active and enabled state;
-- Sunshine pairing-state file presence as one boolean.
+- Sunshine pairing-state file presence plus sanitized directory/file modes.
 
-The observed Sunshine baseline grounds the presence check at the gameplay user's `.config/sunshine/sunshine_state.json`. The gate resolves the gameplay UID and home. It requires the Sunshine directory and state file to be non-symlink directory/file objects owned by that UID. Both objects' permission modes must deny all group and other access. Their resolved paths must stay inside the gameplay home's real `.config` tree. The gate never opens, hashes, copies, moves, prints, or changes the file. It does not read or change `sunshine.conf`, `apps.json`, or other Sunshine configuration. Pairing material and configuration contents stay unchanged and redacted.
+The observed Sunshine baseline grounds the presence check at the gameplay user's `.config/sunshine/sunshine_state.json`. The gate resolves the gameplay UID and home. It requires the Sunshine directory and state file to be non-symlink directory/file objects owned by that UID, and their resolved paths must stay inside the gameplay home's real `.config` tree. Before candidate Sunshine starts, the gate changes only those two modes to `0700` and `0600`; every rollback restores the exact captured baseline modes before the old user service restarts. It never opens, hashes, copies, moves, or prints the state file and does not read or change `sunshine.conf`, `apps.json`, or other Sunshine configuration. Pairing contents stay unchanged and redacted.
 
 The gate never records game paths, catalog titles, game content, private configuration contents, credentials, or environment values.
 
@@ -120,7 +120,7 @@ The raw-readable scan skips only the event node whose complete normalized finger
 
 ## Failure handling
 
-If a mutating state fails, allow the cleanup trap to run. Do not rerun the failed mutation. Run `reconcile` with the same explicit target, generation, gameplay-user, and ledger arguments. It compares current/default generation links, all three old user-unit state pairs, all three system-unit state pairs, target/raw topology, ACL/readability, moved-source and temporary artifacts, InputPlumber state, pairing-state presence, and catalog health with the private baseline. The rebooted rollback uses the same complete comparison. Reconcile does not mutate the device.
+If a mutating state fails, allow the cleanup trap to run. Do not rerun the failed mutation. Run `reconcile` with the same explicit target, generation, gameplay-user, and ledger arguments. It compares current/default generation links, all three old user-unit state pairs, all three system-unit state pairs, target/raw topology, ACL/readability, moved-source and temporary artifacts, InputPlumber state, pairing-state presence and modes, and catalog health with the private baseline. The rebooted rollback uses the same complete comparison. Reconcile does not mutate the device.
 
 SIGKILL can bypass local cleanup and leave `pending-mutation`, `rollback-reboot-verifying`, `candidate-reboot-verifying`, or their `*-starting` states. Marker-required states require the exact nonce/candidate marker. Starting states can reconcile without a marker; an existing marker must match exactly. Any active matching lease blocks reconcile. Pending mutation requires the rollback generation and complete baseline. Rollback reboot verification also reruns rollback gates under a fresh bounded lease. Candidate reboot verification requires the candidate generation, exact controller/profile, complete automated gates, and an unchanged acceptance fingerprint under a fresh bounded lease. Only successful checks restore the ledger's explicit resume state. A failed check records `failed-needs-inspection`.
 
