@@ -401,7 +401,7 @@ mod tests {
     use super::*;
     use axum::{extract::State, routing::post, Json, Router};
     use serde_json::{json, Value};
-    use std::{sync::Arc, time::Duration};
+    use std::sync::Arc;
 
     #[derive(Clone)]
     struct LegacyServerState {
@@ -557,23 +557,19 @@ mod tests {
         };
         let legacy_url = legacy_server(legacy_state.clone()).await;
         let root = tempfile::tempdir().unwrap();
-        let marker = root.path().join("native-prepared");
         let config = root.path().join("host.toml");
         std::fs::write(
             &config,
-            format!(
-                r#"
+            r#"
 label = "zao"
 [[games]]
 id = "shared"
 title = "Native game"
-command = ["sh", "-c", "printf prepared > {}; sleep 1"]
+command = ["native-game"]
 "#,
-                marker.display()
-            ),
         )
         .unwrap();
-        let native_url = serve(crate::host_router(&config)).await;
+        let native_url = serve(crate::host_router_with_in_memory_units(&config)).await;
         let registry = UpstreamRegistry::new(vec![
             UpstreamHostConfig::legacy("aka", legacy_url),
             UpstreamHostConfig::native("zao", native_url),
@@ -607,13 +603,6 @@ command = ["sh", "-c", "printf prepared > {}; sleep 1"]
             .prepare_stream("shared", Some("zao"))
             .await
             .unwrap();
-        for _ in 0..50 {
-            if marker.exists() {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        assert!(marker.exists());
     }
 
     #[tokio::test]

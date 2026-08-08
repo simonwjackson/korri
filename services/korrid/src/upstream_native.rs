@@ -88,7 +88,6 @@ impl NativeClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{path::Path, time::Duration};
 
     async fn serve(app: axum::Router) -> String {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -109,16 +108,6 @@ mod tests {
             }),
         );
         serve(app).await
-    }
-
-    fn wait_for(path: &Path) {
-        for _ in 0..50 {
-            if path.exists() {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        panic!("{} was not created", path.display());
     }
 
     #[tokio::test]
@@ -157,24 +146,20 @@ mod tests {
     #[tokio::test]
     async fn native_client_round_trips_catalog_and_prepare() {
         let root = tempfile::tempdir().unwrap();
-        let marker = root.path().join("prepared");
         let config = root.path().join("host.toml");
         std::fs::write(
             &config,
-            format!(
-                r#"
+            r#"
 label = "zao"
 
 [[games]]
 id = "neverball"
 title = "Neverball"
-command = ["sh", "-c", "printf prepared > {}; sleep 1"]
+command = ["neverball"]
 "#,
-                marker.display()
-            ),
         )
         .unwrap();
-        let base_url = serve(crate::host_router(&config)).await;
+        let base_url = serve(crate::host_router_with_in_memory_units(&config)).await;
         let client = NativeClient::new(base_url);
 
         let catalog = client.catalog_snapshot().await.unwrap();
@@ -183,6 +168,5 @@ command = ["sh", "-c", "printf prepared > {}; sleep 1"]
 
         let prepared = client.prepare_stream("neverball").await.unwrap();
         assert_eq!(prepared.game_id, "neverball");
-        wait_for(&marker);
     }
 }

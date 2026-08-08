@@ -1,4 +1,5 @@
 mod config;
+pub(crate) mod control;
 mod prepare;
 
 use crate::{
@@ -10,7 +11,12 @@ use crate::{
     plugin_policy, CatalogSnapshot, Game, GameIdentity, RpcFailure, SessionPrepared,
 };
 use config::{HostConfig, HostConfigError};
+#[cfg(test)]
+use control::LaunchUnitBackend;
+use control::{HostSessionControl, HostSessionStatus, HostSessionStop};
 use prepare::HostLauncher;
+#[cfg(test)]
+use std::sync::Arc;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -93,12 +99,39 @@ pub struct HostRuntime {
 
 impl HostRuntime {
     pub fn from_path(path: &Path) -> Self {
-        Self::from_paths(path, None)
+        Self::from_paths(path, None, PathBuf::from("korri-state"))
     }
 
-    pub fn from_paths(path: &Path, storage_root: Option<PathBuf>) -> Self {
+    pub fn from_paths(
+        path: &Path,
+        storage_root: Option<PathBuf>,
+        private_state_root: PathBuf,
+    ) -> Self {
         let config = HostConfig::read(path);
-        let launcher = config.as_ref().ok().map(HostLauncher::new);
+        let launcher = config
+            .as_ref()
+            .ok()
+            .map(|config| HostLauncher::new(config, &private_state_root));
+        let dynamic = storage_root.map(|root| DynamicHostRuntime::from_root(&root));
+        Self {
+            config,
+            launcher,
+            dynamic,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_paths_with_backend(
+        path: &Path,
+        storage_root: Option<PathBuf>,
+        private_state_root: PathBuf,
+        backend: Arc<dyn LaunchUnitBackend>,
+    ) -> Self {
+        let config = HostConfig::read(path);
+        let launcher = config
+            .as_ref()
+            .ok()
+            .map(|config| HostLauncher::with_backend(config, &private_state_root, backend));
         let dynamic = storage_root.map(|root| DynamicHostRuntime::from_root(&root));
         Self {
             config,
@@ -153,6 +186,21 @@ impl HostRuntime {
             }
         }
         launcher.prepare(game_id)
+    }
+
+    fn control(&self) -> Result<&HostSessionControl, RpcFailure> {
+        self.launcher
+            .as_ref()
+            .map(HostLauncher::control)
+            .ok_or_else(|| config_failure(self.config.as_ref().expect_err("invalid host config")))
+    }
+
+    pub fn session_status(&self) -> Result<HostSessionStatus, RpcFailure> {
+        Ok(self.control()?.status())
+    }
+
+    pub fn session_stop(&self, expected_launch_id: &str) -> Result<HostSessionStop, RpcFailure> {
+        Ok(self.control()?.stop(expected_launch_id))
     }
 }
 

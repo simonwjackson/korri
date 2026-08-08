@@ -374,6 +374,8 @@ export interface SessionStatusRequest {
 
 export interface SessionStopRequest {
 	force?: boolean;
+	/** Required by the private host control listener. LAN host dispatch remains rejected. */
+	expectedLaunchId?: string;
 }
 
 export enum SessionStopPhase {
