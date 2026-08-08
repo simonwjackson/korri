@@ -158,10 +158,10 @@ impl ShortcutPolicy {
 
         let mut matches = Vec::new();
         if let Some(previous) = previous {
-            matches.extend(self.release(&source, previous));
+            matches.extend(self.handle(ControlEvent::released(source.clone(), previous)));
         }
         if let Some(next) = next {
-            matches.extend(self.press(source, next));
+            matches.extend(self.handle(ControlEvent::pressed(source, next)));
         }
         matches
     }

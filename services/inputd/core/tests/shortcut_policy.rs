@@ -133,6 +133,24 @@ fn source_loss_disarms_destructive_matching_until_every_control_is_released() {
 }
 
 #[test]
+fn destructive_dpad_control_release_can_arm_matching() {
+    let mut policy = ShortcutPolicy::new(
+        vec![ShortcutDefinition::destructive(
+            "destructive-dpad",
+            [Control::DpadLeft, Control::L1],
+        )],
+        vec![],
+    );
+
+    policy.handle_dpad_axis("pad", DpadAxis::Horizontal, -1);
+    policy.handle_dpad_axis("pad", DpadAxis::Horizontal, 0);
+    release(&mut policy, "pad", Control::L1);
+
+    policy.handle_dpad_axis("pad", DpadAxis::Horizontal, -1);
+    assert_eq!(press(&mut policy, "pad", Control::L1), ["destructive-dpad"]);
+}
+
+#[test]
 fn destructive_chord_is_exact_and_from_one_logical_source() {
     let mut policy = policy();
     release_destructive_controls(&mut policy, "pad-a");
