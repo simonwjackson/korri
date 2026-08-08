@@ -7,6 +7,9 @@ let
   lib = pkgs.lib;
   craneLib = (crane.mkLib pkgs).overrideToolchain pkgs.rust-bin.stable.latest.default;
   proseqlSource = import ./proseql-source.nix { inherit pkgs proseql; };
+  retroarchInputplumberAutoconfig =
+    pkgs.callPackage ../inputd/nix/retroarch-inputplumber-autoconfig.nix
+      { };
   sourceRoot = ./.;
   sourceRootString = toString sourceRoot;
   bundledPluginSources = [
@@ -82,7 +85,8 @@ craneLib.buildPackage (
     postInstall = ''
       wrapProgram "$out/bin/korrid" \
         --set KORRI_RETROARCH_EXECUTABLE ${pkgs.retroarch-bare}/bin/retroarch \
-        --set KORRI_MGBA_CORE ${pkgs.libretro.mgba}/lib/retroarch/cores/mgba_libretro.so
+        --set KORRI_MGBA_CORE ${pkgs.libretro.mgba}/lib/retroarch/cores/mgba_libretro.so \
+        --set KORRI_RETROARCH_AUTOCONFIG ${retroarchInputplumberAutoconfig}/share/libretro/autoconfig
     '';
   }
 )

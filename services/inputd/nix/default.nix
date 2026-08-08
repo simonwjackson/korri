@@ -15,16 +15,23 @@ let
   };
   inputplumberData = import ./inputplumber-data.nix { inherit pkgs; };
   inputplumberKorri = inputplumberData.compose { inherit inputplumberRuntime; };
+  retroarchInputplumberAutoconfig = pkgs.callPackage ./retroarch-inputplumber-autoconfig.nix { };
   inputdPackage = import ../package.nix { inherit pkgs crane; };
 in
 {
   packages = {
     inputplumber-korri = inputplumberKorri;
+    retroarch-inputplumber-autoconfig = retroarchInputplumberAutoconfig;
     korri-inputd = inputdPackage;
   };
   checks = {
     inputplumber-korri-package = import ./inputplumber-package-check.nix {
-      inherit pkgs inputplumberRuntime inputplumberKorri;
+      inherit
+        pkgs
+        inputplumberRuntime
+        inputplumberKorri
+        retroarchInputplumberAutoconfig
+        ;
     };
     korri-inputd-package = pkgs.runCommand "korri-inputd-package-check" { } ''
       test -x ${inputdPackage}/bin/korri-inputd

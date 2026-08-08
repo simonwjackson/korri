@@ -376,13 +376,16 @@ library:
         fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
         let executable = root.path().join("bin/retroarch");
         let core = root.path().join("cores/mgba.so");
+        let autoconfig = root.path().join("share/libretro/autoconfig");
         fs::create_dir_all(executable.parent().unwrap()).unwrap();
         fs::create_dir_all(core.parent().unwrap()).unwrap();
+        fs::create_dir_all(&autoconfig).unwrap();
         fs::write(&executable, b"binary").unwrap();
         fs::write(&core, b"core").unwrap();
         let environment = HashMap::from([
             ("KORRI_RETROARCH_EXECUTABLE", executable.as_os_str()),
             ("KORRI_MGBA_CORE", core.as_os_str()),
+            ("KORRI_RETROARCH_AUTOCONFIG", autoconfig.as_os_str()),
         ]);
 
         let runtime = DynamicHostRuntime::from_root_with_env(root.path(), |key| {
