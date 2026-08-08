@@ -6,7 +6,7 @@
   ...
 }:
 let
-  cfg = config.services.korri.input;
+  cfg = config.services.korriLinuxInput;
   system = pkgs.stdenv.hostPlatform.system;
   defaultInputd = korri.packages.${system}.korri-inputd;
   defaultProvider = korri.packages.${system}.inputplumber-korri;
@@ -113,7 +113,7 @@ let
   };
 in
 {
-  options.services.korri.input = {
+  options.services.korriLinuxInput = {
     provider = {
       enable = lib.mkEnableOption "Korri InputPlumber normalized-input provider";
       package = lib.mkOption {
@@ -223,9 +223,11 @@ in
     })
     (lib.mkIf cfg.provider.sunshine.enableUinputAccess {
       users.groups.${sunshineGroup}.gid = cfg.provider.sunshine.gid;
-      systemd.services.${cfg.provider.sunshine.serviceName}.serviceConfig.SupplementaryGroups = lib.mkAfter [
-        sunshineGroup
-      ];
+      systemd.services.${cfg.provider.sunshine.serviceName}.serviceConfig.SupplementaryGroups =
+        lib.mkAfter
+          [
+            sunshineGroup
+          ];
     })
     (lib.mkIf cfg.inputd.enable {
       assertions = [
