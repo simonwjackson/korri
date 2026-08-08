@@ -1,10 +1,9 @@
 use std::{
     collections::BTreeMap,
-    fs::{self, File, OpenOptions},
-    io::{Read, Seek},
-    os::unix::fs::OpenOptionsExt,
+    io::{self, Read},
+    os::fd::AsRawFd,
     path::{Path, PathBuf},
-    process::{Command, ExitStatus, Output, Stdio},
+    process::{Child, ChildStderr, ChildStdout, Command, ExitStatus, Output, Stdio},
     thread,
     time::{Duration, Instant},
 };
@@ -32,6 +31,7 @@ pub enum LaunchUnitErrorKind {
     Timeout,
     Failed,
     Protocol,
+    OutputLimit,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -234,55 +234,88 @@ impl SystemdLaunchUnitBackend {
         }
     }
 
-    fn helper_output_file() -> Result<File, LaunchUnitError> {
-        let path = std::env::temp_dir().join(format!(
-            ".korrid-systemd-helper-{}",
-            crate::generate_launch_id()
-        ));
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(&path)
-            .map_err(|error| {
-                LaunchUnitError::new(
-                    LaunchUnitErrorKind::Spawn,
-                    format!("could not create systemd helper output file: {error}"),
-                )
-            })?;
-        fs::remove_file(path).map_err(|error| {
-            LaunchUnitError::new(
-                LaunchUnitErrorKind::Spawn,
-                format!("could not unlink systemd helper output file: {error}"),
-            )
-        })?;
-        Ok(file)
-    }
-
-    fn read_helper_output(file: &mut File, name: &str) -> Result<Vec<u8>, LaunchUnitError> {
-        file.rewind().map_err(|error| {
-            LaunchUnitError::new(
-                LaunchUnitErrorKind::Protocol,
-                format!("could not rewind {name}: {error}"),
-            )
-        })?;
-        let mut bytes = Vec::new();
-        file.take(MAX_HELPER_OUTPUT_BYTES + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|error| {
-                LaunchUnitError::new(
-                    LaunchUnitErrorKind::Protocol,
-                    format!("could not read {name}: {error}"),
-                )
-            })?;
-        if bytes.len() as u64 > MAX_HELPER_OUTPUT_BYTES {
+    fn set_nonblocking(fd: &impl AsRawFd, name: &str) -> Result<(), LaunchUnitError> {
+        let descriptor = fd.as_raw_fd();
+        let flags = unsafe { libc::fcntl(descriptor, libc::F_GETFL) };
+        if flags == -1
+            || unsafe { libc::fcntl(descriptor, libc::F_SETFL, flags | libc::O_NONBLOCK) } == -1
+        {
             return Err(LaunchUnitError::new(
-                LaunchUnitErrorKind::Protocol,
-                format!("{name} exceeded {MAX_HELPER_OUTPUT_BYTES} bytes"),
+                LaunchUnitErrorKind::Spawn,
+                format!(
+                    "could not configure {name} as bounded pipe: {}",
+                    io::Error::last_os_error()
+                ),
             ));
         }
-        Ok(bytes)
+        Ok(())
+    }
+
+    fn drain_helper_output(
+        reader: &mut impl Read,
+        bytes: &mut Vec<u8>,
+        name: &str,
+    ) -> Result<bool, LaunchUnitError> {
+        let mut chunk = [0_u8; 8192];
+        loop {
+            match reader.read(&mut chunk) {
+                Ok(0) => return Ok(true),
+                Ok(count) => {
+                    if bytes.len() + count > MAX_HELPER_OUTPUT_BYTES as usize {
+                        return Err(LaunchUnitError::new(
+                            LaunchUnitErrorKind::OutputLimit,
+                            format!("{name} exceeded {MAX_HELPER_OUTPUT_BYTES} bytes"),
+                        ));
+                    }
+                    bytes.extend_from_slice(&chunk[..count]);
+                }
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => return Ok(false),
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                Err(error) => {
+                    return Err(LaunchUnitError::new(
+                        LaunchUnitErrorKind::Protocol,
+                        format!("could not read {name}: {error}"),
+                    ));
+                }
+            }
+        }
+    }
+
+    fn terminate_and_reap(child: &mut Child, deadline: Instant) -> Result<(), LaunchUnitError> {
+        let kill_error = child.kill().err();
+        match Self::wait_until_exit(child, deadline) {
+            Ok(Some(_)) => Ok(()),
+            Ok(None) => Err(LaunchUnitError::new(
+                LaunchUnitErrorKind::Protocol,
+                "systemd helper could not be reaped after termination",
+            )),
+            Err(error) => Err(LaunchUnitError::new(
+                LaunchUnitErrorKind::Protocol,
+                format!("systemd helper reap failed after termination: {error}"),
+            )),
+        }
+        .map_err(|mut error| {
+            if let Some(kill_error) = kill_error {
+                error
+                    .message
+                    .push_str(&format!("; kill reported {kill_error}"));
+            }
+            error
+        })
+    }
+
+    fn bounded_output_error(
+        child: &mut Child,
+        deadline: Instant,
+        error: LaunchUnitError,
+    ) -> LaunchUnitError {
+        match Self::terminate_and_reap(child, deadline) {
+            Ok(()) => error,
+            Err(reap_error) => LaunchUnitError::new(
+                error.kind,
+                format!("{}; {}", error.message, reap_error.message),
+            ),
+        }
     }
 
     pub(super) fn run(
@@ -292,24 +325,10 @@ impl SystemdLaunchUnitBackend {
     ) -> Result<Output, LaunchUnitError> {
         self.validate()?;
         let display = program.display();
-        let mut stdout_file = Self::helper_output_file()?;
-        let mut stderr_file = Self::helper_output_file()?;
-        let child_stdout = stdout_file.try_clone().map_err(|error| {
-            LaunchUnitError::new(
-                LaunchUnitErrorKind::Spawn,
-                format!("could not clone systemd helper stdout: {error}"),
-            )
-        })?;
-        let child_stderr = stderr_file.try_clone().map_err(|error| {
-            LaunchUnitError::new(
-                LaunchUnitErrorKind::Spawn,
-                format!("could not clone systemd helper stderr: {error}"),
-            )
-        })?;
         let mut child = Command::new(program)
             .args(arguments)
-            .stdout(Stdio::from(child_stdout))
-            .stderr(Stdio::from(child_stderr))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .spawn()
             .map_err(|error| {
                 LaunchUnitError::new(
@@ -317,51 +336,80 @@ impl SystemdLaunchUnitBackend {
                     format!("could not execute {display}: {error}"),
                 )
             })?;
+        let mut stdout: ChildStdout = child.stdout.take().expect("piped helper stdout");
+        let mut stderr: ChildStderr = child.stderr.take().expect("piped helper stderr");
+        if let Err(error) = Self::set_nonblocking(&stdout, "systemd helper stdout")
+            .and_then(|_| Self::set_nonblocking(&stderr, "systemd helper stderr"))
+        {
+            return Err(Self::bounded_output_error(
+                &mut child,
+                Instant::now() + self.helper_timeout,
+                error,
+            ));
+        }
+        let mut stdout_bytes = Vec::new();
+        let mut stderr_bytes = Vec::new();
         let deadline = Instant::now() + self.helper_timeout;
-        let status = match Self::wait_until_exit(&mut child, deadline) {
-            Ok(Some(status)) => status,
-            Ok(None) => {
-                let kill_error = child.kill().err();
-                let reap_deadline = Instant::now() + self.helper_timeout;
-                match Self::wait_until_exit(&mut child, reap_deadline) {
-                    Ok(Some(_)) => {
-                        let detail = kill_error
-                            .map(|error| format!("; kill reported {error}"))
-                            .unwrap_or_default();
-                        return Err(LaunchUnitError::new(
-                            LaunchUnitErrorKind::Timeout,
-                            format!("systemd helper {display} timed out{detail}"),
-                        ));
-                    }
-                    Ok(None) => {
-                        return Err(LaunchUnitError::new(
-                            LaunchUnitErrorKind::Timeout,
-                            format!("systemd helper {display} timed out and could not be reaped"),
-                        ));
-                    }
-                    Err(error) => {
-                        return Err(LaunchUnitError::new(
-                            LaunchUnitErrorKind::Timeout,
-                            format!("systemd helper {display} timed out and reap failed: {error}"),
-                        ));
-                    }
+        let status = loop {
+            for result in [
+                Self::drain_helper_output(&mut stdout, &mut stdout_bytes, "systemd helper stdout"),
+                Self::drain_helper_output(&mut stderr, &mut stderr_bytes, "systemd helper stderr"),
+            ] {
+                if let Err(error) = result {
+                    return Err(Self::bounded_output_error(
+                        &mut child,
+                        Instant::now() + self.helper_timeout,
+                        error,
+                    ));
                 }
             }
-            Err(error) => {
-                let _ = child.kill();
-                let _ = Self::wait_until_exit(&mut child, Instant::now() + self.helper_timeout);
-                return Err(LaunchUnitError::new(
-                    LaunchUnitErrorKind::Protocol,
-                    format!("could not wait for systemd helper {display}: {error}"),
-                ));
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    Self::drain_helper_output(
+                        &mut stdout,
+                        &mut stdout_bytes,
+                        "systemd helper stdout",
+                    )
+                    .and_then(|_| {
+                        Self::drain_helper_output(
+                            &mut stderr,
+                            &mut stderr_bytes,
+                            "systemd helper stderr",
+                        )
+                    })?;
+                    break status;
+                }
+                Ok(None) if Instant::now() < deadline => thread::sleep(
+                    HELPER_POLL_INTERVAL.min(deadline.saturating_duration_since(Instant::now())),
+                ),
+                Ok(None) => {
+                    let error = LaunchUnitError::new(
+                        LaunchUnitErrorKind::Timeout,
+                        format!("systemd helper {display} timed out"),
+                    );
+                    return Err(Self::bounded_output_error(
+                        &mut child,
+                        Instant::now() + self.helper_timeout,
+                        error,
+                    ));
+                }
+                Err(error) => {
+                    let error = LaunchUnitError::new(
+                        LaunchUnitErrorKind::Protocol,
+                        format!("could not wait for systemd helper {display}: {error}"),
+                    );
+                    return Err(Self::bounded_output_error(
+                        &mut child,
+                        Instant::now() + self.helper_timeout,
+                        error,
+                    ));
+                }
             }
         };
-        let stdout = Self::read_helper_output(&mut stdout_file, "systemd helper stdout")?;
-        let stderr = Self::read_helper_output(&mut stderr_file, "systemd helper stderr")?;
         Ok(Output {
             status,
-            stdout,
-            stderr,
+            stdout: stdout_bytes,
+            stderr: stderr_bytes,
         })
     }
 

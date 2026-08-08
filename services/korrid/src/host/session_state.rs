@@ -827,6 +827,45 @@ mod tests {
     }
 
     #[test]
+    fn noisy_systemd_helper_is_killed_reaped_and_returns_tagged_output_limit() {
+        let root = tempfile::tempdir().unwrap();
+        let helper = root.path().join("systemd-helper");
+        let pid_file = root.path().join("helper.pid");
+        fs::write(
+            &helper,
+            format!(
+                "#!/bin/sh\nprintf '%s' \"$$\" > {}\nexec yes noisy\n",
+                pid_file.display()
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o700)).unwrap();
+        let backend = SystemdLaunchUnitBackend::with_timeout(
+            helper.clone(),
+            helper,
+            1000,
+            1000,
+            Duration::from_secs(2),
+        )
+        .unwrap();
+
+        let started = Instant::now();
+        let error = backend
+            .run(&backend.systemctl, &["ignored".into()])
+            .unwrap_err();
+
+        assert_eq!(error.kind, LaunchUnitErrorKind::OutputLimit);
+        assert!(error.message.contains("65536 bytes"));
+        assert!(started.elapsed() < Duration::from_secs(2));
+        let pid: i32 = fs::read_to_string(pid_file).unwrap().parse().unwrap();
+        assert_eq!(unsafe { libc::kill(pid, 0) }, -1);
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::ESRCH)
+        );
+    }
+
+    #[test]
     fn hanging_systemd_helper_is_killed_reaped_and_returns_tagged_timeout() {
         let root = tempfile::tempdir().unwrap();
         let helper = root.path().join("systemd-helper");

@@ -4038,13 +4038,9 @@ mod tests {
         rpc_body_authorized(app, body, None).await
     }
 
-    async fn unix_rpc_body(app: Router, body: &str) -> serde_json::Value {
+    async fn unix_rpc_body(path: PathBuf, body: &str) -> serde_json::Value {
         use std::io::{Read, Write};
 
-        let root = tempfile::tempdir().unwrap();
-        let path = root.path().join("control.sock");
-        let listener = tokio::net::UnixListener::bind(&path).unwrap();
-        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let body = body.to_owned();
         let response = tokio::task::spawn_blocking(move || {
             let mut stream = std::os::unix::net::UnixStream::connect(path).unwrap();
@@ -4061,13 +4057,25 @@ mod tests {
         })
         .await
         .unwrap();
-        server.abort();
         let payload = response
             .windows(4)
             .position(|window| window == b"\r\n\r\n")
             .map(|position| &response[position + 4..])
             .expect("HTTP response body");
         serde_json::from_slice(payload).unwrap()
+    }
+
+    async fn tcp_rpc_body(address: std::net::SocketAddr, body: &str) -> serde_json::Value {
+        reqwest::Client::new()
+            .post(format!("http://{address}/rpc"))
+            .header(header::CONTENT_TYPE.as_str(), "application/json")
+            .body(body.to_owned())
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap()
     }
 
     async fn rpc_body_authorized(
@@ -4505,8 +4513,16 @@ command = ["game-two"]
         )
         .unwrap();
         let (lan, local) = host_routers_with_in_memory_units(&config);
-        let prepared = rpc_body(
-            lan.clone(),
+        let tcp_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let tcp_address = tcp_listener.local_addr().unwrap();
+        let socket_path = root.path().join("control.sock");
+        let unix_listener = tokio::net::UnixListener::bind(&socket_path).unwrap();
+        let lan_server = tokio::spawn(async move { axum::serve(tcp_listener, lan).await.unwrap() });
+        let local_server =
+            tokio::spawn(async move { axum::serve(unix_listener, local).await.unwrap() });
+
+        let prepared = tcp_rpc_body(
+            tcp_address,
             r#"{"_tag":"app.session.prepare","payload":{"gameId":"one"}}"#,
         )
         .await;
@@ -4516,34 +4532,63 @@ command = ["game-two"]
             .to_owned();
 
         let lan_status =
-            rpc_body(lan.clone(), r#"{"_tag":"app.session.status","payload":{}}"#).await;
+            tcp_rpc_body(tcp_address, r#"{"_tag":"app.session.status","payload":{}}"#).await;
         assert_eq!(
             lan_status["outcome"]["payload"]["code"],
             "SessionStatusUnsupported"
         );
+        assert!(lan_status.to_string().find(&first).is_none());
         let status = unix_rpc_body(
-            local.clone(),
+            socket_path.clone(),
             r#"{"_tag":"app.session.status","payload":{}}"#,
         )
         .await;
         assert_eq!(status["outcome"]["payload"]["active"]["launchId"], first);
         assert_eq!(status["outcome"]["payload"]["active"]["phase"], "running");
 
-        let missing_identity =
-            rpc_body(local.clone(), r#"{"_tag":"app.session.stop","payload":{}}"#).await;
+        let lan_stop = tcp_rpc_body(
+            tcp_address,
+            &serde_json::json!({
+                "_tag": "app.session.stop",
+                "payload": { "expectedLaunchId": first }
+            })
+            .to_string(),
+        )
+        .await;
+        assert_eq!(
+            lan_stop["outcome"]["payload"]["code"],
+            "SessionStopUnsupported"
+        );
+        assert!(lan_stop.to_string().find(&first).is_none());
+
+        let still_active = unix_rpc_body(
+            socket_path.clone(),
+            r#"{"_tag":"app.session.status","payload":{}}"#,
+        )
+        .await;
+        assert_eq!(
+            still_active["outcome"]["payload"]["active"]["launchId"],
+            first
+        );
+
+        let missing_identity = unix_rpc_body(
+            socket_path.clone(),
+            r#"{"_tag":"app.session.stop","payload":{}}"#,
+        )
+        .await;
         assert_eq!(
             missing_identity["outcome"]["payload"]["code"],
             "ExpectedLaunchIdRequired"
         );
-        let stale = rpc_body(
-            local.clone(),
+        let stale = unix_rpc_body(
+            socket_path.clone(),
             r#"{"_tag":"app.session.stop","payload":{"expectedLaunchId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}"#,
         )
         .await;
         assert_eq!(stale["outcome"]["payload"]["code"], "StaleLaunchIdentity");
 
-        let stopped = rpc_body(
-            local.clone(),
+        let stopped = unix_rpc_body(
+            socket_path.clone(),
             &serde_json::json!({
                 "_tag": "app.session.stop",
                 "payload": { "expectedLaunchId": first }
@@ -4552,8 +4597,8 @@ command = ["game-two"]
         )
         .await;
         assert_eq!(stopped["outcome"]["payload"]["phase"], "stopped");
-        let replacement = rpc_body(
-            lan,
+        let replacement = tcp_rpc_body(
+            tcp_address,
             r#"{"_tag":"app.session.prepare","payload":{"gameId":"two"}}"#,
         )
         .await;
@@ -4561,8 +4606,8 @@ command = ["game-two"]
             .as_str()
             .unwrap();
         assert_ne!(second, first);
-        let old_stop = rpc_body(
-            local,
+        let old_stop = unix_rpc_body(
+            socket_path,
             &serde_json::json!({
                 "_tag": "app.session.stop",
                 "payload": { "expectedLaunchId": first }
@@ -4574,6 +4619,8 @@ command = ["game-two"]
             old_stop["outcome"]["payload"]["code"],
             "StaleLaunchIdentity"
         );
+        lan_server.abort();
+        local_server.abort();
     }
 
     #[tokio::test]

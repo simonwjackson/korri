@@ -1,5 +1,10 @@
 use axum::{serve::Listener, Router};
-use std::{ffi::OsString, io, net::SocketAddr, os::fd::FromRawFd, path::PathBuf};
+use std::{ffi::OsString, io, net::SocketAddr, os::fd::FromRawFd, path::PathBuf, time::Duration};
+use tokio::sync::oneshot;
+
+const MAX_TRANSIENT_ACCEPT_RETRIES: u8 = 4;
+const INITIAL_ACCEPT_RETRY_DELAY: Duration = Duration::from_millis(10);
+const MAX_ACCEPT_RETRY_DELAY: Duration = Duration::from_millis(80);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ExpectedControlPeer {
@@ -42,14 +47,75 @@ fn authorize_peer_credentials(
     )
 }
 
+#[derive(Default)]
+struct AcceptErrorBudget {
+    transient_failures: u8,
+}
+
+impl AcceptErrorBudget {
+    fn retry_delay(&mut self, error: &io::Error) -> Option<Duration> {
+        if !is_transient_accept_error(error)
+            || self.transient_failures >= MAX_TRANSIENT_ACCEPT_RETRIES
+        {
+            return None;
+        }
+        let delay = INITIAL_ACCEPT_RETRY_DELAY
+            .saturating_mul(1_u32 << self.transient_failures)
+            .min(MAX_ACCEPT_RETRY_DELAY);
+        self.transient_failures += 1;
+        Some(delay)
+    }
+
+    fn accepted(&mut self) {
+        self.transient_failures = 0;
+    }
+}
+
+fn is_transient_accept_error(error: &io::Error) -> bool {
+    matches!(
+        error.kind(),
+        io::ErrorKind::Interrupted | io::ErrorKind::WouldBlock | io::ErrorKind::ConnectionAborted
+    ) || matches!(
+        error.raw_os_error(),
+        Some(
+            libc::ENETDOWN
+                | libc::EPROTO
+                | libc::ENOPROTOOPT
+                | libc::EHOSTDOWN
+                | libc::ENONET
+                | libc::EHOSTUNREACH
+                | libc::EOPNOTSUPP
+                | libc::ENETUNREACH
+                | libc::EMFILE
+                | libc::ENFILE
+                | libc::ENOBUFS
+                | libc::ENOMEM
+        )
+    )
+}
+
 struct AuthorizedUnixListener {
     listener: tokio::net::UnixListener,
     expected: ExpectedControlPeer,
+    terminal_error: Option<oneshot::Sender<io::Error>>,
+    error_budget: AcceptErrorBudget,
 }
 
 impl AuthorizedUnixListener {
-    fn new(listener: tokio::net::UnixListener, expected: ExpectedControlPeer) -> Self {
-        Self { listener, expected }
+    fn new(
+        listener: tokio::net::UnixListener,
+        expected: ExpectedControlPeer,
+    ) -> (Self, oneshot::Receiver<io::Error>) {
+        let (terminal_error, failure) = oneshot::channel();
+        (
+            Self {
+                listener,
+                expected,
+                terminal_error: Some(terminal_error),
+                error_budget: AcceptErrorBudget::default(),
+            },
+            failure,
+        )
     }
 }
 
@@ -61,17 +127,39 @@ impl Listener for AuthorizedUnixListener {
         loop {
             match self.listener.accept().await {
                 Ok((stream, address)) => {
+                    self.error_budget.accepted();
                     if authorize_peer_credentials(self.expected, unix_peer_credentials(&stream)) {
                         return (stream, address);
                     }
                 }
-                Err(error) => panic!("local control listener failed: {error}"),
+                Err(error) => match self.error_budget.retry_delay(&error) {
+                    Some(delay) => tokio::time::sleep(delay).await,
+                    None => {
+                        if let Some(terminal_error) = self.terminal_error.take() {
+                            let _ = terminal_error.send(error);
+                        }
+                        std::future::pending::<()>().await;
+                    }
+                },
             }
         }
     }
 
     fn local_addr(&self) -> io::Result<Self::Addr> {
         self.listener.local_addr()
+    }
+}
+
+async fn serve_local_control(
+    listener: AuthorizedUnixListener,
+    failure: oneshot::Receiver<io::Error>,
+    router: Router,
+) -> io::Result<()> {
+    tokio::select! {
+        result = axum::serve(listener, router) => result,
+        failure = failure => Err(failure.unwrap_or_else(|_| io::Error::other(
+            "local control listener failure channel closed",
+        ))),
     }
 }
 
@@ -86,6 +174,18 @@ where
         result = &mut lan => ("LAN", result),
         result = &mut local => ("local control", result),
     }
+}
+
+async fn serve_host_surfaces(
+    lan_listener: tokio::net::TcpListener,
+    lan_router: Router,
+    local_listener: AuthorizedUnixListener,
+    local_failure: oneshot::Receiver<io::Error>,
+    local_router: Router,
+) -> (&'static str, io::Result<()>) {
+    let lan_server = async move { axum::serve(lan_listener, lan_router).await };
+    let local_server = serve_local_control(local_listener, local_failure, local_router);
+    first_server_exit(lan_server, local_server).await
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -237,7 +337,7 @@ fn inherited_control_listener() -> Result<Option<std::os::unix::net::UnixListene
 async fn main() {
     let mode_value = std::env::var("KORRID_MODE").ok();
     let mode = Mode::parse(mode_value.as_deref()).unwrap_or_else(|error| panic!("{error}"));
-    let (router, local_control) = match mode {
+    let (lan_router, local_control_router) = match mode {
         Mode::Brain => (brain_router(), None),
         Mode::Host => {
             let (lan, local) = korrid::host_routers_with_storage_and_private(
@@ -256,7 +356,7 @@ async fn main() {
         .await
         .expect("bind korrid server");
 
-    if let Some(router) = local_control {
+    if let Some(local_router) = local_control_router {
         if let Some(listener) =
             inherited_control_listener().unwrap_or_else(|error| panic!("{error}"))
         {
@@ -264,16 +364,20 @@ async fn main() {
                 .expect("adopt inherited local control listener");
             let expected = ExpectedControlPeer::from_environment()
                 .unwrap_or_else(|error| panic!("invalid local control peer identity: {error}"));
-            let local_listener = AuthorizedUnixListener::new(listener, expected);
-            let lan_router = router.clone();
-            let lan_server = async move { axum::serve(lan_listener, lan_router).await };
-            let local_server = async move { axum::serve(local_listener, router).await };
-            let (name, result) = first_server_exit(lan_server, local_server).await;
+            let (local_listener, local_failure) = AuthorizedUnixListener::new(listener, expected);
+            let (name, result) = serve_host_surfaces(
+                lan_listener,
+                lan_router,
+                local_listener,
+                local_failure,
+                local_router,
+            )
+            .await;
             result.unwrap_or_else(|error| panic!("serve {name} korrid: {error}"));
             panic!("{name} korrid server exited unexpectedly");
         }
     }
-    axum::serve(lan_listener, router)
+    axum::serve(lan_listener, lan_router)
         .await
         .expect("serve korrid");
 }
@@ -349,6 +453,44 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn transient_accept_errors_use_bounded_backoff_then_surface_failure() {
+        let mut budget = AcceptErrorBudget::default();
+        let transient = || io::Error::from(io::ErrorKind::ConnectionAborted);
+
+        assert_eq!(
+            (0..MAX_TRANSIENT_ACCEPT_RETRIES)
+                .map(|_| budget.retry_delay(&transient()))
+                .collect::<Vec<_>>(),
+            vec![
+                Some(Duration::from_millis(10)),
+                Some(Duration::from_millis(20)),
+                Some(Duration::from_millis(40)),
+                Some(Duration::from_millis(80)),
+            ]
+        );
+        assert_eq!(budget.retry_delay(&transient()), None);
+    }
+
+    #[test]
+    fn successful_accept_resets_error_budget_and_permanent_errors_surface_immediately() {
+        let mut budget = AcceptErrorBudget::default();
+        let transient = io::Error::from(io::ErrorKind::Interrupted);
+        assert_eq!(
+            budget.retry_delay(&transient),
+            Some(INITIAL_ACCEPT_RETRY_DELAY)
+        );
+        budget.accepted();
+        assert_eq!(
+            budget.retry_delay(&transient),
+            Some(INITIAL_ACCEPT_RETRY_DELAY)
+        );
+        assert_eq!(
+            budget.retry_delay(&io::Error::from(io::ErrorKind::InvalidInput)),
+            None
+        );
+    }
+
     #[tokio::test]
     async fn unix_peer_credentials_are_read_from_the_connected_socket() {
         let (left, _right) = std::os::unix::net::UnixStream::pair().unwrap();
@@ -359,6 +501,52 @@ mod tests {
             unix_peer_credentials(&stream).unwrap(),
             (unsafe { libc::geteuid() }, unsafe { libc::getegid() })
         );
+    }
+
+    #[tokio::test]
+    async fn tcp_and_authorized_unix_listeners_keep_their_assigned_surfaces() {
+        use axum::routing::get;
+        use std::io::{Read, Write};
+
+        let root = tempfile::tempdir().unwrap();
+        let socket_path = root.path().join("control.sock");
+        let unix_listener = tokio::net::UnixListener::bind(&socket_path).unwrap();
+        let expected = ExpectedControlPeer {
+            uid: unsafe { libc::geteuid() },
+            primary_gid: unsafe { libc::getegid() },
+        };
+        let (authorized_listener, failure) = AuthorizedUnixListener::new(unix_listener, expected);
+        let tcp_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let tcp_address = tcp_listener.local_addr().unwrap();
+        let server = tokio::spawn(serve_host_surfaces(
+            tcp_listener,
+            Router::new().route("/surface", get(|| async { "LAN" })),
+            authorized_listener,
+            failure,
+            Router::new().route("/surface", get(|| async { "LocalControl" })),
+        ));
+
+        let lan = reqwest::get(format!("http://{tcp_address}/surface"))
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let local = tokio::task::spawn_blocking(move || {
+            let mut stream = std::os::unix::net::UnixStream::connect(socket_path).unwrap();
+            stream
+                .write_all(b"GET /surface HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+                .unwrap();
+            let mut response = String::new();
+            stream.read_to_string(&mut response).unwrap();
+            response.split("\r\n\r\n").nth(1).unwrap().to_owned()
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(lan, "LAN");
+        assert_eq!(local, "LocalControl");
+        server.abort();
     }
 
     #[tokio::test]
