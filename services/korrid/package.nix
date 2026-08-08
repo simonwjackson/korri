@@ -1,4 +1,8 @@
-{ pkgs, crane, proseql }:
+{
+  pkgs,
+  crane,
+  proseql,
+}:
 let
   lib = pkgs.lib;
   craneLib = (crane.mkLib pkgs).overrideToolchain pkgs.rust-bin.stable.latest.default;
@@ -14,7 +18,8 @@ let
   relativeSourcePath = path: lib.removePrefix "${sourceRootString}/" (toString path);
   cleanSource = lib.cleanSourceWith {
     src = sourceRoot;
-    filter = path: type:
+    filter =
+      path: type:
       (craneLib.filterCargoSources path type)
       # The script unit tests include the checked-in example plugin source.
       || lib.hasPrefix "${sourceRootString}/examples/" (toString path)
@@ -41,6 +46,7 @@ let
     pname = "korrid";
     version = "0.0.0";
     strictDeps = true;
+    meta.mainProgram = "korrid";
     nativeBuildInputs = [
       pkgs.clang
       pkgs.llvmPackages.libclang
@@ -48,29 +54,35 @@ let
     ];
     LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
   };
-  cargoArtifacts = craneLib.buildDepsOnly (commonArgs // {
-    extraDummyScript = proseqlSource.dummySourceScript;
-  });
+  cargoArtifacts = craneLib.buildDepsOnly (
+    commonArgs
+    // {
+      extraDummyScript = proseqlSource.dummySourceScript;
+    }
+  );
 in
-craneLib.buildPackage (commonArgs // {
-  inherit cargoArtifacts;
-  preConfigure = ''
-    plugin_sources="$(${pkgs.findutils}/bin/find plugins -type f -name '*.plugin.ts' -printf '%P\n' | sort)"
-    expected_plugin_sources=$'android-app.plugin.ts\nmgba.plugin.ts\nmoonlight.plugin.ts\nretroarch.plugin.ts'
-    if [[ "$plugin_sources" != "$expected_plugin_sources" ]]; then
-      echo "unexpected bundled plugin source set:" >&2
-      printf '%s\n' "$plugin_sources" >&2
-      exit 1
-    fi
-  '';
-  # Probe binaries and most tests include review fixtures outside this crate
-  # package. The flake package ships the runtime binary plus embedded library;
-  # the full repository gate remains `nix run .#korrid-check`.
-  cargoBuildExtraArgs = "--bin korrid --lib";
-  cargoTestExtraArgs = "--bin korrid";
-  postInstall = ''
-    wrapProgram "$out/bin/korrid" \
-      --set KORRI_RETROARCH_EXECUTABLE ${pkgs.retroarch-bare}/bin/retroarch \
-      --set KORRI_MGBA_CORE ${pkgs.libretro.mgba}/lib/retroarch/cores/mgba_libretro.so
-  '';
-})
+craneLib.buildPackage (
+  commonArgs
+  // {
+    inherit cargoArtifacts;
+    preConfigure = ''
+      plugin_sources="$(${pkgs.findutils}/bin/find plugins -type f -name '*.plugin.ts' -printf '%P\n' | sort)"
+      expected_plugin_sources=$'android-app.plugin.ts\nmgba.plugin.ts\nmoonlight.plugin.ts\nretroarch.plugin.ts'
+      if [[ "$plugin_sources" != "$expected_plugin_sources" ]]; then
+        echo "unexpected bundled plugin source set:" >&2
+        printf '%s\n' "$plugin_sources" >&2
+        exit 1
+      fi
+    '';
+    # Probe binaries and most tests include review fixtures outside this crate
+    # package. The flake package ships the runtime binary plus embedded library;
+    # the full repository gate remains `nix run .#korrid-check`.
+    cargoBuildExtraArgs = "--bin korrid --lib";
+    cargoTestExtraArgs = "--bin korrid";
+    postInstall = ''
+      wrapProgram "$out/bin/korrid" \
+        --set KORRI_RETROARCH_EXECUTABLE ${pkgs.retroarch-bare}/bin/retroarch \
+        --set KORRI_MGBA_CORE ${pkgs.libretro.mgba}/lib/retroarch/cores/mgba_libretro.so
+    '';
+  }
+)

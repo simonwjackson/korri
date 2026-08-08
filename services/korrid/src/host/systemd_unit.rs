@@ -184,8 +184,10 @@ impl SystemdLaunchUnitBackend {
         let systemctl = std::env::var_os("KORRID_SYSTEMCTL")
             .map(PathBuf::from)
             .unwrap_or_default();
-        let gameplay_uid = unsafe { libc::geteuid() };
-        let gameplay_gid = unsafe { libc::getegid() };
+        let gameplay_uid = configured_gameplay_id("KORRID_GAMEPLAY_UID")
+            .unwrap_or_else(|| unsafe { libc::geteuid() });
+        let gameplay_gid = configured_gameplay_id("KORRID_GAMEPLAY_GID")
+            .unwrap_or_else(|| unsafe { libc::getegid() });
         Self::new(
             systemd_run.clone(),
             systemctl.clone(),
@@ -444,6 +446,9 @@ impl SystemdLaunchUnitBackend {
             "--property=ProtectKernelTunables=yes".into(),
             "--property=ProtectKernelModules=yes".into(),
             "--property=ProtectControlGroups=yes".into(),
+            "--property=ProtectProc=invisible".into(),
+            "--property=ProcSubset=pid".into(),
+            "--property=InaccessiblePaths=/var/lib/korrid /run/korrid /run/korrid-control /dev/uinput /dev/inputplumber/sources".into(),
             "--property=RestrictSUIDSGID=yes".into(),
         ];
         arguments.extend(
@@ -583,6 +588,13 @@ impl LaunchUnitBackend for SystemdLaunchUnitBackend {
         ids.dedup();
         Ok(ids)
     }
+}
+
+fn configured_gameplay_id(name: &str) -> Option<u32> {
+    std::env::var(name)
+        .ok()
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|id| *id != 0)
 }
 
 pub(super) fn validate_launch_id(value: &str) -> Result<(), LaunchUnitError> {
