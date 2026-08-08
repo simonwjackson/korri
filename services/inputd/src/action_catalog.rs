@@ -379,6 +379,7 @@ impl ActionCommand {
         if argv.iter().any(|value| value.as_bytes().contains(&0)) {
             return Err(ActionConfigError::ArgumentContainsNul);
         }
+        let executable = canonical_immutable_executable(&executable)?;
         Ok(Self {
             executable,
             argv,
@@ -554,7 +555,7 @@ pub fn commands_from_environment(
     Ok((commands, routes))
 }
 
-fn canonical_immutable_executable(path: &Path) -> Result<PathBuf, ActionConfigError> {
+pub(crate) fn canonical_immutable_executable(path: &Path) -> Result<PathBuf, ActionConfigError> {
     if path
         .as_os_str()
         .as_bytes()

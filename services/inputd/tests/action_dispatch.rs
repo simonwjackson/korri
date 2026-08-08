@@ -300,13 +300,14 @@ fn environment_is_an_explicit_allowlist() {
         OsString::from("SWAYSOCK"),
         OsString::from("/run/user/100/sway.sock"),
     );
-    let command = ActionCommand::new("/nix/store/tool/bin/tool", [], allowed.clone()).unwrap();
+    let executable = std::fs::canonicalize("/run/current-system/sw/bin/true").unwrap();
+    let command = ActionCommand::new(&executable, [], allowed.clone()).unwrap();
 
     assert_eq!(command.environment(), &allowed);
     assert!(!command.environment().contains_key(OsStr::new("HOME")));
     assert!(matches!(
         ActionCommand::new(
-            "/nix/store/tool/bin/tool",
+            executable,
             [],
             BTreeMap::from([(OsString::from("BAD=NAME"), OsString::from("value"))]),
         ),
@@ -418,7 +419,8 @@ async fn action_child_cannot_retain_or_reopen_local_control_authority() {
         0
     );
 
-    let executable = std::env::current_exe().unwrap();
+    let test_executable = std::env::current_exe().unwrap();
+    let executable = std::fs::canonicalize("/run/current-system/sw/bin/sh").unwrap();
     let environment = BTreeMap::from([
         (
             OsString::from("KORRI_TEST_CONTROL_SOCKET"),
@@ -432,9 +434,10 @@ async fn action_child_cannot_retain_or_reopen_local_control_authority() {
     let command = ActionCommand::new(
         executable,
         [
-            OsString::from("--exact"),
-            OsString::from("action_child_process_contract_probe"),
-            OsString::from("--nocapture"),
+            OsString::from("-c"),
+            OsString::from("exec \"$1\" --exact action_child_process_contract_probe --nocapture"),
+            OsString::from("action-probe"),
+            test_executable.into_os_string(),
         ],
         environment,
     )

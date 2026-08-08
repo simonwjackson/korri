@@ -150,7 +150,12 @@ mod tests {
         let mut commands = ActionCommands::default();
         commands.insert(
             ActionId::WorkspaceNext,
-            ActionCommand::new("/absolute/test-action", [], BTreeMap::new()).unwrap(),
+            ActionCommand::new(
+                std::fs::canonicalize("/run/current-system/sw/bin/true").unwrap(),
+                [],
+                BTreeMap::new(),
+            )
+            .unwrap(),
         );
         let dispatcher = ActionDispatcher::with_cgroup_backend(
             commands,
