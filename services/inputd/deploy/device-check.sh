@@ -63,15 +63,35 @@ remote_wait_unit_inactive() {
 
 remote_generation() { realpath -e /run/current-system; }
 remote_user_systemctl() {
-  if [[ "$(id -u)" -eq 0 && -n "${SUDO_UID:-}" ]]; then
-    sudo -n -u "#$SUDO_UID" env XDG_RUNTIME_DIR="/run/user/$SUDO_UID" systemctl --user "$@"
-  else
+  local gameplay_user="$1" uid
+  shift
+  uid="$(id -u "$gameplay_user")" || fail 'gameplay user is unavailable'
+  [[ "$uid" =~ ^[1-9][0-9]*$ ]] || fail 'gameplay user UID is invalid'
+  sudo -n -u "$gameplay_user" env \
+    XDG_RUNTIME_DIR="/run/user/$uid" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
     systemctl --user "$@"
-  fi
 }
 
-remote_user_unit_active() { remote_user_systemctl is-active --quiet "$1" 2>/dev/null; }
-remote_user_unit_enabled() { remote_user_systemctl is-enabled --quiet "$1" 2>/dev/null; }
+remote_user_unit_active() {
+  local gameplay_user="$1" unit="$2" state
+  state="$(remote_user_systemctl "$gameplay_user" show "$unit" -p ActiveState --value)" || return 1
+  case "$state" in
+    active) printf 'true\n' ;;
+    inactive) printf 'false\n' ;;
+    *) printf 'unexpected user unit ActiveState for %s: %s\n' "$unit" "${state:-<empty>}" >&2; return 1 ;;
+  esac
+}
+
+remote_user_unit_enabled() {
+  local gameplay_user="$1" unit="$2" state
+  state="$(remote_user_systemctl "$gameplay_user" show "$unit" -p UnitFileState --value)" || return 1
+  case "$state" in
+    enabled) printf 'true\n' ;;
+    disabled|static) printf 'false\n' ;;
+    *) printf 'unexpected user unit UnitFileState for %s: %s\n' "$unit" "${state:-<empty>}" >&2; return 1 ;;
+  esac
+}
 
 remote_refuse_active_game() {
   local response phase code live_units
@@ -102,31 +122,53 @@ remote_refuse_active_game() {
 }
 
 remote_stop_old_user_units() {
-  local unit
+  local gameplay_user="$1" unit state
   for unit in "${OLD_USER_UNITS[@]}"; do
-    remote_user_systemctl stop "$unit" >/dev/null 2>&1 || true
-    remote_user_systemctl disable "$unit" >/dev/null 2>&1 || true
-    ! remote_user_unit_active "$unit" || fail "old user unit remained active: $unit"
-    ! remote_user_unit_enabled "$unit" || fail "old user unit remained enabled: $unit"
+    remote_user_systemctl "$gameplay_user" stop "$unit" >/dev/null 2>&1 || true
+    remote_user_systemctl "$gameplay_user" disable "$unit" >/dev/null 2>&1 || true
+    state="$(remote_user_unit_active "$gameplay_user" "$unit")" \
+      || fail "old user unit active state query failed after stop: $unit"
+    [[ "$state" == false ]] || fail "old user unit remained active: $unit"
+    state="$(remote_user_unit_enabled "$gameplay_user" "$unit")" \
+      || fail "old user unit enablement query failed after disable: $unit"
+    [[ "$state" == false ]] || fail "old user unit remained enabled: $unit"
   done
 }
 
-remote_restore_old_user_unit() {
-  local unit="$1" was_active="$2" was_enabled="$3"
+remote_restore_old_user_unit_enablement() {
+  local gameplay_user="$1" unit="$2" was_enabled="$3" state
   if [[ "$was_enabled" == true ]]; then
-    remote_user_systemctl enable "$unit" >/dev/null
+    remote_user_systemctl "$gameplay_user" enable "$unit" >/dev/null
   else
-    remote_user_systemctl disable "$unit" >/dev/null 2>&1 || true
+    remote_user_systemctl "$gameplay_user" disable "$unit" >/dev/null 2>&1 || true
   fi
+  state="$(remote_user_unit_enabled "$gameplay_user" "$unit")" \
+    || fail "old user unit enablement query failed during restore: $unit"
+  [[ "$state" == "$was_enabled" ]] || fail "old user unit enabled state was not restored: $unit"
+}
+
+remote_restore_old_user_unit_activity() {
+  local gameplay_user="$1" unit="$2" was_active="$3" state
   if [[ "$was_active" == true ]]; then
-    remote_user_systemctl start "$unit"
+    remote_user_systemctl "$gameplay_user" start "$unit"
   else
-    remote_user_systemctl stop "$unit" >/dev/null 2>&1 || true
+    remote_user_systemctl "$gameplay_user" stop "$unit" >/dev/null 2>&1 || true
   fi
-  [[ "$(remote_user_unit_active "$unit" && printf true || printf false)" == "$was_active" ]] \
-    || fail "old user unit active state was not restored: $unit"
-  [[ "$(remote_user_unit_enabled "$unit" && printf true || printf false)" == "$was_enabled" ]] \
-    || fail "old user unit enabled state was not restored: $unit"
+  state="$(remote_user_unit_active "$gameplay_user" "$unit")" \
+    || fail "old user unit active state query failed during restore: $unit"
+  [[ "$state" == "$was_active" ]] || fail "old user unit active state was not restored: $unit"
+}
+
+remote_restore_old_user_units() {
+  local gameplay_user="$1"
+  local korrid_active="$2" korrid_enabled="$3" sunshine_active="$4" sunshine_enabled="$5"
+  local x11_active="$6" x11_enabled="$7"
+  remote_restore_old_user_unit_enablement "$gameplay_user" x11-headless.service "$x11_enabled"
+  remote_restore_old_user_unit_enablement "$gameplay_user" sunshine.service "$sunshine_enabled"
+  remote_restore_old_user_unit_enablement "$gameplay_user" korrid.service "$korrid_enabled"
+  remote_restore_old_user_unit_activity "$gameplay_user" x11-headless.service "$x11_active"
+  remote_restore_old_user_unit_activity "$gameplay_user" sunshine.service "$sunshine_active"
+  remote_restore_old_user_unit_activity "$gameplay_user" korrid.service "$korrid_active"
 }
 
 remote_restart_user_manager() {
@@ -298,11 +340,11 @@ remote_temporary_artifacts_dirty() {
 }
 
 remote_unit_value() {
-  local scope="$1" unit="$2" property="$3"
+  local scope="$1" gameplay_user="$2" unit="$3" property="$4"
   if [[ "$scope" == user ]]; then
-    remote_user_systemctl show "$unit" -p "$property" --value 2>/dev/null || true
+    remote_user_systemctl "$gameplay_user" show "$unit" -p "$property" --value
   else
-    systemctl show "$unit" -p "$property" --value 2>/dev/null || true
+    systemctl show "$unit" -p "$property" --value
   fi
 }
 
@@ -313,24 +355,54 @@ remote_catalog_health() {
 }
 
 remote_pairing_state_present() {
-  local gameplay_user="$1" home
-  home="$(getent passwd "$gameplay_user" | cut -d: -f6)"
-  [[ -n "$home" && -f "$home/.config/sunshine/sunshine_state.json" ]]
+  local gameplay_user="$1" uid home home_real config_tree config_dir state_file
+  local config_real state_real config_stat state_stat config_mode state_mode
+  uid="$(id -u "$gameplay_user")" || return 1
+  home="$(getent passwd "$gameplay_user" | cut -d: -f6)" || return 1
+  [[ -n "$home" ]] || return 1
+  home_real="$(realpath -e -- "$home" 2>/dev/null)" || return 1
+  config_tree="$home_real/.config"
+  [[ "$(realpath -e -- "$home/.config" 2>/dev/null)" == "$config_tree" ]] || return 1
+  config_dir="$home/.config/sunshine"
+  state_file="$config_dir/sunshine_state.json"
+  config_stat="$(stat -c '%F:%u:%a' -- "$config_dir" 2>/dev/null)" || return 1
+  state_stat="$(stat -c '%F:%u:%a' -- "$state_file" 2>/dev/null)" || return 1
+  [[ "$config_stat" == "directory:$uid:"* && "$state_stat" == regular*"file:$uid:"* ]] || return 1
+  config_mode="${config_stat##*:}"
+  state_mode="${state_stat##*:}"
+  [[ "$config_mode" =~ ^[0-7]{3,4}$ && "$state_mode" =~ ^[0-7]{3,4}$ ]] || return 1
+  (( (8#$config_mode & 8#077) == 0 && (8#$state_mode & 8#077) == 0 )) || return 1
+  config_real="$(realpath -e -- "$config_dir" 2>/dev/null)" || return 1
+  state_real="$(realpath -e -- "$state_file" 2>/dev/null)" || return 1
+  [[ "$config_real" == "$config_tree/"* && "$state_real" == "$config_real/sunshine_state.json" ]]
 }
 
-remote_pid_group_names() {
-  local pid="$1" gid name
-  while read -r gid; do
-    [[ "$gid" =~ ^[0-9]+$ ]] || continue
-    name="$(getent group "$gid" | cut -d: -f1)"
-    [[ -n "$name" ]] && printf '%s\n' "$name"
-  done < <(awk '/^Groups:/ {for (i=2; i<=NF; i++) print $i}' "/proc/$pid/status")
+remote_group_gid() {
+  local name="$1" gid
+  gid="$(getent group "$name" | cut -d: -f3)" || return 1
+  [[ "$gid" =~ ^[0-9]+$ ]] || return 1
+  printf '%s\n' "$gid"
 }
 
-remote_pid_has_group() {
-  remote_pid_group_names "$1" | grep -Fx "$2" >/dev/null
+remote_pid_has_supplementary_gid() {
+  local pid="$1" expected_gid="$2" groups
+  groups="$(awk 'BEGIN { found=0 } /^Groups:/ { found=1; for (i=2; i<=NF; i++) print $i } END { exit found ? 0 : 1 }' "/proc/$pid/status" 2>/dev/null)" \
+    || return 2
+  grep -Fx "$expected_gid" <<<"$groups" >/dev/null
 }
 
+remote_pid_reject_supplementary_gid() {
+  local unit="$1" pid="$2" gid="$3" label="$4" status
+  if remote_pid_has_supplementary_gid "$pid" "$gid"; then
+    fail "$label supplementary group leaked to $unit"
+  else
+    status=$?
+    [[ "$status" -eq 1 ]] || fail "could not inspect supplementary groups for $unit"
+  fi
+}
+
+REMOTE_SERVICE_PID=''
+REMOTE_SERVICE_GID=''
 remote_service_credentials() {
   local unit="$1" declared_user declared_group pid uid gid expected_uid expected_gid fragment
   declared_user="$(systemctl show "$unit" -p User --value)"
@@ -349,31 +421,67 @@ remote_service_credentials() {
   gid="$(awk '/^Gid:/ {print $2}' "/proc/$pid/status" 2>/dev/null || true)"
   [[ "$uid" == "$expected_uid" && -n "$expected_gid" && "$gid" == "$expected_gid" ]] \
     || fail "candidate system service process credentials do not match its unit: $unit"
+  REMOTE_SERVICE_PID="$pid"
+  REMOTE_SERVICE_GID="$gid"
   printf 'service-credentials unit=%s user=%s primary-gid=%s\n' "$unit" "$declared_user" "$expected_gid"
 }
 
+remote_process_group_policy() {
+  local unit="$1" pid="$2" primary_gid="$3" input_gid="$4" uinput_gid="$5" control_gid="$6" sunshine_gid="$7"
+  remote_pid_reject_supplementary_gid "$unit" "$pid" "$input_gid" 'forbidden input'
+  remote_pid_reject_supplementary_gid "$unit" "$pid" "$uinput_gid" 'forbidden uinput'
+  if [[ "$unit" == korri-inputd.service ]]; then
+    [[ "$primary_gid" == "$control_gid" ]] || fail 'inputd does not use the control primary group'
+  else
+    [[ "$primary_gid" != "$control_gid" ]] || fail "control primary group leaked to $unit"
+    remote_pid_reject_supplementary_gid "$unit" "$pid" "$control_gid" 'forbidden control'
+  fi
+  if [[ "$unit" == sunshine.service ]]; then
+    [[ "$primary_gid" != "$sunshine_gid" ]] || fail 'Sunshine dedicated uinput group must be supplementary'
+    remote_pid_has_supplementary_gid "$pid" "$sunshine_gid" \
+      || fail 'system Sunshine lacks its dedicated uinput group'
+  else
+    [[ "$primary_gid" != "$sunshine_gid" ]] || fail "dedicated Sunshine uinput primary group leaked to $unit"
+    remote_pid_reject_supplementary_gid "$unit" "$pid" "$sunshine_gid" 'dedicated Sunshine uinput'
+  fi
+}
+
 remote_candidate_credentials() {
-  local gameplay_user="$1" uid manager_pid unit name
+  local gameplay_user="$1" uid manager_pid unit name pid primary_gid game_units
+  local input_gid uinput_gid control_gid sunshine_gid
   uid="$(id -u "$gameplay_user")" || fail 'gameplay user is unavailable'
+  input_gid="$(remote_group_gid input)" || fail 'input group is unavailable'
+  uinput_gid="$(remote_group_gid uinput)" || fail 'uinput group is unavailable'
+  control_gid="$(remote_group_gid "$KORRID_CONTROL_GROUP")" || fail 'control group is unavailable'
+  sunshine_gid="$(remote_group_gid "$SUNSHINE_UINPUT_GROUP")" || fail 'Sunshine uinput group is unavailable'
   manager_pid="$(systemctl show "user@$uid.service" -p MainPID --value 2>/dev/null || true)"
   [[ "$manager_pid" =~ ^[1-9][0-9]*$ && -r "/proc/$manager_pid/status" ]] \
     || fail 'fresh gameplay user manager is unavailable'
   for name in input uinput "$KORRID_CONTROL_GROUP" "$SUNSHINE_UINPUT_GROUP"; do
     ! id -nG "$gameplay_user" | tr ' ' '\n' | grep -Fx "$name" >/dev/null \
       || fail "gameplay user retains forbidden group: $name"
-    ! remote_pid_has_group "$manager_pid" "$name" \
-      || fail "fresh gameplay user manager retains forbidden group: $name"
   done
-  for unit in "${CANDIDATE_SYSTEM_UNITS[@]}"; do
+  for primary_gid in "$input_gid" "$uinput_gid" "$control_gid" "$sunshine_gid"; do
+    remote_pid_reject_supplementary_gid 'gameplay user manager' "$manager_pid" "$primary_gid" 'forbidden'
+  done
+  for unit in korrid.service x11-headless.service sunshine.service korri-inputd.service; do
     remote_service_credentials "$unit"
+    remote_process_group_policy "$unit" "$REMOTE_SERVICE_PID" "$REMOTE_SERVICE_GID" \
+      "$input_gid" "$uinput_gid" "$control_gid" "$sunshine_gid"
   done
-  remote_pid_has_group "$(systemctl show sunshine.service -p MainPID --value)" "$SUNSHINE_UINPUT_GROUP" \
-    || fail 'system Sunshine lacks its dedicated uinput group'
-  for unit in korrid.service x11-headless.service; do
-    ! remote_pid_has_group "$(systemctl show "$unit" -p MainPID --value)" "$SUNSHINE_UINPUT_GROUP" \
-      || fail "dedicated Sunshine uinput group leaked to $unit"
-  done
-  printf 'candidate-credentials=pass gameplay-broad-groups=none sunshine-uinput=exclusive\n'
+  game_units="$(systemctl list-units --type=service --state=activating,active,reloading,deactivating \
+    --no-legend --plain 'korri-game-*.service')" || fail 'Korri game unit credentials are unavailable'
+  while read -r unit _; do
+    [[ -n "$unit" ]] || continue
+    pid="$(systemctl show "$unit" -p MainPID --value)" || fail "game unit PID is unavailable: $unit"
+    primary_gid="$(awk '/^Gid:/ {print $2}' "/proc/$pid/status" 2>/dev/null)" \
+      || fail "game unit process credentials are unavailable: $unit"
+    [[ "$pid" =~ ^[1-9][0-9]*$ && "$primary_gid" =~ ^[0-9]+$ ]] \
+      || fail "game unit process credentials are invalid: $unit"
+    remote_process_group_policy "$unit" "$pid" "$primary_gid" \
+      "$input_gid" "$uinput_gid" "$control_gid" "$sunshine_gid"
+  done <<<"$game_units"
+  printf 'candidate-credentials=pass gameplay-broad-groups=none service-groups=least-privilege sunshine-uinput=exclusive\n'
 }
 
 remote_start_candidate_services() {
@@ -450,52 +558,64 @@ remote_source_artifacts_digest() {
 
 # Sanitized, exact predicates used for rollback and reconcile comparison.
 remote_predicates() {
-  local gameplay_user="$1" unit stem
+  local gameplay_user="$1" unit stem active enabled
   printf 'generation.current=%s\n' "$(remote_generation)"
   printf 'generation.default=%s\n' "$(readlink -f /nix/var/nix/profiles/system 2>/dev/null || true)"
   for unit in "${OLD_USER_UNITS[@]}"; do
     stem="${unit%.service}"
-    printf 'old-user.%s.active=%s\n' "$stem" "$(remote_user_unit_active "$unit" && printf true || printf false)"
-    printf 'old-user.%s.enabled=%s\n' "$stem" "$(remote_user_unit_enabled "$unit" && printf true || printf false)"
+    active="$(remote_user_unit_active "$gameplay_user" "$unit")" \
+      || fail "old user unit active state query failed: $unit"
+    enabled="$(remote_user_unit_enabled "$gameplay_user" "$unit")" \
+      || fail "old user unit enablement query failed: $unit"
+    printf 'old-user.%s.active=%s\n' "$stem" "$active"
+    printf 'old-user.%s.enabled=%s\n' "$stem" "$enabled"
   done
   for unit in "${CANDIDATE_SYSTEM_UNITS[@]}"; do
     stem="${unit%.service}"
-    printf 'system.%s.active=%s\n' "$stem" "$(remote_unit_value system "$unit" ActiveState)"
-    printf 'system.%s.enabled=%s\n' "$stem" "$(remote_unit_value system "$unit" UnitFileState)"
+    printf 'system.%s.active=%s\n' "$stem" "$(remote_unit_value system '' "$unit" ActiveState)"
+    printf 'system.%s.enabled=%s\n' "$stem" "$(remote_unit_value system '' "$unit" UnitFileState)"
   done
   printf 'topology.target=%s\n' "$(remote_topology_digest target)"
   printf 'topology.raw=%s\n' "$(remote_topology_digest raw)"
   printf 'input.acl-readability=%s\n' "$(remote_acl_digest "$gameplay_user")"
   printf 'input.sources-artifacts=%s\n' "$(remote_source_artifacts_digest)"
-  printf 'inputplumber.active=%s\n' "$(remote_unit_value system inputplumber.service ActiveState)"
-  printf 'inputplumber.enabled=%s\n' "$(remote_unit_value system inputplumber.service UnitFileState)"
+  printf 'inputplumber.active=%s\n' "$(remote_unit_value system '' inputplumber.service ActiveState)"
+  printf 'inputplumber.enabled=%s\n' "$(remote_unit_value system '' inputplumber.service UnitFileState)"
   printf 'sunshine.pairing-state-present=%s\n' "$(remote_pairing_state_present "$gameplay_user" && printf true || printf false)"
   printf 'catalog.health=%s\n' "$(remote_catalog_health)"
 }
 
 remote_unit_snapshot() {
-  local scope="$1" unit="$2"
+  local scope="$1" gameplay_user="$2" unit="$3" load active sub enabled status
+  load="$(remote_unit_value "$scope" "$gameplay_user" "$unit" LoadState)" \
+    || fail "$scope unit LoadState query failed: $unit"
+  active="$(remote_unit_value "$scope" "$gameplay_user" "$unit" ActiveState)" \
+    || fail "$scope unit ActiveState query failed: $unit"
+  sub="$(remote_unit_value "$scope" "$gameplay_user" "$unit" SubState)" \
+    || fail "$scope unit SubState query failed: $unit"
+  enabled="$(remote_unit_value "$scope" "$gameplay_user" "$unit" UnitFileState)" \
+    || fail "$scope unit UnitFileState query failed: $unit"
+  status="$(remote_unit_value "$scope" "$gameplay_user" "$unit" StatusText)" \
+    || fail "$scope unit StatusText query failed: $unit"
   printf '%s/%s LoadState=%s ActiveState=%s SubState=%s UnitFileState=%s StatusText=%s\n' \
-    "$scope" "$unit" "$(remote_unit_value "$scope" "$unit" LoadState)" \
-    "$(remote_unit_value "$scope" "$unit" ActiveState)" "$(remote_unit_value "$scope" "$unit" SubState)" \
-    "$(remote_unit_value "$scope" "$unit" UnitFileState)" "$(remote_unit_value "$scope" "$unit" StatusText)"
+    "$scope" "$unit" "$load" "$active" "$sub" "$enabled" "$status"
 }
 
 remote_inspect() {
-  local machine_id hostname
+  local gameplay_user="$1" machine_id hostname
   machine_id="$(tr -d '\n' </etc/machine-id)"
   hostname="$(hostname)"
   printf 'identity machine-id=%s hostname=%s\n' "$machine_id" "$hostname"
   printf 'generation current=%s default=%s\n' "$(remote_generation)" "$(readlink -f /nix/var/nix/profiles/system 2>/dev/null || true)"
   printf '%s\n' 'units:'
-  remote_unit_snapshot system inputplumber.service
-  remote_unit_snapshot system korri-inputd.service
-  remote_unit_snapshot system korrid.service
-  remote_unit_snapshot system sunshine.service
-  remote_unit_snapshot system x11-headless.service
-  remote_unit_snapshot user korrid.service
-  remote_unit_snapshot user sunshine.service
-  remote_unit_snapshot user x11-headless.service
+  remote_unit_snapshot system '' inputplumber.service
+  remote_unit_snapshot system '' korri-inputd.service
+  remote_unit_snapshot system '' korrid.service
+  remote_unit_snapshot system '' sunshine.service
+  remote_unit_snapshot system '' x11-headless.service
+  remote_unit_snapshot user "$gameplay_user" korrid.service
+  remote_unit_snapshot user "$gameplay_user" sunshine.service
+  remote_unit_snapshot user "$gameplay_user" x11-headless.service
   printf 'temporary-artifacts-dirty=%s catalog=%s\n' \
     "$(remote_temporary_artifacts_dirty && printf yes || printf no)" "$(remote_catalog_health)"
   printf '%s\n' 'physical-controller-candidates:'
@@ -525,7 +645,7 @@ remote_preflight() {
 remote_activate_test() {
   local candidate="$1" gameplay_user="$2"
   remote_refuse_active_game
-  remote_stop_old_user_units
+  remote_stop_old_user_units "$gameplay_user"
   sudo -n "$candidate/bin/switch-to-configuration" test
   remote_restart_user_manager "$gameplay_user"
   remote_start_candidate_services "$gameplay_user"
@@ -546,9 +666,7 @@ remote_restore() {
     sudo -n "$rollback/bin/switch-to-configuration" test
   fi
   remote_restart_user_manager "$gameplay_user"
-  remote_restore_old_user_unit korrid.service "$1" "$2"
-  remote_restore_old_user_unit sunshine.service "$3" "$4"
-  remote_restore_old_user_unit x11-headless.service "$5" "$6"
+  remote_restore_old_user_units "$gameplay_user" "$1" "$2" "$3" "$4" "$5" "$6"
   [[ "$(remote_generation)" == "$rollback" ]]
 }
 
@@ -565,15 +683,19 @@ remote_acceptance_fingerprint() {
 
 remote_automated_gates() {
   local gameplay_user="$1" expected_identity="$2" profile="$3" require_physical="$4"
-  local fingerprint current_fingerprint controller_evidence acceptance delegate delegate_controllers node event event_node unit readable_raw=0
+  local fingerprint current_fingerprint controller_evidence acceptance delegate delegate_controllers node event event_node unit active enabled readable_raw=0
   remote_wait_unit inputplumber.service
   remote_wait_unit korri-inputd.service Ready
   remote_wait_unit korrid.service
   remote_wait_unit x11-headless.service
   remote_wait_unit sunshine.service
   for unit in "${OLD_USER_UNITS[@]}"; do
-    ! remote_user_unit_active "$unit" || fail "old user service is active beside its system replacement: $unit"
-    ! remote_user_unit_enabled "$unit" || fail "old user service is enabled beside its system replacement: $unit"
+    active="$(remote_user_unit_active "$gameplay_user" "$unit")" \
+      || fail "old user unit active state query failed during candidate verification: $unit"
+    enabled="$(remote_user_unit_enabled "$gameplay_user" "$unit")" \
+      || fail "old user unit enablement query failed during candidate verification: $unit"
+    [[ "$active" == false ]] || fail "old user service is active beside its system replacement: $unit"
+    [[ "$enabled" == false ]] || fail "old user service is enabled beside its system replacement: $unit"
   done
   remote_candidate_credentials "$gameplay_user"
   remote_pairing_state_present "$gameplay_user" || fail 'Sunshine pairing-state file is absent'
@@ -639,7 +761,7 @@ remote_inject_health_failure() {
 remote_persistent_switch() {
   local candidate="$1" gameplay_user="$2"
   remote_refuse_active_game
-  remote_stop_old_user_units
+  remote_stop_old_user_units "$gameplay_user"
   sudo -n nix-env -p /nix/var/nix/profiles/system --set "$candidate"
   sudo -n "$candidate/bin/switch-to-configuration" switch
   remote_restart_user_manager "$gameplay_user"
@@ -759,7 +881,7 @@ if [[ "${1:-}" == --remote ]]; then
       timeout --signal=TERM --kill-after=5s "${deadline}s" "$0" --remote attempt-execute-root "$@"
   fi
   case "$action" in
-    inspect) remote_inspect ;;
+    inspect) remote_inspect "${1:?}" ;;
     predicates) remote_predicates "${1:?}" ;;
     preflight) remote_preflight "${1:?}" "${2:?}" "${3:-}" "${4:-}" ;;
     boot-id) tr -d '\n' </proc/sys/kernel/random/boot_id ;;
@@ -780,7 +902,7 @@ fi
 
 usage() {
   cat >&2 <<'EOF'
-usage: device-check.sh --host HOST --expected-machine-id ID --expected-hostname NAME --candidate GENERATION [options]
+usage: device-check.sh --host HOST --expected-machine-id ID --expected-hostname NAME --candidate GENERATION --gameplay-user USER [options]
 Modes: inspect, reconcile, candidate-test, inject-health-failure, rollback,
        rollback-reboot-verify, persistent-switch, candidate-reboot-verify
 Mutation modes require --candidate, --rollback-generation, --gameplay-user,
@@ -842,9 +964,10 @@ if [[ "$MODE" == persistent-switch || "$MODE" == candidate-reboot-verify ]]; the
   [[ -n "$EXPECTED_CONTROLLER_ID" && -n "$PRODUCTION_PROFILE" ]] \
     || fail 'persistent and candidate reboot modes require an explicit expected controller identity and production profile'
 fi
+[[ -n "$GAMEPLAY_USER" && "$GAMEPLAY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] \
+  || fail 'every mode requires an explicit gameplay user'
 if [[ "$MODE" != inspect ]]; then
   valid_generation_path "$ROLLBACK" || fail 'mutation and reconcile modes require a strictly valid Nix store rollback generation path'
-  [[ -n "$GAMEPLAY_USER" && "$GAMEPLAY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || fail 'mutation and reconcile modes require an explicit gameplay user'
   [[ -n "$LEDGER" ]] || fail 'mutation and reconcile modes require a private --ledger directory outside the repository'
 fi
 
@@ -970,11 +1093,11 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 if [[ "$MODE" == inspect ]]; then
-  [[ -z "$CONFIRM$ROLLBACK$GAMEPLAY_USER$LEDGER$EXPECTED_CONTROLLER_ID$PRODUCTION_PROFILE" ]] \
+  [[ -z "$CONFIRM$ROLLBACK$LEDGER$EXPECTED_CONTROLLER_ID$PRODUCTION_PROFILE" ]] \
     || fail 'inspect mode refuses mutation-only arguments'
   umask 077
   local_temp_ledger="$(mktemp -d "${TMPDIR:-/tmp}/korri-device-inspect.XXXXXX")"
-  run_remote_deadlined inspect >"$local_temp_ledger/inspection.txt"
+  run_remote_deadlined inspect "$GAMEPLAY_USER" >"$local_temp_ledger/inspection.txt"
   chmod 0600 "$local_temp_ledger/inspection.txt"
   cat "$local_temp_ledger/inspection.txt"
   printf 'inspection=complete mutation=none ledger=private-temporary\n'
@@ -1038,7 +1161,7 @@ if [[ ! -f "$LEDGER/baseline.predicates" ]]; then
   chmod 0600 "$LEDGER/baseline.predicates"
   grep -Fx "generation.current=$ROLLBACK" "$LEDGER/baseline.predicates" >/dev/null || fail 'baseline current generation is not the rollback generation'
   grep -Fx "generation.default=$ROLLBACK" "$LEDGER/baseline.predicates" >/dev/null || fail 'baseline default generation is not the rollback generation'
-  run_remote_deadlined inspect >"$LEDGER/baseline.txt"
+  run_remote_deadlined inspect "$GAMEPLAY_USER" >"$LEDGER/baseline.txt"
   chmod 0600 "$LEDGER/baseline.txt"
   sync -f "$LEDGER/baseline.predicates"
   sync -f "$LEDGER/baseline.txt"
