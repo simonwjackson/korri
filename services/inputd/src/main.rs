@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, ffi::OsString, path::PathBuf, process::ExitCode
 use korri_inputd::{
     actions::{
         commands_from_environment, set_parent_non_dumpable, ActionDispatcher, ActionIdentity,
-        ActionLimits, ActionOutcome,
+        ActionLimits, ActionOutcome, ActionRoutes, DispatchMode,
     },
     dbus::DbusSignalSource,
     devices::EvdevProvider,
@@ -32,7 +32,7 @@ async fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let (actions, korrid) = match configured_services() {
+    let (actions, routes, korrid) = match configured_services() {
         Ok(configured) => configured,
         Err(error) => {
             tracing::error!(
@@ -44,12 +44,12 @@ async fn main() -> ExitCode {
         }
     };
 
-    run(actions, korrid).await;
+    run(actions, routes, korrid).await;
     ExitCode::SUCCESS
 }
 
-async fn run(actions: ActionDispatcher, korrid: KorridClient) {
-    let mut runtime = Runtime::default();
+async fn run(actions: ActionDispatcher, routes: ActionRoutes, korrid: KorridClient) {
+    let mut runtime = Runtime::with_action_routes(routes);
     let mut provider = EvdevProvider::default();
     let mut dbus = None;
     let mut dbus_failure_logged = false;
@@ -182,19 +182,11 @@ fn dispatch_actions(
     for action in matched {
         tracing::info!(
             event = "inputd_policy_match",
-            action = action.id,
-            destructive = action.destructive,
+            action = %action.id,
+            dispatch_mode = ?action.dispatch_mode,
             "input policy matched"
         );
-        if action.destructive {
-            if action.id != "kill-current-game" {
-                tracing::error!(
-                    event = "inputd_destructive_action_rejected",
-                    action = action.id,
-                    "unknown destructive action was rejected"
-                );
-                continue;
-            }
+        if action.dispatch_mode == DispatchMode::ExactStop {
             let client = korrid.clone();
             tokio::spawn(async move {
                 match client.stop_active_exact().await {
@@ -212,20 +204,20 @@ fn dispatch_actions(
         let dispatcher = dispatcher.clone();
         tokio::spawn(async move {
             let action_id = action.id;
-            match dispatcher.dispatch(&action_id).await {
+            match dispatcher.dispatch(action_id).await {
                 ActionOutcome::Unconfigured => tracing::warn!(
                     event = "inputd_action_unconfigured",
-                    action = action_id,
+                    action = %action_id,
                     "input action has no configured command"
                 ),
                 ActionOutcome::ConcurrencyLimited => tracing::warn!(
                     event = "inputd_action_concurrency_limited",
-                    action = action_id,
+                    action = %action_id,
                     "input action was rejected at the concurrency limit"
                 ),
                 ActionOutcome::Completed(output) => tracing::info!(
                     event = "inputd_action_completed",
-                    action = action_id,
+                    action = %action_id,
                     stdout_bytes = output.stdout.len(),
                     stderr_bytes = output.stderr.len(),
                     stdout_truncated = output.stdout_truncated,
@@ -234,7 +226,7 @@ fn dispatch_actions(
                 ),
                 ActionOutcome::Failed(output) => tracing::warn!(
                     event = "inputd_action_failed",
-                    action = action_id,
+                    action = %action_id,
                     status = ?output.status,
                     stdout_bytes = output.stdout.len(),
                     stderr_bytes = output.stderr.len(),
@@ -242,14 +234,14 @@ fn dispatch_actions(
                 ),
                 ActionOutcome::TimedOut(output) => tracing::warn!(
                     event = "inputd_action_timed_out",
-                    action = action_id,
+                    action = %action_id,
                     stdout_bytes = output.stdout.len(),
                     stderr_bytes = output.stderr.len(),
                     "input action exceeded its runtime limit"
                 ),
                 ActionOutcome::SpawnFailed(error) => tracing::warn!(
                     event = "inputd_action_spawn_failed",
-                    action = action_id,
+                    action = %action_id,
                     error,
                     "input action child was rejected"
                 ),
@@ -273,9 +265,10 @@ fn log_stop_outcome(outcome: ExactStopOutcome) {
     );
 }
 
-fn configured_services() -> Result<(ActionDispatcher, KorridClient), String> {
+fn configured_services() -> Result<(ActionDispatcher, ActionRoutes, KorridClient), String> {
     let environment = std::env::vars_os().collect::<BTreeMap<OsString, OsString>>();
-    let commands = commands_from_environment(&environment).map_err(|error| error.to_string())?;
+    let (commands, routes) =
+        commands_from_environment(&environment).map_err(|error| error.to_string())?;
     let identity = ActionIdentity {
         uid: required_unprivileged_id("KORRI_INPUTD_ACTION_UID", &environment)?,
         gid: required_unprivileged_id("KORRI_INPUTD_ACTION_GID", &environment)?,
@@ -287,7 +280,7 @@ fn configured_services() -> Result<(ActionDispatcher, KorridClient), String> {
     let dispatcher = ActionDispatcher::new(commands, identity, ActionLimits::default())
         .map_err(|error| error.to_string())?;
     let socket = required_absolute_path("KORRI_INPUTD_CONTROL_SOCKET", &environment)?;
-    Ok((dispatcher, KorridClient::new(socket)))
+    Ok((dispatcher, routes, KorridClient::new(socket)))
 }
 
 fn required_unprivileged_id(

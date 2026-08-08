@@ -4,6 +4,7 @@ use evdev::{
     uinput::VirtualDevice, AttributeSet, BusType, Device, EventType, InputEvent, InputId, KeyCode,
 };
 use korri_inputd::{
+    action_catalog::{ActionId, DispatchMode},
     dbus::{Signal, DBUS_INPUT_MEMBER, DBUS_TARGET_INTERFACE, DBUS_TARGET_PATH},
     devices::{
         DeviceCapabilities, DeviceClass, DeviceDescriptor, OpenedTarget, TargetProvider,
@@ -118,7 +119,7 @@ async fn authenticated_dbus_shortcut_survives_an_exclusive_evdev_grab() -> io::R
         value: 1.0,
     });
     assert_eq!(actions.len(), 1);
-    assert_eq!(actions[0].id, "workspace-prev");
-    assert!(!actions[0].destructive);
+    assert_eq!(actions[0].id, ActionId::WorkspacePrev);
+    assert_eq!(actions[0].dispatch_mode, DispatchMode::Direct);
     Ok(())
 }

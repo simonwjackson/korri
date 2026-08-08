@@ -4,6 +4,7 @@ use evdev::{EventType, InputEvent, SynchronizationCode};
 use futures_util::stream;
 use korri_input_core::controls::{Control, ControlTransition};
 use korri_inputd::{
+    action_catalog::{ActionId, ActionRoutes, DispatchMode, Trigger, ACTION_CATALOG},
     dbus::{Signal, DBUS_INPUT_MEMBER, DBUS_TARGET_INTERFACE, DBUS_TARGET_PATH},
     devices::{
         parse_proc_bus_input_devices, resolve_target, DeviceCapabilities, DeviceClass,
@@ -110,7 +111,14 @@ fn raw(node: &str) -> DeviceDescriptor {
 }
 
 fn ready_runtime(provider: &mut InMemoryTargetProvider) -> Runtime {
-    let mut runtime = Runtime::default();
+    ready_runtime_with_routes(provider, ActionRoutes::default())
+}
+
+fn ready_runtime_with_routes(
+    provider: &mut InMemoryTargetProvider,
+    routes: ActionRoutes,
+) -> Runtime {
+    let mut runtime = Runtime::with_action_routes(routes);
     runtime.set_dbus_owner(Some(":1.42"));
     runtime.reconcile(provider);
     assert!(matches!(runtime.state(), RuntimeState::Ready { .. }));
@@ -220,8 +228,8 @@ fn duplicated_non_destructive_controls_dispatch_once_per_chord_lifecycle() {
     assert!(send_dbus(&mut runtime, Control::Home, ControlTransition::Pressed).is_empty());
     let first = runtime.handle_evdev(1, 0x136, 1);
     assert_eq!(first.len(), 1);
-    assert_eq!(first[0].id, "workspace-prev");
-    assert!(!first[0].destructive);
+    assert_eq!(first[0].id, ActionId::WorkspacePrev);
+    assert_eq!(first[0].dispatch_mode, DispatchMode::Direct);
     assert!(send_dbus(&mut runtime, Control::L1, ControlTransition::Pressed).is_empty());
 
     assert!(runtime.handle_evdev(1, 0x136, 0).is_empty());
@@ -231,7 +239,103 @@ fn duplicated_non_destructive_controls_dispatch_once_per_chord_lifecycle() {
     assert!(send_dbus(&mut runtime, Control::Home, ControlTransition::Pressed).is_empty());
     let second = send_dbus(&mut runtime, Control::L1, ControlTransition::Pressed);
     assert_eq!(second.len(), 1);
-    assert_eq!(second[0].id, "workspace-prev");
+    assert_eq!(second[0].id, ActionId::WorkspacePrev);
+}
+
+fn press_control(
+    runtime: &mut Runtime,
+    control: Control,
+) -> Vec<korri_inputd::runtime::RuntimeAction> {
+    match control {
+        Control::DpadLeft => runtime.handle_evdev(3, 16, -1),
+        Control::DpadRight => runtime.handle_evdev(3, 16, 1),
+        Control::DpadUp => runtime.handle_evdev(3, 17, -1),
+        Control::DpadDown => runtime.handle_evdev(3, 17, 1),
+        _ => runtime.handle_evdev(
+            1,
+            match control {
+                Control::Home => 0x13c,
+                Control::L1 => 0x136,
+                Control::R1 => 0x137,
+                Control::Start => 0x13b,
+                Control::Select => 0x13a,
+                Control::L3 => 0x13d,
+                Control::R3 => 0x13e,
+                Control::Back => 0x116,
+                Control::X => 0x133,
+                Control::VolumeUp => 0x73,
+                Control::VolumeDown => 0x72,
+                Control::DpadUp | Control::DpadDown | Control::DpadLeft | Control::DpadRight => {
+                    unreachable!()
+                }
+            },
+            1,
+        ),
+    }
+}
+
+#[test]
+fn legacy_controller_action_matrix_is_reachable_and_catalog_typed() {
+    for entry in ACTION_CATALOG {
+        let routes = match entry.trigger {
+            Trigger::ConfiguredBackTap => ActionRoutes {
+                back_tap: Some(entry.id),
+            },
+            _ => ActionRoutes::default(),
+        };
+        let mut provider = InMemoryTargetProvider::with(vec![target("event10")]);
+        let mut runtime = ready_runtime_with_routes(&mut provider, routes);
+        let mut emitted = Vec::new();
+        match entry.trigger {
+            Trigger::Tap(control) => {
+                emitted.extend(press_control(&mut runtime, control));
+                let code = if control == Control::Home {
+                    0x13c
+                } else {
+                    0x116
+                };
+                emitted.extend(runtime.handle_evdev(1, code, 0));
+            }
+            Trigger::Press(control) => emitted.extend(press_control(&mut runtime, control)),
+            Trigger::Chords(chords) | Trigger::ChordsAndConfiguredBackTap(chords) => {
+                let chord = chords[0];
+                if entry.dispatch_mode == DispatchMode::ExactStop {
+                    for control in chord.controls {
+                        let _ = send_dbus(&mut runtime, *control, ControlTransition::Released);
+                    }
+                    for control in chord.controls {
+                        emitted.extend(send_dbus_at(
+                            &mut runtime,
+                            *control,
+                            ControlTransition::Pressed,
+                            0,
+                        ));
+                    }
+                    emitted.extend(runtime.advance_actions_at(3_000));
+                } else {
+                    for control in chord.controls {
+                        emitted.extend(press_control(&mut runtime, *control));
+                    }
+                }
+            }
+            Trigger::ConfiguredBackTap => {
+                emitted.extend(press_control(&mut runtime, Control::Back));
+                emitted.extend(runtime.handle_evdev(1, 0x116, 0));
+            }
+            Trigger::Unsupported => {
+                assert!(emitted.is_empty());
+                continue;
+            }
+        }
+        assert!(
+            emitted.iter().any(|action| action.id == entry.id),
+            "catalog route was unreachable: {}",
+            entry.id
+        );
+        assert!(emitted
+            .iter()
+            .all(|action| ACTION_CATALOG.iter().any(|known| known.id == action.id)));
+    }
 }
 
 #[test]
@@ -372,7 +476,7 @@ async fn stream_loss_clears_state_and_requires_reconciliation_and_release_before
     assert!(runtime.advance_actions_at(2_999).is_empty());
     let actions = runtime.advance_actions_at(3_000);
     assert_eq!(actions.len(), 1);
-    assert!(actions[0].destructive);
+    assert_eq!(actions[0].dispatch_mode, DispatchMode::ExactStop);
 }
 
 #[test]
@@ -461,7 +565,7 @@ fn same_owner_refresh_does_not_close_target_or_clear_held_state() {
     assert_eq!(provider.open_calls, 1);
     let actions = send_dbus(&mut runtime, Control::L1, ControlTransition::Pressed);
     assert_eq!(actions.len(), 1);
-    assert_eq!(actions[0].id, "workspace-prev");
+    assert_eq!(actions[0].id, ActionId::WorkspacePrev);
 }
 
 #[tokio::test]

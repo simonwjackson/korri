@@ -12,6 +12,7 @@ use korri_input_core::{
 };
 
 use crate::{
+    action_catalog::{ActionId, ActionRoutes, DispatchMode, Trigger, ACTION_CATALOG},
     dbus::{authenticated_message, DbusAuthenticator, SemanticInput, Signal},
     devices::{
         resolve_target, validate_opened_descriptor, DeviceDescriptor, OpenedTarget, TargetIdentity,
@@ -49,41 +50,55 @@ pub enum RecoveryReason {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RuntimeAction {
-    pub id: String,
-    pub destructive: bool,
+    pub id: ActionId,
+    pub dispatch_mode: DispatchMode,
 }
 
 struct Policies {
     non_destructive: ShortcutPolicy,
     destructive: ShortcutPolicy,
+    direct_presses: std::collections::BTreeMap<Control, ActionId>,
     destructive_hold: HoldPolicy,
 }
 
 impl Policies {
-    fn new() -> Self {
+    fn new(routes: ActionRoutes) -> Self {
+        let mut shortcuts = Vec::new();
+        let mut destructive = Vec::new();
+        let mut taps = Vec::new();
+        let mut direct_presses = std::collections::BTreeMap::new();
+        for entry in ACTION_CATALOG {
+            match entry.trigger {
+                Trigger::Tap(control) => taps.push(TapDefinition::new(entry.id.as_str(), control)),
+                Trigger::Press(control) => {
+                    direct_presses.insert(control, entry.id);
+                }
+                Trigger::Chords(chords) | Trigger::ChordsAndConfiguredBackTap(chords) => {
+                    for chord in chords {
+                        if entry.dispatch_mode == DispatchMode::ExactStop {
+                            destructive.push(ShortcutDefinition::destructive(
+                                entry.id.as_str(),
+                                chord.controls.iter().copied(),
+                            ));
+                        } else {
+                            shortcuts.push(ShortcutDefinition::non_destructive(
+                                entry.id.as_str(),
+                                chord.controls.iter().copied(),
+                                chord.exact,
+                            ));
+                        }
+                    }
+                }
+                Trigger::ConfiguredBackTap | Trigger::Unsupported => {}
+            }
+            if routes.back_tap == Some(entry.id) {
+                taps.push(TapDefinition::new(entry.id.as_str(), Control::Back));
+            }
+        }
         Self {
-            non_destructive: ShortcutPolicy::new(
-                vec![
-                    ShortcutDefinition::non_destructive(
-                        "workspace-prev",
-                        [Control::Home, Control::L1],
-                        false,
-                    ),
-                    ShortcutDefinition::non_destructive(
-                        "workspace-next",
-                        [Control::Home, Control::R1],
-                        false,
-                    ),
-                ],
-                vec![TapDefinition::new("system-panel", Control::Home)],
-            ),
-            destructive: ShortcutPolicy::new(
-                vec![ShortcutDefinition::destructive(
-                    "kill-current-game",
-                    [Control::L1, Control::R1, Control::Start, Control::Select],
-                )],
-                vec![],
-            ),
+            non_destructive: ShortcutPolicy::new(shortcuts, taps),
+            destructive: ShortcutPolicy::new(destructive, vec![]),
+            direct_presses,
             destructive_hold: HoldPolicy::new(HoldConfig::default())
                 .expect("default destructive hold duration is valid"),
         }
@@ -109,19 +124,34 @@ impl Policies {
             InputSource::Evdev => EVDEV_SOURCE,
             InputSource::AuthenticatedDbus => DBUS_SOURCE,
         };
-        let actions = handle_policy(&mut self.non_destructive, source_name, input)
+        let mut actions = handle_policy(&mut self.non_destructive, source_name, input)
             .into_iter()
             .map(|id| RuntimeAction {
-                id,
-                destructive: false,
+                id: ActionId::try_from(id.as_str())
+                    .expect("shortcut ids come from the action catalog"),
+                dispatch_mode: DispatchMode::Direct,
             })
             .collect::<Vec<_>>();
+        if actions.is_empty() {
+            if let SemanticInput::Control(control, ControlTransition::Pressed) = input {
+                if let Some(id) = self.direct_presses.get(&control).copied() {
+                    actions.push(RuntimeAction {
+                        id,
+                        dispatch_mode: DispatchMode::Direct,
+                    });
+                }
+            }
+        }
         if source == InputSource::AuthenticatedDbus {
             for id in handle_policy(&mut self.destructive, source_name, input) {
                 self.destructive_hold.engage(id, now_ms);
             }
-            if !self.destructive.is_action_active("kill-current-game") {
-                self.destructive_hold.release("kill-current-game", now_ms);
+            if !self
+                .destructive
+                .is_action_active(ActionId::KillCurrentGame.as_str())
+            {
+                self.destructive_hold
+                    .release(ActionId::KillCurrentGame.as_str(), now_ms);
             }
         }
         actions
@@ -133,8 +163,9 @@ impl Policies {
             .into_iter()
             .filter(|update| update.phase == HoldPhase::Fired)
             .map(|update| RuntimeAction {
-                id: update.id,
-                destructive: true,
+                id: ActionId::try_from(update.id.as_str())
+                    .expect("hold ids come from the action catalog"),
+                dispatch_mode: DispatchMode::ExactStop,
             })
             .collect()
     }
@@ -174,7 +205,7 @@ impl Default for Runtime {
                 reason: RecoveryReason::ProviderUnavailable,
             },
             opened: None,
-            policies: Policies::new(),
+            policies: Policies::new(ActionRoutes::default()),
             dbus: DbusAuthenticator::default(),
             started_at: Instant::now(),
         }
@@ -182,6 +213,13 @@ impl Default for Runtime {
 }
 
 impl Runtime {
+    pub fn with_action_routes(routes: ActionRoutes) -> Self {
+        Self {
+            policies: Policies::new(routes),
+            ..Self::default()
+        }
+    }
+
     pub fn state(&self) -> &RuntimeState {
         &self.state
     }
@@ -491,6 +529,8 @@ pub fn map_evdev(event_type: u16, code: u16, value: i32) -> Option<SemanticInput
         0x13e => Control::R3,
         0x116 => Control::Back,
         0x133 => Control::X,
+        0x73 => Control::VolumeUp,
+        0x72 => Control::VolumeDown,
         _ => return None,
     };
     Some(SemanticInput::Control(

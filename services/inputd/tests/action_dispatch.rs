@@ -9,8 +9,8 @@ use std::{
 };
 
 use korri_inputd::actions::{
-    commands_from_environment, legacy_environment_name, ActionCommand, ActionConfigError,
-    ActionDispatcher, ActionIdentity, ActionLimits, ActionOutcome, ACTION_IDS,
+    action_entry, commands_from_environment, ActionCommand, ActionConfigError, ActionDispatcher,
+    ActionId, ActionIdentity, ActionLimits, ActionOutcome, ACTION_CATALOG,
 };
 
 fn identity_requiring_privilege_drop() -> ActionIdentity {
@@ -39,16 +39,16 @@ fn identity_requiring_privilege_drop() -> ActionIdentity {
 
 #[test]
 fn legacy_action_vocabulary_has_stable_configuration_names() {
-    assert_eq!(ACTION_IDS.len(), 18);
+    assert_eq!(ACTION_CATALOG.len(), 18);
     assert_eq!(
-        legacy_environment_name("system-panel"),
-        Some("KORRI_INPUTD_SYSTEM_PANEL")
+        action_entry(ActionId::SystemPanel).legacy_environment_name,
+        "KORRI_INPUTD_SYSTEM_PANEL"
     );
     assert_eq!(
-        legacy_environment_name("toggle-bottom-keyboard"),
-        Some("KORRI_INPUTD_BOTTOM_KEYBOARD")
+        action_entry(ActionId::ToggleBottomKeyboard).legacy_environment_name,
+        "KORRI_INPUTD_BOTTOM_KEYBOARD"
     );
-    assert_eq!(legacy_environment_name("unknown"), None);
+    assert!(ActionId::try_from("unknown").is_err());
 }
 
 #[test]
@@ -68,18 +68,21 @@ fn commands_require_absolute_executables_and_explicit_argv() {
         Err(ActionConfigError::CommandIsNotExplicitArgv)
     ));
 
+    let executable = std::fs::canonicalize("/run/current-system/sw/bin/true").unwrap();
     environment.insert(
         OsString::from("KORRI_INPUTD_SYSTEM_PANEL"),
         OsString::from(
-            r#"{"executable":"/nix/store/tool/bin/tool","argv":["--flag","value with spaces"],"environment":{"SWAYSOCK":"/run/user/100/sway.sock"}}"#,
+            serde_json::json!({
+                "executable": executable,
+                "argv": ["--flag", "value with spaces"],
+                "environment": {"SWAYSOCK": "/run/user/100/sway.sock"}
+            })
+            .to_string(),
         ),
     );
-    let commands = commands_from_environment(&environment).unwrap();
-    let command = commands.get("system-panel").unwrap();
-    assert_eq!(
-        command.executable(),
-        PathBuf::from("/nix/store/tool/bin/tool")
-    );
+    let (commands, _) = commands_from_environment(&environment).unwrap();
+    let command = commands.get(ActionId::SystemPanel).unwrap();
+    assert_eq!(command.executable(), executable);
     assert_eq!(
         command.argv(),
         [
@@ -91,6 +94,96 @@ fn commands_require_absolute_executables_and_explicit_argv() {
         command.environment().get(OsStr::new("SWAYSOCK")),
         Some(&OsString::from("/run/user/100/sway.sock"))
     );
+}
+
+#[test]
+fn immutable_executable_validation_rejects_dot_and_parent_traversal() {
+    let executable = std::fs::canonicalize("/run/current-system/sw/bin/true").unwrap();
+    let item = executable.ancestors().nth(2).unwrap();
+    for traversed in [
+        PathBuf::from(format!("{}/bin/./true", item.display())),
+        PathBuf::from(format!("{}/bin/../bin/true", item.display())),
+    ] {
+        let environment = BTreeMap::from([(
+            OsString::from("KORRI_INPUTD_SYSTEM_PANEL"),
+            OsString::from(
+                serde_json::json!({"executable": traversed, "argv": [], "environment": {}})
+                    .to_string(),
+            ),
+        )]);
+        assert!(matches!(
+            commands_from_environment(&environment),
+            Err(ActionConfigError::ExecutableTraversal(_))
+        ));
+    }
+}
+
+#[test]
+fn immutable_executable_must_resolve_to_a_regular_executable_in_the_same_store_item() {
+    let executable = std::fs::canonicalize("/run/current-system/sw/bin/true").unwrap();
+    let item = executable.ancestors().nth(2).unwrap();
+    let environment = BTreeMap::from([(
+        OsString::from("KORRI_INPUTD_SYSTEM_PANEL"),
+        OsString::from(
+            serde_json::json!({"executable": item.join("bin"), "argv": [], "environment": {}})
+                .to_string(),
+        ),
+    )]);
+    assert!(matches!(
+        commands_from_environment(&environment),
+        Err(ActionConfigError::ExecutableNotRegular(_))
+    ));
+}
+
+#[test]
+fn configured_action_matrix_accepts_only_currently_reachable_routes() {
+    let executable = std::fs::canonicalize("/run/current-system/sw/bin/true").unwrap();
+    let command =
+        serde_json::json!({"executable": executable, "argv": [], "environment": {}}).to_string();
+    let mut environment = BTreeMap::from([(
+        OsString::from("KORRI_INPUTD_BACK_TAP_ACTION"),
+        OsString::from("toggle-steam-visibility"),
+    )]);
+    for entry in ACTION_CATALOG {
+        if entry.dispatch_mode == korri_inputd::actions::DispatchMode::Direct
+            && !matches!(
+                entry.trigger,
+                korri_inputd::action_catalog::Trigger::Unsupported
+            )
+        {
+            environment.insert(
+                OsString::from(entry.legacy_environment_name),
+                OsString::from(&command),
+            );
+        }
+    }
+    let (commands, routes) = commands_from_environment(&environment).unwrap();
+    let accepted = commands
+        .configured_ids()
+        .collect::<std::collections::BTreeSet<_>>();
+    let reachable = ACTION_CATALOG
+        .iter()
+        .filter(|entry| entry.dispatch_mode == korri_inputd::actions::DispatchMode::Direct)
+        .filter(|entry| routes.is_reachable(entry))
+        .map(|entry| entry.id)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(accepted, reachable);
+
+    for id in [
+        ActionId::PowerSuspend,
+        ActionId::LidClosed,
+        ActionId::LidOpened,
+    ] {
+        let entry = action_entry(id);
+        let rejected = BTreeMap::from([(
+            OsString::from(entry.legacy_environment_name),
+            OsString::from(&command),
+        )]);
+        assert!(matches!(
+            commands_from_environment(&rejected),
+            Err(ActionConfigError::UnsupportedConfiguredAction(rejected_id)) if rejected_id == id
+        ));
+    }
 }
 
 #[test]
@@ -137,7 +230,7 @@ async fn unconfigured_action_is_a_bounded_no_op() {
     .unwrap();
 
     assert_eq!(
-        dispatcher.dispatch("workspace-next").await,
+        dispatcher.dispatch(ActionId::WorkspaceNext).await,
         ActionOutcome::Unconfigured
     );
 }
@@ -223,7 +316,7 @@ async fn action_child_cannot_retain_or_reopen_local_control_authority() {
     )
     .unwrap();
     let mut commands = korri_inputd::actions::ActionCommands::default();
-    commands.insert("workspace-next", command);
+    commands.insert(ActionId::WorkspaceNext, command);
     let identity = identity_requiring_privilege_drop();
     let dispatcher = ActionDispatcher::new(
         commands,
@@ -236,7 +329,7 @@ async fn action_child_cannot_retain_or_reopen_local_control_authority() {
     )
     .unwrap();
 
-    let outcome = dispatcher.dispatch("workspace-next").await;
+    let outcome = dispatcher.dispatch(ActionId::WorkspaceNext).await;
     let observed = server.await.unwrap();
     if unsafe { libc::geteuid() } == 0 {
         assert!(
@@ -258,7 +351,7 @@ async fn child_fails_closed_when_group_drop_cannot_be_proven() {
     let executable = std::fs::canonicalize("/run/current-system/sw/bin/true").unwrap();
     let command = ActionCommand::new(executable, [], BTreeMap::new()).unwrap();
     let mut commands = korri_inputd::actions::ActionCommands::default();
-    commands.insert("workspace-next", command);
+    commands.insert(ActionId::WorkspaceNext, command);
     let dispatcher = ActionDispatcher::new(
         commands,
         identity_requiring_privilege_drop(),
@@ -271,7 +364,7 @@ async fn child_fails_closed_when_group_drop_cannot_be_proven() {
     .unwrap();
 
     assert!(matches!(
-        dispatcher.dispatch("workspace-next").await,
+        dispatcher.dispatch(ActionId::WorkspaceNext).await,
         ActionOutcome::SpawnFailed(_)
     ));
 }

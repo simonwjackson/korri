@@ -1,19 +1,15 @@
-use std::{
-    collections::BTreeMap,
-    ffi::{OsStr, OsString},
-    fmt, io,
-    os::unix::ffi::OsStrExt,
-    path::{Path, PathBuf},
-    process::ExitStatus,
-    sync::Arc,
-    time::Duration,
-};
+use std::{io, process::ExitStatus, sync::Arc, time::Duration};
 
 use tokio::{
     io::AsyncReadExt,
     process::{Child, Command},
     sync::Semaphore,
     task::JoinHandle,
+};
+
+pub use crate::action_catalog::{
+    action_entry, commands_from_environment, ActionCommand, ActionCommands, ActionConfigError,
+    ActionId, ActionRoutes, DispatchMode, ACTION_CATALOG,
 };
 
 const OUTPUT_DRAIN_GRACE: Duration = Duration::from_millis(100);
@@ -39,136 +35,6 @@ impl Default for ActionLimits {
             timeout: Duration::from_secs(10),
             max_output_bytes: 8 * 1024,
         }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ActionCommand {
-    executable: PathBuf,
-    argv: Vec<OsString>,
-    environment: BTreeMap<OsString, OsString>,
-}
-
-impl ActionCommand {
-    pub fn new(
-        executable: impl Into<PathBuf>,
-        argv: impl IntoIterator<Item = OsString>,
-        environment: BTreeMap<OsString, OsString>,
-    ) -> Result<Self, ActionConfigError> {
-        let executable = executable.into();
-        if !executable.is_absolute() {
-            return Err(ActionConfigError::ExecutableNotAbsolute(executable));
-        }
-        if executable.as_os_str().as_bytes().contains(&0) {
-            return Err(ActionConfigError::ExecutableContainsNul);
-        }
-        for (name, value) in &environment {
-            let name = name.as_bytes();
-            if name.is_empty() || name.contains(&b'=') || name.contains(&0) {
-                return Err(ActionConfigError::InvalidEnvironmentName);
-            }
-            if value.as_bytes().contains(&0) {
-                return Err(ActionConfigError::InvalidEnvironmentValue);
-            }
-        }
-        let argv = argv.into_iter().collect::<Vec<_>>();
-        if argv.iter().any(|value| value.as_bytes().contains(&0)) {
-            return Err(ActionConfigError::ArgumentContainsNul);
-        }
-        Ok(Self {
-            executable,
-            argv,
-            environment,
-        })
-    }
-
-    pub fn executable(&self) -> &Path {
-        &self.executable
-    }
-
-    pub fn argv(&self) -> &[OsString] {
-        &self.argv
-    }
-
-    pub fn environment(&self) -> &BTreeMap<OsString, OsString> {
-        &self.environment
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ActionConfigError {
-    ExecutableNotAbsolute(PathBuf),
-    ExecutableContainsNul,
-    ArgumentContainsNul,
-    InvalidEnvironmentName,
-    InvalidEnvironmentValue,
-    ZeroConcurrency,
-    ZeroTimeout,
-    ZeroOutputLimit,
-    ControlGroupRetained,
-    PrivilegedActionIdentity,
-    DestructiveCommandOverride,
-    CommandIsNotUtf8,
-    CommandIsNotExplicitArgv,
-    ExecutableNotImmutable(PathBuf),
-}
-
-impl fmt::Display for ActionConfigError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ExecutableNotAbsolute(path) => {
-                write!(
-                    formatter,
-                    "action executable must be absolute: {}",
-                    path.display()
-                )
-            }
-            Self::ExecutableContainsNul => formatter.write_str("action executable contains NUL"),
-            Self::ArgumentContainsNul => formatter.write_str("action argument contains NUL"),
-            Self::InvalidEnvironmentName => {
-                formatter.write_str("action environment name is invalid")
-            }
-            Self::InvalidEnvironmentValue => {
-                formatter.write_str("action environment value contains NUL")
-            }
-            Self::ZeroConcurrency => formatter.write_str("action concurrency must be positive"),
-            Self::ZeroTimeout => formatter.write_str("action timeout must be positive"),
-            Self::ZeroOutputLimit => formatter.write_str("action output limit must be positive"),
-            Self::ControlGroupRetained => {
-                formatter.write_str("action GID must differ from inputd's control GID")
-            }
-            Self::PrivilegedActionIdentity => {
-                formatter.write_str("action UID and GID must be unprivileged")
-            }
-            Self::DestructiveCommandOverride => {
-                formatter.write_str("kill-current-game cannot be configured as a command override")
-            }
-            Self::CommandIsNotUtf8 => formatter.write_str("action command must be UTF-8 JSON"),
-            Self::CommandIsNotExplicitArgv => formatter
-                .write_str("action command must contain a JSON executable, argv, and environment"),
-            Self::ExecutableNotImmutable(path) => write!(
-                formatter,
-                "configured action executable must be an exact /nix/store path: {}",
-                path.display()
-            ),
-        }
-    }
-}
-
-impl std::error::Error for ActionConfigError {}
-
-#[derive(Clone, Debug, Default)]
-pub struct ActionCommands {
-    commands: BTreeMap<String, ActionCommand>,
-}
-
-impl ActionCommands {
-    pub fn insert(&mut self, id: impl Into<String>, command: ActionCommand) {
-        self.commands.insert(id.into(), command);
-    }
-
-    pub fn get(&self, id: &str) -> Option<&ActionCommand> {
-        self.commands.get(id)
     }
 }
 
@@ -209,7 +75,7 @@ impl ActionDispatcher {
         })
     }
 
-    pub async fn dispatch(&self, action_id: &str) -> ActionOutcome {
+    pub async fn dispatch(&self, action_id: ActionId) -> ActionOutcome {
         let Some(command) = self.commands.get(action_id).cloned() else {
             return ActionOutcome::Unconfigured;
         };
@@ -252,11 +118,11 @@ async fn execute(
     identity: ActionIdentity,
     limits: ActionLimits,
 ) -> ActionOutcome {
-    let mut command = Command::new(&configured.executable);
+    let mut command = Command::new(configured.executable());
     command
-        .args(&configured.argv)
+        .args(configured.argv())
         .env_clear()
-        .envs(&configured.environment)
+        .envs(configured.environment())
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -578,102 +444,10 @@ fn set_dumpable(enabled: bool) -> io::Result<()> {
     }
 }
 
-pub const ACTION_IDS: &[&str] = &[
-    "system-panel",
-    "kill-current-game",
-    "volume-up",
-    "volume-down",
-    "brightness-up",
-    "brightness-down",
-    "power-suspend",
-    "lid-closed",
-    "lid-opened",
-    "screen-switch",
-    "toggle-bottom-screen",
-    "toggle-top-screen",
-    "workspace-prev",
-    "workspace-next",
-    "move-output-up",
-    "move-output-down",
-    "toggle-bottom-keyboard",
-    "toggle-steam-visibility",
-];
-
-#[derive(serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ConfiguredAction {
-    executable: PathBuf,
-    argv: Vec<String>,
-    #[serde(default)]
-    environment: BTreeMap<String, String>,
-}
-
-pub fn commands_from_environment(
-    environment: &BTreeMap<OsString, OsString>,
-) -> Result<ActionCommands, ActionConfigError> {
-    if environment.contains_key(OsStr::new("KORRI_INPUTD_KILL_CURRENT_GAME")) {
-        return Err(ActionConfigError::DestructiveCommandOverride);
-    }
-    let mut commands = ActionCommands::default();
-    for action_id in ACTION_IDS {
-        if *action_id == "kill-current-game" {
-            continue;
-        }
-        let Some(name) = legacy_environment_name(action_id) else {
-            continue;
-        };
-        let Some(raw) = environment.get(OsStr::new(name)) else {
-            continue;
-        };
-        let raw = raw.to_str().ok_or(ActionConfigError::CommandIsNotUtf8)?;
-        let configured: ConfiguredAction =
-            serde_json::from_str(raw).map_err(|_| ActionConfigError::CommandIsNotExplicitArgv)?;
-        if !configured.executable.starts_with("/nix/store/") {
-            return Err(ActionConfigError::ExecutableNotImmutable(
-                configured.executable,
-            ));
-        }
-        let command = ActionCommand::new(
-            configured.executable,
-            configured.argv.into_iter().map(OsString::from),
-            configured
-                .environment
-                .into_iter()
-                .map(|(name, value)| (OsString::from(name), OsString::from(value)))
-                .collect(),
-        )?;
-        commands.insert(*action_id, command);
-    }
-    Ok(commands)
-}
-
-pub fn legacy_environment_name(action_id: &str) -> Option<&'static str> {
-    match action_id {
-        "system-panel" => Some("KORRI_INPUTD_SYSTEM_PANEL"),
-        "kill-current-game" => Some("KORRI_INPUTD_KILL_CURRENT_GAME"),
-        "volume-up" => Some("KORRI_INPUTD_VOLUME_UP"),
-        "volume-down" => Some("KORRI_INPUTD_VOLUME_DOWN"),
-        "brightness-up" => Some("KORRI_INPUTD_BRIGHTNESS_UP"),
-        "brightness-down" => Some("KORRI_INPUTD_BRIGHTNESS_DOWN"),
-        "power-suspend" => Some("KORRI_INPUTD_POWER_SUSPEND"),
-        "lid-closed" => Some("KORRI_INPUTD_LID_CLOSED"),
-        "lid-opened" => Some("KORRI_INPUTD_LID_OPENED"),
-        "screen-switch" => Some("KORRI_INPUTD_SCREEN_SWITCH"),
-        "toggle-bottom-screen" => Some("KORRI_INPUTD_TOGGLE_BOTTOM_SCREEN"),
-        "toggle-top-screen" => Some("KORRI_INPUTD_TOGGLE_TOP_SCREEN"),
-        "workspace-prev" => Some("KORRI_INPUTD_WORKSPACE_PREV"),
-        "workspace-next" => Some("KORRI_INPUTD_WORKSPACE_NEXT"),
-        "move-output-up" => Some("KORRI_INPUTD_MOVE_OUTPUT_UP"),
-        "move-output-down" => Some("KORRI_INPUTD_MOVE_OUTPUT_DOWN"),
-        "toggle-bottom-keyboard" => Some("KORRI_INPUTD_BOTTOM_KEYBOARD"),
-        "toggle-steam-visibility" => Some("KORRI_INPUTD_TOGGLE_STEAM_VISIBILITY"),
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
     use tokio::io::AsyncWriteExt;
 
     #[tokio::test]
@@ -697,7 +471,7 @@ mod tests {
         let control_gid = if gid == u32::MAX { gid - 1 } else { gid + 1 };
         let mut commands = ActionCommands::default();
         commands.insert(
-            "workspace-next",
+            ActionId::WorkspaceNext,
             ActionCommand::new("/absolute/test-action", [], BTreeMap::new()).unwrap(),
         );
         let dispatcher = ActionDispatcher::new(
@@ -716,7 +490,7 @@ mod tests {
         let _active = dispatcher.permits.acquire().await.unwrap();
 
         assert_eq!(
-            dispatcher.dispatch("workspace-next").await,
+            dispatcher.dispatch(ActionId::WorkspaceNext).await,
             ActionOutcome::ConcurrencyLimited
         );
     }
