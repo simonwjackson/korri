@@ -8,7 +8,8 @@ let
     filter =
       path: type:
       (craneLib.filterCargoSources path type)
-      || pkgs.lib.hasPrefix "${sourceRootString}/tests/fixtures/" (toString path);
+      || pkgs.lib.hasPrefix "${sourceRootString}/tests/fixtures/" (toString path)
+      || toString path == "${sourceRootString}/deploy/device-check.sh";
   };
   commonArgs = {
     inherit src;
@@ -24,6 +25,11 @@ craneLib.buildPackage (
   // {
     inherit cargoArtifacts;
     cargoBuildExtraArgs = "--bin korri-inputd --lib";
+    postInstall = ''
+      # Keep this byte-for-byte identical to the repository gate. The rollout
+      # verifies the candidate closure helper against the local source digest.
+      install -Dm0555 "$src/deploy/device-check.sh" "$out/bin/korri-device-gate"
+    '';
     doCheck = false;
   }
 )

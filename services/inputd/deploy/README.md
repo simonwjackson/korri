@@ -2,17 +2,19 @@
 
 `device-check.sh` is the repository-side gate for a reversible NixOS rollout on one explicit device. It does not contain a default host. It does not discover devices.
 
-The gate is read-only unless `--mode` selects a mutation state. Every invocation requires both the expected machine ID and expected hostname. The script reads both values over SSH and stops before upload, baseline capture, or mutation if either value differs.
+The gate is read-only unless `--mode` selects a mutation state. Every invocation requires the candidate generation, expected machine ID, and expected hostname. Before identity inspection, it requires the exact candidate helper at `CANDIDATE/sw/bin/korri-device-gate` to be root-owned, executable, non-writable store content whose SHA-256 matches the local gate source.
 
 ## Safety contract
 
 - Default `inspect` mode only reads state. It captures the result in a mode `0700` temporary directory, prints the sanitized result, and removes the temporary directory on exit.
-- Before the first SSH call, mutation and reconcile modes require strict canonical Nix generation path syntax for candidate and rollback. Remote preflight then proves that both exact paths exist and contain `switch-to-configuration`.
-- Every SSH command uses a shell-escaped argv. Candidate, rollback, user, and helper paths never enter unquoted remote shell text.
+- Before the first SSH call, every mode requires strict canonical Nix generation path syntax for the candidate. Mutation and reconcile modes also require it for rollback. Remote preflight proves that both exact paths exist and contain `switch-to-configuration`.
+- The inputd package installs the byte-identical gate as `bin/korri-device-gate`. The NixOS module places it in the candidate system closure. The rollout never uploads or runs a writable script with `sudo`.
+- Every SSH command uses a shell-escaped argv plus a local transport deadline and an appropriate remote command deadline. Candidate, rollback, user, and helper paths never enter unquoted remote shell text.
 - A mutation also requires a mode `0700` ledger outside the repository, an explicit gameplay user, and a confirmation token bound to the captured machine ID, hostname, and exact candidate generation.
 - The script prints the required confirmation token when it is absent. Run the same command again with `--confirm TOKEN` only after checking all three displayed values.
 - The script arms rollback by durably writing `pending-mutation` before every remote mutation. The remote process enforces the command deadline. A longer local SSH deadline covers the remote deadline and lock wait. Failure, timeout, or interruption runs rollback and records `failed-needs-inspection`.
-- A root-owned `/run/lock/korri-device-gate.lock` serializes every activation, restore, and persistent profile mutation. Rollback takes the same lock. It waits for an earlier remote mutation to finish or reports a clear lock/rollback failure. It never races a switch that survived an SSH transport failure.
+- A root-owned `/run/lock/korri-device-gate.lock` serializes each remote operation. A root-owned mode `0600` `/var/lib/korri-device-gate/attempt` marker and bounded systemd lease serialize the complete activation, verification, and restore or acceptance window. Both bind the private attempt nonce, exact candidate, and exact candidate helper. Every mutation and automated gate validates them.
+- Another invocation cannot replace a live marker. Reconcile removes a matching stale marker only after the lease is inactive and while it holds the root operation lock, so it cannot race a live switch.
 - Every automated gate and acceptance-fingerprint read after activation has both the remote wall-clock deadline and the longer local SSH deadline while rollback remains armed.
 - The gate rejects another mutation from `failed-needs-inspection`. `reconcile` is read-only. It requires the rollback generation and every sanitized baseline predicate to match before it restores the prior ledger state.
 - The script never retries a switch, profile change, reboot, or destructive command blindly.
@@ -85,7 +87,7 @@ A synthetic controller can be used only during separate temporary preflight work
 
 ## HITL stages
 
-The candidate remains active while a human verifies behavior that repository code cannot infer from static service state. `candidate-test`, `persistent-switch`, and candidate reboot verification prompt for all seven stage tokens. After activation, the gate generates a cryptographic per-attempt nonce. The private mode `0600` ledger is the only place that records it. Each displayed token binds the machine ID, hostname, exact candidate, nonce, boot ID, ledger state, and gate. The ledger records every consumed gate and rejects reuse. Production and tests use the same controlling-terminal path. No environment variable or command argument can supply or bypass HITL tokens.
+The candidate remains active while a human verifies behavior that repository code cannot infer from static service state. `candidate-test`, `persistent-switch`, and candidate reboot verification prompt for all seven stage tokens. Each `/dev/tty` read and the complete HITL stage have bounded timeouts. A timeout exits through armed cleanup and rollback. Before activation, the gate generates a cryptographic per-attempt nonce and durably arms rollback. The private mode `0600` ledger and root-owned remote attempt marker record it. Each displayed token binds the machine ID, hostname, exact candidate, nonce, boot ID, ledger state, and gate. The ledger records every consumed gate and rejects reuse. Production and tests use the same controlling-terminal path. No environment variable or command argument can supply or bypass HITL tokens.
 
 Immediately before acceptance, the gate re-reads the exact InputPlumber 0.75.2 `xb360` identity and capability fingerprint. It requires the virtual sysfs provenance, empty `phys` and `uniq`, exact keys and absolute axes, force-feedback support, joystick class, InputPlumber executable/version, event node, sysfs path, inode, and matching sysfs/device major-minor to remain unchanged. Persistent and reboot acceptance also re-read the CLI-bound physical identity and live production-profile selection.
 
@@ -118,8 +120,9 @@ A missing rollback closure, host identity mismatch, missing exact physical-contr
 Run without SSH or device mutation:
 
 ```sh
+./services/inputd/deploy/test-device-bitmap.sh
 ./services/inputd/deploy/test-device-check.sh
-shellcheck services/inputd/deploy/device-check.sh services/inputd/deploy/test-device-check.sh
+shellcheck services/inputd/deploy/device-check.sh services/inputd/deploy/test-device-check.sh services/inputd/deploy/test-device-bitmap.sh
 ```
 
-The shell test replaces SSH and SCP with a modeled command endpoint. The models cover systemd delegation property semantics, physical identity and live production-profile selection, topology count, normalized InputPlumber provenance/capabilities, ACL exposure, baseline drift, target replacement, remote timeout, and interruption. Successful HITL tests run the production `/dev/tty` prompt path through a pseudo-terminal. The tests also prove malicious generation paths stop before SSH, remote argv stays intact, rollback is armed before mutation, a remote mutation that survives transport finishes before lock-serialized rollback, candidate reboot token/SSH failures resume through reconcile, accepted persistent state resumes without repeating mutation, and the nonce is absent from terminal output.
+The shell test replaces SSH with a modeled command endpoint. The models cover systemd delegation property semantics, physical identity and live production-profile selection, topology count, normalized InputPlumber provenance/capabilities, ACL exposure, baseline drift, target replacement, remote timeout, and interruption. Successful HITL tests run the production `/dev/tty` prompt path through a pseudo-terminal. The tests also prove malicious generation paths stop before SSH, remote argv stays intact, rollback is armed before mutation, a remote mutation that survives transport finishes before lock-serialized rollback, candidate reboot token/SSH failures resume through reconcile, accepted persistent state resumes without repeating mutation, and the nonce is absent from terminal output.

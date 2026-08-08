@@ -35,6 +35,9 @@ in
     };
     korri-inputd-package = pkgs.runCommand "korri-inputd-package-check" { } ''
       test -x ${inputdPackage}/bin/korri-inputd
+      test -x ${inputdPackage}/bin/korri-device-gate
+      test "$(sha256sum ${inputdPackage}/bin/korri-device-gate | cut -d' ' -f1)" = \
+        "$(sha256sum ${../deploy/device-check.sh} | cut -d' ' -f1)"
       touch "$out"
     '';
     korri-input-module = import ./korri-input-module-check.nix {

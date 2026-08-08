@@ -15,6 +15,13 @@ cargo test --manifest-path core/Cargo.toml --all-targets
 cargo check --manifest-path core/Cargo.toml --target wasm32-unknown-unknown
 
 cd "$ROOT"
+bash -n services/inputd/deploy/device-check.sh services/inputd/deploy/test-device-check.sh \
+  services/inputd/deploy/test-device-bitmap.sh
+shellcheck services/inputd/deploy/device-check.sh services/inputd/deploy/test-device-check.sh \
+  services/inputd/deploy/test-device-bitmap.sh
+services/inputd/deploy/test-device-bitmap.sh
+services/inputd/deploy/test-device-check.sh
+
 nix build --no-link \
   .#checks."$(nix eval --raw --impure --expr builtins.currentSystem)".inputplumber-korri-package \
   .#checks."$(nix eval --raw --impure --expr builtins.currentSystem)".korri-input-module \

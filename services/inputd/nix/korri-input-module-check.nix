@@ -279,6 +279,10 @@ assert evaluationRejected emptyAction;
 pkgs.runCommand "korri-input-module-check" { } ''
   set -euo pipefail
   test -f ${providerWithData.config.services.inputplumber.package}/share/inputplumber/devices/platform-check.yaml
+  candidate_gate=${inputdOnly.config.system.build.toplevel}/sw/bin/korri-device-gate
+  test -x "$candidate_gate"
+  test "$(sha256sum "$candidate_gate" | cut -d' ' -f1)" = \
+    "$(sha256sum ${../deploy/device-check.sh} | cut -d' ' -f1)"
   policy_package="${
     lib.findFirst (path: lib.hasInfix "korri-inputplumber-dbus-policy" path) "" dbusPackages
   }"

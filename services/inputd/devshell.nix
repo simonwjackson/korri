@@ -13,6 +13,7 @@ pkgs.mkShell {
     rustToolchain
     pkgs.cargo-audit
     pkgs.nixfmt-rfc-style
+    pkgs.shellcheck
   ];
   shellHook = ''
     export CARGO_TARGET_DIR="$KORRI_ROOT/.cache/inputd-target"

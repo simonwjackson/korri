@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# This file is also the modeled SSH/SCP endpoint used by the tests below.
+# This file is also the modeled SSH endpoint used by the tests below.
 case "$(basename "$0")" in
   ssh-command-harness)
     command="${*: -1}"
@@ -9,6 +9,30 @@ case "$(basename "$0")" in
     # Model the remote login shell. If production quoting regresses, this eval
     # makes the adversarial tests execute their sentinel and fail.
     eval "set -- $command"
+    transport_deadlined=false
+    if [[ "${1:-}" == timeout ]]; then
+      transport_deadlined=true
+      shift
+      while [[ "${1:-}" == -* ]]; do shift; done
+      [[ "${1:-}" =~ ^[0-9]+s$ ]] || exit 72
+      shift
+    fi
+    if [[ "$transport_deadlined" != true ]]; then
+      if [[ "${2:-}" != --remote || ! "${3:-}" =~ ^(deadline|locked-root|attempt-command)$ ]]; then
+        printf 'bare SSH operation without a remote deadline\n' >&2
+        exit 73
+      fi
+    fi
+    if [[ "${1:-}" == stat && "${*: -1}" == */sw/bin/korri-device-gate ]]; then
+      printf '%s\n' "${HARNESS_HELPER_STAT:-0:555}"
+      exit 0
+    fi
+    if [[ "${1:-}" == sha256sum && "${*: -1}" == */sw/bin/korri-device-gate ]]; then
+      digest="$(sha256sum "${HARNESS_GATE_SOURCE:?}" | awk '{print $1}')"
+      [[ "${HARNESS_HELPER_DIGEST:-valid}" == valid ]] || digest=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+      printf '%s  %s\n' "$digest" "${*: -1}"
+      exit 0
+    fi
     if [[ "${1:-}" == cat && "${2:-}" == /etc/machine-id ]]; then
       printf '%s\n' "${HARNESS_MACHINE_ID:-0123456789abcdef0123456789abcdef}"
       exit 0
@@ -25,6 +49,7 @@ case "$(basename "$0")" in
       exit 0
     fi
     if [[ "${2:-}" == --remote ]]; then
+      helper_path="$1"
       action="${3:-}"
       shift 3
       wrapper=direct lock_owned=false
@@ -33,12 +58,22 @@ case "$(basename "$0")" in
         remote_deadline="$1"
         action="$2"
         shift 2
-      elif [[ "$action" == locked-mutation ]]; then
-        wrapper=locked-mutation
+      elif [[ "$action" == locked-root ]]; then
+        wrapper=locked-root
         remote_deadline="$1"
         lock_wait="$2"
         action="$3"
         shift 3
+      elif [[ "$action" == attempt-command ]]; then
+        wrapper=attempt-command
+        remote_deadline="$1"
+        lock_wait="$2"
+        attempt_nonce="$3"
+        attempt_candidate="$4"
+        action="$5"
+        shift 5
+      fi
+      if [[ "$wrapper" == locked-root || "$wrapper" == attempt-command ]]; then
         lock_dir="${HARNESS_GATE_LOCK:-$HARNESS_LOG.lock}"
         for _ in $(seq 1 500); do
           if mkdir "$lock_dir" 2>/dev/null; then
@@ -54,12 +89,65 @@ case "$(basename "$0")" in
         }
         trap '[[ "$lock_owned" != true ]] || rmdir "$lock_dir" 2>/dev/null || true' EXIT
       fi
+      if [[ "$wrapper" == attempt-command ]]; then
+        grep -Fx "nonce=$attempt_nonce" "$HARNESS_ATTEMPT_MARKER" >/dev/null 2>&1 \
+          && grep -Fx "candidate=$attempt_candidate" "$HARNESS_ATTEMPT_MARKER" >/dev/null 2>&1 \
+          && [[ -e "$HARNESS_ATTEMPT_LEASE" ]] || {
+            printf 'modeled attempt marker validation failed\n' >&2
+            exit 76
+          }
+      fi
+      case "$action" in
+        acceptance-fingerprint|automated-gates|rollback-gates|activate-test|inject-health-failure|restore|persistent-switch)
+          if [[ "$wrapper" != attempt-command \
+            || "$helper_path" != "$attempt_candidate/sw/bin/korri-device-gate" ]]; then
+            printf 'root mutation or gate argv did not name the candidate store helper\n' >&2
+            exit 79
+          fi
+          ;;
+        predicates|boot-id|current-generation)
+          if [[ "$wrapper" == attempt-command \
+            && "$helper_path" != "$attempt_candidate/sw/bin/korri-device-gate" ]]; then
+            printf 'root attempt argv did not name the candidate store helper\n' >&2
+            exit 79
+          fi
+          ;;
+      esac
       {
-        printf 'wrapper=%s remote-deadline=%s lock-wait=%s action=%s argv=' \
-          "$wrapper" "${remote_deadline:-none}" "${lock_wait:-none}" "$action"
+        printf 'helper=%q wrapper=%s remote-deadline=%s lock-wait=%s action=%s argv=' \
+          "$helper_path" "$wrapper" "${remote_deadline:-none}" "${lock_wait:-none}" "$action"
         printf '%q ' "$@"
         printf '\n'
       } >>"$HARNESS_LOG"
+      case "$action" in
+        attempt-start-root)
+          nonce="$1" candidate="$2"
+          if [[ -e "$HARNESS_ATTEMPT_MARKER" || -e "$HARNESS_ATTEMPT_LEASE" ]]; then
+            printf 'device gate: another device-gate attempt marker already exists\n' >&2
+            exit 77
+          fi
+          printf 'nonce=%s\ncandidate=%s\n' "$nonce" "$candidate" >"$HARNESS_ATTEMPT_MARKER"
+          : >"$HARNESS_ATTEMPT_LEASE"
+          exit 0
+          ;;
+        attempt-finish-root)
+          grep -Fx "nonce=$1" "$HARNESS_ATTEMPT_MARKER" >/dev/null \
+            && grep -Fx "candidate=$2" "$HARNESS_ATTEMPT_MARKER" >/dev/null || exit 76
+          rm -f "$HARNESS_ATTEMPT_LEASE" "$HARNESS_ATTEMPT_MARKER"
+          exit 0
+          ;;
+        attempt-reconcile-root)
+          [[ -e "$HARNESS_ATTEMPT_MARKER" ]] || exit 0
+          grep -Fx "nonce=$1" "$HARNESS_ATTEMPT_MARKER" >/dev/null \
+            && grep -Fx "candidate=$2" "$HARNESS_ATTEMPT_MARKER" >/dev/null || exit 76
+          [[ ! -e "$HARNESS_ATTEMPT_LEASE" ]] || {
+            printf 'device gate: device-gate attempt is still live; reconcile refuses to race it\n' >&2
+            exit 78
+          }
+          rm -f "$HARNESS_ATTEMPT_MARKER"
+          exit 0
+          ;;
+      esac
       if [[ "${HARNESS_FAIL_ACTION_ONCE:-}" == "$action" ]]; then
         fail_marker="${HARNESS_FAIL_ACTION_MARKER:?}"
         if [[ ! -e "$fail_marker" ]]; then
@@ -233,9 +321,6 @@ case "$(basename "$0")" in
     printf 'unexpected SSH argv: %q\n' "$command" >&2
     exit 69
     ;;
-  scp-command-harness)
-    exit 0
-    ;;
 esac
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -244,10 +329,9 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 SELF="$(realpath "$0")"
 ln -s "$SELF" "$TMP/ssh-command-harness"
-ln -s "$SELF" "$TMP/scp-command-harness"
 export KORRI_DEVICE_GATE_SSH="$TMP/ssh-command-harness"
-export KORRI_DEVICE_GATE_SCP="$TMP/scp-command-harness"
-export HARNESS_LOG="$TMP/commands.log"
+export HARNESS_LOG="$TMP/commands.log" HARNESS_GATE_SOURCE="$GATE"
+export HARNESS_ATTEMPT_MARKER="$TMP/remote-attempt" HARNESS_ATTEMPT_LEASE="$TMP/remote-attempt.lease"
 MACHINE_ID=0123456789abcdef0123456789abcdef
 HOSTNAME=u7-test-host
 CANDIDATE=/nix/store/00000000000000000000000000000000-nixos-system-u7-test-host-1
@@ -258,7 +342,8 @@ PRODUCTION_PROFILE=korri-60-xbox_one_gamepad.yaml
 export CANDIDATE ROLLBACK
 
 run_gate() {
-  "$GATE" --host "$HOSTNAME" --expected-machine-id "$MACHINE_ID" --expected-hostname "$HOSTNAME" "$@"
+  "$GATE" --host "$HOSTNAME" --expected-machine-id "$MACHINE_ID" --expected-hostname "$HOSTNAME" \
+    --candidate "$CANDIDATE" "$@"
 }
 
 assert_fails_with() {
@@ -320,8 +405,17 @@ assert_fails_with 'invalid host target' "$GATE" --host "host;touch-$TMP/host-exe
 
 : >"$HARNESS_LOG"
 assert_fails_with 'remote machine-id mismatch' "$GATE" --host "$HOSTNAME" \
-  --expected-machine-id ffffffffffffffffffffffffffffffff --expected-hostname "$HOSTNAME"
+  --expected-machine-id ffffffffffffffffffffffffffffffff --expected-hostname "$HOSTNAME" --candidate "$CANDIDATE"
 assert_no_mutation
+
+# The candidate helper must be immutable store content and byte-identical to
+# the local source before the gate uses it.
+export HARNESS_HELPER_STAT=0:755
+assert_fails_with 'must be executable and not writable' run_gate
+unset HARNESS_HELPER_STAT
+export HARNESS_HELPER_DIGEST=mismatch
+assert_fails_with 'digest does not match the local gate source' run_gate
+unset HARNESS_HELPER_DIGEST
 
 : >"$HARNESS_LOG"
 inspection="$(run_gate)"
@@ -369,7 +463,7 @@ assert_fails_with 'unsupported production profile' run_gate --mode persistent-sw
   --candidate "$CANDIDATE" --rollback-generation "$ROLLBACK" --gameplay-user "$GAMEPLAY_USER" \
   --ledger "$TMP/unsupported-profile-ledger" --expected-controller-id "$CONTROLLER_ID" \
   --production-profile default.yaml --confirm "$confirm"
-for controller_model in synthetic virtual unsupported stale generic-joystick; do
+for controller_model in synthetic virtual unsupported stale generic-joystick two-matching; do
   controller_ledger="$TMP/controller-$controller_model-ledger"
   mapfile -d '' -t controller_args < <(common_for "$controller_ledger")
   export HARNESS_LEDGER="$controller_ledger" HARNESS_CONTROLLER_MODEL="$controller_model"
@@ -463,6 +557,90 @@ run_interactive() {
   return "$status"
 }
 
+run_stalled_interactive() {
+  local ledger="$1" transcript="$2"
+  shift 2
+  local fifo="$TMP/stalled-tty-$RANDOM" command=''
+  local -a argv=("$GATE" --host "$HOSTNAME" --expected-machine-id "$MACHINE_ID" --expected-hostname "$HOSTNAME" --mode candidate-test "$@")
+  mkfifo "$fifo"
+  printf -v command '%q ' "${argv[@]}"
+  script -qefc "$command" /dev/null <"$fifo" >"$transcript" 2>&1 &
+  local script_pid=$!
+  exec 4>"$fifo"
+  local status=0
+  wait "$script_pid" || status=$?
+  exec 4>&-
+  [[ ! -e "$HARNESS_ATTEMPT_MARKER" && ! -e "$HARNESS_ATTEMPT_LEASE" ]]
+  return "$status"
+}
+
+# A stalled controlling terminal reaches the bounded read timeout while
+# rollback is armed. Cleanup restores the baseline and releases the marker.
+stalled_ledger="$TMP/stalled-ledger"
+mapfile -d '' -t stalled_args < <(common_for "$stalled_ledger")
+export HARNESS_LEDGER="$stalled_ledger" KORRI_DEVICE_GATE_HITL_READ_TIMEOUT=1
+export KORRI_DEVICE_GATE_HITL_OVERALL_TIMEOUT=2 KORRI_DEVICE_GATE_ATTEMPT_TIMEOUT=4
+: >"$HARNESS_LOG"
+if run_stalled_interactive "$stalled_ledger" "$TMP/stalled.tty" "${stalled_args[@]}" --confirm "$confirm"; then
+  printf 'stalled HITL unexpectedly passed\n' >&2
+  exit 1
+fi
+grep -F 'HITL stage timed out: normalized-gameplay' "$TMP/stalled.tty" >/dev/null
+grep -Fx 'state=failed-needs-inspection' "$stalled_ledger/state" >/dev/null
+grep -F 'action=restore' "$HARNESS_LOG" >/dev/null
+unset KORRI_DEVICE_GATE_HITL_READ_TIMEOUT KORRI_DEVICE_GATE_HITL_OVERALL_TIMEOUT KORRI_DEVICE_GATE_ATTEMPT_TIMEOUT
+
+# The durable remote marker rejects a second invocation throughout the first
+# invocation's activation and HITL window.
+first_ledger="$TMP/interleaved-first-ledger"
+second_ledger="$TMP/interleaved-second-ledger"
+mapfile -d '' -t first_args < <(common_for "$first_ledger")
+mapfile -d '' -t second_args < <(common_for "$second_ledger")
+interleaved_fifo="$TMP/interleaved-fifo"
+mkfifo "$interleaved_fifo"
+printf -v interleaved_command '%q ' "$GATE" --host "$HOSTNAME" --expected-machine-id "$MACHINE_ID" \
+  --expected-hostname "$HOSTNAME" --mode candidate-test "${first_args[@]}" --confirm "$confirm"
+HARNESS_LEDGER="$first_ledger" KORRI_DEVICE_GATE_HITL_READ_TIMEOUT=30 \
+  KORRI_DEVICE_GATE_HITL_OVERALL_TIMEOUT=60 KORRI_DEVICE_GATE_ATTEMPT_TIMEOUT=90 \
+  script -qefc "$interleaved_command" /dev/null <"$interleaved_fifo" >"$TMP/interleaved-first.tty" 2>&1 &
+first_pid=$!
+exec 5>"$interleaved_fifo"
+for _ in $(seq 1 300); do
+  [[ -e "$HARNESS_ATTEMPT_MARKER" && -e "$HARNESS_ATTEMPT_LEASE" ]] && break
+  kill -0 "$first_pid" 2>/dev/null || break
+  sleep 0.02
+done
+[[ -e "$HARNESS_ATTEMPT_MARKER" && -e "$HARNESS_ATTEMPT_LEASE" ]]
+
+live_reconcile_ledger="$TMP/interleaved-live-reconcile-ledger"
+cp -a "$first_ledger" "$live_reconcile_ledger"
+sed -i 's/^state=pending-mutation$/state=failed-needs-inspection/' "$live_reconcile_ledger/state"
+mapfile -d '' -t live_reconcile_args < <(common_for "$live_reconcile_ledger")
+export HARNESS_LEDGER="$live_reconcile_ledger"
+assert_fails_with 'attempt is still live; reconcile refuses to race it' run_gate --mode reconcile \
+  "${live_reconcile_args[@]}"
+
+export HARNESS_LEDGER="$second_ledger"
+assert_fails_with 'another device-gate attempt marker already exists' run_gate --mode candidate-test \
+  "${second_args[@]}" --confirm "$confirm"
+[[ -e "$HARNESS_ATTEMPT_MARKER" && -e "$HARNESS_ATTEMPT_LEASE" ]]
+kill -TERM "$first_pid" 2>/dev/null || true
+wait "$first_pid" 2>/dev/null || true
+exec 5>&-
+for _ in $(seq 1 300); do
+  [[ ! -e "$HARNESS_ATTEMPT_MARKER" && ! -e "$HARNESS_ATTEMPT_LEASE" ]] && break
+  sleep 0.02
+done
+[[ ! -e "$HARNESS_ATTEMPT_MARKER" && ! -e "$HARNESS_ATTEMPT_LEASE" ]]
+
+# Reconcile removes the same marker only after its lease is stale and still
+# proves the exact rollback baseline before restoring the prior ledger state.
+live_nonce="$(awk -F= '$1 == "attempt_nonce" {print $2}' "$live_reconcile_ledger/state")"
+printf 'nonce=%s\ncandidate=%s\n' "$live_nonce" "$CANDIDATE" >"$HARNESS_ATTEMPT_MARKER"
+export HARNESS_LEDGER="$live_reconcile_ledger"
+run_gate --mode reconcile "${live_reconcile_args[@]}" >/dev/null
+[[ ! -e "$HARNESS_ATTEMPT_MARKER" ]]
+
 flow_ledger="$TMP/flow-ledger"
 mapfile -d '' -t flow_args < <(common_for "$flow_ledger")
 export HARNESS_LEDGER="$flow_ledger"
@@ -480,7 +658,7 @@ grep -Fx 'state=rollback-await-reboot' "$flow_ledger/state" >/dev/null
 export HARNESS_BOOT_ID=boot-two HARNESS_CURRENT_GENERATION="$ROLLBACK"
 run_gate --mode rollback-reboot-verify "${flow_args[@]}" --confirm "$confirm" >/dev/null
 grep -Fx 'state=rollback-reboot-green' "$flow_ledger/state" >/dev/null
-grep -E 'wrapper=deadline .*action=rollback-gates' "$HARNESS_LOG" >/dev/null
+grep -E 'wrapper=attempt-command .*action=rollback-gates' "$HARNESS_LOG" >/dev/null
 
 run_interactive persistent-switch pending-mutation "$flow_ledger" "$TMP/persistent.tty" \
   "${flow_args[@]}" --confirm "$confirm"
@@ -529,9 +707,9 @@ export HARNESS_LEDGER="$flow_ledger"
 run_interactive candidate-reboot-verify candidate-reboot-verifying "$flow_ledger" "$TMP/candidate-reboot.tty" \
   "${flow_args[@]}" --confirm "$confirm"
 grep -Fx 'state=complete' "$flow_ledger/state" >/dev/null
-grep -E 'wrapper=deadline .*action=automated-gates' "$HARNESS_LOG" >/dev/null
-grep -E 'wrapper=deadline .*action=acceptance-fingerprint' "$HARNESS_LOG" >/dev/null
-if grep -E 'wrapper=direct .*action=(automated-gates|acceptance-fingerprint|rollback-gates)' "$HARNESS_LOG" >/dev/null; then
+grep -E 'wrapper=attempt-command .*action=automated-gates' "$HARNESS_LOG" >/dev/null
+grep -E 'wrapper=attempt-command .*action=acceptance-fingerprint' "$HARNESS_LOG" >/dev/null
+if grep -E 'wrapper=(direct|deadline) .*action=(automated-gates|acceptance-fingerprint|rollback-gates)' "$HARNESS_LOG" >/dev/null; then
   printf 'post-activation automated command ran without a remote deadline\n' >&2
   exit 1
 fi
