@@ -27,11 +27,47 @@ case "$(basename "$0")" in
     if [[ "${2:-}" == --remote ]]; then
       action="${3:-}"
       shift 3
+      wrapper=direct lock_owned=false
+      if [[ "$action" == deadline ]]; then
+        wrapper=deadline
+        remote_deadline="$1"
+        action="$2"
+        shift 2
+      elif [[ "$action" == locked-mutation ]]; then
+        wrapper=locked-mutation
+        remote_deadline="$1"
+        lock_wait="$2"
+        action="$3"
+        shift 3
+        lock_dir="${HARNESS_GATE_LOCK:-$HARNESS_LOG.lock}"
+        for _ in $(seq 1 500); do
+          if mkdir "$lock_dir" 2>/dev/null; then
+            lock_owned=true
+            break
+          fi
+          printf 'lock-wait action=%s\n' "$action" >>"$HARNESS_LOG"
+          sleep 0.01
+        done
+        [[ "$lock_owned" == true ]] || {
+          printf 'modeled root gate lock timeout for %s\n' "$action" >&2
+          exit 75
+        }
+        trap '[[ "$lock_owned" != true ]] || rmdir "$lock_dir" 2>/dev/null || true' EXIT
+      fi
       {
-        printf 'action=%s argv=' "$action"
+        printf 'wrapper=%s remote-deadline=%s lock-wait=%s action=%s argv=' \
+          "$wrapper" "${remote_deadline:-none}" "${lock_wait:-none}" "$action"
         printf '%q ' "$@"
         printf '\n'
       } >>"$HARNESS_LOG"
+      if [[ "${HARNESS_FAIL_ACTION_ONCE:-}" == "$action" ]]; then
+        fail_marker="${HARNESS_FAIL_ACTION_MARKER:?}"
+        if [[ ! -e "$fail_marker" ]]; then
+          : >"$fail_marker"
+          printf 'modeled transient SSH failure for %s\n' "$action" >&2
+          exit 255
+        fi
+      fi
       case "$action" in
         inspect)
           printf 'identity machine-id=%s hostname=%s\n' \
@@ -41,8 +77,10 @@ case "$(basename "$0")" in
           printf 'units:\nsystem/inputplumber.service LoadState=loaded ActiveState=active SubState=running UnitFileState=enabled StatusText=\n'
           printf 'user/korrid.service LoadState=loaded ActiveState=inactive SubState=dead UnitFileState=disabled StatusText=\n'
           printf 'user/sunshine.service LoadState=loaded ActiveState=active SubState=running UnitFileState=enabled StatusText=\n'
-          printf 'real-controller=%s temporary-artifacts-dirty=%s catalog=Ok\n' \
-            "${HARNESS_REAL_CONTROLLER:-yes}" "${HARNESS_DIRTY:-no}"
+          printf 'temporary-artifacts-dirty=%s catalog=Ok\n' "${HARNESS_DIRTY:-no}"
+          printf 'physical-controller-candidates:\n'
+          printf 'controller-candidate identity=%s name=Observed_Controller sysfs=/sys/devices/pci0000:00/input/input8/event8 event=event8\n' \
+            "${HARNESS_CONTROLLER_ID:-0003:045e:02ea:050b}"
           ;;
         predicates)
           printf 'generation.current=%s\n' "${HARNESS_PREDICATE_GENERATION:-$ROLLBACK}"
@@ -66,8 +104,19 @@ case "$(basename "$0")" in
           printf 'candidate-switch=%s\n' "${HARNESS_CANDIDATE_SWITCH:-yes}"
           printf 'rollback=%s\n' "$rollback"
           printf 'rollback-switch=%s\n' "${HARNESS_ROLLBACK_SWITCH:-yes}"
-          printf 'real-controller=%s\n' "${HARNESS_REAL_CONTROLLER:-yes}"
+          expected_identity="${3:-}"
+          profile="${4:-}"
           printf 'temporary-artifacts-dirty=%s\n' "${HARNESS_DIRTY:-no}"
+          if [[ -n "$expected_identity" && -n "$profile" ]]; then
+            if [[ "${HARNESS_CONTROLLER_MODEL:-valid}" == valid \
+              && "$expected_identity" == "${HARNESS_CONTROLLER_ID:-0003:045e:02ea:050b}" \
+              && "$profile" == korri-60-xbox_one_gamepad.yaml ]]; then
+              printf 'expected-controller=yes\n'
+              printf 'controller-evidence=identity=%s event=event8 sysfs=/sys/devices/pci0000:00/input/input8/event8 profile=%s\n' "$expected_identity" "$profile"
+            else
+              printf 'expected-controller=no\n'
+            fi
+          fi
           ;;
         boot-id)
           if [[ -n "${HARNESS_BOOT_COUNT_FILE:-}" ]]; then
@@ -84,6 +133,9 @@ case "$(basename "$0")" in
           printf '%s\n' "${HARNESS_CURRENT_GENERATION:-$ROLLBACK}"
           ;;
         automated-gates)
+          expected_identity="${2:-}"
+          profile="${3:-}"
+          require_physical="${4:-false}"
           if [[ "${HARNESS_AUTOMATED_INTERRUPT:-no}" == yes ]]; then
             printf 'modeled interruption immediately after activation\n' >&2
             exit 130
@@ -100,16 +152,47 @@ case "$(basename "$0")" in
             printf 'modeled gameplay ACL exposes raw input\n' >&2
             exit 63
           }
-          [[ "${HARNESS_CATALOG:-Ok}" == Ok ]] || exit 64
-          printf 'automated-gates=pass raw-readable=0 inputd-status=Ready catalog=Ok\n'
-          printf 'normalized-fingerprint=%s\n' "${HARNESS_FINGERPRINT:-node=/dev/input/event9 sysfs=/sys/devices/virtual/input/input9/event9 dev=13:73 inode=1:9 inputplumber=/nix/store/provider/bin/inputplumber version=0.75.2 keys=exact abs=exact ff=yes}"
-          ;;
-        normalized-fingerprint)
-          if [[ "${HARNESS_REPLACE_TARGET:-no}" == yes ]]; then
-            printf '%s\n' 'node=/dev/input/event10 sysfs=/sys/devices/virtual/input/input10/event10 dev=13:74 inode=1:10 inputplumber=/nix/store/provider/bin/inputplumber version=0.75.2 keys=exact abs=exact ff=yes'
-          else
-            printf '%s\n' "${HARNESS_FINGERPRINT:-node=/dev/input/event9 sysfs=/sys/devices/virtual/input/input9/event9 dev=13:73 inode=1:9 inputplumber=/nix/store/provider/bin/inputplumber version=0.75.2 keys=exact abs=exact ff=yes}"
+          [[ "${HARNESS_DELEGATE:-yes}" == yes ]] || {
+            printf 'device gate: inputd Delegate is not enabled\n' >&2
+            exit 66
+          }
+          [[ " ${HARNESS_DELEGATE_CONTROLLERS:-cpu pids memory} " == *' pids '* ]] || {
+            printf 'device gate: inputd DelegateControllers does not contain pids\n' >&2
+            exit 67
+          }
+          if [[ "$require_physical" == true ]]; then
+            [[ "${HARNESS_CONTROLLER_MODEL:-valid}" == valid \
+              && "$expected_identity" == "${HARNESS_CONTROLLER_ID:-0003:045e:02ea:050b}" \
+              && "$profile" == korri-60-xbox_one_gamepad.yaml ]] || {
+              printf 'expected physical controller is not live, supported, and selected with the production profile\n' >&2
+              exit 68
+            }
           fi
+          [[ "${HARNESS_CATALOG:-Ok}" == Ok ]] || exit 64
+          normalized="${HARNESS_FINGERPRINT:-node=/dev/input/event9 sysfs=/sys/devices/virtual/input/input9/event9 dev=13:73 inode=1:9 inputplumber=/nix/store/provider/bin/inputplumber version=0.75.2 keys=exact abs=exact ff=yes}"
+          physical="identity=$expected_identity event=event8 sysfs=/sys/devices/pci0000:00/input/input8/event8 profile=$profile"
+          printf 'automated-gates=pass raw-readable=0 inputd-status=Ready catalog=Ok delegate=yes controllers=pids\n'
+          printf 'normalized-fingerprint=%s\n' "$normalized"
+          [[ "$require_physical" != true ]] || printf 'controller-evidence=%s\n' "$physical"
+          printf 'acceptance-fingerprint=normalized=%s' "$normalized"
+          [[ "$require_physical" != true ]] || printf ' physical=%s' "$physical"
+          printf '\n'
+          ;;
+        acceptance-fingerprint)
+          expected_identity="${1:-}"
+          profile="${2:-}"
+          require_physical="${3:-false}"
+          if [[ "${HARNESS_REPLACE_TARGET:-no}" == yes ]]; then
+            normalized='node=/dev/input/event10 sysfs=/sys/devices/virtual/input/input10/event10 dev=13:74 inode=1:10 inputplumber=/nix/store/provider/bin/inputplumber version=0.75.2 keys=exact abs=exact ff=yes'
+          else
+            normalized="${HARNESS_FINGERPRINT:-node=/dev/input/event9 sysfs=/sys/devices/virtual/input/input9/event9 dev=13:73 inode=1:9 inputplumber=/nix/store/provider/bin/inputplumber version=0.75.2 keys=exact abs=exact ff=yes}"
+          fi
+          printf 'normalized=%s' "$normalized"
+          if [[ "$require_physical" == true ]]; then
+            [[ "${HARNESS_CONTROLLER_MODEL:-valid}" == valid ]] || exit 68
+            printf ' physical=identity=%s event=event8 sysfs=/sys/devices/pci0000:00/input/input8/event8 profile=%s' "$expected_identity" "$profile"
+          fi
+          printf '\n'
           ;;
         rollback-gates)
           printf 'rollback-gates=pass\n'
@@ -124,7 +207,23 @@ case "$(basename "$0")" in
             [[ "${3:-}" == "${HARNESS_OLD_ENABLED:-false}" ]]
           fi
           if [[ "$action" == activate-test && "${HARNESS_MUTATION_SLEEP:-0}" != 0 ]]; then
+            if ((HARNESS_MUTATION_SLEEP > remote_deadline)); then
+              sleep "$remote_deadline"
+              exit 124
+            fi
             sleep "$HARNESS_MUTATION_SLEEP"
+          fi
+          if [[ "$action" == activate-test && "${HARNESS_MUTATION_OUTLIVES_TRANSPORT:-no}" == yes \
+            && ! -e "${HARNESS_OUTLIVE_MARKER:?}" ]]; then
+            : >"$HARNESS_OUTLIVE_MARKER"
+            lock_owned=false
+            (
+              sleep 0.2
+              printf 'remote-mutation-finished\n' >>"$HARNESS_LOG"
+              rmdir "$lock_dir"
+            ) &
+            printf 'local-transport-ended\n' >>"$HARNESS_LOG"
+            exit 255
           fi
           ;;
         *) printf 'unexpected remote action: %s\n' "$action" >&2; exit 70 ;;
@@ -154,6 +253,8 @@ HOSTNAME=u7-test-host
 CANDIDATE=/nix/store/00000000000000000000000000000000-nixos-system-u7-test-host-1
 ROLLBACK=/nix/store/11111111111111111111111111111111-nixos-system-u7-test-host-0
 GAMEPLAY_USER=gameplay
+CONTROLLER_ID=0003:045e:02ea:050b
+PRODUCTION_PROFILE=korri-60-xbox_one_gamepad.yaml
 export CANDIDATE ROLLBACK
 
 run_gate() {
@@ -187,7 +288,8 @@ assert_no_mutation() {
 common_for() {
   local ledger="$1"
   printf '%s\0' --candidate "$CANDIDATE" --rollback-generation "$ROLLBACK" \
-    --gameplay-user "$GAMEPLAY_USER" --ledger "$ledger"
+    --gameplay-user "$GAMEPLAY_USER" --ledger "$ledger" \
+    --expected-controller-id "$CONTROLLER_ID" --production-profile "$PRODUCTION_PROFILE"
 }
 confirm="CONFIRM-$(printf '%s' "$MACHINE_ID|$HOSTNAME|$CANDIDATE" | sha256sum | cut -c1-16)"
 
@@ -224,6 +326,7 @@ assert_no_mutation
 : >"$HARNESS_LOG"
 inspection="$(run_gate)"
 grep -F 'inspection=complete mutation=none' <<<"$inspection" >/dev/null
+grep -F "controller-candidate identity=$CONTROLLER_ID" <<<"$inspection" >/dev/null
 assert_no_mutation
 
 # A valid Nix name containing shell metacharacters remains one exact argv item.
@@ -253,6 +356,29 @@ run_failure_model() {
 run_failure_model topology HARNESS_TOPOLOGY_MODEL two 'modeled topology has two normalized targets'
 run_failure_model provenance HARNESS_PROVENANCE_MODEL invalid 'modeled target provenance/capability fingerprint is invalid'
 run_failure_model acl HARNESS_ACL_MODEL raw-readable 'modeled gameplay ACL exposes raw input'
+run_failure_model delegate HARNESS_DELEGATE no 'inputd Delegate is not enabled'
+run_failure_model delegate-controllers HARNESS_DELEGATE_CONTROLLERS cpu 'DelegateControllers does not contain pids'
+
+missing_controller_ledger="$TMP/missing-controller-ledger"
+: >"$HARNESS_LOG"
+assert_fails_with 'require an explicit expected controller identity and production profile' run_gate \
+  --mode persistent-switch --candidate "$CANDIDATE" --rollback-generation "$ROLLBACK" \
+  --gameplay-user "$GAMEPLAY_USER" --ledger "$missing_controller_ledger" --confirm "$confirm"
+assert_no_mutation
+assert_fails_with 'unsupported production profile' run_gate --mode persistent-switch \
+  --candidate "$CANDIDATE" --rollback-generation "$ROLLBACK" --gameplay-user "$GAMEPLAY_USER" \
+  --ledger "$TMP/unsupported-profile-ledger" --expected-controller-id "$CONTROLLER_ID" \
+  --production-profile default.yaml --confirm "$confirm"
+for controller_model in synthetic virtual unsupported stale generic-joystick; do
+  controller_ledger="$TMP/controller-$controller_model-ledger"
+  mapfile -d '' -t controller_args < <(common_for "$controller_ledger")
+  export HARNESS_LEDGER="$controller_ledger" HARNESS_CONTROLLER_MODEL="$controller_model"
+  : >"$HARNESS_LOG"
+  assert_fails_with 'expected physical controller is not live, supported, and selected with the production profile' \
+    run_gate --mode persistent-switch "${controller_args[@]}" --confirm "$confirm"
+  assert_no_mutation
+  unset HARNESS_CONTROLLER_MODEL
+done
 
 # An interruption immediately after activation leaves a durable failure state,
 # performs rollback, and blocks retry until an exact baseline reconcile.
@@ -278,11 +404,28 @@ run_gate --mode reconcile "${interrupt_args[@]}" >/dev/null
 # the same rollback/reconcile path.
 timeout_ledger="$TMP/timeout-ledger"
 mapfile -d '' -t timeout_args < <(common_for "$timeout_ledger")
-export HARNESS_LEDGER="$timeout_ledger" HARNESS_MUTATION_SLEEP=3 KORRI_DEVICE_GATE_MUTATION_TIMEOUT=1
+export HARNESS_LEDGER="$timeout_ledger" HARNESS_MUTATION_SLEEP=3 KORRI_DEVICE_GATE_REMOTE_TIMEOUT=1
+export KORRI_DEVICE_GATE_LOCK_WAIT_TIMEOUT=2 KORRI_DEVICE_GATE_SSH_TIMEOUT=4
 assert_fails_with 'mutation failed; fresh reconcile is required' run_gate --mode candidate-test \
   "${timeout_args[@]}" --confirm "$confirm"
 grep -Fx 'state=failed-needs-inspection' "$timeout_ledger/state" >/dev/null
-unset HARNESS_MUTATION_SLEEP KORRI_DEVICE_GATE_MUTATION_TIMEOUT
+unset HARNESS_MUTATION_SLEEP KORRI_DEVICE_GATE_REMOTE_TIMEOUT
+unset KORRI_DEVICE_GATE_LOCK_WAIT_TIMEOUT KORRI_DEVICE_GATE_SSH_TIMEOUT
+
+# A remote mutation can survive a transport failure. Cleanup waits on the same
+# root gate lock, so restore starts only after the remote mutation finishes.
+outlive_ledger="$TMP/outlive-ledger"
+mapfile -d '' -t outlive_args < <(common_for "$outlive_ledger")
+export HARNESS_LEDGER="$outlive_ledger" HARNESS_MUTATION_OUTLIVES_TRANSPORT=yes
+export HARNESS_OUTLIVE_MARKER="$TMP/outlive-marker" HARNESS_GATE_LOCK="$TMP/root-gate-lock"
+: >"$HARNESS_LOG"
+assert_fails_with 'mutation failed; fresh reconcile is required' run_gate --mode candidate-test \
+  "${outlive_args[@]}" --confirm "$confirm"
+mutation_finished_line="$(grep -n 'remote-mutation-finished' "$HARNESS_LOG" | cut -d: -f1)"
+restore_line="$(grep -n 'action=restore' "$HARNESS_LOG" | cut -d: -f1 | tail -1)"
+[[ -n "$mutation_finished_line" && -n "$restore_line" && "$mutation_finished_line" -lt "$restore_line" ]]
+grep -F 'lock-wait action=restore' "$HARNESS_LOG" >/dev/null
+unset HARNESS_MUTATION_OUTLIVES_TRANSPORT HARNESS_OUTLIVE_MARKER HARNESS_GATE_LOCK
 
 # Run a mutation through the real /dev/tty path. The driver reads the private
 # nonce from the 0600 ledger and sends the displayed one-time tokens over a PTY.
@@ -307,6 +450,7 @@ run_interactive() {
   trap '' PIPE
   for gate in normalized-gameplay health-recovery-ambiguity dbus-spoof-and-exclusive-grab exact-stop-and-races direct-action-isolation sunshine-video-controller-recovery catalog-and-session; do
     token="PASS-$(printf '%s' "$MACHINE_ID|$HOSTNAME|$CANDIDATE|$nonce|$boot|$ledger_state|$gate" | sha256sum | cut -c1-16)"
+    [[ "${HARNESS_MISTYPE_GATE:-}" != "$gate" ]] || token=MISTYPED-TOKEN
     printf '%s\n' "$token" >&3 || break
   done
   exec 3>&-
@@ -336,14 +480,61 @@ grep -Fx 'state=rollback-await-reboot' "$flow_ledger/state" >/dev/null
 export HARNESS_BOOT_ID=boot-two HARNESS_CURRENT_GENERATION="$ROLLBACK"
 run_gate --mode rollback-reboot-verify "${flow_args[@]}" --confirm "$confirm" >/dev/null
 grep -Fx 'state=rollback-reboot-green' "$flow_ledger/state" >/dev/null
+grep -E 'wrapper=deadline .*action=rollback-gates' "$HARNESS_LOG" >/dev/null
 
 run_interactive persistent-switch pending-mutation "$flow_ledger" "$TMP/persistent.tty" \
   "${flow_args[@]}" --confirm "$confirm"
 grep -Fx 'state=candidate-await-reboot' "$flow_ledger/state" >/dev/null
 export HARNESS_BOOT_ID=boot-three HARNESS_CURRENT_GENERATION="$CANDIDATE"
+
+# A mistyped reboot HITL token is a resumable verification failure. Reconcile
+# returns to candidate-await-reboot without rolling back the accepted candidate.
+cp -a "$flow_ledger" "$TMP/mistyped-ledger"
+mistyped_ledger="$TMP/mistyped-ledger"
+export HARNESS_LEDGER="$mistyped_ledger" HARNESS_MISTYPE_GATE=normalized-gameplay
+: >"$HARNESS_LOG"
+if run_interactive candidate-reboot-verify candidate-reboot-verifying "$mistyped_ledger" "$TMP/mistyped.tty" \
+  "${flow_args[@]/$flow_ledger/$mistyped_ledger}" --confirm "$confirm"; then
+  printf 'mistyped candidate reboot token unexpectedly passed\n' >&2
+  exit 1
+fi
+grep -Fx 'state=failed-needs-inspection' "$mistyped_ledger/state" >/dev/null
+grep -Fx 'resume_state=candidate-await-reboot' "$mistyped_ledger/state" >/dev/null
+if grep -F 'action=restore' "$HARNESS_LOG" >/dev/null; then
+  printf 'candidate reboot verification failure attempted rollback\n' >&2
+  exit 1
+fi
+unset HARNESS_MISTYPE_GATE
+run_gate --mode reconcile "${flow_args[@]/$flow_ledger/$mistyped_ledger}" >/dev/null
+grep -Fx 'state=candidate-await-reboot' "$mistyped_ledger/state" >/dev/null
+
+# A transient SSH failure in an automated reboot gate follows the same durable
+# failure/reconcile path and can then retry successfully.
+cp -a "$flow_ledger" "$TMP/transient-ledger"
+transient_ledger="$TMP/transient-ledger"
+export HARNESS_LEDGER="$transient_ledger" HARNESS_FAIL_ACTION_ONCE=automated-gates
+export HARNESS_FAIL_ACTION_MARKER="$TMP/transient-action-marker"
+assert_fails_with 'candidate reboot verification failed; fresh reconcile is required' run_gate \
+  --mode candidate-reboot-verify "${flow_args[@]/$flow_ledger/$transient_ledger}" --confirm "$confirm"
+grep -Fx 'state=failed-needs-inspection' "$transient_ledger/state" >/dev/null
+grep -Fx 'resume_state=candidate-await-reboot' "$transient_ledger/state" >/dev/null
+unset HARNESS_FAIL_ACTION_ONCE HARNESS_FAIL_ACTION_MARKER
+run_gate --mode reconcile "${flow_args[@]/$flow_ledger/$transient_ledger}" >/dev/null
+grep -Fx 'state=candidate-await-reboot' "$transient_ledger/state" >/dev/null
+run_interactive candidate-reboot-verify candidate-reboot-verifying "$transient_ledger" "$TMP/transient-retry.tty" \
+  "${flow_args[@]/$flow_ledger/$transient_ledger}" --confirm "$confirm"
+grep -Fx 'state=complete' "$transient_ledger/state" >/dev/null
+
+export HARNESS_LEDGER="$flow_ledger"
 run_interactive candidate-reboot-verify candidate-reboot-verifying "$flow_ledger" "$TMP/candidate-reboot.tty" \
   "${flow_args[@]}" --confirm "$confirm"
 grep -Fx 'state=complete' "$flow_ledger/state" >/dev/null
+grep -E 'wrapper=deadline .*action=automated-gates' "$HARNESS_LOG" >/dev/null
+grep -E 'wrapper=deadline .*action=acceptance-fingerprint' "$HARNESS_LOG" >/dev/null
+if grep -E 'wrapper=direct .*action=(automated-gates|acceptance-fingerprint|rollback-gates)' "$HARNESS_LOG" >/dev/null; then
+  printf 'post-activation automated command ran without a remote deadline\n' >&2
+  exit 1
+fi
 [[ "$(wc -l <"$flow_ledger/consumed-gates")" -eq 21 ]]
 [[ "$(sort -u "$flow_ledger/consumed-gates" | wc -l)" -eq 21 ]]
 
@@ -356,7 +547,7 @@ if run_interactive candidate-test pending-mutation "$replacement_ledger" "$TMP/r
   printf 'replacement acceptance unexpectedly passed\n' >&2
   exit 1
 fi
-grep -F 'normalized target was replaced before acceptance' "$TMP/replacement.tty" >/dev/null
+grep -F 'normalized target or expected physical controller proof changed before acceptance' "$TMP/replacement.tty" >/dev/null
 grep -Fx 'state=failed-needs-inspection' "$replacement_ledger/state" >/dev/null
 unset HARNESS_REPLACE_TARGET
 

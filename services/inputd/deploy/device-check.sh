@@ -9,8 +9,12 @@ SSH_BIN="${KORRI_DEVICE_GATE_SSH:-ssh}"
 SCP_BIN="${KORRI_DEVICE_GATE_SCP:-scp}"
 POLL_ATTEMPTS="${KORRI_DEVICE_GATE_POLL_ATTEMPTS:-40}"
 POLL_DELAY="${KORRI_DEVICE_GATE_POLL_DELAY:-0.25}"
-MUTATION_TIMEOUT="${KORRI_DEVICE_GATE_MUTATION_TIMEOUT:-120}"
+REMOTE_COMMAND_TIMEOUT="${KORRI_DEVICE_GATE_REMOTE_TIMEOUT:-120}"
+LOCK_WAIT_TIMEOUT="${KORRI_DEVICE_GATE_LOCK_WAIT_TIMEOUT:-125}"
+LOCAL_SSH_TIMEOUT="${KORRI_DEVICE_GATE_SSH_TIMEOUT:-250}"
+GATE_LOCK='/run/lock/korri-device-gate.lock'
 NORMALIZED_NAME='Microsoft X-Box 360 pad'
+SUPPORTED_PRODUCTION_PROFILE='korri-60-xbox_one_gamepad.yaml'
 EXPECTED_KEYS='304,305,307,308,310,311,314,315,316,317,318,704,705,706,707'
 EXPECTED_ABS='0,1,2,3,4,5,16,17'
 
@@ -38,23 +42,31 @@ remote_wait_unit() {
 }
 
 remote_generation() { realpath -e /run/current-system; }
-remote_user_unit_active() { systemctl --user is-active --quiet korrid.service 2>/dev/null; }
+remote_user_systemctl() {
+  if [[ "$(id -u)" -eq 0 && -n "${SUDO_UID:-}" ]]; then
+    sudo -n -u "#$SUDO_UID" env XDG_RUNTIME_DIR="/run/user/$SUDO_UID" systemctl --user "$@"
+  else
+    systemctl --user "$@"
+  fi
+}
+
+remote_user_unit_active() { remote_user_systemctl is-active --quiet korrid.service 2>/dev/null; }
 
 remote_stop_old_user_unit() {
-  remote_user_unit_active && systemctl --user stop korrid.service || true
+  remote_user_unit_active && remote_user_systemctl stop korrid.service || true
 }
 
 remote_restore_old_user_unit() {
   local was_active="$1" was_enabled="$2"
   if [[ "$was_enabled" == true ]]; then
-    systemctl --user enable korrid.service >/dev/null
+    remote_user_systemctl enable korrid.service >/dev/null
   else
-    systemctl --user disable korrid.service >/dev/null 2>&1 || true
+    remote_user_systemctl disable korrid.service >/dev/null 2>&1 || true
   fi
   if [[ "$was_active" == true ]]; then
-    systemctl --user start korrid.service
+    remote_user_systemctl start korrid.service
   else
-    systemctl --user stop korrid.service >/dev/null 2>&1 || true
+    remote_user_systemctl stop korrid.service >/dev/null 2>&1 || true
   fi
 }
 
@@ -120,18 +132,69 @@ remote_normalized_fingerprint() {
   [[ "$count" -eq 1 ]]
 }
 
-remote_has_real_controller() {
-  local event node name properties
+remote_controller_candidates() {
+  local event node name identity properties sysfs dev_sys dev_stat
   shopt -s nullglob
   for event in /sys/class/input/event*; do
     node="/dev/input/${event##*/}"
-    [[ -r "$event/device/name" ]] || continue
+    [[ -r "$event/device/name" && -e "$node" ]] || continue
     name="$(<"$event/device/name")"
-    [[ "$name" == "$NORMALIZED_NAME" ]] && continue
+    [[ "$name" != "$NORMALIZED_NAME" && "$name" != 'Korri U7 Synthetic Controller' ]] || continue
     properties="$(udevadm info --query=property --name="$node" 2>/dev/null || true)"
-    grep -Fx 'ID_INPUT_JOYSTICK=1' <<<"$properties" >/dev/null && return 0
+    grep -Fx 'ID_INPUT_JOYSTICK=1' <<<"$properties" >/dev/null || continue
+    sysfs="$(realpath -e -- "$event" 2>/dev/null || true)"
+    [[ "$sysfs" == /sys/devices/* && "$sysfs" != /sys/devices/virtual/* ]] || continue
+    dev_sys="$(<"$event/dev")"
+    dev_stat="$(stat -Lc '%t:%T' "$node" 2>/dev/null || true)"
+    [[ "$dev_stat" =~ ^[0-9a-fA-F]+:[0-9a-fA-F]+$ ]] || continue
+    [[ "$dev_sys" == "$((16#${dev_stat%:*})):$((16#${dev_stat#*:}))" ]] || continue
+    identity="$(cat "$event/device/id/bustype" 2>/dev/null || true):$(cat "$event/device/id/vendor" 2>/dev/null || true):$(cat "$event/device/id/product" 2>/dev/null || true):$(cat "$event/device/id/version" 2>/dev/null || true)"
+    [[ "${identity,,}" =~ ^[0-9a-f]{4}:[0-9a-f]{4}:[0-9a-f]{4}:[0-9a-f]{4}$ ]] || continue
+    printf 'controller-candidate identity=%s name=%q sysfs=%s event=%s\n' \
+      "${identity,,}" "$name" "$sysfs" "${event##*/}"
   done
+}
+
+remote_profile_selects_event() {
+  local event_name="$1" profile="$2" exe expected_path object profile_property sources_property
+  exe="$(readlink -f /proc/"$(systemctl show inputplumber.service -p MainPID --value)"/exe 2>/dev/null || true)"
+  [[ "$exe" =~ ^/nix/store/[0-9a-df-np-sv-z]{32}-inputplumber-korri-0\.75\.2/bin/inputplumber$ ]] || return 1
+  expected_path="${exe%/bin/inputplumber}/share/inputplumber/profiles/$profile"
+  [[ -f "$expected_path" ]] || return 1
+  while IFS= read -r object; do
+    [[ "$object" == /org/shadowblip/InputPlumber/CompositeDevice* ]] || continue
+    profile_property="$(busctl --system get-property org.shadowblip.InputPlumber "$object" org.shadowblip.Input.CompositeDevice ProfilePath 2>/dev/null || true)"
+    [[ "$profile_property" == "s \"$expected_path\"" ]] || continue
+    sources_property="$(busctl --system get-property org.shadowblip.InputPlumber "$object" org.shadowblip.Input.CompositeDevice SourceDevicePaths 2>/dev/null || true)"
+    grep -F "\"/dev/input/$event_name\"" <<<"$sources_property" >/dev/null && return 0
+  done < <(busctl --system tree org.shadowblip.InputPlumber /org/shadowblip/InputPlumber --list --no-pager 2>/dev/null || true)
   return 1
+}
+
+remote_physical_controller_evidence() {
+  local expected_identity="$1" profile="$2" event node name identity properties sysfs dev_sys dev_stat count=0
+  [[ "$profile" == "$SUPPORTED_PRODUCTION_PROFILE" ]] || return 1
+  shopt -s nullglob
+  for event in /sys/class/input/event*; do
+    node="/dev/input/${event##*/}"
+    [[ -r "$event/device/name" && -e "$node" ]] || continue
+    name="$(<"$event/device/name")"
+    [[ "$name" != "$NORMALIZED_NAME" && "$name" != 'Korri U7 Synthetic Controller' ]] || continue
+    identity="$(cat "$event/device/id/bustype" 2>/dev/null || true):$(cat "$event/device/id/vendor" 2>/dev/null || true):$(cat "$event/device/id/product" 2>/dev/null || true):$(cat "$event/device/id/version" 2>/dev/null || true)"
+    [[ "${identity,,}" == "$expected_identity" ]] || continue
+    properties="$(udevadm info --query=property --name="$node" 2>/dev/null || true)"
+    grep -Fx 'ID_INPUT_JOYSTICK=1' <<<"$properties" >/dev/null || continue
+    sysfs="$(realpath -e -- "$event" 2>/dev/null || true)"
+    [[ "$sysfs" == /sys/devices/* && "$sysfs" != /sys/devices/virtual/* ]] || continue
+    dev_sys="$(<"$event/dev")"
+    dev_stat="$(stat -Lc '%t:%T' "$node" 2>/dev/null || true)"
+    [[ "$dev_stat" =~ ^[0-9a-fA-F]+:[0-9a-fA-F]+$ ]] || continue
+    [[ "$dev_sys" == "$((16#${dev_stat%:*})):$((16#${dev_stat#*:}))" ]] || continue
+    remote_profile_selects_event "${event##*/}" "$profile" || continue
+    printf 'identity=%s event=%s sysfs=%s profile=%s\n' "$expected_identity" "${event##*/}" "$sysfs" "$profile"
+    count=$((count + 1))
+  done
+  [[ "$count" -eq 1 ]]
 }
 
 remote_temporary_artifacts_dirty() {
@@ -218,7 +281,7 @@ remote_predicates() {
   printf 'generation.current=%s\n' "$(remote_generation)"
   printf 'generation.default=%s\n' "$(readlink -f /nix/var/nix/profiles/system 2>/dev/null || true)"
   printf 'old-user.active=%s\n' "$(remote_user_unit_active && printf true || printf false)"
-  printf 'old-user.enabled=%s\n' "$(systemctl --user is-enabled --quiet korrid.service 2>/dev/null && printf true || printf false)"
+  printf 'old-user.enabled=%s\n' "$(remote_user_systemctl is-enabled --quiet korrid.service 2>/dev/null && printf true || printf false)"
   printf 'topology.target=%s\n' "$(remote_topology_digest target)"
   printf 'topology.raw=%s\n' "$(remote_topology_digest raw)"
   printf 'input.acl-readability=%s\n' "$(remote_acl_digest "$gameplay_user")"
@@ -250,13 +313,14 @@ remote_inspect() {
   remote_unit_snapshot system korrid.service
   remote_unit_snapshot user korrid.service
   remote_unit_snapshot user sunshine.service
-  printf 'real-controller=%s temporary-artifacts-dirty=%s catalog=%s\n' \
-    "$(remote_has_real_controller && printf yes || printf no)" \
+  printf 'temporary-artifacts-dirty=%s catalog=%s\n' \
     "$(remote_temporary_artifacts_dirty && printf yes || printf no)" "$(remote_catalog_health)"
+  printf '%s\n' 'physical-controller-candidates:'
+  remote_controller_candidates
 }
 
 remote_preflight() {
-  local candidate="$1" rollback="$2" candidate_real rollback_real
+  local candidate="$1" rollback="$2" expected_identity="${3:-}" profile="${4:-}" candidate_real rollback_real evidence
   valid_generation_path "$candidate" && valid_generation_path "$rollback" || return 1
   candidate_real="$(realpath -e -- "$candidate" 2>/dev/null || true)"
   rollback_real="$(realpath -e -- "$rollback" 2>/dev/null || true)"
@@ -264,8 +328,12 @@ remote_preflight() {
   printf 'candidate-switch=%s\n' "$([[ -x "$candidate_real/bin/switch-to-configuration" ]] && printf yes || printf no)"
   printf 'rollback=%s\n' "$rollback_real"
   printf 'rollback-switch=%s\n' "$([[ -x "$rollback_real/bin/switch-to-configuration" ]] && printf yes || printf no)"
-  printf 'real-controller=%s\n' "$(remote_has_real_controller && printf yes || printf no)"
   printf 'temporary-artifacts-dirty=%s\n' "$(remote_temporary_artifacts_dirty && printf yes || printf no)"
+  if [[ -n "$expected_identity" && -n "$profile" ]]; then
+    evidence="$(remote_physical_controller_evidence "$expected_identity" "$profile" 2>/dev/null || true)"
+    printf 'expected-controller=%s\n' "$([[ -n "$evidence" ]] && printf yes || printf no)"
+    [[ -z "$evidence" ]] || printf 'controller-evidence=%s\n' "$evidence"
+  fi
 }
 
 remote_activate_test() {
@@ -286,12 +354,28 @@ remote_restore() {
   [[ "$(remote_generation)" == "$rollback" ]]
 }
 
+remote_acceptance_fingerprint() {
+  local expected_identity="$1" profile="$2" require_physical="$3" normalized physical
+  normalized="$(remote_normalized_fingerprint)" || return 1
+  printf 'normalized=%s' "$normalized"
+  if [[ "$require_physical" == true ]]; then
+    physical="$(remote_physical_controller_evidence "$expected_identity" "$profile")" || return 1
+    printf ' physical=%s' "$physical"
+  fi
+  printf '\n'
+}
+
 remote_automated_gates() {
-  local gameplay_user="$1" fingerprint node event name readable_raw=0
+  local gameplay_user="$1" expected_identity="$2" profile="$3" require_physical="$4"
+  local fingerprint controller_evidence acceptance delegate delegate_controllers node event name readable_raw=0
   remote_wait_unit inputplumber.service
   remote_wait_unit korri-inputd.service Ready
   remote_wait_unit korrid.service
   fingerprint="$(remote_normalized_fingerprint)" || fail 'normalized target does not match the InputPlumber 0.75.2 xb360 fingerprint exactly'
+  if [[ "$require_physical" == true ]]; then
+    controller_evidence="$(remote_physical_controller_evidence "$expected_identity" "$profile")" \
+      || fail 'expected physical controller is not live, supported, and selected with the production profile'
+  fi
   node="${fingerprint#node=}"
   node="${node%% *}"
   sudo -n -u "$gameplay_user" test -r "$node" || fail 'gameplay user cannot read normalized target'
@@ -309,10 +393,17 @@ remote_automated_gates() {
   busctl --system introspect org.shadowblip.InputPlumber /org/shadowblip/InputPlumber/devices/target/dbus0 org.shadowblip.Input.DBusDevice --no-pager 2>/dev/null \
     | grep -F 'InputEvent' >/dev/null || fail 'InputPlumber DBus target interface is unavailable'
   [[ "$(stat -fc %T /sys/fs/cgroup)" == cgroup2fs ]] || fail 'cgroup v2 is unavailable'
-  [[ "$(systemctl show korri-inputd.service -p Delegate --value)" == pids ]] || fail 'inputd pids delegation is unavailable'
+  delegate="$(systemctl show korri-inputd.service -p Delegate --value 2>/dev/null || true)"
+  delegate_controllers="$(systemctl show korri-inputd.service -p DelegateControllers --value 2>/dev/null || true)"
+  [[ "$delegate" == yes ]] || fail 'inputd Delegate is not enabled'
+  [[ " $delegate_controllers " == *' pids '* ]] || fail 'inputd DelegateControllers does not contain pids'
   [[ "$(remote_catalog_health)" == Ok ]] || fail 'korrid catalog is unhealthy'
-  printf 'automated-gates=pass raw-readable=0 inputd-status=Ready catalog=Ok\n'
+  acceptance="$(remote_acceptance_fingerprint "$expected_identity" "$profile" "$require_physical")" \
+    || fail 'acceptance fingerprint could not be captured'
+  printf 'automated-gates=pass raw-readable=0 inputd-status=Ready catalog=Ok delegate=yes controllers=pids\n'
   printf 'normalized-fingerprint=%s\n' "$fingerprint"
+  [[ "$require_physical" != true ]] || printf 'controller-evidence=%s\n' "$controller_evidence"
+  printf 'acceptance-fingerprint=%s\n' "$acceptance"
 }
 
 remote_rollback_gates() {
@@ -337,7 +428,7 @@ remote_inject_health_failure() {
 remote_persistent_switch() {
   local candidate="$1"
   remote_stop_old_user_unit
-  systemctl --user disable korrid.service >/dev/null 2>&1 || true
+  remote_user_systemctl disable korrid.service >/dev/null 2>&1 || true
   sudo -n nix-env -p /nix/var/nix/profiles/system --set "$candidate"
   sudo -n "$candidate/bin/switch-to-configuration" switch
   [[ "$(remote_generation)" == "$candidate" ]]
@@ -346,14 +437,26 @@ remote_persistent_switch() {
 if [[ "${1:-}" == --remote ]]; then
   action="${2:-}"
   shift 2
+  if [[ "$action" == deadline ]]; then
+    deadline="${1:?}"
+    shift
+    exec timeout --signal=TERM --kill-after=5s "${deadline}s" "$0" --remote "$@"
+  fi
+  if [[ "$action" == locked-mutation ]]; then
+    deadline="${1:?}"
+    lock_wait="${2:?}"
+    shift 2
+    exec sudo -n flock --wait "$lock_wait" --conflict-exit-code 75 "$GATE_LOCK" \
+      timeout --signal=TERM --kill-after=5s "${deadline}s" "$0" --remote "$@"
+  fi
   case "$action" in
     inspect) remote_inspect ;;
     predicates) remote_predicates "${1:?}" ;;
-    preflight) remote_preflight "${1:?}" "${2:?}" ;;
+    preflight) remote_preflight "${1:?}" "${2:?}" "${3:-}" "${4:-}" ;;
     boot-id) tr -d '\n' </proc/sys/kernel/random/boot_id ;;
     current-generation) remote_generation ;;
-    normalized-fingerprint) remote_normalized_fingerprint ;;
-    automated-gates) remote_automated_gates "${1:?}" ;;
+    acceptance-fingerprint) remote_acceptance_fingerprint "${1:-}" "${2:-}" "${3:?}" ;;
+    automated-gates) remote_automated_gates "${1:?}" "${2:-}" "${3:-}" "${4:?}" ;;
     rollback-gates) remote_rollback_gates ;;
     activate-test) remote_activate_test "${1:?}" ;;
     inject-health-failure) remote_inject_health_failure "${1:?}" "${2:?}" "${3:?}" ;;
@@ -370,12 +473,15 @@ usage: device-check.sh --host HOST --expected-machine-id ID --expected-hostname 
 Modes: inspect, reconcile, candidate-test, inject-health-failure, rollback,
        rollback-reboot-verify, persistent-switch, candidate-reboot-verify
 Mutation modes require --candidate, --rollback-generation, --gameplay-user,
---ledger, and --confirm. HITL tokens are accepted only from /dev/tty.
+--ledger, and --confirm. Persistent/reboot candidate modes also require
+--expected-controller-id BUS:VENDOR:PRODUCT:VERSION and --production-profile.
+HITL tokens are accepted only from /dev/tty.
 EOF
 }
 
 HOST='' EXPECTED_MACHINE_ID='' EXPECTED_HOSTNAME='' MODE=inspect
 CANDIDATE='' ROLLBACK='' GAMEPLAY_USER='' LEDGER='' CONFIRM=''
+EXPECTED_CONTROLLER_ID='' PRODUCTION_PROFILE=''
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --host) HOST="${2:-}"; shift 2 ;;
@@ -387,6 +493,8 @@ while [[ $# -gt 0 ]]; do
     --gameplay-user) GAMEPLAY_USER="${2:-}"; shift 2 ;;
     --ledger) LEDGER="${2:-}"; shift 2 ;;
     --confirm) CONFIRM="${2:-}"; shift 2 ;;
+    --expected-controller-id) EXPECTED_CONTROLLER_ID="${2:-}"; shift 2 ;;
+    --production-profile) PRODUCTION_PROFILE="${2:-}"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) usage; fail "unknown argument: $1" ;;
   esac
@@ -397,7 +505,12 @@ done
 [[ "$HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] || fail 'invalid host target'
 [[ "$EXPECTED_MACHINE_ID" =~ ^[0-9a-f]{32}$ ]] || fail 'expected machine-id must be 32 lowercase hexadecimal characters'
 [[ "$EXPECTED_HOSTNAME" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] || fail 'invalid expected hostname'
-[[ "$MUTATION_TIMEOUT" =~ ^[1-9][0-9]*$ && "$MUTATION_TIMEOUT" -le 600 ]] || fail 'mutation timeout must be 1 through 600 seconds'
+for timeout_value in "$REMOTE_COMMAND_TIMEOUT" "$LOCK_WAIT_TIMEOUT" "$LOCAL_SSH_TIMEOUT"; do
+  [[ "$timeout_value" =~ ^[1-9][0-9]*$ && "$timeout_value" -le 1200 ]] || fail 'gate timeouts must be 1 through 1200 seconds'
+done
+((REMOTE_COMMAND_TIMEOUT < LOCAL_SSH_TIMEOUT)) || fail 'remote command timeout must be shorter than local SSH timeout'
+((REMOTE_COMMAND_TIMEOUT + LOCK_WAIT_TIMEOUT < LOCAL_SSH_TIMEOUT)) \
+  || fail 'local SSH timeout must exceed the remote deadline plus gate-lock wait'
 case "$MODE" in
   inspect|reconcile|candidate-test|inject-health-failure|rollback|rollback-reboot-verify|persistent-switch|candidate-reboot-verify) ;;
   *) fail "unknown mode: $MODE" ;;
@@ -405,6 +518,14 @@ esac
 
 [[ -z "$CANDIDATE" ]] || valid_generation_path "$CANDIDATE" || fail 'candidate must be a strictly valid Nix store generation path'
 [[ -z "$ROLLBACK" ]] || valid_generation_path "$ROLLBACK" || fail 'rollback must be a strictly valid Nix store generation path'
+[[ -z "$EXPECTED_CONTROLLER_ID" || "$EXPECTED_CONTROLLER_ID" =~ ^[0-9a-f]{4}:[0-9a-f]{4}:[0-9a-f]{4}:[0-9a-f]{4}$ ]] \
+  || fail 'expected controller identity must be exact lowercase BUS:VENDOR:PRODUCT:VERSION hexadecimal'
+[[ -z "$PRODUCTION_PROFILE" || "$PRODUCTION_PROFILE" == "$SUPPORTED_PRODUCTION_PROFILE" ]] \
+  || fail "unsupported production profile; this gate supports only $SUPPORTED_PRODUCTION_PROFILE"
+if [[ "$MODE" == persistent-switch || "$MODE" == candidate-reboot-verify ]]; then
+  [[ -n "$EXPECTED_CONTROLLER_ID" && -n "$PRODUCTION_PROFILE" ]] \
+    || fail 'persistent and candidate reboot modes require an explicit expected controller identity and production profile'
+fi
 if [[ "$MODE" != inspect ]]; then
   valid_generation_path "$CANDIDATE" || fail 'mutation and reconcile modes require a strictly valid Nix store candidate generation path'
   valid_generation_path "$ROLLBACK" || fail 'mutation and reconcile modes require a strictly valid Nix store rollback generation path'
@@ -432,7 +553,8 @@ actual_hostname="$(ssh_exec hostname | tr -d '\r\n')" || fail 'could not read re
 [[ "$actual_hostname" == "$EXPECTED_HOSTNAME" ]] || fail "remote hostname mismatch for $HOST"
 
 remote_dir='' remote_script='' local_temp_ledger=''
-mutation_active=false rollback_persistent=false state_file='' old_user_was_active=false old_user_was_enabled=false
+mutation_active=false verification_active=false rollback_persistent=false state_file=''
+old_user_was_active=false old_user_was_enabled=false failure_resume_boot_id=''
 write_state() {
   local next="$1" boot_id="${2:-}" resume_state="${3:-}" attempt_nonce="${4:-}"
   {
@@ -441,6 +563,8 @@ write_state() {
     printf 'hostname=%s\n' "$actual_hostname"
     printf 'candidate=%s\n' "$CANDIDATE"
     printf 'rollback=%s\n' "$ROLLBACK"
+    printf 'expected_controller_id=%s\n' "$EXPECTED_CONTROLLER_ID"
+    printf 'production_profile=%s\n' "$PRODUCTION_PROFILE"
     printf 'boot_id=%s\n' "$boot_id"
     printf 'resume_state=%s\n' "$resume_state"
     printf 'attempt_nonce=%s\n' "$attempt_nonce"
@@ -455,16 +579,18 @@ cleanup() {
   trap - EXIT INT TERM
   set +e
   if [[ "$mutation_active" == true && -n "$remote_script" && -n "$ROLLBACK" ]]; then
-    if timeout --signal=TERM --kill-after=5s "${MUTATION_TIMEOUT}s" \
-      "$SSH_BIN" "${ssh_options[@]}" "$HOST" "$(remote_quote "$remote_script") $(remote_quote --remote) $(remote_quote restore) $(remote_quote "$ROLLBACK") $(remote_quote "$old_user_was_active") $(remote_quote "$old_user_was_enabled") $(remote_quote "$rollback_persistent")" >/dev/null 2>&1; then
+    if run_remote_mutation restore "$ROLLBACK" "$old_user_was_active" "$old_user_was_enabled" "$rollback_persistent" >/dev/null 2>&1; then
       rollback_ok=true
     else
-      printf 'device gate: cleanup rollback failed; inspect the recorded rollback generation without retrying mutation\n' >&2
+      printf 'device gate: cleanup rollback failed or could not acquire the root gate lock; inspect the recorded rollback generation without retrying mutation\n' >&2
     fi
     if [[ -n "$state_file" ]]; then
-      write_state failed-needs-inspection '' "${resume_after_failure:-}" ''
+      write_state failed-needs-inspection "${failure_resume_boot_id:-}" "${resume_after_failure:-}" ''
       printf 'device gate: mutation failed; fresh reconcile is required before retry (rollback=%s)\n' "$rollback_ok" >&2
     fi
+  elif [[ "$verification_active" == true && -n "$state_file" ]]; then
+    write_state failed-needs-inspection "${failure_resume_boot_id:-}" candidate-await-reboot ''
+    printf 'device gate: candidate reboot verification failed; fresh reconcile is required before retry\n' >&2
   fi
   [[ -z "$remote_dir" ]] || ssh_exec rm -rf -- "$remote_dir" >/dev/null 2>&1 || true
   [[ -z "$local_temp_ledger" ]] || rm -rf -- "$local_temp_ledger"
@@ -479,18 +605,28 @@ remote_dir="$(ssh_exec mktemp -d /tmp/korri-device-gate.XXXXXX)"
 remote_script="$remote_dir/device-check.sh"
 "$SCP_BIN" "${ssh_options[@]}" -- "$0" "$HOST:$remote_script" >/dev/null
 run_remote() { ssh_exec "$remote_script" --remote "$@"; }
-run_remote_mutation() {
+run_remote_deadlined() {
   local command='' arg quoted
-  for arg in "$remote_script" --remote "$@"; do
+  for arg in "$remote_script" --remote deadline "$REMOTE_COMMAND_TIMEOUT" "$@"; do
     quoted="$(remote_quote "$arg")"
     command+="${command:+ }$quoted"
   done
-  timeout --signal=TERM --kill-after=5s "${MUTATION_TIMEOUT}s" \
+  timeout --signal=TERM --kill-after=5s "${LOCAL_SSH_TIMEOUT}s" \
+    "$SSH_BIN" "${ssh_options[@]}" "$HOST" "$command"
+}
+run_remote_mutation() {
+  local command='' arg quoted
+  for arg in "$remote_script" --remote locked-mutation "$REMOTE_COMMAND_TIMEOUT" "$LOCK_WAIT_TIMEOUT" "$@"; do
+    quoted="$(remote_quote "$arg")"
+    command+="${command:+ }$quoted"
+  done
+  timeout --signal=TERM --kill-after=5s "${LOCAL_SSH_TIMEOUT}s" \
     "$SSH_BIN" "${ssh_options[@]}" "$HOST" "$command"
 }
 
 if [[ "$MODE" == inspect ]]; then
-  [[ -z "$CONFIRM$CANDIDATE$ROLLBACK$GAMEPLAY_USER$LEDGER" ]] || fail 'inspect mode refuses mutation-only arguments'
+  [[ -z "$CONFIRM$CANDIDATE$ROLLBACK$GAMEPLAY_USER$LEDGER$EXPECTED_CONTROLLER_ID$PRODUCTION_PROFILE" ]] \
+    || fail 'inspect mode refuses mutation-only arguments'
   umask 077
   local_temp_ledger="$(mktemp -d "${TMPDIR:-/tmp}/korri-device-inspect.XXXXXX")"
   run_remote inspect >"$local_temp_ledger/inspection.txt"
@@ -519,9 +655,24 @@ if [[ -n "$state" ]]; then
   grep -Fx "hostname=$actual_hostname" "$state_file" >/dev/null || fail 'ledger hostname differs from target'
   grep -Fx "candidate=$CANDIDATE" "$state_file" >/dev/null || fail 'ledger candidate differs from request'
   grep -Fx "rollback=$ROLLBACK" "$state_file" >/dev/null || fail 'ledger rollback differs from request'
+  ledger_controller="$(awk -F= '$1 == "expected_controller_id" {print $2}' "$state_file")"
+  ledger_profile="$(awk -F= '$1 == "production_profile" {print $2}' "$state_file")"
+  [[ -z "$ledger_controller" || "$ledger_controller" == "$EXPECTED_CONTROLLER_ID" ]] || fail 'ledger controller identity differs from request'
+  [[ -z "$ledger_profile" || "$ledger_profile" == "$PRODUCTION_PROFILE" ]] || fail 'ledger production profile differs from request'
 fi
 
-preflight="$(run_remote preflight "$CANDIDATE" "$ROLLBACK")"
+if [[ "$MODE" == candidate-reboot-verify && "$state" == candidate-await-reboot ]]; then
+  prior_boot="$(awk -F= '$1 == "boot_id" {print $2}' "$state_file")"
+  failure_resume_boot_id="$prior_boot"
+  verification_active=true
+  write_state candidate-reboot-verifying "$prior_boot" candidate-await-reboot ''
+fi
+
+if [[ "$MODE" == candidate-reboot-verify || "$MODE" == reconcile ]]; then
+  preflight="$(run_remote_deadlined preflight "$CANDIDATE" "$ROLLBACK" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE")"
+else
+  preflight="$(run_remote preflight "$CANDIDATE" "$ROLLBACK" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE")"
+fi
 remote_candidate="$(awk -F= '$1 == "candidate" {print substr($0, index($0, "=") + 1)}' <<<"$preflight")"
 remote_rollback="$(awk -F= '$1 == "rollback" {print substr($0, index($0, "=") + 1)}' <<<"$preflight")"
 [[ "$remote_candidate" == "$CANDIDATE" ]] || fail 'candidate generation is unavailable or not canonical on the target'
@@ -530,7 +681,8 @@ grep -Fx 'candidate-switch=yes' <<<"$preflight" >/dev/null || fail 'candidate ha
 grep -Fx 'rollback-switch=yes' <<<"$preflight" >/dev/null || fail 'rollback generation has no switch-to-configuration executable'
 grep -Fx 'temporary-artifacts-dirty=no' <<<"$preflight" >/dev/null || fail 'dirty or untracked U7 temporary devices/profiles are present'
 if [[ "$MODE" == persistent-switch || "$MODE" == candidate-reboot-verify ]]; then
-  grep -Fx 'real-controller=yes' <<<"$preflight" >/dev/null || fail 'persistent and reboot candidate gates require a real supported controller'
+  grep -Fx 'expected-controller=yes' <<<"$preflight" >/dev/null \
+    || fail 'expected physical controller is not live, supported, and selected with the production profile'
 fi
 
 identity_key="$actual_machine_id|$actual_hostname|$CANDIDATE"
@@ -557,7 +709,7 @@ old_user_was_enabled="$(awk -F= '$1 == "old-user.enabled" {print $2}' "$LEDGER/b
 [[ "$old_user_was_enabled" == true || "$old_user_was_enabled" == false ]] || fail 'invalid baseline old user enabled predicate'
 
 compare_baseline() {
-  run_remote predicates "$GAMEPLAY_USER" >"$LEDGER/current.predicates.next"
+  run_remote_deadlined predicates "$GAMEPLAY_USER" >"$LEDGER/current.predicates.next"
   chmod 0600 "$LEDGER/current.predicates.next"
   if ! cmp -s "$LEDGER/baseline.predicates" "$LEDGER/current.predicates.next"; then
     mv -f "$LEDGER/current.predicates.next" "$LEDGER/current.predicates"
@@ -568,10 +720,19 @@ compare_baseline() {
 
 if [[ "$MODE" == reconcile ]]; then
   [[ "$state" == failed-needs-inspection ]] || fail 'reconcile requires failed-needs-inspection ledger state'
-  [[ "$(run_remote current-generation)" == "$ROLLBACK" ]] || fail 'reconcile requires the rollback generation to be active'
-  compare_baseline
   resume="$(awk -F= '$1 == "resume_state" {print $2}' "$state_file")"
-  write_state "$resume"
+  resume_boot="$(awk -F= '$1 == "boot_id" {print $2}' "$state_file")"
+  if [[ "$resume" == candidate-await-reboot ]]; then
+    [[ "$(run_remote current-generation)" == "$CANDIDATE" ]] \
+      || fail 'candidate reboot reconcile requires the candidate generation to remain active'
+    grep -Fx 'expected-controller=yes' <<<"$preflight" >/dev/null \
+      || fail 'candidate reboot reconcile requires the exact expected physical controller and production profile'
+    write_state candidate-await-reboot "$resume_boot"
+  else
+    [[ "$(run_remote current-generation)" == "$ROLLBACK" ]] || fail 'reconcile requires the rollback generation to be active'
+    compare_baseline
+    write_state "$resume"
+  fi
   printf 'device-gate mode=reconcile state=%s host=%s mutation=none\n' "${resume:-baseline}" "$actual_hostname"
   exit 0
 fi
@@ -613,10 +774,12 @@ accept_and_disarm() {
   mutation_active=false
 }
 verify_fingerprint_unchanged() {
-  local evidence="$1"
-  awk -F= '$1 == "normalized-fingerprint" {print substr($0, index($0, "=") + 1)}' "$evidence" >"$LEDGER/fingerprint.expected"
-  run_remote normalized-fingerprint >"$LEDGER/fingerprint.current"
-  cmp -s "$LEDGER/fingerprint.expected" "$LEDGER/fingerprint.current" || fail 'normalized target was replaced before acceptance'
+  local evidence="$1" require_physical="$2"
+  awk -F= '$1 == "acceptance-fingerprint" {print substr($0, index($0, "=") + 1)}' "$evidence" >"$LEDGER/fingerprint.expected"
+  run_remote_deadlined acceptance-fingerprint "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" "$require_physical" \
+    >"$LEDGER/fingerprint.current"
+  cmp -s "$LEDGER/fingerprint.expected" "$LEDGER/fingerprint.current" \
+    || fail 'normalized target or expected physical controller proof changed before acceptance'
   chmod 0600 "$LEDGER/fingerprint.expected" "$LEDGER/fingerprint.current"
 }
 
@@ -626,9 +789,9 @@ case "$MODE" in
     begin_mutation false
     run_remote_mutation activate-test "$CANDIDATE"
     new_attempt_after_activation pending-mutation
-    run_remote automated-gates "$GAMEPLAY_USER" | tee "$LEDGER/candidate-automated.txt"
+    run_remote_deadlined automated-gates "$GAMEPLAY_USER" '' '' false | tee "$LEDGER/candidate-automated.txt"
     require_hitl pending-mutation
-    verify_fingerprint_unchanged "$LEDGER/candidate-automated.txt"
+    verify_fingerprint_unchanged "$LEDGER/candidate-automated.txt" false
     run_remote_mutation restore "$ROLLBACK" "$old_user_was_active" "$old_user_was_enabled" false
     compare_baseline
     accept_and_disarm candidate-green "$attempt_boot_id"
@@ -654,10 +817,10 @@ case "$MODE" in
   rollback-reboot-verify)
     [[ "$state" == rollback-await-reboot ]] || fail 'rollback reboot verification requires rollback-await-reboot ledger state'
     prior_boot="$(awk -F= '$1 == "boot_id" {print $2}' "$state_file")"
-    current_boot="$(run_remote boot-id)"
+    current_boot="$(run_remote_deadlined boot-id)"
     [[ "$current_boot" != "$prior_boot" ]] || fail 'rollback reboot verification requires a new boot ID'
-    [[ "$(run_remote current-generation)" == "$ROLLBACK" ]] || fail 'rebooted system is not the rollback generation'
-    run_remote rollback-gates | tee "$LEDGER/rollback-reboot.txt"
+    [[ "$(run_remote_deadlined current-generation)" == "$ROLLBACK" ]] || fail 'rebooted system is not the rollback generation'
+    run_remote_deadlined rollback-gates | tee "$LEDGER/rollback-reboot.txt"
     compare_baseline
     write_state rollback-reboot-green "$current_boot"
     ;;
@@ -670,9 +833,10 @@ case "$MODE" in
       begin_mutation true
       run_remote_mutation persistent-switch "$CANDIDATE"
       new_attempt_after_activation pending-mutation
-      run_remote automated-gates "$GAMEPLAY_USER" | tee "$LEDGER/persistent-automated.txt"
+      run_remote_deadlined automated-gates "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" true \
+        | tee "$LEDGER/persistent-automated.txt"
       require_hitl pending-mutation
-      verify_fingerprint_unchanged "$LEDGER/persistent-automated.txt"
+      verify_fingerprint_unchanged "$LEDGER/persistent-automated.txt" true
       # This durable accepted state makes a failed boot-ID fetch resumable.
       write_state candidate-accepted-pending-boot '' '' ''
       mutation_active=false
@@ -682,18 +846,18 @@ case "$MODE" in
     ;;
   candidate-reboot-verify)
     [[ "$state" == candidate-await-reboot ]] || fail 'candidate reboot verification requires candidate-await-reboot ledger state'
-    prior_boot="$(awk -F= '$1 == "boot_id" {print $2}' "$state_file")"
-    current_boot="$(run_remote boot-id)"
+    current_boot="$(run_remote_deadlined boot-id)"
     [[ "$current_boot" != "$prior_boot" ]] || fail 'candidate reboot verification requires a new boot ID'
-    [[ "$(run_remote current-generation)" == "$CANDIDATE" ]] || fail 'rebooted system is not the candidate generation'
-    resume_after_failure="$state"
+    [[ "$(run_remote_deadlined current-generation)" == "$CANDIDATE" ]] || fail 'rebooted system is not the candidate generation'
     attempt_nonce="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
     attempt_boot_id="$current_boot"
-    write_state candidate-reboot-verifying "$current_boot" "$state" "$attempt_nonce"
-    run_remote automated-gates "$GAMEPLAY_USER" | tee "$LEDGER/candidate-reboot.txt"
+    write_state candidate-reboot-verifying "$current_boot" candidate-await-reboot "$attempt_nonce"
+    run_remote_deadlined automated-gates "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" true \
+      | tee "$LEDGER/candidate-reboot.txt"
     require_hitl candidate-reboot-verifying
-    verify_fingerprint_unchanged "$LEDGER/candidate-reboot.txt"
+    verify_fingerprint_unchanged "$LEDGER/candidate-reboot.txt" true
     write_state complete "$current_boot"
+    verification_active=false
     ;;
 esac
 
