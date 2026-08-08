@@ -1,9 +1,14 @@
 use std::{io, time::Duration};
 
-use evdev::{uinput::VirtualDevice, AttributeSet, Device, EventType, InputEvent, KeyCode};
+use evdev::{
+    uinput::VirtualDevice, AttributeSet, BusType, Device, EventType, InputEvent, InputId, KeyCode,
+};
 use korri_inputd::{
     dbus::{Signal, DBUS_INPUT_MEMBER, DBUS_TARGET_INTERFACE, DBUS_TARGET_PATH},
-    devices::{DeviceClass, DeviceDescriptor, OpenedTarget, TargetProvider, XB360_TARGET_NAME},
+    devices::{
+        DeviceCapabilities, DeviceClass, DeviceDescriptor, OpenedTarget, TargetProvider,
+        XB360_TARGET_NAME,
+    },
     runtime::{Runtime, RuntimeState},
 };
 
@@ -50,6 +55,7 @@ async fn authenticated_dbus_shortcut_survives_an_exclusive_evdev_grab() -> io::R
     keys.insert(KeyCode::BTN_TL);
     let mut virtual_device = VirtualDevice::builder()?
         .name(XB360_TARGET_NAME)
+        .input_id(InputId::new(BusType(3), 0x045e, 0x028e, 0x0001))
         .with_keys(&keys)?
         .build()?;
     let event_path = virtual_device
@@ -64,10 +70,11 @@ async fn authenticated_dbus_shortcut_survives_an_exclusive_evdev_grab() -> io::R
     let descriptor = DeviceDescriptor {
         path: event_path.clone(),
         name: XB360_TARGET_NAME.to_owned(),
-        physical_path: Some("inputplumber/test-target".to_owned()),
+        physical_path: None,
         unique_id: None,
         sysfs_path: Some("/devices/virtual/input/test-target".to_owned()),
         input_id,
+        capabilities: DeviceCapabilities::inputplumber_xb360(),
         class: DeviceClass::Gamepad,
         device_number: None,
     };

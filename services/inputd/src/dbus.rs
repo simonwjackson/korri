@@ -1,3 +1,5 @@
+use std::{fmt, future::Future, time::Duration};
+
 use futures_util::StreamExt;
 use korri_input_core::controls::{Control, ControlTransition, DpadAxis};
 use zbus::{message::Type, MatchRule, Message, MessageStream};
@@ -6,6 +8,46 @@ pub const INPUTPLUMBER_BUS_NAME: &str = "org.shadowblip.InputPlumber";
 pub const DBUS_TARGET_PATH: &str = "/org/shadowblip/InputPlumber/devices/target/dbus0";
 pub const DBUS_TARGET_INTERFACE: &str = "org.shadowblip.Input.DBusDevice";
 pub const DBUS_INPUT_MEMBER: &str = "InputEvent";
+pub const DBUS_OPERATION_TIMEOUT: Duration = Duration::from_millis(500);
+
+#[derive(Debug)]
+pub enum DbusRuntimeError {
+    TimedOut,
+    Zbus(zbus::Error),
+}
+
+impl fmt::Display for DbusRuntimeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::TimedOut => formatter.write_str("DBus operation timed out"),
+            Self::Zbus(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl std::error::Error for DbusRuntimeError {}
+
+impl From<zbus::Error> for DbusRuntimeError {
+    fn from(error: zbus::Error) -> Self {
+        Self::Zbus(error)
+    }
+}
+
+async fn bounded<T>(
+    operation: impl Future<Output = zbus::Result<T>>,
+) -> Result<T, DbusRuntimeError> {
+    bounded_with_timeout(DBUS_OPERATION_TIMEOUT, operation).await
+}
+
+async fn bounded_with_timeout<T>(
+    timeout: Duration,
+    operation: impl Future<Output = zbus::Result<T>>,
+) -> Result<T, DbusRuntimeError> {
+    tokio::time::timeout(timeout, operation)
+        .await
+        .map_err(|_| DbusRuntimeError::TimedOut)?
+        .map_err(DbusRuntimeError::Zbus)
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SemanticInput {
@@ -62,12 +104,19 @@ pub struct DbusSignalSource {
 }
 
 impl DbusSignalSource {
-    pub async fn system() -> zbus::Result<Self> {
-        let connection = zbus::Connection::system().await?;
-        Self::for_connection(connection).await
+    pub async fn system() -> Result<Self, DbusRuntimeError> {
+        bounded(async {
+            let connection = zbus::Connection::system().await?;
+            Self::for_connection_unbounded(connection).await
+        })
+        .await
     }
 
-    pub async fn for_connection(connection: zbus::Connection) -> zbus::Result<Self> {
+    pub async fn for_connection(connection: zbus::Connection) -> Result<Self, DbusRuntimeError> {
+        bounded(Self::for_connection_unbounded(connection)).await
+    }
+
+    async fn for_connection_unbounded(connection: zbus::Connection) -> zbus::Result<Self> {
         let rule = MatchRule::builder()
             .msg_type(Type::Signal)
             .path(DBUS_TARGET_PATH)?
@@ -81,7 +130,7 @@ impl DbusSignalSource {
         })
     }
 
-    pub async fn current_owner(&self) -> zbus::Result<Option<String>> {
+    pub async fn current_owner(&self) -> Result<Option<String>, DbusRuntimeError> {
         current_authenticated_owner(&self.connection).await
     }
 
@@ -91,6 +140,12 @@ impl DbusSignalSource {
 }
 
 pub async fn current_authenticated_owner(
+    connection: &zbus::Connection,
+) -> Result<Option<String>, DbusRuntimeError> {
+    bounded(current_authenticated_owner_unbounded(connection)).await
+}
+
+async fn current_authenticated_owner_unbounded(
     connection: &zbus::Connection,
 ) -> zbus::Result<Option<String>> {
     let Some(owner) = current_unique_owner(connection).await? else {
@@ -215,4 +270,21 @@ pub fn map_capability(capability: &str, value: f64) -> Option<SemanticInput> {
         _ => return None,
     };
     Some(SemanticInput::Control(control, transition))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{future, time::Duration};
+
+    use super::{bounded_with_timeout, DbusRuntimeError};
+
+    #[tokio::test]
+    async fn bounded_wait_times_out_and_allows_a_fresh_retry() {
+        let result =
+            bounded_with_timeout(Duration::ZERO, future::pending::<zbus::Result<()>>()).await;
+        assert!(matches!(result, Err(DbusRuntimeError::TimedOut)));
+
+        let retry = bounded_with_timeout(Duration::ZERO, future::ready(Ok(42))).await;
+        assert_eq!(retry.expect("ready retry"), 42);
+    }
 }

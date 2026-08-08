@@ -1,10 +1,22 @@
-I: Bus=0003 Vendor=045e Product=028e Version=0114
+I: Bus=0003 Vendor=045e Product=028e Version=0001
 N: Name="Microsoft X-Box 360 pad"
-P: Phys=inputplumber/virtual-xb360
+P: Phys=
 S: Sysfs=/devices/virtual/input/input20
-U: Uniq=inputplumber-xb360-1
+U: Uniq=
 H: Handlers=js0 event10
+B: EV=20000b
+B: KEY=f 0 0 0 0 0 0 7cdb000000000000 0 0 0 0
+B: ABS=3003f
+
+I: Bus=0003 Vendor=045e Product=028e Version=0001
+N: Name="Microsoft X-Box 360 pad"
+P: Phys=
+S: Sysfs=/devices/virtual/input/input21
+U: Uniq=
+H: Handlers=js2 event12
+B: EV=b
 B: KEY=1000000000000 0 0 0 0
+B: ABS=3
 
 I: Bus=0003 Vendor=045e Product=0b13 Version=050f
 N: Name="Xbox Wireless Controller"

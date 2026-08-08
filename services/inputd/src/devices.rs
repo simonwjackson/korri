@@ -5,10 +5,24 @@ use std::{
     pin::Pin,
 };
 
-use evdev::{Device, InputEvent, InputId};
+use evdev::{raw_stream::RawDevice, InputEvent, InputId};
 use futures_util::Stream;
 
 pub const XB360_TARGET_NAME: &str = "Microsoft X-Box 360 pad";
+
+// InputPlumber 0.75.2 src/input/target/xpad.rs builds `xb360` with these
+// identity and capability fields. It does not set uinput phys or uniq fields.
+const XB360_INPUT_ID: DeviceInputId = DeviceInputId {
+    bus: 0x0003,
+    vendor: 0x045e,
+    product: 0x028e,
+    version: 0x0001,
+};
+const XB360_KEYS: [u16; 15] = [
+    0x130, 0x131, 0x133, 0x134, 0x136, 0x137, 0x13a, 0x13b, 0x13c, 0x13d, 0x13e, 0x2c0, 0x2c1,
+    0x2c2, 0x2c3,
+];
+const XB360_ABSOLUTE_AXES: [u16; 8] = [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x10, 0x11];
 
 pub type InputEventStream = Pin<Box<dyn Stream<Item = io::Result<InputEvent>> + Send + 'static>>;
 
@@ -26,8 +40,30 @@ pub struct DeviceDescriptor {
     pub unique_id: Option<String>,
     pub sysfs_path: Option<String>,
     pub input_id: DeviceInputId,
+    pub capabilities: DeviceCapabilities,
     pub class: DeviceClass,
     pub device_number: Option<u64>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct DeviceCapabilities {
+    pub keys: Vec<u16>,
+    pub absolute_axes: Vec<u16>,
+    pub force_feedback: bool,
+}
+
+impl DeviceCapabilities {
+    pub fn inputplumber_xb360() -> Self {
+        Self {
+            keys: XB360_KEYS.to_vec(),
+            absolute_axes: XB360_ABSOLUTE_AXES.to_vec(),
+            force_feedback: true,
+        }
+    }
+
+    fn is_inputplumber_xb360(&self) -> bool {
+        self.keys == XB360_KEYS && self.absolute_axes == XB360_ABSOLUTE_AXES && self.force_feedback
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -51,18 +87,16 @@ impl From<InputId> for DeviceInputId {
 
 impl DeviceDescriptor {
     pub fn is_validated_inputplumber_xb360(&self) -> bool {
-        if self.class != DeviceClass::Gamepad || self.name != XB360_TARGET_NAME {
-            return false;
-        }
-        let virtual_sysfs = self
-            .sysfs_path
-            .as_deref()
-            .is_some_and(|path| path.starts_with("/devices/virtual/input/"));
-        let inputplumber_marker = [self.physical_path.as_deref(), self.unique_id.as_deref()]
-            .into_iter()
-            .flatten()
-            .any(|value| value.to_ascii_lowercase().contains("inputplumber"));
-        virtual_sysfs || inputplumber_marker
+        self.class == DeviceClass::Gamepad
+            && self.name == XB360_TARGET_NAME
+            && self.input_id == XB360_INPUT_ID
+            && self.physical_path.is_none()
+            && self.unique_id.is_none()
+            && self
+                .sysfs_path
+                .as_deref()
+                .is_some_and(|path| path.starts_with("/devices/virtual/input/"))
+            && self.capabilities.is_inputplumber_xb360()
     }
 
     pub fn stable_identity(&self) -> TargetIdentity {
@@ -169,7 +203,9 @@ impl TargetProvider for EvdevProvider {
     }
 
     fn open(&mut self, expected: &DeviceDescriptor) -> io::Result<OpenedTarget> {
-        let device = Device::open(&expected.path)?;
+        // RawDevice exposes SYN_DROPPED. Runtime handles it by closing this
+        // stream and reconciling instead of retaining potentially stale state.
+        let device = RawDevice::open(&expected.path)?;
         let device_number = fstat_device_number(&device)?;
         let sysfs_path = sysfs_path_for_device_number(device_number, Path::new("/sys"));
         let descriptor =
@@ -184,7 +220,7 @@ impl TargetProvider for EvdevProvider {
 
 fn descriptor_from_opened_device(
     expected: &DeviceDescriptor,
-    device: &Device,
+    device: &RawDevice,
     device_number: u64,
     sysfs_path: Option<String>,
 ) -> DeviceDescriptor {
@@ -195,6 +231,7 @@ fn descriptor_from_opened_device(
         unique_id: device.unique_name().map(str::to_owned),
         sysfs_path,
         input_id: device.input_id().into(),
+        capabilities: capabilities_from_device(device),
         class: if device.supported_keys().is_some_and(|keys| {
             keys.contains(evdev::KeyCode::new(0x130)) || keys.contains(evdev::KeyCode::new(0x120))
         }) {
@@ -206,7 +243,23 @@ fn descriptor_from_opened_device(
     }
 }
 
-fn fstat_device_number(device: &Device) -> io::Result<u64> {
+fn capabilities_from_device(device: &RawDevice) -> DeviceCapabilities {
+    DeviceCapabilities {
+        keys: device
+            .supported_keys()
+            .map(|values| values.iter().map(|value| value.0).collect())
+            .unwrap_or_default(),
+        absolute_axes: device
+            .supported_absolute_axes()
+            .map(|values| values.iter().map(|value| value.0).collect())
+            .unwrap_or_default(),
+        force_feedback: device
+            .supported_events()
+            .contains(evdev::EventType::FORCEFEEDBACK),
+    }
+}
+
+fn fstat_device_number(device: &RawDevice) -> io::Result<u64> {
     rustix::fs::fstat(device.as_fd())
         .map(|stat| stat.st_rdev)
         .map_err(io::Error::from)
@@ -260,11 +313,14 @@ fn parse_proc_block(block: &str, input_root: &Path) -> Option<DeviceDescriptor> 
         product: parse_hex_field(input, "Product"),
         version: parse_hex_field(input, "Version"),
     };
-    let key_words = block.lines().find_map(|line| {
-        line.trim()
-            .strip_prefix("B: KEY=")
-            .map(|bits| bits.split_whitespace().collect::<Vec<_>>())
-    });
+    let bitmap = |name: &str| {
+        block.lines().find_map(|line| {
+            line.trim()
+                .strip_prefix(&format!("B: {name}="))
+                .map(|bits| bits.split_whitespace().collect::<Vec<_>>())
+        })
+    };
+    let key_words = bitmap("KEY");
     let class = if key_words
         .as_ref()
         .is_some_and(|words| bitmap_has(words, 0x130) || bitmap_has(words, 0x120))
@@ -285,6 +341,16 @@ fn parse_proc_block(block: &str, input_root: &Path) -> Option<DeviceDescriptor> 
         unique_id: non_empty_value("U:"),
         sysfs_path: non_empty_value("S:"),
         input_id,
+        capabilities: DeviceCapabilities {
+            keys: key_words.as_deref().map(bitmap_values).unwrap_or_default(),
+            absolute_axes: bitmap("ABS")
+                .as_deref()
+                .map(bitmap_values)
+                .unwrap_or_default(),
+            force_feedback: bitmap("EV")
+                .as_ref()
+                .is_some_and(|words| bitmap_has(words, evdev::EventType::FORCEFEEDBACK.0.into())),
+        },
         class,
         device_number,
     })
@@ -307,4 +373,11 @@ fn bitmap_has(words: &[&str], bit: usize) -> bool {
     u64::from_str_radix(words[index], 16)
         .map(|word| word & (1_u64 << (bit % BITS_PER_WORD)) != 0)
         .unwrap_or(false)
+}
+
+fn bitmap_values(words: &[&str]) -> Vec<u16> {
+    (0..words.len() * 64)
+        .filter(|bit| bitmap_has(words, *bit))
+        .filter_map(|bit| u16::try_from(bit).ok())
+        .collect()
 }

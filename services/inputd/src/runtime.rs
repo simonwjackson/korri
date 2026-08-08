@@ -172,19 +172,24 @@ impl Runtime {
         if !self.dbus.set_owner(owner) {
             return;
         }
-        self.clear_all();
-        if self.dbus.owner().is_none() {
-            self.transition(RuntimeState::Recovering {
-                reason: RecoveryReason::ProviderUnavailable,
-            });
-        } else if let Some(opened) = &self.opened {
-            self.transition(RuntimeState::Ready {
-                target: ready_target(&opened.descriptor),
-            });
-        }
+        // A unique-owner change creates a new authenticated topology. Close the
+        // old evdev stream and stay inert until reconciliation opens the target
+        // against that topology. A same-owner refresh returns above unchanged.
+        self.close_target();
+        self.transition(RuntimeState::Recovering {
+            reason: RecoveryReason::ProviderUnavailable,
+        });
     }
 
     pub fn reconcile(&mut self, provider: &mut impl TargetProvider) {
+        if self.dbus.owner().is_none() {
+            self.close_target();
+            self.transition(RuntimeState::Recovering {
+                reason: RecoveryReason::ProviderUnavailable,
+            });
+            return;
+        }
+
         let devices = match provider.enumerate() {
             Ok(devices) => devices,
             Err(error) => {
@@ -305,6 +310,12 @@ impl Runtime {
     }
 
     pub fn handle_evdev(&mut self, event_type: u16, code: u16, value: i32) -> Vec<RuntimeAction> {
+        const EV_SYN: u16 = 0;
+        const SYN_DROPPED: u16 = 3;
+        if event_type == EV_SYN && code == SYN_DROPPED {
+            self.event_stream_lost();
+            return Vec::new();
+        }
         if !matches!(self.state, RuntimeState::Ready { .. }) {
             return Vec::new();
         }
@@ -346,10 +357,6 @@ impl Runtime {
         if self.opened.take().is_some() {
             self.policies.clear_evdev();
         }
-        self.policies.reset();
-    }
-
-    fn clear_all(&mut self) {
         self.policies.reset();
     }
 

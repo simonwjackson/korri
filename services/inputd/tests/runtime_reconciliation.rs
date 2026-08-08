@@ -1,12 +1,14 @@
 use std::{collections::VecDeque, io, path::PathBuf};
 
+use evdev::{EventType, InputEvent, SynchronizationCode};
 use futures_util::stream;
 use korri_input_core::controls::{Control, ControlTransition};
 use korri_inputd::{
     dbus::{Signal, DBUS_INPUT_MEMBER, DBUS_TARGET_INTERFACE, DBUS_TARGET_PATH},
     devices::{
-        parse_proc_bus_input_devices, resolve_target, DeviceClass, DeviceDescriptor, DeviceInputId,
-        OpenedTarget, TargetProvider, TargetResolution, XB360_TARGET_NAME,
+        parse_proc_bus_input_devices, resolve_target, DeviceCapabilities, DeviceClass,
+        DeviceDescriptor, DeviceInputId, OpenedTarget, TargetProvider, TargetResolution,
+        XB360_TARGET_NAME,
     },
     runtime::{RecoveryReason, Runtime, RuntimeState},
 };
@@ -15,6 +17,7 @@ struct InMemoryTargetProvider {
     devices: Vec<DeviceDescriptor>,
     opened: VecDeque<io::Result<DeviceDescriptor>>,
     end_stream_on_open: bool,
+    drop_sync_on_open: bool,
     enumerate_calls: usize,
     open_calls: usize,
 }
@@ -25,6 +28,7 @@ impl InMemoryTargetProvider {
             devices,
             opened: VecDeque::new(),
             end_stream_on_open: false,
+            drop_sync_on_open: false,
             enumerate_calls: 0,
             open_calls: 0,
         }
@@ -36,6 +40,10 @@ impl InMemoryTargetProvider {
 
     fn end_stream_on_open(&mut self) {
         self.end_stream_on_open = true;
+    }
+
+    fn drop_sync_on_open(&mut self) {
+        self.drop_sync_on_open = true;
     }
 }
 
@@ -54,6 +62,13 @@ impl TargetProvider for InMemoryTargetProvider {
         let events = if self.end_stream_on_open {
             self.end_stream_on_open = false;
             Box::pin(stream::empty()) as korri_inputd::devices::InputEventStream
+        } else if self.drop_sync_on_open {
+            self.drop_sync_on_open = false;
+            Box::pin(stream::iter([Ok(InputEvent::new(
+                EventType::SYNCHRONIZATION.0,
+                SynchronizationCode::SYN_DROPPED.0,
+                0,
+            ))])) as korri_inputd::devices::InputEventStream
         } else {
             Box::pin(stream::pending()) as korri_inputd::devices::InputEventStream
         };
@@ -65,15 +80,16 @@ fn target(node: &str) -> DeviceDescriptor {
     DeviceDescriptor {
         path: PathBuf::from(format!("/dev/input/{node}")),
         name: XB360_TARGET_NAME.to_owned(),
-        physical_path: Some("inputplumber/virtual-xb360".to_owned()),
-        unique_id: Some("inputplumber-xb360-1".to_owned()),
+        physical_path: None,
+        unique_id: None,
         sysfs_path: Some("/devices/virtual/input/input20".to_owned()),
         input_id: DeviceInputId {
             bus: 3,
             vendor: 0x045e,
             product: 0x028e,
-            version: 0x0114,
+            version: 0x0001,
         },
+        capabilities: DeviceCapabilities::inputplumber_xb360(),
         class: DeviceClass::Gamepad,
         device_number: Some(100),
     }
@@ -87,6 +103,7 @@ fn raw(node: &str) -> DeviceDescriptor {
         unique_id: None,
         sysfs_path: Some("/devices/pci/usb/input/input9".to_owned()),
         input_id: DeviceInputId::default(),
+        capabilities: DeviceCapabilities::default(),
         class: DeviceClass::Gamepad,
         device_number: Some(9),
     }
@@ -139,7 +156,7 @@ fn proc_fixture_resolves_only_the_exact_virtual_target() {
     let fixture = include_str!("fixtures/proc-bus-input/one-virtual-one-raw.txt");
     let devices = parse_proc_bus_input_devices(fixture, std::path::Path::new("/fixture/input"));
 
-    assert_eq!(devices.len(), 3);
+    assert_eq!(devices.len(), 4);
     let TargetResolution::Found(selected) = resolve_target(&devices) else {
         panic!("fixture must resolve exactly one normalized target");
     };
@@ -147,8 +164,15 @@ fn proc_fixture_resolves_only_the_exact_virtual_target() {
     assert_eq!(selected.input_id.bus, 3);
     assert_eq!(selected.input_id.vendor, 0x045e);
     assert_eq!(selected.input_id.product, 0x028e);
-    assert_eq!(selected.unique_id.as_deref(), Some("inputplumber-xb360-1"));
-    assert_eq!(devices[1].unique_id, None);
+    assert_eq!(selected.input_id.version, 0x0001);
+    assert_eq!(selected.physical_path, None);
+    assert_eq!(selected.unique_id, None);
+    assert_eq!(
+        selected.capabilities,
+        DeviceCapabilities::inputplumber_xb360()
+    );
+    assert!(!devices[1].is_validated_inputplumber_xb360());
+    assert_eq!(devices[2].unique_id, None);
 }
 
 #[test]
@@ -219,7 +243,6 @@ fn ambiguity_closes_the_stream_clears_held_state_and_recovers_after_hotplug() {
     assert!(runtime.handle_evdev(1, 0x13c, 1).is_empty());
 
     let mut second = target("event11");
-    second.unique_id = Some("inputplumber-xb360-2".to_owned());
     second.device_number = Some(101);
     provider.devices.push(second);
     runtime.reconcile(&mut provider);
@@ -284,9 +307,7 @@ fn unreadable_required_target_is_retried_but_irrelevant_devices_are_not_opened()
 
 #[test]
 fn descriptor_provenance_rejects_path_replacement_between_enumeration_and_open() {
-    let mut expected = target("event10");
-    expected.physical_path = None;
-    expected.unique_id = None;
+    let expected = target("event10");
     let mut replacement = expected.clone();
     replacement.sysfs_path = Some("/devices/pci/usb/input/input9".to_owned());
     let mut provider = InMemoryTargetProvider::with(vec![expected]);
@@ -335,23 +356,87 @@ async fn stream_loss_clears_state_and_requires_reconciliation_and_release_before
 }
 
 #[test]
-fn provider_owner_loss_and_change_clear_and_disarm_before_recovery() {
+fn provider_owner_change_closes_target_and_requires_reconciliation() {
     let mut provider = InMemoryTargetProvider::with(vec![target("event10")]);
     let mut runtime = ready_runtime(&mut provider);
     release_destructive(&mut runtime);
 
-    runtime.set_dbus_owner(None);
+    runtime.set_dbus_owner(Some(":1.99"));
     assert_eq!(
         runtime.state(),
         &RuntimeState::Recovering {
             reason: RecoveryReason::ProviderUnavailable
         }
     );
-    runtime.set_dbus_owner(Some(":1.99"));
+    assert!(!runtime.has_open_target());
+    assert!(send_dbus(&mut runtime, Control::Home, ControlTransition::Pressed).is_empty());
+
+    runtime.reconcile(&mut provider);
     assert!(matches!(runtime.state(), RuntimeState::Ready { .. }));
+    assert_eq!(provider.open_calls, 2);
     for control in [Control::L1, Control::R1, Control::Start, Control::Select] {
         assert!(send_dbus(&mut runtime, control, ControlTransition::Pressed).is_empty());
     }
+}
+
+#[test]
+fn owner_lookup_failure_leaves_runtime_inert_until_a_bounded_retry_succeeds() {
+    let mut provider = InMemoryTargetProvider::with(vec![target("event10")]);
+    let mut runtime = ready_runtime(&mut provider);
+
+    runtime.set_dbus_owner(None);
+    runtime.reconcile(&mut provider);
+
+    assert_eq!(
+        runtime.state(),
+        &RuntimeState::Recovering {
+            reason: RecoveryReason::ProviderUnavailable
+        }
+    );
+    assert!(!runtime.has_open_target());
+    assert_eq!(provider.open_calls, 1);
+    assert!(runtime.handle_evdev(1, 0x13c, 1).is_empty());
+
+    runtime.set_dbus_owner(Some(":1.99"));
+    runtime.reconcile(&mut provider);
+    assert!(matches!(runtime.state(), RuntimeState::Ready { .. }));
+    assert_eq!(provider.open_calls, 2);
+}
+
+#[test]
+fn same_owner_refresh_does_not_close_target_or_clear_held_state() {
+    let mut provider = InMemoryTargetProvider::with(vec![target("event10")]);
+    let mut runtime = ready_runtime(&mut provider);
+    assert!(send_dbus(&mut runtime, Control::Home, ControlTransition::Pressed).is_empty());
+
+    runtime.set_dbus_owner(Some(":1.42"));
+    runtime.reconcile(&mut provider);
+
+    assert!(runtime.has_open_target());
+    assert_eq!(provider.open_calls, 1);
+    let actions = send_dbus(&mut runtime, Control::L1, ControlTransition::Pressed);
+    assert_eq!(actions.len(), 1);
+    assert_eq!(actions[0].id, "workspace-prev");
+}
+
+#[tokio::test]
+async fn syn_dropped_closes_target_and_clears_stale_pressed_state() {
+    let mut provider = InMemoryTargetProvider::with(vec![target("event10")]);
+    provider.drop_sync_on_open();
+    let mut runtime = ready_runtime(&mut provider);
+    assert!(runtime.handle_evdev(1, 0x13c, 1).is_empty());
+
+    assert!(matches!(runtime.next_evdev_actions().await, Ok(Some(actions)) if actions.is_empty()));
+    assert_eq!(
+        runtime.state(),
+        &RuntimeState::Recovering {
+            reason: RecoveryReason::EventStreamLost
+        }
+    );
+    assert!(!runtime.has_open_target());
+
+    runtime.reconcile(&mut provider);
+    assert!(runtime.handle_evdev(1, 0x136, 1).is_empty());
 }
 
 #[test]
