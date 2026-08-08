@@ -1,0 +1,22 @@
+I: Bus=0003 Vendor=045e Product=028e Version=0114
+N: Name="Microsoft X-Box 360 pad"
+P: Phys=inputplumber/virtual-xb360
+S: Sysfs=/devices/virtual/input/input20
+U: Uniq=inputplumber-xb360-1
+H: Handlers=js0 event10
+B: KEY=1000000000000 0 0 0 0
+
+I: Bus=0003 Vendor=045e Product=0b13 Version=050f
+N: Name="Xbox Wireless Controller"
+P: Phys=usb-0000:01:00.0-1/input0
+S: Sysfs=/devices/pci0000:00/usb1/input/input9
+U: Uniq=
+H: Handlers=js1 event4
+B: KEY=1000000000000 0 0 0 0
+
+I: Bus=0011 Vendor=0001 Product=0001 Version=ab41
+N: Name="AT Translated Set 2 keyboard"
+P: Phys=isa0060/serio0/input0
+S: Sysfs=/devices/platform/i8042/serio0/input/input3
+H: Handlers=sysrq kbd event3
+B: KEY=120013 0 0 0 0
