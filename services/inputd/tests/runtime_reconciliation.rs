@@ -122,6 +122,15 @@ fn send_dbus(
     control: Control,
     transition: ControlTransition,
 ) -> Vec<korri_inputd::runtime::RuntimeAction> {
+    send_dbus_at(runtime, control, transition, 0)
+}
+
+fn send_dbus_at(
+    runtime: &mut Runtime,
+    control: Control,
+    transition: ControlTransition,
+    now_ms: u64,
+) -> Vec<korri_inputd::runtime::RuntimeAction> {
     let capability = match control {
         Control::Home => "ui_guide",
         Control::L1 => "ui_l1",
@@ -131,18 +140,21 @@ fn send_dbus(
         _ => panic!("test helper has no DBus capability for {control:?}"),
     };
     let owner = runtime.dbus_owner().expect("DBus owner").to_owned();
-    runtime.handle_dbus_signal(&Signal {
-        sender: &owner,
-        path: DBUS_TARGET_PATH,
-        interface: DBUS_TARGET_INTERFACE,
-        member: DBUS_INPUT_MEMBER,
-        capability,
-        value: if transition == ControlTransition::Pressed {
-            1.0
-        } else {
-            0.0
+    runtime.handle_dbus_signal_at(
+        &Signal {
+            sender: &owner,
+            path: DBUS_TARGET_PATH,
+            interface: DBUS_TARGET_INTERFACE,
+            member: DBUS_INPUT_MEMBER,
+            capability,
+            value: if transition == ControlTransition::Pressed {
+                1.0
+            } else {
+                0.0
+            },
         },
-    })
+        now_ms,
+    )
 }
 
 fn release_destructive(runtime: &mut Runtime) {
@@ -350,9 +362,42 @@ async fn stream_loss_clears_state_and_requires_reconciliation_and_release_before
     for control in [Control::L1, Control::R1, Control::Start] {
         send_dbus(&mut runtime, control, ControlTransition::Pressed);
     }
-    let actions = send_dbus(&mut runtime, Control::Select, ControlTransition::Pressed);
+    assert!(send_dbus_at(
+        &mut runtime,
+        Control::Select,
+        ControlTransition::Pressed,
+        1_000,
+    )
+    .is_empty());
+    assert!(runtime.advance_actions_at(2_999).is_empty());
+    let actions = runtime.advance_actions_at(3_000);
     assert_eq!(actions.len(), 1);
     assert!(actions[0].destructive);
+}
+
+#[test]
+fn destructive_chord_release_before_hold_threshold_dispatches_nothing() {
+    let mut provider = InMemoryTargetProvider::with(vec![target("event10")]);
+    let mut runtime = ready_runtime(&mut provider);
+    release_destructive(&mut runtime);
+    for control in [Control::L1, Control::R1, Control::Start] {
+        assert!(send_dbus_at(&mut runtime, control, ControlTransition::Pressed, 1_000,).is_empty());
+    }
+    assert!(send_dbus_at(
+        &mut runtime,
+        Control::Select,
+        ControlTransition::Pressed,
+        1_000,
+    )
+    .is_empty());
+    assert!(send_dbus_at(
+        &mut runtime,
+        Control::Select,
+        ControlTransition::Released,
+        2_000,
+    )
+    .is_empty());
+    assert!(runtime.advance_actions_at(4_000).is_empty());
 }
 
 #[test]

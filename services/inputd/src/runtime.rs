@@ -1,8 +1,13 @@
-use std::{io, path::PathBuf, time::Duration};
+use std::{
+    io,
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 
 use futures_util::StreamExt;
 use korri_input_core::{
     controls::{Control, ControlEvent, ControlTransition, DpadAxis},
+    hold::{HoldConfig, HoldPhase, HoldPolicy},
     shortcuts::{ShortcutDefinition, ShortcutPolicy, TapDefinition},
 };
 
@@ -51,6 +56,7 @@ pub struct RuntimeAction {
 struct Policies {
     non_destructive: ShortcutPolicy,
     destructive: ShortcutPolicy,
+    destructive_hold: HoldPolicy,
 }
 
 impl Policies {
@@ -78,24 +84,32 @@ impl Policies {
                 )],
                 vec![],
             ),
+            destructive_hold: HoldPolicy::new(HoldConfig::default())
+                .expect("default destructive hold duration is valid"),
         }
     }
 
     fn reset(&mut self) {
         self.non_destructive.reset();
         self.destructive.reset();
+        self.destructive_hold.reset();
     }
 
     fn clear_evdev(&mut self) {
         self.non_destructive.clear_source(EVDEV_SOURCE);
     }
 
-    fn handle(&mut self, source: InputSource, input: SemanticInput) -> Vec<RuntimeAction> {
+    fn handle(
+        &mut self,
+        source: InputSource,
+        input: SemanticInput,
+        now_ms: u64,
+    ) -> Vec<RuntimeAction> {
         let source_name = match source {
             InputSource::Evdev => EVDEV_SOURCE,
             InputSource::AuthenticatedDbus => DBUS_SOURCE,
         };
-        let mut actions = handle_policy(&mut self.non_destructive, source_name, input)
+        let actions = handle_policy(&mut self.non_destructive, source_name, input)
             .into_iter()
             .map(|id| RuntimeAction {
                 id,
@@ -103,16 +117,26 @@ impl Policies {
             })
             .collect::<Vec<_>>();
         if source == InputSource::AuthenticatedDbus {
-            actions.extend(
-                handle_policy(&mut self.destructive, source_name, input)
-                    .into_iter()
-                    .map(|id| RuntimeAction {
-                        id,
-                        destructive: true,
-                    }),
-            );
+            for id in handle_policy(&mut self.destructive, source_name, input) {
+                self.destructive_hold.engage(id, now_ms);
+            }
+            if !self.destructive.is_action_active("kill-current-game") {
+                self.destructive_hold.release("kill-current-game", now_ms);
+            }
         }
         actions
+    }
+
+    fn advance(&mut self, now_ms: u64) -> Vec<RuntimeAction> {
+        self.destructive_hold
+            .advance(now_ms)
+            .into_iter()
+            .filter(|update| update.phase == HoldPhase::Fired)
+            .map(|update| RuntimeAction {
+                id: update.id,
+                destructive: true,
+            })
+            .collect()
     }
 }
 
@@ -140,6 +164,7 @@ pub struct Runtime {
     opened: Option<OpenedTarget>,
     policies: Policies,
     dbus: DbusAuthenticator,
+    started_at: Instant,
 }
 
 impl Default for Runtime {
@@ -151,6 +176,7 @@ impl Default for Runtime {
             opened: None,
             policies: Policies::new(),
             dbus: DbusAuthenticator::default(),
+            started_at: Instant::now(),
         }
     }
 }
@@ -291,22 +317,48 @@ impl Runtime {
     }
 
     pub fn handle_dbus_signal(&mut self, signal: &Signal<'_>) -> Vec<RuntimeAction> {
+        self.handle_dbus_signal_at(signal, self.elapsed_ms())
+    }
+
+    pub fn handle_dbus_signal_at(
+        &mut self,
+        signal: &Signal<'_>,
+        now_ms: u64,
+    ) -> Vec<RuntimeAction> {
         if !matches!(self.state, RuntimeState::Ready { .. }) {
             return Vec::new();
         }
         self.dbus
             .authenticate(signal)
-            .map(|input| self.policies.handle(InputSource::AuthenticatedDbus, input))
+            .map(|input| {
+                self.policies
+                    .handle(InputSource::AuthenticatedDbus, input, now_ms)
+            })
             .unwrap_or_default()
     }
 
     pub fn handle_dbus_message(&mut self, message: &zbus::Message) -> Vec<RuntimeAction> {
+        let now_ms = self.elapsed_ms();
         if !matches!(self.state, RuntimeState::Ready { .. }) {
             return Vec::new();
         }
         authenticated_message(&self.dbus, message)
-            .map(|input| self.policies.handle(InputSource::AuthenticatedDbus, input))
+            .map(|input| {
+                self.policies
+                    .handle(InputSource::AuthenticatedDbus, input, now_ms)
+            })
             .unwrap_or_default()
+    }
+
+    pub fn advance_actions(&mut self) -> Vec<RuntimeAction> {
+        self.advance_actions_at(self.elapsed_ms())
+    }
+
+    pub fn advance_actions_at(&mut self, now_ms: u64) -> Vec<RuntimeAction> {
+        if !matches!(self.state, RuntimeState::Ready { .. }) {
+            return Vec::new();
+        }
+        self.policies.advance(now_ms)
     }
 
     pub fn handle_evdev(&mut self, event_type: u16, code: u16, value: i32) -> Vec<RuntimeAction> {
@@ -319,8 +371,9 @@ impl Runtime {
         if !matches!(self.state, RuntimeState::Ready { .. }) {
             return Vec::new();
         }
+        let now_ms = self.elapsed_ms();
         map_evdev(event_type, code, value)
-            .map(|input| self.policies.handle(InputSource::Evdev, input))
+            .map(|input| self.policies.handle(InputSource::Evdev, input, now_ms))
             .unwrap_or_default()
     }
 
@@ -351,6 +404,10 @@ impl Runtime {
         self.transition(RuntimeState::Recovering {
             reason: RecoveryReason::EventStreamLost,
         });
+    }
+
+    fn elapsed_ms(&self) -> u64 {
+        self.started_at.elapsed().as_millis().min(u64::MAX as u128) as u64
     }
 
     fn close_target(&mut self) {

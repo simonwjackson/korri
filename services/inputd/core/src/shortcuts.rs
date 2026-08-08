@@ -184,6 +184,13 @@ impl ShortcutPolicy {
             .any(|state| state.pressed.contains(&control))
     }
 
+    pub fn is_action_active(&self, id: &str) -> bool {
+        self.shortcuts
+            .iter()
+            .find(|shortcut| shortcut.id == id)
+            .is_some_and(|shortcut| self.definition_assembled(shortcut))
+    }
+
     pub fn reset(&mut self) {
         self.sources.clear();
         self.fired_ids.clear();
