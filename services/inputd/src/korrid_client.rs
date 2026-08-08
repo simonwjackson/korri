@@ -65,9 +65,8 @@ impl KorridClient {
 
     pub async fn stop_active_exact(&self) -> Result<ExactStopOutcome, LocalControlError> {
         let launch_id = match self.status().await? {
-            SessionStatus::Running { launch_id } | SessionStatus::Stopping { launch_id } => {
-                launch_id
-            }
+            SessionStatus::Running { launch_id } => launch_id,
+            SessionStatus::Stopping { .. } => return Ok(ExactStopOutcome::AlreadyStopping),
             SessionStatus::NoActive => return Ok(ExactStopOutcome::NoActive),
             SessionStatus::Completed => return Ok(ExactStopOutcome::Completed),
             SessionStatus::RecoveryBlocked => return Ok(ExactStopOutcome::RecoveryBlocked),
@@ -122,7 +121,7 @@ impl KorridClient {
             }
             response.extend_from_slice(&buffer[..count]);
         }
-        parse_http_response(&response)
+        parse_http_response(&response, self.limits.max_response_bytes)
     }
 }
 
@@ -194,23 +193,62 @@ impl fmt::Display for LocalControlError {
 
 impl std::error::Error for LocalControlError {}
 
-fn parse_http_response(response: &[u8]) -> Result<Vec<u8>, LocalControlError> {
+fn parse_http_response(
+    response: &[u8],
+    max_response_bytes: usize,
+) -> Result<Vec<u8>, LocalControlError> {
     let header_end = response
         .windows(4)
         .position(|window| window == b"\r\n\r\n")
         .ok_or(LocalControlError::InvalidHttpResponse)?;
     let headers = std::str::from_utf8(&response[..header_end])
         .map_err(|_| LocalControlError::InvalidHttpResponse)?;
-    let status = headers
-        .lines()
+    let mut lines = headers.split("\r\n");
+    let status = lines
         .next()
-        .and_then(|line| line.split_whitespace().nth(1))
-        .and_then(|value| value.parse::<u16>().ok())
+        .and_then(|line| {
+            let mut fields = line.split_ascii_whitespace();
+            match (fields.next(), fields.next()) {
+                (Some("HTTP/1.1"), Some(value)) => value.parse::<u16>().ok(),
+                _ => None,
+            }
+        })
         .ok_or(LocalControlError::InvalidHttpResponse)?;
+
+    let mut content_length = None;
+    for line in lines {
+        let (name, value) = line
+            .split_once(':')
+            .ok_or(LocalControlError::InvalidHttpResponse)?;
+        if name.eq_ignore_ascii_case("content-length") {
+            if content_length.is_some() {
+                return Err(LocalControlError::InvalidHttpResponse);
+            }
+            let value = value.trim();
+            if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+                return Err(LocalControlError::InvalidHttpResponse);
+            }
+            let parsed = value
+                .parse::<usize>()
+                .map_err(|_| LocalControlError::InvalidHttpResponse)?;
+            if parsed > max_response_bytes {
+                return Err(LocalControlError::ResponseTooLarge);
+            }
+            content_length = Some(parsed);
+        }
+    }
+    let content_length = content_length.ok_or(LocalControlError::InvalidHttpResponse)?;
+    let body_start = header_end + 4;
+    let framed_end = body_start
+        .checked_add(content_length)
+        .ok_or(LocalControlError::ResponseTooLarge)?;
+    if framed_end != response.len() {
+        return Err(LocalControlError::InvalidHttpResponse);
+    }
     if status != 200 {
         return Err(LocalControlError::HttpStatus(status));
     }
-    Ok(response[header_end + 4..].to_vec())
+    Ok(response[body_start..framed_end].to_vec())
 }
 
 #[derive(Deserialize)]

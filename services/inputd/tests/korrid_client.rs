@@ -120,6 +120,32 @@ async fn exact_stop_uses_the_observed_launch_id_and_mutates_once() {
 }
 
 #[tokio::test]
+async fn stopping_returns_already_stopping_without_a_stop_mutation() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("control.sock");
+    let listener = UnixListener::bind(&path).unwrap();
+    let server = tokio::spawn(async move {
+        let (mut status, _) = listener.accept().await.unwrap();
+        let _ = request_body(&mut status).await;
+        reply(&mut status, &status_ok("stopping")).await;
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), listener.accept())
+                .await
+                .is_err()
+        );
+    });
+
+    assert_eq!(
+        KorridClient::with_limits(path, limits(1))
+            .stop_active_exact()
+            .await
+            .unwrap(),
+        ExactStopOutcome::AlreadyStopping
+    );
+    server.await.unwrap();
+}
+
+#[tokio::test]
 async fn no_active_and_recovery_blocked_never_send_a_stop() {
     for (code, expected) in [
         ("NoActiveSession", ExactStopOutcome::NoActive),
@@ -217,6 +243,49 @@ async fn read_only_status_retries_but_stop_is_never_retried() {
     assert!(matches!(
         error,
         LocalControlError::InvalidHttpResponse | LocalControlError::Read(_)
+    ));
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn response_framing_requires_one_exact_bounded_content_length() {
+    for response in [
+        "HTTP/1.1 200 OK\r\nconnection: close\r\n\r\n{}".to_owned(),
+        "HTTP/1.1 200 OK\r\ncontent-length: 2\r\nContent-Length: 2\r\n\r\n{}".to_owned(),
+        "HTTP/1.1 200 OK\r\ncontent-length: nope\r\n\r\n{}".to_owned(),
+        "HTTP/1.1 200 OK\r\ncontent-length: 3\r\n\r\n{}".to_owned(),
+        "HTTP/1.1 200 OK\r\ncontent-length: 1\r\n\r\n{}".to_owned(),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("control.sock");
+        let listener = UnixListener::bind(&path).unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let _ = request_body(&mut stream).await;
+            stream.write_all(response.as_bytes()).await.unwrap();
+        });
+
+        assert!(matches!(
+            KorridClient::with_limits(path, limits(1)).status().await,
+            Err(LocalControlError::InvalidHttpResponse)
+        ));
+        server.await.unwrap();
+    }
+
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("control.sock");
+    let listener = UnixListener::bind(&path).unwrap();
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let _ = request_body(&mut stream).await;
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 99999\r\n\r\n")
+            .await
+            .unwrap();
+    });
+    assert!(matches!(
+        KorridClient::with_limits(path, limits(1)).status().await,
+        Err(LocalControlError::ResponseTooLarge)
     ));
     server.await.unwrap();
 }
