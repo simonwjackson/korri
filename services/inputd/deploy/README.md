@@ -7,10 +7,12 @@ The gate is read-only unless `--mode` selects a mutation state. Every invocation
 ## Safety contract
 
 - Default `inspect` mode only reads state. It captures the result in a mode `0700` temporary directory, prints the sanitized result, and removes the temporary directory on exit.
-- A mutation requires canonical candidate and rollback generation paths that already exist on the device.
-- A mutation also requires a mode `0700` ledger outside the repository, an explicit gameplay user, and a confirmation token bound to the captured machine ID, hostname, and candidate generation.
+- Before the first SSH call, mutation and reconcile modes require strict canonical Nix generation path syntax for candidate and rollback. Remote preflight then proves that both exact paths exist and contain `switch-to-configuration`.
+- Every SSH command uses a shell-escaped argv. Candidate, rollback, user, and helper paths never enter unquoted remote shell text.
+- A mutation also requires a mode `0700` ledger outside the repository, an explicit gameplay user, and a confirmation token bound to the captured machine ID, hostname, and exact candidate generation.
 - The script prints the required confirmation token when it is absent. Run the same command again with `--confirm TOKEN` only after checking all three displayed values.
-- The script uses bounded polling. Its exit trap restores the rollback generation after a failed temporary activation.
+- The script arms rollback by durably writing `pending-mutation` before every remote mutation. Every remote mutation has a wall-clock timeout that sends TERM, then KILL after five more seconds. Failure, timeout, or interruption runs rollback and records `failed-needs-inspection`.
+- The gate rejects another mutation from `failed-needs-inspection`. `reconcile` is read-only. It requires the rollback generation and every sanitized baseline predicate to match before it restores the prior ledger state.
 - The script never retries a switch, profile change, reboot, or destructive command blindly.
 - The script preserves the old `korrid.service` user-unit file. Temporary states restart the old unit if it was active. Persistent activation disables the old user unit but does not remove it, so rollback can restore it.
 - The script does not run `reboot`. The operator performs each reboot as a separate HITL action, then runs the matching read-only reboot-verification state.
@@ -21,19 +23,17 @@ The cost of this design is more operator steps. It also needs a consuming NixOS 
 
 The baseline contains no configuration file contents and no journal payloads. It records:
 
-- current, default, and listed NixOS generations;
-- running package executable identities and InputPlumber's resolved data root;
-- system service, socket, old user service, Sunshine, and X11 unit state;
-- `ActiveState` and inputd `StatusText`;
-- input event identity, provenance, permissions, and ACLs;
-- broad group membership;
-- cgroup v2 and service delegation;
-- InputPlumber's unique DBus owner and target interface;
-- Sunshine active state and whether pairing state is present;
-- only the Korrid catalog outcome/count and session outcome/state;
-- attached physical-controller identity and temporary-artifact status.
+- the machine ID and hostname;
+- current and default NixOS generation links;
+- InputPlumber, inputd, system korrid, old user korrid, and Sunshine unit summaries;
+- real-controller presence, temporary-artifact status, and catalog health;
+- exact old user active and enabled state;
+- normalized and raw topology digests;
+- permissions, ACL, and gameplay-user readability as one digest;
+- moved-source and temporary-artifact topology as one digest;
+- InputPlumber and Sunshine active and enabled state.
 
-The gate never reads or records Sunshine pairing material. It never records game paths, catalog titles, game content, private configuration contents, credentials, or environment values other than InputPlumber's `XDG_DATA_DIRS`.
+The gate never reads or records Sunshine pairing material. It never records game paths, catalog titles, game content, private configuration contents, credentials, or environment values.
 
 Delete the private ledger after the final evidence has been transferred to the work ledger in sanitized form. The private ledger is operational evidence, not a repository artifact.
 
@@ -65,6 +65,7 @@ Use one private ledger for the complete sequence. The gate rejects out-of-order 
 | State | Mode | Device mutation | Required result |
 |---|---|---:|---|
 | Baseline | `inspect` | No | Identity and sanitized device posture captured. |
+| Failed mutation | `reconcile` | No | A fresh inspection proves the rollback generation and all sanitized predicates exactly match the baseline before retry. |
 | Temporary candidate | `candidate-test` | Temporary | Candidate activates with NixOS `test`, automated and HITL gates pass, then rollback restores the prior generation and old user unit. |
 | Automatic rollback | `inject-health-failure` | Temporary | The provider stops once, inputd publishes `Recovering` or `Missing`, and the prior generation restores automatically. |
 | Explicit rollback | `rollback` | Persistent rollback | Candidate activates temporarily, then the system profile and runtime restore to the rollback generation. |
@@ -78,7 +79,9 @@ Persistent and candidate-reboot modes stop before mutation or acceptance unless 
 
 ## HITL stages
 
-The candidate remains active while a human verifies behavior that repository code cannot infer from static service state. `candidate-test`, `persistent-switch`, and candidate reboot verification prompt for all seven stage tokens. The script prints one token and waits at each stage. A token is bound to the captured host and candidate generation. Production runs read tokens from the controlling terminal; command arguments cannot bypass these prompts.
+The candidate remains active while a human verifies behavior that repository code cannot infer from static service state. `candidate-test`, `persistent-switch`, and candidate reboot verification prompt for all seven stage tokens. After activation, the gate generates a cryptographic per-attempt nonce. The private mode `0600` ledger is the only place that records it. Each displayed token binds the machine ID, hostname, exact candidate, nonce, boot ID, ledger state, and gate. The ledger records every consumed gate and rejects reuse. Production and tests use the same controlling-terminal path. No environment variable or command argument can supply or bypass HITL tokens.
+
+Immediately before acceptance, the gate re-reads the exact InputPlumber 0.75.2 `xb360` identity and capability fingerprint. It requires the virtual sysfs provenance, empty `phys` and `uniq`, exact keys and absolute axes, force-feedback support, joystick class, InputPlumber executable/version, event node, sysfs path, inode, and matching sysfs/device major-minor to remain unchanged.
 
 Do not enter a token until the named stage passes.
 
@@ -96,7 +99,7 @@ The automated portion separately checks service activity, `StatusText=Ready`, on
 
 ## Failure handling
 
-If a temporary state fails, allow the cleanup trap to run. Do not rerun the failed mutation immediately. Run default inspection first and compare the current generation, units, ACLs, moved sources, DBus owner, Sunshine state, and topology with the private baseline.
+If a mutating state fails, allow the cleanup trap to run. Do not rerun the failed mutation. Run `reconcile` with the same explicit target, generation, gameplay-user, and ledger arguments. It compares current/default generation links, exact old-user state, target/raw topology, ACL/readability, moved-source and temporary artifacts, InputPlumber/Sunshine state, and catalog health with the private baseline. It does not mutate the device.
 
 If cleanup reports that rollback failed, stop. Use the exact rollback generation printed in the private ledger. Do not guess another generation and do not remove the old user unit.
 
@@ -111,4 +114,4 @@ Run without SSH or device mutation:
 shellcheck services/inputd/deploy/device-check.sh services/inputd/deploy/test-device-check.sh
 ```
 
-The shell test replaces SSH and SCP with a deterministic command harness. Its test-only environment seam supplies HITL tokens without a terminal. It proves explicit targeting, mismatch refusal, read-only inspection, confirmation binding, preflight refusal, ordered state transitions, rollback cleanup calls, and reboot-generation checks.
+The shell test replaces SSH and SCP with a modeled command endpoint. The models cover topology count, InputPlumber provenance/capabilities, ACL exposure, baseline drift, target replacement, timeout, and interruption. Successful HITL tests run the production `/dev/tty` prompt path through a pseudo-terminal. The tests also prove malicious generation paths stop before SSH, remote argv stays intact, rollback is armed before mutation, failures require reconcile, accepted persistent state resumes without repeating mutation, and the nonce is absent from terminal output.
