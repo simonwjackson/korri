@@ -115,6 +115,7 @@ in
     systemd.tmpfiles.rules = [
       "d ${controlDirectory} 0750 root ${controlGroup} -"
       "d ${cfg.privateStateRoot} 0700 ${serviceUser} ${serviceGroup} -"
+      "d /dev/inputplumber/sources 0700 root root -"
     ];
 
     systemd.sockets.korrid-control = {
@@ -122,7 +123,10 @@ in
       wantedBy = [ "sockets.target" ];
       before = [ "korrid.service" ];
       requires = [ "systemd-tmpfiles-setup.service" ];
-      after = [ "systemd-tmpfiles-setup.service" ];
+      after = [
+        "systemd-tmpfiles-setup.service"
+        "systemd-tmpfiles-resetup.service"
+      ];
       socketConfig = {
         ListenStream = cfg.controlSocket;
         SocketUser = "root";
@@ -141,6 +145,8 @@ in
       after = [
         "network.target"
         "korrid-control.socket"
+        "systemd-tmpfiles-setup-dev.service"
+        "systemd-tmpfiles-resetup.service"
       ];
       environment = {
         KORRID_MODE = "host";

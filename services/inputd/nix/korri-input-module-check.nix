@@ -246,6 +246,8 @@ assert providerOnly.config.services.inputplumber.package == inputplumberKorri;
 assert builtins.elem "uinput" providerOnly.config.boot.kernelModules;
 assert !(providerOnly.config.systemd.services ? korri-inputd);
 assert providerService.environment.XDG_DATA_DIRS == "${inputplumberKorri}/share";
+assert builtins.elem "systemd-tmpfiles-setup-dev.service" hiddenProvider.config.systemd.services.inputplumber.after;
+assert builtins.elem "systemd-tmpfiles-resetup.service" hiddenProvider.config.systemd.services.inputplumber.after;
 assert
   providerWithData.config.services.inputplumber.package.additionalDataPackages == [ additionalData ];
 assert
@@ -262,6 +264,8 @@ assert inputdOnly.config.systemd.services ? korri-inputd;
 assert !inputdOnly.config.services.inputplumber.enable;
 assert inputdService.serviceConfig.RestrictAddressFamilies == [ "AF_UNIX" ];
 assert inputdService.serviceConfig.IPAddressDeny == "any";
+assert builtins.elem "systemd-tmpfiles-setup-dev.service" inputdService.after;
+assert builtins.elem "systemd-tmpfiles-resetup.service" inputdService.after;
 assert inputdService.serviceConfig.Delegate == "pids";
 assert
   inputdService.serviceConfig.CapabilityBoundingSet == [

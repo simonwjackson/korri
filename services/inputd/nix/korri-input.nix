@@ -204,9 +204,15 @@ in
         enable = true;
         package = providerPackage;
       };
-      systemd.services.inputplumber.environment = {
-        XDG_DATA_DIRS = lib.mkForce "${providerPackage}/share";
-        HIDE_DEVICES_FROM_ROOT = lib.mkIf cfg.provider.sourceHiding.enable "1";
+      systemd.services.inputplumber = {
+        after = lib.mkIf cfg.provider.sourceHiding.enable [
+          "systemd-tmpfiles-setup-dev.service"
+          "systemd-tmpfiles-resetup.service"
+        ];
+        environment = {
+          XDG_DATA_DIRS = lib.mkForce "${providerPackage}/share";
+          HIDE_DEVICES_FROM_ROOT = lib.mkIf cfg.provider.sourceHiding.enable "1";
+        };
       };
       systemd.tmpfiles.rules = lib.optional cfg.provider.sourceHiding.enable "d /dev/inputplumber/sources 0700 root root -";
       services.udev.extraRules = ''
@@ -313,6 +319,8 @@ in
         after = [
           "dbus.service"
           "systemd-udevd.service"
+          "systemd-tmpfiles-setup-dev.service"
+          "systemd-tmpfiles-resetup.service"
         ]
         ++ lib.optional cfg.provider.enable "inputplumber.service";
         environment = actionEnvironment // {
