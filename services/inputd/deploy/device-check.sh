@@ -121,14 +121,24 @@ remote_refuse_active_game() {
   printf 'active-game-check=clear\n'
 }
 
-remote_stop_old_user_units() {
+remote_quiesce_old_user_units() {
   local gameplay_user="$1" unit state
   for unit in "${OLD_USER_UNITS[@]}"; do
     remote_user_systemctl "$gameplay_user" stop "$unit" >/dev/null 2>&1 || true
-    remote_user_systemctl "$gameplay_user" disable "$unit" >/dev/null 2>&1 || true
     state="$(remote_user_unit_active "$gameplay_user" "$unit")" \
       || fail "old user unit active state query failed after stop: $unit"
     [[ "$state" == false ]] || fail "old user unit remained active: $unit"
+  done
+}
+
+remote_disable_old_user_units() {
+  local gameplay_user="$1" unit state
+  remote_user_systemctl "$gameplay_user" daemon-reload
+  for unit in "${OLD_USER_UNITS[@]}"; do
+    remote_user_systemctl "$gameplay_user" disable "$unit" >/dev/null 2>&1 || true
+    state="$(remote_user_unit_active "$gameplay_user" "$unit")" \
+      || fail "old user unit active state query failed after candidate activation: $unit"
+    [[ "$state" == false ]] || fail "old user unit became active during candidate activation: $unit"
     state="$(remote_user_unit_enabled "$gameplay_user" "$unit")" \
       || fail "old user unit enablement query failed after disable: $unit"
     [[ "$state" == false ]] || fail "old user unit remained enabled: $unit"
@@ -673,8 +683,9 @@ remote_preflight() {
 remote_activate_test() {
   local candidate="$1" gameplay_user="$2"
   remote_refuse_active_game
-  remote_stop_old_user_units "$gameplay_user"
+  remote_quiesce_old_user_units "$gameplay_user"
   sudo -n "$candidate/bin/switch-to-configuration" test
+  remote_disable_old_user_units "$gameplay_user"
   remote_set_pairing_state_modes "$gameplay_user" 0700 0600 >/dev/null
   remote_restart_user_manager "$gameplay_user"
   remote_start_candidate_services "$gameplay_user"
@@ -791,9 +802,10 @@ remote_inject_health_failure() {
 remote_persistent_switch() {
   local candidate="$1" gameplay_user="$2"
   remote_refuse_active_game
-  remote_stop_old_user_units "$gameplay_user"
+  remote_quiesce_old_user_units "$gameplay_user"
   sudo -n nix-env -p /nix/var/nix/profiles/system --set "$candidate"
   sudo -n "$candidate/bin/switch-to-configuration" switch
+  remote_disable_old_user_units "$gameplay_user"
   remote_set_pairing_state_modes "$gameplay_user" 0700 0600 >/dev/null
   remote_restart_user_manager "$gameplay_user"
   remote_start_candidate_services "$gameplay_user"
