@@ -248,6 +248,8 @@ assert !(providerOnly.config.systemd.services ? korri-inputd);
 assert providerService.environment.XDG_DATA_DIRS == "${inputplumberKorri}/share";
 assert builtins.elem "systemd-tmpfiles-setup-dev.service" hiddenProvider.config.systemd.services.inputplumber.after;
 assert builtins.elem "systemd-tmpfiles-resetup.service" hiddenProvider.config.systemd.services.inputplumber.after;
+assert builtins.elem "d /dev/inputplumber 0700 root root -" hiddenProvider.config.systemd.tmpfiles.rules;
+assert builtins.elem "d /dev/inputplumber/sources 0700 root root -" hiddenProvider.config.systemd.tmpfiles.rules;
 assert
   providerWithData.config.services.inputplumber.package.additionalDataPackages == [ additionalData ];
 assert

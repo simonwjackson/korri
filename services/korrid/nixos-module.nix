@@ -115,6 +115,7 @@ in
     systemd.tmpfiles.rules = [
       "d ${controlDirectory} 0750 root ${controlGroup} -"
       "d ${cfg.privateStateRoot} 0700 ${serviceUser} ${serviceGroup} -"
+      "d /dev/inputplumber 0700 root root -"
       "d /dev/inputplumber/sources 0700 root root -"
     ];
 

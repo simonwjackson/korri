@@ -112,6 +112,7 @@ assert builtins.elem "systemd-tmpfiles-setup.service" socket.requires;
 assert builtins.elem "systemd-tmpfiles-setup.service" socket.after;
 assert builtins.elem "systemd-tmpfiles-resetup.service" socket.after;
 assert builtins.elem "d /run/korrid-control 0750 root korri-control -" tmpfiles;
+assert builtins.elem "d /dev/inputplumber 0700 root root -" tmpfiles;
 assert builtins.elem "d /dev/inputplumber/sources 0700 root root -" tmpfiles;
 assert builtins.elem "systemd-tmpfiles-setup-dev.service" service.after;
 assert builtins.elem "systemd-tmpfiles-resetup.service" service.after;

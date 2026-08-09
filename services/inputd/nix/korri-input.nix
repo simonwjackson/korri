@@ -214,7 +214,10 @@ in
           HIDE_DEVICES_FROM_ROOT = lib.mkIf cfg.provider.sourceHiding.enable "1";
         };
       };
-      systemd.tmpfiles.rules = lib.optional cfg.provider.sourceHiding.enable "d /dev/inputplumber/sources 0700 root root -";
+      systemd.tmpfiles.rules = lib.optionals cfg.provider.sourceHiding.enable [
+        "d /dev/inputplumber 0700 root root -"
+        "d /dev/inputplumber/sources 0700 root root -"
+      ];
       services.udev.extraRules = ''
         # InputPlumber is root. Sunshine receives uinput only through its own service group.
         KERNEL=="uinput", SUBSYSTEM=="misc", OWNER="root", GROUP="${
