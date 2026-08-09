@@ -8,7 +8,7 @@ The gate is read-only unless `--mode` selects a mutation state. Every invocation
 
 - Default `inspect` mode only reads state. It captures the result in a mode `0700` temporary directory, prints the sanitized result, and removes the temporary directory on exit.
 - Before the first SSH call, every mode requires strict canonical Nix generation path syntax for the candidate. Mutation and reconcile modes also require it for rollback. Remote preflight proves that both exact paths exist and contain `switch-to-configuration`.
-- The inputd package installs the byte-identical gate as `bin/korri-device-gate`. The NixOS module places it in the candidate system closure. The rollout never uploads or runs a writable script with `sudo`.
+- The inputd package installs the byte-identical gate as `bin/korri-device-gate`. The NixOS module places it in the candidate system closure. The root-owned systemd attempt holder receives only the immutable candidate `sw/bin` path so the byte-identical `env bash` helper and bounded holder command resolve without an interactive-shell environment. The rollout never uploads or runs a writable script with `sudo`.
 - Every SSH command uses a shell-escaped argv plus a local transport deadline and an appropriate remote command deadline. Candidate, rollback, user, and helper paths never enter unquoted remote shell text.
 - A mutation also requires a mode `0700` ledger outside the repository, an explicit gameplay user, and a confirmation token bound to the captured machine ID, hostname, and exact candidate generation.
 - The script prints the required confirmation token when it is absent. Run the same command again with `--confirm TOKEN` only after checking all three displayed values.

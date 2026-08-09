@@ -834,7 +834,8 @@ remote_attempt_start_root() {
   sync -f "${ATTEMPT_MARKER%/*}"
   systemctl reset-failed "$ATTEMPT_UNIT" >/dev/null 2>&1 || true
   if ! systemd-run --quiet --collect --unit="$ATTEMPT_UNIT" \
-    --property="RuntimeMaxSec=${ttl}s" -- "$helper" --remote attempt-holder "$nonce" "$candidate" "$ttl"; then
+    --property="RuntimeMaxSec=${ttl}s" --setenv="PATH=$candidate/sw/bin" \
+    -- "$helper" --remote attempt-holder "$nonce" "$candidate" "$ttl"; then
     rm -f "$ATTEMPT_MARKER"
     sync -f "${ATTEMPT_MARKER%/*}"
     return 1

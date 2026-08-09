@@ -609,6 +609,13 @@ common_for() {
 }
 confirm="CONFIRM-$(printf '%s' "$MACHINE_ID|$HOSTNAME|$CANDIDATE" | sha256sum | cut -c1-16)"
 
+# The root-owned systemd attempt holder starts outside an interactive shell.
+# Its immutable candidate-scoped PATH must resolve the byte-identical helper's
+# env/bash shebang and bounded holder command.
+# This is a literal source-level regression check.
+# shellcheck disable=SC2016
+grep -F -- '--setenv="PATH=$candidate/sw/bin"' "$GATE" >/dev/null
+
 # Exercise the production primary-group policy directly. The remote endpoint
 # model cannot reproduce a forged primary GID without replacing /proc.
 GROUP_POLICY_SOURCE="$(awk '
