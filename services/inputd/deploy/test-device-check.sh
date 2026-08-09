@@ -615,6 +615,10 @@ confirm="CONFIRM-$(printf '%s' "$MACHINE_ID|$HOSTNAME|$CANDIDATE" | sha256sum | 
 # This is a literal source-level regression check.
 # shellcheck disable=SC2016
 grep -F -- '--setenv="PATH=$candidate/sw/bin"' "$GATE" >/dev/null
+# stat(1) canonicalizes 0700/0600 to 700/600; candidate calls must use the
+# canonical forms so post-chmod verification compares equal.
+# shellcheck disable=SC2016
+[[ "$(grep -Fc 'remote_set_pairing_state_modes "$gameplay_user" 700 600' "$GATE")" -eq 2 ]]
 
 # Exercise the production primary-group policy directly. The remote endpoint
 # model cannot reproduce a forged primary GID without replacing /proc.
