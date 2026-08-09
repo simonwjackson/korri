@@ -684,9 +684,9 @@ remote_activate_test() {
   local candidate="$1" gameplay_user="$2"
   remote_refuse_active_game
   remote_quiesce_old_user_units "$gameplay_user"
+  remote_set_pairing_state_modes "$gameplay_user" 0700 0600 >/dev/null
   sudo -n "$candidate/bin/switch-to-configuration" test
   remote_disable_old_user_units "$gameplay_user"
-  remote_set_pairing_state_modes "$gameplay_user" 0700 0600 >/dev/null
   remote_restart_user_manager "$gameplay_user"
   remote_start_candidate_services "$gameplay_user"
 }
@@ -803,10 +803,10 @@ remote_persistent_switch() {
   local candidate="$1" gameplay_user="$2"
   remote_refuse_active_game
   remote_quiesce_old_user_units "$gameplay_user"
+  remote_set_pairing_state_modes "$gameplay_user" 0700 0600 >/dev/null
   sudo -n nix-env -p /nix/var/nix/profiles/system --set "$candidate"
   sudo -n "$candidate/bin/switch-to-configuration" switch
   remote_disable_old_user_units "$gameplay_user"
-  remote_set_pairing_state_modes "$gameplay_user" 0700 0600 >/dev/null
   remote_restart_user_manager "$gameplay_user"
   remote_start_candidate_services "$gameplay_user"
   [[ "$(remote_generation)" == "$candidate" ]]
