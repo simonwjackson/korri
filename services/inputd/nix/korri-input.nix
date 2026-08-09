@@ -205,7 +205,9 @@ in
         package = providerPackage;
       };
       systemd.services.inputplumber = {
+        requires = lib.mkIf cfg.provider.sourceHiding.enable [ "korri-input-source-guard.service" ];
         after = lib.mkIf cfg.provider.sourceHiding.enable [
+          "korri-input-source-guard.service"
           "systemd-tmpfiles-setup-dev.service"
           "systemd-tmpfiles-resetup.service"
         ];
@@ -229,6 +231,23 @@ in
       '';
       services.dbus.packages = [ providerPackage ];
       security.polkit.enable = true;
+    })
+    (lib.mkIf (cfg.inputd.enable || (cfg.provider.enable && cfg.provider.sourceHiding.enable)) {
+      systemd.services.korri-input-source-guard = {
+        description = "Korri hidden input source guard";
+        wantedBy = [ "multi-user.target" ];
+        before = [
+          "inputplumber.service"
+          "korri-inputd.service"
+          "korrid.service"
+        ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStart = "${pkgs.coreutils}/bin/install -d -m 0700 -o root -g root /dev/inputplumber /dev/inputplumber/sources";
+          ExecStop = "-${pkgs.coreutils}/bin/rmdir /dev/inputplumber/sources /dev/inputplumber";
+        };
+      };
     })
     (lib.mkIf cfg.provider.sunshine.enableUinputAccess {
       users.groups.${sunshineGroup}.gid = cfg.provider.sunshine.gid;
@@ -319,8 +338,10 @@ in
         description = "Korri input policy daemon";
         wantedBy = [ "multi-user.target" ];
         wants = lib.optional cfg.provider.enable "inputplumber.service";
+        requires = [ "korri-input-source-guard.service" ];
         after = [
           "dbus.service"
+          "korri-input-source-guard.service"
           "systemd-udevd.service"
           "systemd-tmpfiles-setup-dev.service"
           "systemd-tmpfiles-resetup.service"

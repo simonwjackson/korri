@@ -116,6 +116,8 @@ assert builtins.elem "d /dev/inputplumber 0700 root root -" tmpfiles;
 assert builtins.elem "d /dev/inputplumber/sources 0700 root root -" tmpfiles;
 assert builtins.elem "systemd-tmpfiles-setup-dev.service" service.after;
 assert builtins.elem "systemd-tmpfiles-resetup.service" service.after;
+assert builtins.elem "korri-input-source-guard.service" service.after;
+assert builtins.elem "-/dev/inputplumber/sources" service.serviceConfig.InaccessiblePaths;
 assert enabled.config.users.groups.korri-control.gid == 977;
 assert !(builtins.elem "korri-control" enabled.config.users.users.gameplay.extraGroups);
 assert builtins.elem "AF_UNIX" service.serviceConfig.RestrictAddressFamilies;

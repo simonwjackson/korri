@@ -146,6 +146,7 @@ in
       after = [
         "network.target"
         "korrid-control.socket"
+        "korri-input-source-guard.service"
         "systemd-tmpfiles-setup-dev.service"
         "systemd-tmpfiles-resetup.service"
       ];
@@ -202,7 +203,7 @@ in
         ];
         InaccessiblePaths = [
           "/dev/uinput"
-          "/dev/inputplumber/sources"
+          "-/dev/inputplumber/sources"
         ];
       };
     };

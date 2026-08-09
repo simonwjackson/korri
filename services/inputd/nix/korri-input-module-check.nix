@@ -248,6 +248,9 @@ assert !(providerOnly.config.systemd.services ? korri-inputd);
 assert providerService.environment.XDG_DATA_DIRS == "${inputplumberKorri}/share";
 assert builtins.elem "systemd-tmpfiles-setup-dev.service" hiddenProvider.config.systemd.services.inputplumber.after;
 assert builtins.elem "systemd-tmpfiles-resetup.service" hiddenProvider.config.systemd.services.inputplumber.after;
+assert builtins.elem "korri-input-source-guard.service" hiddenProvider.config.systemd.services.inputplumber.requires;
+assert hiddenProvider.config.systemd.services ? korri-input-source-guard;
+assert lib.hasInfix "install -d -m 0700 -o root -g root /dev/inputplumber /dev/inputplumber/sources" hiddenProvider.config.systemd.services.korri-input-source-guard.serviceConfig.ExecStart;
 assert builtins.elem "d /dev/inputplumber 0700 root root -" hiddenProvider.config.systemd.tmpfiles.rules;
 assert builtins.elem "d /dev/inputplumber/sources 0700 root root -" hiddenProvider.config.systemd.tmpfiles.rules;
 assert
@@ -280,6 +283,9 @@ assert
     "CAP_SETGID"
   ];
 assert builtins.elem "/dev/uinput" inputdService.serviceConfig.InaccessiblePaths;
+assert inputdOnly.config.systemd.services ? korri-input-source-guard;
+assert builtins.elem "korri-input-source-guard.service" inputdService.requires;
+assert builtins.elem "korri-input-source-guard.service" inputdService.after;
 assert lib.hasInfix "Microsoft X-Box 360 pad" inputdOnlyRules;
 assert lib.hasInfix "korri-virtual-target-acl" inputdOnlyRules;
 assert lib.hasInfix " grant 977 1001 $env{DEVNAME}" inputdOnlyRules;
