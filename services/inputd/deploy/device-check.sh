@@ -461,9 +461,11 @@ remote_service_credentials() {
 remote_process_group_policy() {
   local unit="$1" pid="$2" primary_gid="$3" input_gid="$4" uinput_gid="$5" control_gid="$6" sunshine_gid="$7"
   [[ "$primary_gid" != "$input_gid" ]] || fail "forbidden input primary group leaked to $unit"
-  [[ "$primary_gid" != "$uinput_gid" ]] || fail "forbidden uinput primary group leaked to $unit"
   remote_pid_reject_supplementary_gid "$unit" "$pid" "$input_gid" 'forbidden input'
-  remote_pid_reject_supplementary_gid "$unit" "$pid" "$uinput_gid" 'forbidden uinput'
+  if [[ -n "$uinput_gid" ]]; then
+    [[ "$primary_gid" != "$uinput_gid" ]] || fail "forbidden uinput primary group leaked to $unit"
+    remote_pid_reject_supplementary_gid "$unit" "$pid" "$uinput_gid" 'forbidden uinput'
+  fi
   if [[ "$unit" == korri-inputd.service ]]; then
     [[ "$primary_gid" == "$control_gid" ]] || fail 'inputd does not use the control primary group'
   else
@@ -485,7 +487,9 @@ remote_candidate_credentials() {
   local input_gid uinput_gid control_gid sunshine_gid
   uid="$(id -u "$gameplay_user")" || fail 'gameplay user is unavailable'
   input_gid="$(remote_group_gid input)" || fail 'input group is unavailable'
-  uinput_gid="$(remote_group_gid uinput)" || fail 'uinput group is unavailable'
+  # A removed legacy uinput group has no credentials to leak. If it remains,
+  # prove that no candidate or gameplay process retains its numeric authority.
+  uinput_gid="$(remote_group_gid uinput 2>/dev/null || true)"
   control_gid="$(remote_group_gid "$KORRID_CONTROL_GROUP")" || fail 'control group is unavailable'
   sunshine_gid="$(remote_group_gid "$SUNSHINE_UINPUT_GROUP")" || fail 'Sunshine uinput group is unavailable'
   manager_pid="$(systemctl show "user@$uid.service" -p MainPID --value 2>/dev/null || true)"

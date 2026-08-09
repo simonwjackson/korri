@@ -630,7 +630,7 @@ GROUP_POLICY_SOURCE="$(awk '
 [[ "$GROUP_POLICY_SOURCE" == remote_process_group_policy* ]]
 run_production_group_policy() (
   local unit="$1" primary_gid="$2" sunshine_supplementary="${3:-yes}"
-  local input_gid=10 uinput_gid=20 control_gid=30 sunshine_gid=40
+  local input_gid=10 uinput_gid="${4-20}" control_gid=30 sunshine_gid=40
   # shellcheck disable=SC2329 # Invoked by the production function loaded below.
   fail() {
     printf 'device gate: %s\n' "$*" >&2
@@ -660,6 +660,9 @@ assert_fails_with 'inputd does not use the control primary group' \
 assert_fails_with 'control primary group leaked to korrid.service' \
   run_production_group_policy korrid.service 30
 run_production_group_policy sunshine.service 50
+# Removing the broad legacy uinput group is safer than retaining it. Its absent
+# GID must skip only the leak checks tied to that nonexistent authority.
+run_production_group_policy sunshine.service 50 yes ''
 assert_fails_with 'Sunshine dedicated uinput group must be supplementary' \
   run_production_group_policy sunshine.service 40
 assert_fails_with 'system Sunshine lacks its dedicated uinput group' \
