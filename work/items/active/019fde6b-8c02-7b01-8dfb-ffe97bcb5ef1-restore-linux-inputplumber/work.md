@@ -18,7 +18,8 @@ Restore Korri's Linux normalized-input boundary using a pinned upstream InputPlu
 - The optional `nixosModules.korri-bundle` host adapter initializes GC-rooted active and previous selectors.
 - Rust launch and selection helpers reject mutable components or data, use no shell, restart only InputPlumber, inputd, and korrid, and restore the previous selector after failed health.
 - Local Rust, package, NixOS module, dev-runner, and repository korrid checks pass.
-- Device work is pending. It requires one online device and a maintenance window only for the first stable host-layer activation. Later bundle tests do not need a NixOS activation.
+- Zao physical development proof passed with controller `0003:045e:0b12:0501`. A transient candidate InputPlumber created one Xbox 360 target and the DBus target; `korri-dev --physical` reached `Ready` with actions disabled. Only InputPlumber restarted, the original provider returned, the candidate target was removed, and unrelated user-service states and both NixOS generation links remained unchanged.
+- The first hardened host-layer installation remains pending. It needs either an approved NixOS activation or a reboot into a prepared generation. Later bundle tests restart only InputPlumber, inputd, and korrid and do not need another NixOS activation.
 
 ## Execution decisions
 
