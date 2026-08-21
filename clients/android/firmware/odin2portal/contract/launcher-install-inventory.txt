@@ -9,7 +9,14 @@ evidence/extracted-apk-verification/apk-SHA256SUMS
 evidence/extracted-apk-verification/apksigner.txt
 evidence/extracted-apk-verification/dex-packages.txt
 evidence/extracted-apk-verification/files.txt
+evidence/extracted-apk-verification/portal-index.html
+evidence/extracted-apk-verification/portal-script-1.js
+evidence/extracted-apk-verification/portal-scripts.txt
+evidence/extracted-apk-verification/portal-stylesheet-1.css
+evidence/extracted-apk-verification/portal-stylesheet-paths.txt
+evidence/extracted-apk-verification/portal-stylesheets.txt
 evidence/extracted-apk-verification/RESULT.txt
+evidence/extracted-apk-verifier.stdout.txt
 evidence/generated-launcher-artifact-SHA256SUMS
 evidence/generated-launcher-sha256.txt
 evidence/korri-public-key-sha256.txt
