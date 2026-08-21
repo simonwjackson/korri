@@ -506,6 +506,9 @@ impl ActionCommands {
     pub fn configured_ids(&self) -> impl Iterator<Item = ActionId> + '_ {
         self.commands.keys().copied()
     }
+    pub fn is_empty(&self) -> bool {
+        self.commands.is_empty()
+    }
 }
 
 #[derive(serde::Deserialize)]

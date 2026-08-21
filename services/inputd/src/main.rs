@@ -33,7 +33,7 @@ async fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let (actions, routes, korrid) = match configured_services() {
+    let services = match configured_services() {
         Ok(configured) => configured,
         Err(error) => {
             tracing::error!(
@@ -54,7 +54,7 @@ async fn main() -> ExitCode {
         );
         return ExitCode::FAILURE;
     }
-    run(actions, routes, korrid, &mut health).await;
+    run(services, &mut health).await;
     ExitCode::SUCCESS
 }
 
@@ -62,13 +62,8 @@ fn initialize_health(health: &mut impl HealthPublisher) -> std::io::Result<()> {
     health.initialized(RuntimeHealth::Recovering)
 }
 
-async fn run(
-    actions: ActionDispatcher,
-    routes: ActionRoutes,
-    korrid: KorridClient,
-    health: &mut impl HealthPublisher,
-) {
-    let mut runtime = Runtime::with_action_routes(routes);
+async fn run(services: ConfiguredServices, health: &mut impl HealthPublisher) {
+    let mut runtime = Runtime::with_action_routes(services.routes);
     let mut provider = EvdevProvider::default();
     let mut dbus = None;
     let mut dbus_failure_logged = false;
@@ -86,9 +81,9 @@ async fn run(
                 return;
             }
             _ = hold_poll.tick() => {
-                dispatch_actions(runtime.advance_actions(), &actions, &korrid);
+                dispatch_actions(runtime.advance_actions(), &services);
             }
-            _ = reconcile.tick() => {
+            _ = reconcile.tick(), if services.physical_input => {
                 if dbus.is_none() {
                     match DbusSignalSource::system().await {
                         Ok(source) => dbus = Some(source),
@@ -119,7 +114,7 @@ async fn run(
                     Ok(Some(message)) => {
                         if refresh_owner(&mut runtime, &mut dbus).await {
                             dbus_failure_logged = false;
-                            dispatch_actions(runtime.handle_dbus_message(&message), &actions, &korrid);
+                            dispatch_actions(runtime.handle_dbus_message(&message), &services);
                         } else {
                             dbus_failure_logged = true;
                         }
@@ -144,7 +139,7 @@ async fn run(
             }
             result = runtime.next_evdev_actions(), if has_evdev => {
                 match result {
-                    Ok(Some(matched)) => dispatch_actions(matched, &actions, &korrid),
+                    Ok(Some(matched)) => dispatch_actions(matched, &services),
                     Ok(None) => tracing::warn!(
                         event = "inputd_evdev_stream_ended",
                         "normalized target event stream ended"
@@ -200,11 +195,7 @@ async fn refresh_owner(runtime: &mut Runtime, source: &mut Option<DbusSignalSour
     }
 }
 
-fn dispatch_actions(
-    matched: Vec<RuntimeAction>,
-    dispatcher: &ActionDispatcher,
-    korrid: &KorridClient,
-) {
+fn dispatch_actions(matched: Vec<RuntimeAction>, services: &ConfiguredServices) {
     for action in matched {
         tracing::info!(
             event = "inputd_policy_match",
@@ -212,8 +203,20 @@ fn dispatch_actions(
             dispatch_mode = ?action.dispatch_mode,
             "input policy matched"
         );
+        let Some(dispatcher) = services.actions.as_ref() else {
+            tracing::info!(
+                event = "inputd_development_action_suppressed",
+                action = %action.id,
+                "development profile does not perform actions"
+            );
+            continue;
+        };
         if action.dispatch_mode == DispatchMode::ExactStop {
-            let client = korrid.clone();
+            let client = services
+                .korrid
+                .as_ref()
+                .expect("hardened actions always configure exact local control")
+                .clone();
             tokio::spawn(async move {
                 match client.stop_active_exact().await {
                     Ok(outcome) => log_stop_outcome(outcome),
@@ -297,22 +300,95 @@ fn log_stop_outcome(outcome: ExactStopOutcome) {
     );
 }
 
-fn configured_services() -> Result<(ActionDispatcher, ActionRoutes, KorridClient), String> {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RuntimeProfile {
+    Hardened,
+    Development,
+}
+
+impl RuntimeProfile {
+    fn parse(value: Option<&str>) -> Result<Self, String> {
+        match value.unwrap_or("hardened") {
+            "hardened" => Ok(Self::Hardened),
+            "development" => Ok(Self::Development),
+            other => Err(format!(
+                "KORRI_INPUTD_PROFILE must be hardened or development, got {other:?}"
+            )),
+        }
+    }
+}
+
+struct ConfiguredServices {
+    actions: Option<ActionDispatcher>,
+    routes: ActionRoutes,
+    korrid: Option<KorridClient>,
+    physical_input: bool,
+}
+
+fn configured_services() -> Result<ConfiguredServices, String> {
     let environment = std::env::vars_os().collect::<BTreeMap<OsString, OsString>>();
+    configured_services_from_environment(&environment)
+}
+
+fn configured_services_from_environment(
+    environment: &BTreeMap<OsString, OsString>,
+) -> Result<ConfiguredServices, String> {
+    let profile = RuntimeProfile::parse(
+        environment
+            .get(std::ffi::OsStr::new("KORRI_INPUTD_PROFILE"))
+            .and_then(|value| value.to_str()),
+    )?;
     let (commands, routes) =
-        commands_from_environment(&environment).map_err(|error| error.to_string())?;
+        commands_from_environment(environment).map_err(|error| error.to_string())?;
+    if profile == RuntimeProfile::Development {
+        if !commands.is_empty() {
+            return Err("development profile cannot configure action commands".into());
+        }
+        let physical_input = match environment
+            .get(std::ffi::OsStr::new("KORRI_INPUTD_SOURCE"))
+            .and_then(|value| value.to_str())
+            .unwrap_or("disabled")
+        {
+            "disabled" => false,
+            "physical" => true,
+            other => {
+                return Err(format!(
+                    "KORRI_INPUTD_SOURCE must be disabled or physical, got {other:?}"
+                ))
+            }
+        };
+        return Ok(ConfiguredServices {
+            actions: None,
+            routes,
+            korrid: None,
+            physical_input,
+        });
+    }
+    if let Some(source) = environment
+        .get(std::ffi::OsStr::new("KORRI_INPUTD_SOURCE"))
+        .and_then(|value| value.to_str())
+    {
+        if source != "physical" {
+            return Err("hardened profile requires physical input".into());
+        }
+    }
     let identity = ActionIdentity {
-        uid: required_unprivileged_id("KORRI_INPUTD_ACTION_UID", &environment)?,
-        gid: required_unprivileged_id("KORRI_INPUTD_ACTION_GID", &environment)?,
-        control_gid: required_unprivileged_id("KORRI_INPUTD_CONTROL_GID", &environment)?,
+        uid: required_unprivileged_id("KORRI_INPUTD_ACTION_UID", environment)?,
+        gid: required_unprivileged_id("KORRI_INPUTD_ACTION_GID", environment)?,
+        control_gid: required_unprivileged_id("KORRI_INPUTD_CONTROL_GID", environment)?,
     };
     if unsafe { libc::getegid() } != identity.control_gid {
         return Err("inputd primary GID does not match KORRI_INPUTD_CONTROL_GID".into());
     }
     let dispatcher = ActionDispatcher::new(commands, identity, ActionLimits::default())
         .map_err(|error| error.to_string())?;
-    let socket = required_absolute_path("KORRI_INPUTD_CONTROL_SOCKET", &environment)?;
-    Ok((dispatcher, routes, KorridClient::new(socket)))
+    let socket = required_absolute_path("KORRI_INPUTD_CONTROL_SOCKET", environment)?;
+    Ok(ConfiguredServices {
+        actions: Some(dispatcher),
+        routes,
+        korrid: Some(KorridClient::new(socket)),
+        physical_input: true,
+    })
 }
 
 fn required_unprivileged_id(
@@ -362,6 +438,79 @@ mod tests {
         fn publish(&mut self, _health: RuntimeHealth) -> std::io::Result<()> {
             Ok(())
         }
+    }
+
+    #[test]
+    fn runtime_profile_defaults_to_hardened_and_rejects_unknown_values() {
+        assert_eq!(RuntimeProfile::parse(None), Ok(RuntimeProfile::Hardened));
+        assert_eq!(
+            RuntimeProfile::parse(Some("development")),
+            Ok(RuntimeProfile::Development)
+        );
+        assert!(RuntimeProfile::parse(Some("unsafe")).is_err());
+    }
+
+    #[test]
+    fn development_profile_needs_no_service_credentials_or_cgroup() {
+        let environment = BTreeMap::from([(
+            OsString::from("KORRI_INPUTD_PROFILE"),
+            OsString::from("development"),
+        )]);
+
+        let services = configured_services_from_environment(&environment).unwrap();
+
+        assert!(services.actions.is_none());
+        assert!(services.korrid.is_none());
+        assert!(!services.physical_input);
+    }
+
+    #[test]
+    fn development_profile_requires_an_explicit_physical_input_opt_in() {
+        let environment = BTreeMap::from([
+            (
+                OsString::from("KORRI_INPUTD_PROFILE"),
+                OsString::from("development"),
+            ),
+            (
+                OsString::from("KORRI_INPUTD_SOURCE"),
+                OsString::from("physical"),
+            ),
+        ]);
+
+        let services = configured_services_from_environment(&environment).unwrap();
+
+        assert!(services.physical_input);
+    }
+
+    #[test]
+    fn development_profile_rejects_configured_action_commands() {
+        use korri_inputd::actions::{action_entry, ActionId};
+
+        let executable = std::fs::canonicalize("/run/current-system/sw/bin/true").unwrap();
+        let command = serde_json::json!({
+            "executable": executable,
+            "argv": [],
+            "environment": {}
+        });
+        let environment = BTreeMap::from([
+            (
+                OsString::from("KORRI_INPUTD_PROFILE"),
+                OsString::from("development"),
+            ),
+            (
+                OsString::from(action_entry(ActionId::WorkspaceNext).legacy_environment_name),
+                OsString::from(command.to_string()),
+            ),
+        ]);
+
+        let error = configured_services_from_environment(&environment)
+            .err()
+            .expect("development command must be rejected");
+
+        assert_eq!(
+            error,
+            "development profile cannot configure action commands"
+        );
     }
 
     #[test]

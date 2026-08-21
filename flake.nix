@@ -66,7 +66,9 @@
         };
       in
       {
-        apps = import ./nix/tasks.nix { inherit pkgs proseql; };
+        apps =
+          (import ./nix/tasks.nix { inherit pkgs proseql; })
+          // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux inputplumber.apps;
         devShells.android = import ./clients/android/devshell.nix { inherit pkgs; };
         devShells.portal = import ./clients/portal/devshell.nix { inherit pkgs; };
         devShells.korrid = import ./services/korrid/devshell.nix { inherit pkgs proseql; };
