@@ -70,8 +70,10 @@ if [[ "$1 $2" == 'manifest print' ]]; then
 </manifest>
 XML
 elif [[ "$1 $2" == 'files list' ]]; then
+  korrid_file="${MOCK_KORRID_FILE-/lib/arm64-v8a/libkorrid.so}"
+  [[ -z "$korrid_file" ]] || printf '%s\n' "$korrid_file"
   printf '%s\n' \
-    "${MOCK_ABI_FILE:-/lib/arm64-v8a/libmoonlight-core.so}" \
+    '/lib/arm64-v8a/libmoonlight-core.so' \
     "${MOCK_PORTAL_INDEX:-/assets/portal/index.html}" \
     "${MOCK_PORTAL_SCRIPT_FILE:-/assets/portal/assets/index.js}" \
     "${MOCK_PORTAL_STYLE_FILE:-/assets/portal/assets/index.css}" \
@@ -126,7 +128,8 @@ expect_rejection debuggable MOCK_DEBUGGABLE=true
 expect_rejection disabled-application MOCK_APPLICATION_ENABLED=false
 expect_rejection disabled-activity MOCK_ACTIVITY_ENABLED=false
 expect_rejection relative-home-class MOCK_ACTIVITY_NAME=.KorriShellActivity
-expect_rejection wrong-abi MOCK_ABI_FILE=/lib/x86_64/libmoonlight-core.so
+expect_rejection wrong-abi MOCK_KORRID_FILE=/lib/x86_64/libkorrid.so
+expect_rejection missing-korrid MOCK_KORRID_FILE=
 expect_rejection missing-home-class MOCK_HOME_CLASS='C d 1 1 1 com.limelight.OtherActivity'
 expect_rejection missing-portal-index MOCK_PORTAL_INDEX=/assets/portal/index.html.bak
 expect_rejection missing-portal-script MOCK_PORTAL_SCRIPT_FILE=/assets/other.js

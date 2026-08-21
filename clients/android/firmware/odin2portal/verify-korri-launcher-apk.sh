@@ -124,8 +124,8 @@ if not matched:
     raise SystemExit("Korri HOME activity lacks one MAIN+HOME+DEFAULT filter")
 PY
 
-if ! grep -Eq '^/lib/arm64-v8a/[^/]+\.so$' "$EVIDENCE/files.txt"; then
-  echo 'Korri APK has no arm64-v8a native code' >&2
+if ! grep -Fx '/lib/arm64-v8a/libkorrid.so' "$EVIDENCE/files.txt" >/dev/null; then
+  echo 'Korri APK does not contain the arm64 korrid library' >&2
   exit 1
 fi
 if grep -Eq '^/lib/(x86|x86_64|armeabi-v7a)/' "$EVIDENCE/files.txt"; then
