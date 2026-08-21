@@ -293,14 +293,20 @@ mod tests {
         let bundle = store.join(name);
         let package = store.join(format!("{name}-packages"));
         fs::create_dir_all(bundle.join("bin")).unwrap();
-        fs::create_dir_all(bundle.join("share/inputplumber")).unwrap();
+        fs::create_dir_all(bundle.join("share")).unwrap();
         fs::create_dir_all(package.join("bin")).unwrap();
+        fs::create_dir_all(package.join("share/inputplumber")).unwrap();
         for component in ["inputplumber", "korri-inputd", "korrid"] {
             let executable = package.join("bin").join(component);
             fs::write(&executable, b"fixture").unwrap();
             fs::set_permissions(&executable, fs::Permissions::from_mode(0o555)).unwrap();
             symlink(&executable, bundle.join("bin").join(component)).unwrap();
         }
+        symlink(
+            package.join("share/inputplumber"),
+            bundle.join("share/inputplumber"),
+        )
+        .unwrap();
         bundle
     }
 

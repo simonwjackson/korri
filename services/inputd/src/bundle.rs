@@ -48,10 +48,15 @@ pub fn resolve_bundle(selector: &Path, store_root: &Path) -> Result<PathBuf, Str
         resolve_component_in_bundle(&bundle, component, store_root)?;
     }
     let data = bundle.join("share/inputplumber");
-    let data_metadata = std::fs::metadata(&data)
+    let data_link = std::fs::symlink_metadata(&data)
         .map_err(|error| format!("InputPlumber bundle data is unavailable: {error}"))?;
-    if !data_metadata.is_dir() {
-        return Err("InputPlumber bundle data must be a directory".into());
+    if !data_link.file_type().is_symlink() {
+        return Err("InputPlumber bundle data must be an immutable bundle symlink".into());
+    }
+    let data = std::fs::canonicalize(&data)
+        .map_err(|error| format!("InputPlumber bundle data is unavailable: {error}"))?;
+    if !is_inside_store_item(&data, store_root) || !data.is_dir() {
+        return Err("InputPlumber bundle data must resolve inside the immutable store".into());
     }
     Ok(bundle)
 }
@@ -118,8 +123,9 @@ mod tests {
         let bundle = store.join("bundle");
         let package = store.join("packages");
         std::fs::create_dir_all(bundle.join("bin")).unwrap();
-        std::fs::create_dir_all(bundle.join("share/inputplumber")).unwrap();
+        std::fs::create_dir_all(bundle.join("share")).unwrap();
         std::fs::create_dir_all(package.join("bin")).unwrap();
+        std::fs::create_dir_all(package.join("share/inputplumber")).unwrap();
         for name in ["inputplumber", "korri-inputd", "korrid"] {
             let executable = package.join("bin").join(name);
             std::fs::write(&executable, b"fixture").unwrap();
@@ -128,6 +134,11 @@ mod tests {
             std::fs::set_permissions(&executable, permissions).unwrap();
             symlink(&executable, bundle.join("bin").join(name)).unwrap();
         }
+        symlink(
+            package.join("share/inputplumber"),
+            bundle.join("share/inputplumber"),
+        )
+        .unwrap();
         let selector = root.path().join("active");
         symlink(&bundle, &selector).unwrap();
         (root, store, selector)
@@ -159,6 +170,21 @@ mod tests {
             "selected component must be an immutable bundle symlink"
         );
         drop(root);
+    }
+
+    #[test]
+    fn rejects_mutable_data_in_place_of_the_bundle_symlink() {
+        let (_root, store, selector) = fixture();
+        let bundle = std::fs::canonicalize(&selector).unwrap();
+        std::fs::remove_file(bundle.join("share/inputplumber")).unwrap();
+        std::fs::create_dir(bundle.join("share/inputplumber")).unwrap();
+
+        let error = resolve_bundle(&selector, &store).unwrap_err();
+
+        assert_eq!(
+            error,
+            "InputPlumber bundle data must be an immutable bundle symlink"
+        );
     }
 
     #[test]
