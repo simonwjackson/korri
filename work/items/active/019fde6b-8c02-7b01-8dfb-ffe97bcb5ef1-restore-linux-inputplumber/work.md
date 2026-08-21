@@ -10,6 +10,16 @@ source: direct
 
 Restore Korri's Linux normalized-input boundary using a pinned upstream InputPlumber package, Korri-owned profile composition, and a new Rust input-policy daemon. Portable development is now the default: `korri-dev` runs without host mutation, and an explicit physical flag reads only an existing validated normalized target. The optional hardened host layer selects one immutable service bundle and performs service-scoped rollback without a full NixOS activation. Zao remains the final physical and persistence gate, used only after explicit device availability and maintenance approval. The browser input bridge, Android backend integration, Xvfb pointer repair, and Sunshine input seats remain separate work.
 
+## Current status
+
+- Portable `korri-dev` starts isolated korrid and inputd processes. Physical input and actions are off by default.
+- `--physical` reads only the validated normalized InputPlumber target. Actions stay off.
+- `korri-bundle` contains exact korrid, inputd, InputPlumber, and profile store paths.
+- The optional `nixosModules.korri-bundle` host adapter initializes GC-rooted active and previous selectors.
+- Rust launch and selection helpers reject mutable components or data, use no shell, restart only InputPlumber, inputd, and korrid, and restore the previous selector after failed health.
+- Local Rust, package, NixOS module, dev-runner, and repository korrid checks pass.
+- Device work is pending. It requires one online device and a maintenance window only for the first stable host-layer activation. Later bundle tests do not need a NixOS activation.
+
 ## Execution decisions
 
 - Active games survive korrid crashes, upgrades, and restarts. Korrid reattaches only when one persisted launch ID and one systemd scope match exactly. Ambiguity preserves all game scopes and blocks new launches and stop requests until an operator resolves it; recovery never kills an active game.
