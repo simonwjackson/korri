@@ -12,6 +12,12 @@ EXPECTED_CERT_SHA256="$(cat "$CONTRACT/korri-release-cert-SHA256.txt")"
 EXPECTED_APK_PATH='package:/product/app/Korri/Korri.apk'
 EXPECTED_KORRI_HOME='com.simonwjackson.korri/com.limelight.KorriShellActivity'
 EXPECTED_AYN_HOME='com.odin.odinlauncher/.activities.LauncherActivity'
+ANDROID_HOME="${ANDROID_HOME:?run through a Nix Android task}"
+APKSIGNER="$(find -L "$ANDROID_HOME/build-tools" -mindepth 2 -maxdepth 2 -name apksigner -type f -print | sort -V | tail -n1)"
+[[ -x "$APKSIGNER" ]] || {
+  echo 'Android apksigner is unavailable' >&2
+  exit 1
+}
 
 [[ "$SERIAL" == "$EXPECTED_SERIAL" ]] || {
   echo "device serial does not match its contract: $SERIAL" >&2
@@ -74,7 +80,7 @@ ACTUAL_APK_SHA256="$(sha256sum "$WORK/Korri.apk" | awk '{print $1}')"
   exit 1
 }
 
-apksigner verify --verbose --print-certs "$WORK/Korri.apk" > "$STAGED/apksigner.txt"
+"$APKSIGNER" verify --verbose --print-certs "$WORK/Korri.apk" > "$STAGED/apksigner.txt"
 SIGNER_COUNT="$(sed -n 's/^Number of signers: //p' "$STAGED/apksigner.txt" | head -n1 | tr -d '[:space:]')"
 [[ "$SIGNER_COUNT" == 1 ]] || {
   echo 'installed Korri APK must have exactly one signer' >&2

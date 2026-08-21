@@ -22,13 +22,28 @@ fi
 grep -F 'device serial does not match its contract' "$TMP/wrong.stderr" >/dev/null
 
 if [[ -z "${ODIN2PORTAL_ACCEPTANCE_SERIAL:-}" ]]; then
-  printf 'odin2portal launcher device acceptance integration skipped: set ODIN2PORTAL_ACCEPTANCE_SERIAL\n'
+  printf 'odin2portal launcher device acceptance integration skipped: set ODIN2PORTAL_ACCEPTANCE_SERIAL and ODIN2PORTAL_ACCEPTANCE_EXPECT\n'
   exit 0
 fi
-if "$ACCEPTANCE" "$ODIN2PORTAL_ACCEPTANCE_SERIAL" "$TMP/current-device" \
-  >"$TMP/current.stdout" 2>"$TMP/current.stderr"; then
-  echo 'launcher device acceptance unexpectedly passed before the launcher image was installed' >&2
-  exit 1
-fi
-grep -F 'Korri is not installed at the approved product path' "$TMP/current.stderr" >/dev/null
-printf 'odin2portal launcher device acceptance pre-install rejection passed\n'
+case "${ODIN2PORTAL_ACCEPTANCE_EXPECT:-}" in
+  preinstall)
+    if "$ACCEPTANCE" "$ODIN2PORTAL_ACCEPTANCE_SERIAL" "$TMP/current-device" \
+      >"$TMP/current.stdout" 2>"$TMP/current.stderr"; then
+      echo 'launcher device acceptance unexpectedly passed before the launcher image was installed' >&2
+      exit 1
+    fi
+    grep -F 'Korri is not installed at the approved product path' "$TMP/current.stderr" >/dev/null
+    printf 'odin2portal launcher device acceptance pre-install rejection passed\n'
+    ;;
+  installed)
+    "$ACCEPTANCE" "$ODIN2PORTAL_ACCEPTANCE_SERIAL" "$TMP/current-device" \
+      >"$TMP/current.stdout" 2>"$TMP/current.stderr"
+    tail -n1 "$TMP/current.stdout" | grep -Fx 'ODIN2PORTAL_LAUNCHER_DEVICE_HOST_GATES_PASS' >/dev/null
+    grep -Fx 'ODIN2PORTAL_LAUNCHER_DEVICE_HOST_GATES_PASS' "$TMP/current-device/RESULT.txt" >/dev/null
+    printf 'odin2portal launcher device acceptance installed-image integration passed\n'
+    ;;
+  *)
+    echo 'ODIN2PORTAL_ACCEPTANCE_EXPECT must be preinstall or installed when a serial is set' >&2
+    exit 1
+    ;;
+esac
