@@ -52,7 +52,9 @@ nix run .#odin2portal-install-readiness -- \
 
 The final line must be `ODIN2PORTAL_INSTALL_ARTIFACTS_READY`. This result does not approve a device write.
 
-The user owns the encrypted offline backup. Record the user's backup confirmation before installation.
+Before a release, distribution, or installation on another person's device, the user must own a verified encrypted offline backup.
+
+For private development on owner-operated Odin 2 Portal `ef201f64`, the user can explicitly accept the loss risk and defer that backup. Record the waiver before installation. In the same session, verify the exact stock source and rollback bundle against their SHA-256 contracts. This waiver does not apply to a bootloader lock or to deletion of the verified stock source.
 
 Keep the signed output and rollback bundle on stable local storage. Keep them available for the complete session. Run the host readiness gate again in the same shell immediately before the first write.
 
