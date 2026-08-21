@@ -3,6 +3,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub const INPUT_PROFILE_BUNDLE_PATH: &str = "share/korri-input-profile";
+pub const INPUT_PROFILE_NAME: &str = "korri-60-xbox_one_gamepad.yaml";
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Component {
     InputPlumber,
@@ -58,6 +61,7 @@ pub fn resolve_bundle(selector: &Path, store_root: &Path) -> Result<PathBuf, Str
     if !is_inside_store_item(&data, store_root) || !data.is_dir() {
         return Err("InputPlumber bundle data must resolve inside the immutable store".into());
     }
+    resolve_profile_in_bundle(&bundle, &data, store_root)?;
     Ok(bundle)
 }
 
@@ -68,6 +72,38 @@ pub fn resolve_component(
 ) -> Result<PathBuf, String> {
     let bundle = resolve_bundle(selector, store_root)?;
     resolve_component_in_bundle(&bundle, component, store_root)
+}
+
+pub fn resolve_profile(selector: &Path, store_root: &Path) -> Result<PathBuf, String> {
+    let bundle = resolve_bundle(selector, store_root)?;
+    let data = std::fs::canonicalize(bundle.join("share/inputplumber"))
+        .map_err(|error| format!("InputPlumber bundle data is unavailable: {error}"))?;
+    resolve_profile_in_bundle(&bundle, &data, store_root)
+}
+
+fn resolve_profile_in_bundle(
+    bundle: &Path,
+    data: &Path,
+    store_root: &Path,
+) -> Result<PathBuf, String> {
+    let selected = bundle.join(INPUT_PROFILE_BUNDLE_PATH);
+    let link = std::fs::symlink_metadata(&selected)
+        .map_err(|error| format!("selected input profile is unavailable: {error}"))?;
+    if !link.file_type().is_symlink() {
+        return Err("selected input profile must be an immutable bundle symlink".into());
+    }
+    let profile = std::fs::canonicalize(&selected)
+        .map_err(|error| format!("selected input profile is unavailable: {error}"))?;
+    if !is_inside_store_item(&profile, store_root)
+        || !profile.is_file()
+        || profile.file_name().and_then(|name| name.to_str()) != Some(INPUT_PROFILE_NAME)
+        || store_item_root(&profile, store_root) != store_item_root(data, store_root)
+    {
+        return Err(
+            "selected input profile must resolve inside the InputPlumber store item".into(),
+        );
+    }
+    Ok(profile)
 }
 
 fn resolve_component_in_bundle(
@@ -92,6 +128,14 @@ fn resolve_component_in_bundle(
         return Err("selected component target must be a regular executable".into());
     }
     Ok(executable)
+}
+
+fn store_item_root(path: &Path, store_root: &Path) -> Option<PathBuf> {
+    let relative = path.strip_prefix(store_root).ok()?;
+    let std::path::Component::Normal(item) = relative.components().next()? else {
+        return None;
+    };
+    Some(store_root.join(item))
 }
 
 pub fn is_store_item_root(path: &Path, store_root: &Path) -> bool {
@@ -125,7 +169,7 @@ mod tests {
         std::fs::create_dir_all(bundle.join("bin")).unwrap();
         std::fs::create_dir_all(bundle.join("share")).unwrap();
         std::fs::create_dir_all(package.join("bin")).unwrap();
-        std::fs::create_dir_all(package.join("share/inputplumber")).unwrap();
+        std::fs::create_dir_all(package.join("share/inputplumber/profiles")).unwrap();
         for name in ["inputplumber", "korri-inputd", "korrid"] {
             let executable = package.join("bin").join(name);
             std::fs::write(&executable, b"fixture").unwrap();
@@ -139,20 +183,30 @@ mod tests {
             bundle.join("share/inputplumber"),
         )
         .unwrap();
+        let profile = package
+            .join("share/inputplumber/profiles")
+            .join(INPUT_PROFILE_NAME);
+        std::fs::write(&profile, b"profile").unwrap();
+        symlink(&profile, bundle.join(INPUT_PROFILE_BUNDLE_PATH)).unwrap();
         let selector = root.path().join("active");
         symlink(&bundle, &selector).unwrap();
         (root, store, selector)
     }
 
     #[test]
-    fn resolves_one_fixed_component_from_an_immutable_bundle() {
+    fn resolves_one_fixed_component_and_profile_from_an_immutable_bundle() {
         let (_root, store, selector) = fixture();
 
         let executable = resolve_component(&selector, Component::Inputd, &store).unwrap();
+        let profile = resolve_profile(&selector, &store).unwrap();
 
         assert_eq!(
             executable.file_name().and_then(|name| name.to_str()),
             Some("korri-inputd")
+        );
+        assert_eq!(
+            profile.file_name().and_then(|name| name.to_str()),
+            Some(INPUT_PROFILE_NAME)
         );
     }
 
@@ -185,6 +239,25 @@ mod tests {
             error,
             "InputPlumber bundle data must be an immutable bundle symlink"
         );
+    }
+
+    #[test]
+    fn rejects_a_profile_from_another_store_item() {
+        let (root, store, selector) = fixture();
+        let bundle = std::fs::canonicalize(&selector).unwrap();
+        let other = store.join("other").join(INPUT_PROFILE_NAME);
+        std::fs::create_dir_all(other.parent().unwrap()).unwrap();
+        std::fs::write(&other, b"other profile").unwrap();
+        std::fs::remove_file(bundle.join(INPUT_PROFILE_BUNDLE_PATH)).unwrap();
+        symlink(&other, bundle.join(INPUT_PROFILE_BUNDLE_PATH)).unwrap();
+
+        let error = resolve_bundle(&selector, &store).unwrap_err();
+
+        assert_eq!(
+            error,
+            "selected input profile must resolve inside the InputPlumber store item"
+        );
+        drop(root);
     }
 
     #[test]

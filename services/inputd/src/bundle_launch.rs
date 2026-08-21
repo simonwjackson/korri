@@ -6,7 +6,7 @@ use std::{
     process::{Command, ExitCode},
 };
 
-use korri_inputd::bundle::{resolve_bundle, resolve_component, Component};
+use korri_inputd::bundle::{resolve_bundle, resolve_component, resolve_profile, Component};
 
 const ACTIVE_BUNDLE_ENV: &str = "KORRI_BUNDLE_ACTIVE";
 const DEFAULT_ACTIVE_BUNDLE: &str = "/nix/var/nix/gcroots/korri-bundle/active";
@@ -38,6 +38,12 @@ fn launch(arguments: Vec<OsString>) -> Result<ExitCode, String> {
     command.args(arguments.into_iter().skip(2));
     if component == Component::InputPlumber {
         command.env("XDG_DATA_DIRS", bundle.join("share"));
+    }
+    if component == Component::Inputd {
+        command.env(
+            "KORRI_INPUTD_PROFILE_PATH",
+            resolve_profile(&selector, store_root)?,
+        );
     }
     Err(command.exec().to_string())
 }

@@ -99,6 +99,10 @@ let
         </policy>
         <policy user="${inputdUser}">
           <deny own="org.shadowblip.InputPlumber"/>
+          <deny send_destination="org.shadowblip.InputPlumber" send_type="method_call"/>
+          <allow send_destination="org.shadowblip.InputPlumber" send_interface="org.freedesktop.DBus.Introspectable" send_member="Introspect"/>
+          <allow send_destination="org.shadowblip.InputPlumber" send_interface="org.freedesktop.DBus.Properties" send_member="Get"/>
+          <allow send_destination="org.shadowblip.InputPlumber" send_interface="org.shadowblip.Input.CompositeDevice" send_member="LoadProfilePath"/>
           <allow receive_sender="org.shadowblip.InputPlumber"/>
         </policy>
       </busconfig>
@@ -346,6 +350,13 @@ in
           if (subject.user == "${cfg.inputd.actionUser}" && action.id.indexOf("org.shadowblip.") == 0) {
             return polkit.Result.NO;
           }
+          if (subject.user == "${inputdUser}" && [
+            "org.shadowblip.Input.CompositeDevice.DbusDevices",
+            "org.shadowblip.Input.CompositeDevice.ProfilePath",
+            "org.shadowblip.Input.CompositeDevice.LoadProfilePath"
+          ].indexOf(action.id) >= 0) {
+            return polkit.Result.YES;
+          }
         });
       '';
       systemd.services.korri-inputd = {
@@ -370,6 +381,7 @@ in
           KORRI_INPUTD_ACTION_GID = toString cfg.inputd.actionGid;
           KORRI_INPUTD_CONTROL_GID = toString cfg.inputd.controlGid;
           KORRI_INPUTD_CONTROL_SOCKET = cfg.inputd.controlSocket;
+          KORRI_INPUTD_PROFILE_PATH = "${providerPackage}/share/inputplumber/profiles/${data.resolvedProfile}";
           KORRI_INPUTD_BACK_TAP_ACTION = lib.mkIf (cfg.inputd.backTapAction != null) cfg.inputd.backTapAction;
           KORRI_BUNDLE_ACTIVE = lib.mkIf bundleCfg.enable bundleCfg.activePath;
         };

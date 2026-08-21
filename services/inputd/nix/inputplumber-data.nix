@@ -46,13 +46,13 @@ let
         exit 1
       }
 
-      yq eval -i '.options.auto_manage = true | .target_devices = ["xb360", "mouse", "keyboard", "dbus"]' "$selected_device"
+      yq eval -i '.options.auto_manage = true | .target_devices = ["xb360", "mouse", "keyboard"]' "$selected_device"
       cp "$default_profile" "$resolved_profile"
       yq eval -i '.name = "Korri ${selectedDeviceName}"' "$resolved_profile"
       cat ${shortcutMappings} >> "$resolved_profile"
 
       test "$(yq eval '.options.auto_manage' "$selected_device")" = true \
-        && test "$(yq eval -o=json -I=0 '.target_devices' "$selected_device")" = '["xb360","mouse","keyboard","dbus"]' || {
+        && test "$(yq eval -o=json -I=0 '.target_devices' "$selected_device")" = '["xb360","mouse","keyboard"]' || {
         echo "selected profile auto-management or target transform produced unexpected data" >&2
         exit 1
       }

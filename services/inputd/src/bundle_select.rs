@@ -295,7 +295,7 @@ mod tests {
         fs::create_dir_all(bundle.join("bin")).unwrap();
         fs::create_dir_all(bundle.join("share")).unwrap();
         fs::create_dir_all(package.join("bin")).unwrap();
-        fs::create_dir_all(package.join("share/inputplumber")).unwrap();
+        fs::create_dir_all(package.join("share/inputplumber/profiles")).unwrap();
         for component in ["inputplumber", "korri-inputd", "korrid"] {
             let executable = package.join("bin").join(component);
             fs::write(&executable, b"fixture").unwrap();
@@ -305,6 +305,15 @@ mod tests {
         symlink(
             package.join("share/inputplumber"),
             bundle.join("share/inputplumber"),
+        )
+        .unwrap();
+        let profile = package
+            .join("share/inputplumber/profiles")
+            .join(korri_inputd::bundle::INPUT_PROFILE_NAME);
+        fs::write(&profile, b"profile").unwrap();
+        symlink(
+            &profile,
+            bundle.join(korri_inputd::bundle::INPUT_PROFILE_BUNDLE_PATH),
         )
         .unwrap();
         bundle

@@ -146,6 +146,8 @@ let
     ln -s ${inputdPackage}/bin/korri-inputd "$out/bin/korri-inputd"
     ln -s ${pkgs.coreutils}/bin/true "$out/bin/korrid"
     ln -s ${inputplumberKorri}/share/inputplumber "$out/share/inputplumber"
+    ln -s ${inputplumberKorri}/share/inputplumber/profiles/korri-60-xbox_one_gamepad.yaml \
+      "$out/share/korri-input-profile"
   '';
   bundled = withInputd {
     services.korriBundle = {
@@ -330,6 +332,11 @@ assert combinedEnvironment.KORRI_INPUTD_CONTROL_GID == "977";
 assert combinedEnvironment.KORRI_INPUTD_ACTION_UID == "1001";
 assert combinedEnvironment.KORRI_INPUTD_ACTION_GID == "1001";
 assert
+  combinedEnvironment.KORRI_INPUTD_PROFILE_PATH
+  == "${inputplumberKorri}/share/inputplumber/profiles/korri-60-xbox_one_gamepad.yaml";
+assert lib.hasInfix "org.shadowblip.Input.CompositeDevice.LoadProfilePath"
+  combined.config.security.polkit.extraConfig;
+assert
   (builtins.fromJSON (
     builtins.unsafeDiscardStringContext combinedEnvironment.KORRI_INPUTD_WORKSPACE_NEXT
   )) == {
@@ -391,6 +398,9 @@ pkgs.runCommand "korri-input-module-check" { } ''
   test -f "$policy"
   grep -F '<deny own="org.shadowblip.InputPlumber"/>' "$policy" >/dev/null
   grep -F '<deny send_destination="org.shadowblip.InputPlumber" send_type="method_call"/>' "$policy" >/dev/null
+  grep -F 'send_interface="org.freedesktop.DBus.Introspectable" send_member="Introspect"' "$policy" >/dev/null
+  grep -F 'send_interface="org.freedesktop.DBus.Properties" send_member="Get"' "$policy" >/dev/null
+  grep -F 'send_interface="org.shadowblip.Input.CompositeDevice" send_member="LoadProfilePath"' "$policy" >/dev/null
 
   export KORRI_TEST_ACL_LOG="$TMPDIR/acl.log"
   ${fixtureAcl}/bin/korri-virtual-target-acl grant 888 889 ${aclFixture}/dev/input/event4

@@ -71,6 +71,8 @@ in
       test "$(readlink -f ${korriBundle}/bin/korri-inputd)" = ${inputdPackage}/bin/korri-inputd
       test "$(readlink -f ${korriBundle}/bin/korrid)" = ${korridPackage}/bin/korrid
       test "$(readlink -f ${korriBundle}/share/inputplumber)" = ${inputplumberKorri}/share/inputplumber
+      test "$(readlink -f ${korriBundle}/share/korri-input-profile)" = \
+        ${inputplumberKorri}/share/inputplumber/profiles/${inputplumberData.resolvedProfile}
       touch "$out"
     '';
     korri-input-module = import ./korri-input-module-check.nix {

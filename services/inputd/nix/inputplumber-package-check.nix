@@ -52,6 +52,7 @@ pkgs.runCommand "inputplumber-korri-package-check"
 
     inputplumber_bin="${inputplumberKorri}/bin/inputplumber"
     inputplumber_root="${inputplumberKorri}/share/inputplumber"
+    inputplumber_manager="${inputplumberRuntime.upstream.src}/src/input/manager.rs"
     selected_device="$inputplumber_root/devices/${data.selectedDeviceProfile}"
     default_profile="$inputplumber_root/profiles/default.yaml"
     resolved_profile="$inputplumber_root/profiles/${data.resolvedProfile}"
@@ -68,6 +69,10 @@ pkgs.runCommand "inputplumber-korri-package-check"
       echo "inputplumber-korri must report upstream version 0.75.2" >&2
       exit 1
     }
+    test "$(grep -Fc 'let dbus_device = self.create_target_device("dbus").await?;' "$inputplumber_manager")" = 1 || {
+      echo "pinned InputPlumber must create one automatic DBus target per composite" >&2
+      exit 1
+    }
 
     test -f "$selected_device" || {
       echo "selected upstream profile ${data.selectedDeviceProfile} is missing" >&2
@@ -77,12 +82,16 @@ pkgs.runCommand "inputplumber-korri-package-check"
       echo "selected device profile must auto-manage its supported physical controllers" >&2
       exit 1
     }
+    test "$(yq eval '[.source_devices[].evdev | select(.vendor_id == "045e" and (.product_id | contains("02ea")))] | length' "$selected_device")" = 1 || {
+      echo "selected device profile must match Sunshine's exact virtual Xbox One identity" >&2
+      exit 1
+    }
     test "$(yq eval '[.target_devices[] | select(. == "xb360")] | length' "$selected_device")" = 1 || {
       echo "selected device profile must target xb360 exactly once" >&2
       exit 1
     }
-    test "$(yq eval '[.target_devices[] | select(. == "dbus")] | length' "$selected_device")" = 1 || {
-      echo "selected device profile must target dbus exactly once" >&2
+    test "$(yq eval '[.target_devices[] | select(. == "dbus")] | length' "$selected_device")" = 0 || {
+      echo "selected device profile must use only InputPlumber's one automatic composite DBus target" >&2
       exit 1
     }
     test "$(yq eval '[.target_devices[] | select(. == "xbox-series")] | length' "$selected_device")" = 0 || {

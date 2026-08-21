@@ -1,28 +1,56 @@
-use std::{fmt, future::Future, time::Duration};
+use std::{fmt, future::Future, path::Path, time::Duration};
 
 use futures_util::StreamExt;
 use korri_input_core::controls::{Control, ControlTransition, DpadAxis};
 use zbus::{message::Type, MatchRule, Message, MessageStream};
 
 pub const INPUTPLUMBER_BUS_NAME: &str = "org.shadowblip.InputPlumber";
+pub const INPUTPLUMBER_ROOT_PATH: &str = "/org/shadowblip/InputPlumber";
+pub const COMPOSITE_DEVICE_INTERFACE: &str = "org.shadowblip.Input.CompositeDevice";
 pub const DBUS_TARGET_PATH: &str = "/org/shadowblip/InputPlumber/devices/target/dbus0";
 pub const DBUS_TARGET_INTERFACE: &str = "org.shadowblip.Input.DBusDevice";
 pub const DBUS_INPUT_MEMBER: &str = "InputEvent";
 pub const DBUS_OPERATION_TIMEOUT: Duration = Duration::from_millis(500);
 
+#[zbus::proxy(interface = "org.shadowblip.Input.CompositeDevice")]
+trait CompositeDevice {
+    #[zbus(property)]
+    fn dbus_devices(&self) -> zbus::Result<Vec<String>>;
+
+    #[zbus(property)]
+    fn profile_path(&self) -> zbus::Result<String>;
+
+    fn load_profile_path(&self, path: String) -> zbus::Result<()>;
+}
+
 #[derive(Debug)]
 pub enum DbusRuntimeError {
     TimedOut,
+    Rejected(String),
     Zbus(zbus::Error),
+}
+
+impl DbusRuntimeError {
+    pub fn is_transport_failure(&self) -> bool {
+        matches!(self, Self::TimedOut | Self::Zbus(_))
+    }
 }
 
 impl fmt::Display for DbusRuntimeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::TimedOut => formatter.write_str("DBus operation timed out"),
+            Self::Rejected(error) => formatter.write_str(error),
             Self::Zbus(error) => error.fmt(formatter),
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileStatus {
+    Pending,
+    Ready,
+    Applied,
 }
 
 impl std::error::Error for DbusRuntimeError {}
@@ -134,9 +162,112 @@ impl DbusSignalSource {
         current_authenticated_owner(&self.connection).await
     }
 
+    pub async fn ensure_profile(
+        &self,
+        profile_path: &Path,
+    ) -> Result<ProfileStatus, DbusRuntimeError> {
+        let profile_path = profile_path
+            .to_str()
+            .ok_or_else(|| DbusRuntimeError::Rejected("profile path is not UTF-8".into()))?;
+        tokio::time::timeout(
+            DBUS_OPERATION_TIMEOUT,
+            ensure_profile_unbounded(&self.connection, profile_path),
+        )
+        .await
+        .map_err(|_| DbusRuntimeError::TimedOut)?
+    }
+
     pub async fn next_message(&mut self) -> zbus::Result<Option<Message>> {
         self.messages.next().await.transpose()
     }
+}
+
+async fn ensure_profile_unbounded(
+    connection: &zbus::Connection,
+    profile_path: &str,
+) -> Result<ProfileStatus, DbusRuntimeError> {
+    let Some(owner) = current_unique_owner(connection).await? else {
+        return Ok(ProfileStatus::Pending);
+    };
+    let root = zbus::fdo::IntrospectableProxy::builder(connection)
+        .destination(owner.as_str())?
+        .path(INPUTPLUMBER_ROOT_PATH)?
+        .build()
+        .await?;
+    let xml = root
+        .introspect()
+        .await
+        .map_err(|error| DbusRuntimeError::Zbus(error.into()))?;
+    let composite_paths = composite_paths_from_introspection(&xml);
+    let mut candidates = Vec::new();
+    for path in composite_paths {
+        let proxy = CompositeDeviceProxy::builder(connection)
+            .destination(owner.as_str())?
+            .path(path.as_str())?
+            .build()
+            .await?;
+        if proxy
+            .dbus_devices()
+            .await?
+            .iter()
+            .any(|target| target == DBUS_TARGET_PATH)
+        {
+            candidates.push(path);
+        }
+    }
+    let [path] = candidates.as_slice() else {
+        return match candidates.len() {
+            0 => Ok(ProfileStatus::Pending),
+            _ => Err(DbusRuntimeError::Rejected(
+                "more than one InputPlumber composite owns the required DBus target".into(),
+            )),
+        };
+    };
+    let proxy = CompositeDeviceProxy::builder(connection)
+        .destination(owner.as_str())?
+        .path(path.as_str())?
+        .build()
+        .await?;
+    if proxy.profile_path().await? == profile_path {
+        return if current_unique_owner(connection).await?.as_deref() == Some(owner.as_str()) {
+            Ok(ProfileStatus::Ready)
+        } else {
+            Ok(ProfileStatus::Pending)
+        };
+    }
+    proxy.load_profile_path(profile_path.to_owned()).await?;
+    if current_unique_owner(connection).await?.as_deref() != Some(owner.as_str()) {
+        return Ok(ProfileStatus::Pending);
+    }
+    if proxy.profile_path().await? != profile_path {
+        return Err(DbusRuntimeError::Rejected(
+            "InputPlumber did not retain the immutable Korri profile".into(),
+        ));
+    }
+    if current_unique_owner(connection).await?.as_deref() != Some(owner.as_str()) {
+        return Ok(ProfileStatus::Pending);
+    }
+    Ok(ProfileStatus::Applied)
+}
+
+pub fn composite_paths_from_introspection(xml: &str) -> Vec<String> {
+    let mut paths = xml
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            let name = line
+                .strip_prefix("<node name=\"CompositeDevice")?
+                .split_once('\"')?
+                .0;
+            if name.is_empty() || !name.bytes().all(|byte| byte.is_ascii_digit()) {
+                return None;
+            }
+            Some(format!("{INPUTPLUMBER_ROOT_PATH}/CompositeDevice{name}"))
+        })
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths.dedup();
+    paths
 }
 
 pub async fn current_authenticated_owner(
@@ -276,7 +407,7 @@ pub fn map_capability(capability: &str, value: f64) -> Option<SemanticInput> {
 mod tests {
     use std::{future, time::Duration};
 
-    use super::{bounded_with_timeout, DbusRuntimeError};
+    use super::{bounded_with_timeout, composite_paths_from_introspection, DbusRuntimeError};
 
     #[tokio::test]
     async fn bounded_wait_times_out_and_allows_a_fresh_retry() {
@@ -286,5 +417,27 @@ mod tests {
 
         let retry = bounded_with_timeout(Duration::ZERO, future::ready(Ok(42))).await;
         assert_eq!(retry.expect("ready retry"), 42);
+    }
+
+    #[test]
+    fn composite_discovery_accepts_only_direct_numbered_children() {
+        let xml = r#"
+            <node>
+              <node name="CompositeDevice10"/>
+              <node name="devices"/>
+              <node name="CompositeDevice2"/>
+              <node name="CompositeDevice2"/>
+              <node name="CompositeDevicebad"/>
+              <node name="CompositeDevice0/child"/>
+            </node>
+        "#;
+
+        assert_eq!(
+            composite_paths_from_introspection(xml),
+            vec![
+                "/org/shadowblip/InputPlumber/CompositeDevice10",
+                "/org/shadowblip/InputPlumber/CompositeDevice2",
+            ]
+        );
     }
 }

@@ -5,7 +5,8 @@ use korri_inputd::{
         commands_from_environment, set_parent_non_dumpable, ActionDispatcher, ActionIdentity,
         ActionLimits, ActionOutcome, ActionRoutes, DispatchMode,
     },
-    dbus::DbusSignalSource,
+    bundle::is_inside_store_item,
+    dbus::{DbusSignalSource, ProfileStatus},
     devices::EvdevProvider,
     health::{systemd::SystemdHealthPublisher, HealthPublisher, RuntimeHealth},
     korrid_client::{ExactStopOutcome, KorridClient},
@@ -16,6 +17,8 @@ use tracing_subscriber::EnvFilter;
 
 const DBUS_RETRY_INTERVAL: Duration = RECONCILE_INTERVAL;
 const HOLD_POLL_INTERVAL: Duration = Duration::from_millis(50);
+const STORE_ROOT: &str = "/nix/store";
+const SUPPORTED_PROFILE_NAME: &str = "korri-60-xbox_one_gamepad.yaml";
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -67,6 +70,7 @@ async fn run(services: ConfiguredServices, health: &mut impl HealthPublisher) {
     let mut provider = EvdevProvider::default();
     let mut dbus = None;
     let mut dbus_failure_logged = false;
+    let mut profile_wait_logged = false;
     let mut reconcile = tokio::time::interval(RECONCILE_INTERVAL);
     reconcile.set_missed_tick_behavior(MissedTickBehavior::Skip);
     let mut hold_poll = tokio::time::interval(HOLD_POLL_INTERVAL);
@@ -99,7 +103,19 @@ async fn run(services: ConfiguredServices, health: &mut impl HealthPublisher) {
                         }
                     }
                 }
-                let dbus_available = refresh_owner(&mut runtime, &mut dbus).await;
+                let profile_ready = ensure_runtime_profile(
+                    &mut runtime,
+                    &mut dbus,
+                    services.profile_path.as_deref(),
+                    &mut profile_wait_logged,
+                )
+                .await;
+                let dbus_available = if profile_ready {
+                    refresh_owner(&mut runtime, &mut dbus).await
+                } else {
+                    runtime.set_dbus_owner(None);
+                    dbus.is_some()
+                };
                 if dbus_available && dbus_failure_logged {
                     tracing::info!(
                         event = "inputd_dbus_recovered",
@@ -170,6 +186,71 @@ async fn next_dbus_message(
         .expect("DBus branch is enabled only while connected")
         .next_message()
         .await
+}
+
+async fn ensure_runtime_profile(
+    runtime: &mut Runtime,
+    source: &mut Option<DbusSignalSource>,
+    profile_path: Option<&std::path::Path>,
+    wait_logged: &mut bool,
+) -> bool {
+    let Some(profile_path) = profile_path else {
+        return true;
+    };
+    let Some(connected) = source.as_ref() else {
+        runtime.set_dbus_owner(None);
+        return false;
+    };
+    match connected.ensure_profile(profile_path).await {
+        Ok(ProfileStatus::Ready) => {
+            if *wait_logged {
+                tracing::info!(
+                    event = "inputd_profile_ready",
+                    profile = %profile_path.display(),
+                    "immutable InputPlumber profile is ready"
+                );
+            }
+            *wait_logged = false;
+            true
+        }
+        Ok(ProfileStatus::Applied) => {
+            tracing::info!(
+                event = "inputd_profile_applied",
+                profile = %profile_path.display(),
+                "loaded immutable Korri profile into the supported composite"
+            );
+            *wait_logged = false;
+            true
+        }
+        Ok(ProfileStatus::Pending) => {
+            if !*wait_logged {
+                tracing::info!(
+                    event = "inputd_profile_pending",
+                    profile = %profile_path.display(),
+                    "waiting for one supported InputPlumber composite"
+                );
+            }
+            *wait_logged = true;
+            runtime.set_dbus_owner(None);
+            false
+        }
+        Err(error) => {
+            if !*wait_logged {
+                tracing::warn!(
+                    event = "inputd_profile_rejected",
+                    profile = %profile_path.display(),
+                    error = %error,
+                    "InputPlumber profile selection failed closed"
+                );
+            }
+            *wait_logged = true;
+            runtime.set_dbus_owner(None);
+            if error.is_transport_failure() {
+                *source = None;
+            }
+            false
+        }
+    }
 }
 
 async fn refresh_owner(runtime: &mut Runtime, source: &mut Option<DbusSignalSource>) -> bool {
@@ -323,6 +404,7 @@ struct ConfiguredServices {
     routes: ActionRoutes,
     korrid: Option<KorridClient>,
     physical_input: bool,
+    profile_path: Option<PathBuf>,
 }
 
 fn configured_services() -> Result<ConfiguredServices, String> {
@@ -357,11 +439,15 @@ fn configured_services_from_environment(
                 ))
             }
         };
+        if environment.contains_key(std::ffi::OsStr::new("KORRI_INPUTD_PROFILE_PATH")) {
+            return Err("development profile cannot load an InputPlumber profile".into());
+        }
         return Ok(ConfiguredServices {
             actions: None,
             routes,
             korrid: None,
             physical_input,
+            profile_path: None,
         });
     }
     if let Some(source) = environment
@@ -383,11 +469,13 @@ fn configured_services_from_environment(
     let dispatcher = ActionDispatcher::new(commands, identity, ActionLimits::default())
         .map_err(|error| error.to_string())?;
     let socket = required_absolute_path("KORRI_INPUTD_CONTROL_SOCKET", environment)?;
+    let profile_path = required_immutable_profile_path(environment)?;
     Ok(ConfiguredServices {
         actions: Some(dispatcher),
         routes,
         korrid: Some(KorridClient::new(socket)),
         physical_input: true,
+        profile_path: Some(profile_path),
     })
 }
 
@@ -420,6 +508,37 @@ fn required_absolute_path(
         return Err(format!("{name} must be absolute"));
     }
     Ok(path)
+}
+
+fn required_immutable_profile_path(
+    environment: &BTreeMap<OsString, OsString>,
+) -> Result<PathBuf, String> {
+    required_immutable_profile_path_at(environment, std::path::Path::new(STORE_ROOT))
+}
+
+fn required_immutable_profile_path_at(
+    environment: &BTreeMap<OsString, OsString>,
+    store_root: &std::path::Path,
+) -> Result<PathBuf, String> {
+    let configured = required_absolute_path("KORRI_INPUTD_PROFILE_PATH", environment)?;
+    let profile = std::fs::canonicalize(&configured)
+        .map_err(|error| format!("KORRI_INPUTD_PROFILE_PATH is unavailable: {error}"))?;
+    if configured != profile {
+        return Err("KORRI_INPUTD_PROFILE_PATH must be a canonical immutable path".into());
+    }
+    if !is_inside_store_item(&profile, store_root) {
+        return Err("KORRI_INPUTD_PROFILE_PATH must resolve inside the Nix store".into());
+    }
+    let metadata = std::fs::metadata(&profile)
+        .map_err(|error| format!("KORRI_INPUTD_PROFILE_PATH is unavailable: {error}"))?;
+    if !metadata.is_file()
+        || profile.file_name().and_then(|name| name.to_str()) != Some(SUPPORTED_PROFILE_NAME)
+    {
+        return Err(format!(
+            "KORRI_INPUTD_PROFILE_PATH must select {SUPPORTED_PROFILE_NAME}"
+        ));
+    }
+    Ok(profile)
 }
 
 #[cfg(test)]
@@ -462,6 +581,7 @@ mod tests {
         assert!(services.actions.is_none());
         assert!(services.korrid.is_none());
         assert!(!services.physical_input);
+        assert!(services.profile_path.is_none());
     }
 
     #[test]
@@ -480,6 +600,63 @@ mod tests {
         let services = configured_services_from_environment(&environment).unwrap();
 
         assert!(services.physical_input);
+    }
+
+    #[test]
+    fn development_profile_rejects_an_inputplumber_profile_path() {
+        let environment = BTreeMap::from([
+            (
+                OsString::from("KORRI_INPUTD_PROFILE"),
+                OsString::from("development"),
+            ),
+            (
+                OsString::from("KORRI_INPUTD_PROFILE_PATH"),
+                OsString::from("/nix/store/not-used-in-development"),
+            ),
+        ]);
+
+        let error = configured_services_from_environment(&environment)
+            .err()
+            .expect("development profile mutation must be rejected");
+
+        assert_eq!(
+            error,
+            "development profile cannot load an InputPlumber profile"
+        );
+    }
+
+    #[test]
+    fn hardened_profile_path_must_be_canonical_and_immutable() {
+        use std::os::unix::fs::symlink;
+
+        let root = tempfile::tempdir().unwrap();
+        let store = root.path().join("store");
+        let package = store.join("package");
+        let profile = package
+            .join("share/inputplumber/profiles")
+            .join(SUPPORTED_PROFILE_NAME);
+        std::fs::create_dir_all(profile.parent().unwrap()).unwrap();
+        std::fs::write(&profile, b"profile").unwrap();
+        let environment = BTreeMap::from([(
+            OsString::from("KORRI_INPUTD_PROFILE_PATH"),
+            profile.clone().into_os_string(),
+        )]);
+
+        assert_eq!(
+            required_immutable_profile_path_at(&environment, &store).unwrap(),
+            profile
+        );
+
+        let selector = root.path().join("profile-link");
+        symlink(&profile, &selector).unwrap();
+        let linked = BTreeMap::from([(
+            OsString::from("KORRI_INPUTD_PROFILE_PATH"),
+            selector.into_os_string(),
+        )]);
+        assert_eq!(
+            required_immutable_profile_path_at(&linked, &store).unwrap_err(),
+            "KORRI_INPUTD_PROFILE_PATH must be a canonical immutable path"
+        );
     }
 
     #[test]
