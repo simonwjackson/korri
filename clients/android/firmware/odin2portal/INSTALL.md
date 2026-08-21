@@ -32,6 +32,14 @@ Use these rollback files:
 
 The `.not-flashable` names are an intentional safety control. Do not rename the files before final approval.
 
+After the signed marker image passes first-boot acceptance, use these launcher follow-up files from the separately verified launcher output:
+
+- `NON_FLASHABLE_ARTIFACTS/super.img.not-flashable`
+- `NON_FLASHABLE_ARTIFACTS/vbmeta_system_a.img.not-flashable`
+- `NON_FLASHABLE_ARTIFACTS/vbmeta_a.img.not-flashable`
+
+Do not substitute the marker output for the launcher output. The dedicated launcher readiness gate pins different `super` and `vbmeta_system_a` bytes.
+
 ## Host readiness gate
 
 Run this host-only check:
@@ -52,7 +60,7 @@ Keep the signed output and rollback bundle on stable local storage. Keep them av
 
 Use a direct USB cable. Do not use a USB hub. Charge the battery to at least 60 percent.
 
-No Odin 2 Portal is connected now. Therefore, these values are not yet confirmed.
+Record whether Odin 2 Portal `ef201f64` is connected at the start of each installation session. Treat every live value as unconfirmed until that session captures it again.
 
 Before bootloader entry, confirm that ADB lists `ef201f64` as `device`. Stop if ADB is unauthorized, offline, or absent. USB authorization must remain available for first-boot acceptance.
 
@@ -216,6 +224,99 @@ Record a pass or fail result for each manual hardware test:
 5. Test each performance mode.
 
 Each control must behave as it did on the captured stock build. Do not lock the bootloader after a successful test.
+
+## Launcher follow-up installation
+
+Use this section only after the signed marker image has the recorded final result `ODIN2PORTAL_CONTROLLED_INSTALL_PASS`. This follow-up installs Korri under `/product/app/Korri/Korri.apk`. It retains the marker, AYN launcher, Android Settings, and AYN hardware services. It does not select Korri as HOME.
+
+Set these paths:
+
+```console
+LAUNCHER_ROOT=/path/to/odin2portal-korri-launcher-signed-avb-dry-run
+LAUNCHER="$LAUNCHER_ROOT/NON_FLASHABLE_ARTIFACTS"
+ROLLBACK=/path/to/odin2portal-stock-130-rollback-bundle
+CONTRACT_DIR=/path/to/repository/clients/android/firmware/odin2portal/contract
+```
+
+Run the dedicated host-only gate:
+
+```console
+nix run .#odin2portal-launcher-install-readiness -- \
+  "$LAUNCHER_ROOT" "$ROLLBACK"
+```
+
+Require the final line `ODIN2PORTAL_LAUNCHER_INSTALL_ARTIFACTS_READY`. This result does not approve a device write.
+
+Before bootloader entry, repeat the ADB identity, fingerprint, Verified Boot, verity, marker, and battery gates. Record all output. After separate approval, enter bootloader fastboot. Repeat every condition in the device readiness gate, including the exact serial, unlocked state, slot A, partition sizes, and inactive snapshot update.
+
+Enter userspace fastboot:
+
+```console
+fastboot -s "$SERIAL" reboot fastboot
+```
+
+Wait up to 60 seconds for the exact serial. Require userspace fastboot, slot A, and no active or merging snapshot. Verify the launcher files immediately before the write:
+
+```console
+cd "$LAUNCHER_ROOT" && \
+  sha256sum --check "$CONTRACT_DIR/launcher-install-SHA256SUMS"
+```
+
+Write the complete launcher dynamic-partition container:
+
+```console
+fastboot -s "$SERIAL" flash super "$LAUNCHER/super.img.not-flashable"
+```
+
+Require `OKAY`. If this command fails and userspace fastboot remains available, use the immediate super rollback branch. Do not change modes first.
+
+Do not reboot Android. Return to bootloader fastboot:
+
+```console
+fastboot -s "$SERIAL" reboot bootloader
+```
+
+Wait up to 60 seconds for the exact serial. Require bootloader fastboot, slot A, and the unlocked state. Verify the launcher files again:
+
+```console
+cd "$LAUNCHER_ROOT" && \
+  sha256sum --check "$CONTRACT_DIR/launcher-install-SHA256SUMS"
+```
+
+Write the lower AVB image first. Write the root AVB image last:
+
+```console
+fastboot -s "$SERIAL" flash vbmeta_system_a "$LAUNCHER/vbmeta_system_a.img.not-flashable"
+fastboot -s "$SERIAL" flash vbmeta_a "$LAUNCHER/vbmeta_a.img.not-flashable"
+```
+
+Require `OKAY` after each command. Stop after the first failure and use the AVB repair branch while bootloader fastboot remains available. Restart only after all three writes succeed:
+
+```console
+fastboot -s "$SERIAL" reboot
+```
+
+Allow ten minutes for startup. Run the read-only host acceptance gate:
+
+```console
+nix run .#odin2portal-launcher-device-acceptance -- \
+  ef201f64 \
+  /path/to/odin2portal-launcher-acceptance-ef201f64
+```
+
+The evidence path must not exist. Require the final line `ODIN2PORTAL_LAUNCHER_DEVICE_HOST_GATES_PASS`. The command pulls the installed product APK to temporary host storage, verifies its exact approved APK SHA-256 and signer certificate, then deletes the temporary APK. It does not write to the device.
+
+Repeat every manual hardware acceptance gate. Also require all of these launcher-specific results before HOME provisioning:
+
+- Korri has exactly one package path, `/product/app/Korri/Korri.apk`, and no path under `/data/app`.
+- The installed Korri APK and signer match `contract/korri-launcher-apk-SHA256.txt` and `contract/korri-release-cert-SHA256.txt`.
+- HOME candidates include `com.simonwjackson.korri/com.limelight.KorriShellActivity` and `com.odin.odinlauncher/.activities.LauncherActivity`.
+- The resolved HOME remains `com.odin.odinlauncher/.activities.LauncherActivity` before provisioning.
+- Android Settings and every AYN hardware control pass again.
+
+Rollback the complete stock `super`, `vbmeta_system_a`, and `vbmeta_a` set if any launcher-image boot, package, signer, HOME-candidate, or hardware gate fails. Do not provision HOME after a failed gate.
+
+After launcher-image acceptance, read `HOME-PROVISIONING.md`. Its one package-manager write requires a new approval and keeps the AYN launcher installed as fallback.
 
 ## Immediate super rollback
 

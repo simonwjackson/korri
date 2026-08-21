@@ -200,6 +200,44 @@ let
       '';
     };
 
+    odin2portal-launcher-install-readiness = {
+      description = "Verify the exact Korri launcher and stock rollback artifacts without device writes.";
+      runtimeInputs = odin2portalStockRepack.installRuntimeInputs;
+      usageSuffix = " -- <launcher-output> <rollback-bundle>";
+      script = ''
+        exec "$KORRI_ROOT/clients/android/firmware/odin2portal/launcher-install-readiness.sh" "$@"
+      '';
+    };
+
+    odin2portal-launcher-install-readiness-check = {
+      description = "Test the host-only Odin 2 Portal launcher installation readiness gate.";
+      runtimeInputs = odin2portalStockRepack.installRuntimeInputs;
+      script = ''
+        exec "$KORRI_ROOT/clients/android/firmware/odin2portal/test-launcher-install-readiness.sh"
+      '';
+    };
+
+    odin2portal-launcher-device-acceptance = {
+      description = "Verify the installed Odin launcher image and signer without device writes.";
+      runtimeInputs = androidInputs ++ [ pkgs.android-tools pkgs.gnugrep pkgs.gnused ];
+      env = androidEnv;
+      usageSuffix = " -- <adb-serial> <evidence-directory>";
+      script = ''
+        ${androidSetup}
+        exec "$KORRI_ROOT/clients/android/firmware/odin2portal/launcher-device-acceptance.sh" "$@"
+      '';
+    };
+
+    odin2portal-launcher-device-acceptance-check = {
+      description = "Test launcher device acceptance safety and optional pre-install rejection.";
+      runtimeInputs = androidInputs ++ [ pkgs.android-tools pkgs.gnugrep pkgs.gnused ];
+      env = androidEnv;
+      script = ''
+        ${androidSetup}
+        exec "$KORRI_ROOT/clients/android/firmware/odin2portal/test-launcher-device-acceptance.sh"
+      '';
+    };
+
     odin2portal-signed-avb-dry-run = {
       description = "Build and verify a non-flashable signed AVB chain for the Odin 2 Portal marker image.";
       runtimeInputs = odin2portalStockRepack.signedAvbRuntimeInputs;

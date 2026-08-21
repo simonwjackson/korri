@@ -90,6 +90,26 @@ The output is quarantined under `NON_FLASHABLE_ARTIFACTS/`, contains no private 
 
 The image adds Korri as a HOME candidate but does not alter the existing user's preferred HOME. `HOME-PROVISIONING.md` defines the separate, auditable package-manager operation and the AYN-launcher fallback. That operation requires separate approval.
 
+Verify the exact launcher output and stock rollback bundle before any live device gate:
+
+```console
+nix run .#odin2portal-launcher-install-readiness -- \
+  /path/to/odin2portal-korri-launcher-signed-avb-dry-run \
+  /path/to/odin2portal-stock-130-rollback-bundle
+```
+
+The final line must be `ODIN2PORTAL_LAUNCHER_INSTALL_ARTIFACTS_READY`. The command pins the produced launcher image bytes, complete inventory, operator documents, and rollback artifacts. It contains no ADB or fastboot command and does not approve an installation.
+
+`INSTALL.md` defines the launcher write and acceptance sequence after the signed marker image passes its first-boot acceptance gate. After the launcher image boots, run the read-only installed-image gate:
+
+```console
+nix run .#odin2portal-launcher-device-acceptance -- \
+  ef201f64 \
+  /path/to/odin2portal-launcher-acceptance-ef201f64
+```
+
+This gate verifies the installed product APK bytes, release signer, boot state, marker, HOME candidates, AYN fallback, and Settings package. `HOME-PROVISIONING.md` remains a separate user-state operation after launcher-image acceptance.
+
 ## Review installation readiness
 
 Read `INSTALL.md`. It defines the proposed write order, stop conditions, first-boot checks, and stock rollback sequence. It does not approve or execute an installation.
@@ -134,6 +154,8 @@ nix run .#odin2portal-rollback-bundle-check
 nix run .#odin2portal-marker-dry-run-check
 nix run .#odin2portal-signed-avb-dry-run-check
 nix run .#odin2portal-launcher-image-dry-run-check
+nix run .#odin2portal-launcher-install-readiness-check
+nix run .#odin2portal-launcher-device-acceptance-check
 nix run .#odin2portal-install-readiness-check
 ```
 
