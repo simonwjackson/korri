@@ -31,6 +31,7 @@
     }:
     let
       nixosModules = {
+        korri-bundle = import ./services/inputd/nix/korri-bundle-module.nix { korri = self; };
         korri-input = import ./services/inputd/nix/korri-input.nix { korri = self; };
         korrid-linux-device = import ./services/korrid/nixos-module.nix { korri = self; };
       };
@@ -61,13 +62,22 @@
             korridPackage
             ;
           inputplumberNixpkgs = inputplumber-nixpkgs;
+          korriBundleModule = nixosModules.korri-bundle;
           korriInputModule = nixosModules.korri-input;
           korridLinuxDeviceModule = nixosModules.korrid-linux-device;
         };
       in
       {
         apps =
-          (import ./nix/tasks.nix { inherit pkgs proseql; })
+          (import ./nix/tasks.nix {
+            inherit pkgs proseql;
+            extraHelpText = pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+
+              nix run .#korri-dev -- [--physical]
+                  Run isolated korrid and inputd development processes without host mutation.
+              nix run .#korri-bundle-select -- COMMAND
+                  Select or roll back one immutable Korri bundle without NixOS activation.'';
+          })
           // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux inputplumber.apps;
         devShells.android = import ./clients/android/devshell.nix { inherit pkgs; };
         devShells.portal = import ./clients/portal/devshell.nix { inherit pkgs; };

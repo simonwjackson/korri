@@ -1,6 +1,10 @@
 # Korri task definitions. Runnable apps and generated help derive from the
 # same definitions so the command surface cannot drift from its documentation.
-{ pkgs, proseql }:
+{
+  pkgs,
+  proseql,
+  extraHelpText ? "",
+}:
 let
   proseqlSource = import ../services/korrid/proseql-source.nix { inherit pkgs proseql; };
   android = import ../clients/android/sdk.nix { inherit pkgs; };
@@ -832,11 +836,13 @@ let
 
   packages = pkgs.lib.mapAttrs makeTask definitions;
 
-  helpText = pkgs.lib.concatStringsSep "\n" (
-    pkgs.lib.mapAttrsToList (
-      name: task: "  nix run .#${name}${task.usageSuffix or ""}\n      ${task.description}"
-    ) definitions
-  );
+  helpText =
+    pkgs.lib.concatStringsSep "\n" (
+      pkgs.lib.mapAttrsToList (
+        name: task: "  nix run .#${name}${task.usageSuffix or ""}\n      ${task.description}"
+      ) definitions
+    )
+    + extraHelpText;
 
   help = pkgs.writeShellApplication {
     name = "help";

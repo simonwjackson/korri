@@ -1,7 +1,10 @@
 {
   pkgs,
   module,
+  bundleModule,
   korridPackage,
+  inputdPackage,
+  korriBundle,
 }:
 let
   lib = pkgs.lib;
@@ -32,6 +35,7 @@ let
     import "${pkgs.path}/nixos/lib/eval-config.nix" {
       system = pkgs.stdenv.hostPlatform.system;
       modules = [
+        bundleModule
         module
         base
         {
@@ -46,6 +50,14 @@ let
       ];
     };
   enabled = evaluate { services.korridLinuxDevice.enable = true; };
+  bundled = evaluate {
+    services.korriBundle = {
+      enable = true;
+      initialPackage = korriBundle;
+      launcherPackage = inputdPackage;
+    };
+    services.korridLinuxDevice.enable = true;
+  };
   customPaths = evaluate {
     services.korridLinuxDevice = {
       enable = true;
@@ -88,6 +100,7 @@ let
   customService = customPaths.config.systemd.services.korrid;
   customSocket = customPaths.config.systemd.sockets.korrid-control;
   customTmpfiles = customPaths.config.systemd.tmpfiles.rules;
+  bundledService = bundled.config.systemd.services.korrid;
 in
 assert allAssertionsPass enabled;
 assert service.serviceConfig.User == "korrid";
@@ -126,6 +139,11 @@ assert service.serviceConfig.ProtectProc == "invisible";
 assert service.serviceConfig.ProcSubset == "pid";
 assert lib.hasInfix "subject.system_unit == \"korrid.service\"" polkit;
 assert lib.hasInfix "^korri-game-[0-9a-f]{32}" polkit;
+assert allAssertionsPass bundled;
+assert builtins.elem "korri-bundle-selector.service" bundledService.requires;
+assert builtins.elem "korri-bundle-selector.service" bundledService.after;
+assert bundledService.environment.KORRI_BUNDLE_ACTIVE == "/nix/var/nix/gcroots/korri-bundle/active";
+assert bundledService.serviceConfig.ExecStart == "${inputdPackage}/bin/korri-bundle-launch korrid";
 assert allAssertionsPass customPaths;
 assert customSocket.socketConfig.ListenStream == "/run/korri-test/control/device.sock";
 assert customService.environment.KORRID_PRIVATE_STATE_ROOT == "/srv/korri-test/recovery";
@@ -135,7 +153,8 @@ assert builtins.elem "d /run/korri-test/control 0750 root korri-control -" custo
 assert hasFailedAssertion "service UID must differ" sameUid;
 assert hasFailedAssertion "gameplay user must not hold raw input" broadGame;
 assert hasFailedAssertion "privateStateRoot must be a normalized absolute path" invalidPrivatePath;
-assert hasFailedAssertion "controlSocket and its directory must be normalized absolute paths" invalidControlPath;
+assert hasFailedAssertion "controlSocket and its directory must be normalized absolute paths"
+  invalidControlPath;
 assert evaluationRejected sameUid;
 assert evaluationRejected broadGame;
 assert evaluationRejected invalidPrivatePath;

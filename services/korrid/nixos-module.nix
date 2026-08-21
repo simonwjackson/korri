@@ -7,12 +7,19 @@
 }:
 let
   cfg = config.services.korridLinuxDevice;
+  bundleCfg =
+    config.services.korriBundle or {
+      enable = false;
+      activePath = "";
+      launcherPackage = null;
+    };
   system = pkgs.stdenv.hostPlatform.system;
   serviceUser = "korrid";
   serviceGroup = "korrid";
   controlGroup = "korri-control";
   controlDirectory = builtins.dirOf cfg.controlSocket;
-  validAbsolutePath = path:
+  validAbsolutePath =
+    path:
     lib.hasPrefix "/" path
     && path != "/"
     && !(lib.hasInfix "//" path)
@@ -142,16 +149,21 @@ in
     systemd.services.korrid = {
       description = "Korri Linux device daemon";
       wantedBy = [ "multi-user.target" ];
-      requires = [ "korrid-control.socket" ];
+      requires = [
+        "korrid-control.socket"
+      ]
+      ++ lib.optional bundleCfg.enable "korri-bundle-selector.service";
       after = [
         "network.target"
         "korrid-control.socket"
         "korri-input-source-guard.service"
         "systemd-tmpfiles-setup-dev.service"
         "systemd-tmpfiles-resetup.service"
-      ];
+      ]
+      ++ lib.optional bundleCfg.enable "korri-bundle-selector.service";
       environment = {
         KORRID_MODE = "host";
+        KORRI_BUNDLE_ACTIVE = lib.mkIf bundleCfg.enable bundleCfg.activePath;
         KORRID_ADDRESS = cfg.address;
         KORRID_HOST_CONFIG = toString cfg.deviceConfig;
         KORRID_STORAGE_ROOT = cfg.storageRoot;
@@ -166,7 +178,11 @@ in
         KORRID_SYSTEMCTL = "${pkgs.systemd}/bin/systemctl";
       };
       serviceConfig = {
-        ExecStart = lib.getExe cfg.package;
+        ExecStart =
+          if bundleCfg.enable then
+            "${bundleCfg.launcherPackage}/bin/korri-bundle-launch korrid"
+          else
+            lib.getExe cfg.package;
         User = serviceUser;
         Group = serviceGroup;
         StateDirectory = "korrid";

@@ -11,7 +11,16 @@ verify_command: "nix run .#inputd-check"
 
 ## Summary
 
-Restore Korri's Linux normalized-input boundary as a pinned upstream InputPlumber runtime with Korri-owned profile composition, a separate Rust input-policy daemon, and explicit NixOS integration. Preserve the legacy safety behavior deliberately, use Zao as the first reversible device gate, and leave browser delivery and Android platform integration out of this slice.
+Restore Korri's Linux normalized-input boundary as a pinned upstream InputPlumber runtime with Korri-owned profile composition and a separate Rust input-policy daemon. Portable development is the default. NixOS is an optional stable host adapter. Routine code and profile deployment selects one immutable Korri bundle and restarts only Korri input services; full NixOS activation is reserved for approved host-policy maintenance.
+
+## Architecture Revision — Portable by Default
+
+Device retries proved that full NixOS activation also reloads Home Manager and unrelated user services. The implementation therefore uses two modes only:
+
+- `korri-dev` runs isolated korrid and inputd processes without root, physical input, actions, systemd mutation, X11 management, or Sunshine management. `--physical` opts in only to an existing validated normalized InputPlumber target; actions remain disabled.
+- The optional hardened host layer installs stable service identities, permissions, and units once. Those units launch fixed components from the active Nix GC root. The active and previous bundle selectors both keep their exact store closures available for rollback. A bounded selector changes one immutable bundle, restarts only InputPlumber, inputd, and korrid, and restores the previous selector on failed health.
+
+The full generation gate remains a maintenance and persistence check. It is not the normal development or candidate-deployment path.
 
 ---
 

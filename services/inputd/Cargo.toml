@@ -16,6 +16,10 @@ path = "src/main.rs"
 name = "korri-bundle-launch"
 path = "src/bundle_launch.rs"
 
+[[bin]]
+name = "korri-bundle-select"
+path = "src/bundle_select.rs"
+
 [dependencies]
 evdev = { version = "0.13.2", features = ["stream-trait"] }
 futures-util = "0.3"

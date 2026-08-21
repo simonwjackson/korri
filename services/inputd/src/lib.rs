@@ -1,5 +1,6 @@
 pub mod action_catalog;
 pub mod actions;
+pub mod bundle;
 pub mod cgroup_sandbox;
 pub mod dbus;
 pub mod devices;

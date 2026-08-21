@@ -1,0 +1,178 @@
+use std::{
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
+};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Component {
+    InputPlumber,
+    Inputd,
+    Korrid,
+}
+
+impl Component {
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "inputplumber" => Ok(Self::InputPlumber),
+            "inputd" => Ok(Self::Inputd),
+            "korrid" => Ok(Self::Korrid),
+            other => Err(format!(
+                "component must be inputplumber, inputd, or korrid, got {other:?}"
+            )),
+        }
+    }
+
+    pub const fn executable(self) -> &'static str {
+        match self {
+            Self::InputPlumber => "bin/inputplumber",
+            Self::Inputd => "bin/korri-inputd",
+            Self::Korrid => "bin/korrid",
+        }
+    }
+}
+
+pub fn resolve_bundle(selector: &Path, store_root: &Path) -> Result<PathBuf, String> {
+    if !selector.is_absolute() {
+        return Err("active bundle selector must be absolute".into());
+    }
+    let bundle = std::fs::canonicalize(selector)
+        .map_err(|error| format!("active bundle is unavailable: {error}"))?;
+    if !is_store_item_root(&bundle, store_root) || !bundle.is_dir() {
+        return Err("active bundle must resolve to one immutable store directory".into());
+    }
+    for component in [
+        Component::InputPlumber,
+        Component::Inputd,
+        Component::Korrid,
+    ] {
+        resolve_component_in_bundle(&bundle, component, store_root)?;
+    }
+    let data = bundle.join("share/inputplumber");
+    let data_metadata = std::fs::metadata(&data)
+        .map_err(|error| format!("InputPlumber bundle data is unavailable: {error}"))?;
+    if !data_metadata.is_dir() {
+        return Err("InputPlumber bundle data must be a directory".into());
+    }
+    Ok(bundle)
+}
+
+pub fn resolve_component(
+    selector: &Path,
+    component: Component,
+    store_root: &Path,
+) -> Result<PathBuf, String> {
+    let bundle = resolve_bundle(selector, store_root)?;
+    resolve_component_in_bundle(&bundle, component, store_root)
+}
+
+fn resolve_component_in_bundle(
+    bundle: &Path,
+    component: Component,
+    store_root: &Path,
+) -> Result<PathBuf, String> {
+    let selected = bundle.join(component.executable());
+    let link = std::fs::symlink_metadata(&selected)
+        .map_err(|error| format!("selected component is unavailable: {error}"))?;
+    if !link.file_type().is_symlink() {
+        return Err("selected component must be an immutable bundle symlink".into());
+    }
+    let executable = std::fs::canonicalize(&selected)
+        .map_err(|error| format!("selected component target is unavailable: {error}"))?;
+    if !is_inside_store_item(&executable, store_root) {
+        return Err("selected component must resolve inside the immutable store".into());
+    }
+    let metadata = std::fs::metadata(&executable)
+        .map_err(|error| format!("selected component target is unavailable: {error}"))?;
+    if !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 {
+        return Err("selected component target must be a regular executable".into());
+    }
+    Ok(executable)
+}
+
+pub fn is_store_item_root(path: &Path, store_root: &Path) -> bool {
+    let Ok(relative) = path.strip_prefix(store_root) else {
+        return false;
+    };
+    let mut components = relative.components();
+    matches!(components.next(), Some(std::path::Component::Normal(item)) if !item.is_empty())
+        && components.next().is_none()
+}
+
+pub fn is_inside_store_item(path: &Path, store_root: &Path) -> bool {
+    let Ok(relative) = path.strip_prefix(store_root) else {
+        return false;
+    };
+    let mut components = relative.components();
+    matches!(components.next(), Some(std::path::Component::Normal(item)) if !item.is_empty())
+        && components.next().is_some()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::symlink;
+
+    fn fixture() -> (tempfile::TempDir, PathBuf, PathBuf) {
+        let root = tempfile::tempdir().unwrap();
+        let store = root.path().join("store");
+        let bundle = store.join("bundle");
+        let package = store.join("packages");
+        std::fs::create_dir_all(bundle.join("bin")).unwrap();
+        std::fs::create_dir_all(bundle.join("share/inputplumber")).unwrap();
+        std::fs::create_dir_all(package.join("bin")).unwrap();
+        for name in ["inputplumber", "korri-inputd", "korrid"] {
+            let executable = package.join("bin").join(name);
+            std::fs::write(&executable, b"fixture").unwrap();
+            let mut permissions = std::fs::metadata(&executable).unwrap().permissions();
+            permissions.set_mode(0o555);
+            std::fs::set_permissions(&executable, permissions).unwrap();
+            symlink(&executable, bundle.join("bin").join(name)).unwrap();
+        }
+        let selector = root.path().join("active");
+        symlink(&bundle, &selector).unwrap();
+        (root, store, selector)
+    }
+
+    #[test]
+    fn resolves_one_fixed_component_from_an_immutable_bundle() {
+        let (_root, store, selector) = fixture();
+
+        let executable = resolve_component(&selector, Component::Inputd, &store).unwrap();
+
+        assert_eq!(
+            executable.file_name().and_then(|name| name.to_str()),
+            Some("korri-inputd")
+        );
+    }
+
+    #[test]
+    fn rejects_a_regular_file_in_place_of_the_bundle_symlink() {
+        let (root, store, selector) = fixture();
+        let bundle = std::fs::canonicalize(&selector).unwrap();
+        std::fs::remove_file(bundle.join("bin/korri-inputd")).unwrap();
+        std::fs::write(bundle.join("bin/korri-inputd"), b"not a link").unwrap();
+
+        let error = resolve_component(&selector, Component::Inputd, &store).unwrap_err();
+
+        assert_eq!(
+            error,
+            "selected component must be an immutable bundle symlink"
+        );
+        drop(root);
+    }
+
+    #[test]
+    fn rejects_a_selector_outside_the_store() {
+        let root = tempfile::tempdir().unwrap();
+        let selector = root.path().join("active");
+        std::fs::create_dir(&selector).unwrap();
+
+        let error =
+            resolve_component(&selector, Component::Inputd, Path::new("/store")).unwrap_err();
+
+        assert_eq!(
+            error,
+            "active bundle must resolve to one immutable store directory"
+        );
+    }
+}

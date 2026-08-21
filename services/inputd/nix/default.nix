@@ -3,6 +3,7 @@
   system,
   inputplumberNixpkgs,
   crane,
+  korriBundleModule,
   korriInputModule,
   korridLinuxDeviceModule,
   korridPackage,
@@ -34,7 +35,13 @@ let
   };
 in
 {
-  apps.korri-dev = toApp devApp;
+  apps = {
+    korri-dev = toApp devApp;
+    korri-bundle-select = {
+      type = "app";
+      program = "${inputdPackage}/bin/korri-bundle-select";
+    };
+  };
   packages = {
     inputplumber-korri = inputplumberKorri;
     retroarch-inputplumber-autoconfig = retroarchInputplumberAutoconfig;
@@ -53,6 +60,7 @@ in
     korri-inputd-package = pkgs.runCommand "korri-inputd-package-check" { } ''
       test -x ${inputdPackage}/bin/korri-inputd
       test -x ${inputdPackage}/bin/korri-bundle-launch
+      test -x ${inputdPackage}/bin/korri-bundle-select
       test -x ${inputdPackage}/bin/korri-device-gate
       test "$(sha256sum ${inputdPackage}/bin/korri-device-gate | cut -d' ' -f1)" = \
         "$(sha256sum ${../deploy/device-check.sh} | cut -d' ' -f1)"
@@ -67,11 +75,30 @@ in
     '';
     korri-input-module = import ./korri-input-module-check.nix {
       module = korriInputModule;
+      bundleModule = korriBundleModule;
       inherit pkgs inputdPackage inputplumberKorri;
+    };
+    korri-bundle-module = import ./korri-bundle-module-check.nix {
+      inherit
+        pkgs
+        korriBundleModule
+        korriInputModule
+        korridLinuxDeviceModule
+        inputdPackage
+        inputplumberKorri
+        korridPackage
+        korriBundle
+        ;
     };
     korrid-linux-device-module = import ../../korrid/nixos-module-check.nix {
       module = korridLinuxDeviceModule;
-      inherit pkgs korridPackage;
+      bundleModule = korriBundleModule;
+      inherit
+        pkgs
+        korridPackage
+        inputdPackage
+        korriBundle
+        ;
     };
   };
 }

@@ -7,6 +7,12 @@
 }:
 let
   cfg = config.services.korriLinuxInput;
+  bundleCfg =
+    config.services.korriBundle or {
+      enable = false;
+      activePath = "";
+      launcherPackage = null;
+    };
   system = pkgs.stdenv.hostPlatform.system;
   defaultInputd = korri.packages.${system}.korri-inputd;
   defaultProvider = korri.packages.${system}.inputplumber-korri;
@@ -205,16 +211,24 @@ in
         package = providerPackage;
       };
       systemd.services.inputplumber = {
-        requires = lib.mkIf cfg.provider.sourceHiding.enable [ "korri-input-source-guard.service" ];
-        after = lib.mkIf cfg.provider.sourceHiding.enable [
-          "korri-input-source-guard.service"
-          "systemd-tmpfiles-setup-dev.service"
-          "systemd-tmpfiles-resetup.service"
-        ];
+        requires =
+          lib.optional cfg.provider.sourceHiding.enable "korri-input-source-guard.service"
+          ++ lib.optional bundleCfg.enable "korri-bundle-selector.service";
+        after =
+          lib.optionals cfg.provider.sourceHiding.enable [
+            "korri-input-source-guard.service"
+            "systemd-tmpfiles-setup-dev.service"
+            "systemd-tmpfiles-resetup.service"
+          ]
+          ++ lib.optional bundleCfg.enable "korri-bundle-selector.service";
         environment = {
           XDG_DATA_DIRS = lib.mkForce "${providerPackage}/share";
           HIDE_DEVICES_FROM_ROOT = lib.mkIf cfg.provider.sourceHiding.enable "1";
+          KORRI_BUNDLE_ACTIVE = lib.mkIf bundleCfg.enable bundleCfg.activePath;
         };
+        serviceConfig.ExecStart = lib.mkIf bundleCfg.enable (
+          lib.mkForce "${bundleCfg.launcherPackage}/bin/korri-bundle-launch inputplumber"
+        );
       };
       systemd.tmpfiles.rules = lib.optionals cfg.provider.sourceHiding.enable [
         "d /dev/inputplumber 0700 root root -"
@@ -338,7 +352,10 @@ in
         description = "Korri input policy daemon";
         wantedBy = [ "multi-user.target" ];
         wants = lib.optional cfg.provider.enable "inputplumber.service";
-        requires = [ "korri-input-source-guard.service" ];
+        requires = [
+          "korri-input-source-guard.service"
+        ]
+        ++ lib.optional bundleCfg.enable "korri-bundle-selector.service";
         after = [
           "dbus.service"
           "korri-input-source-guard.service"
@@ -346,19 +363,25 @@ in
           "systemd-tmpfiles-setup-dev.service"
           "systemd-tmpfiles-resetup.service"
         ]
-        ++ lib.optional cfg.provider.enable "inputplumber.service";
+        ++ lib.optional cfg.provider.enable "inputplumber.service"
+        ++ lib.optional bundleCfg.enable "korri-bundle-selector.service";
         environment = actionEnvironment // {
           KORRI_INPUTD_ACTION_UID = toString cfg.inputd.actionUid;
           KORRI_INPUTD_ACTION_GID = toString cfg.inputd.actionGid;
           KORRI_INPUTD_CONTROL_GID = toString cfg.inputd.controlGid;
           KORRI_INPUTD_CONTROL_SOCKET = cfg.inputd.controlSocket;
           KORRI_INPUTD_BACK_TAP_ACTION = lib.mkIf (cfg.inputd.backTapAction != null) cfg.inputd.backTapAction;
+          KORRI_BUNDLE_ACTIVE = lib.mkIf bundleCfg.enable bundleCfg.activePath;
         };
         serviceConfig = {
           Type = "notify";
           NotifyAccess = "main";
           ExecStartPre = "+${lib.getExe virtualTargetAcl} reapply ${toString cfg.inputd.uid} ${toString cfg.inputd.actionUid}";
-          ExecStart = "${lib.getExe cfg.inputd.package}";
+          ExecStart =
+            if bundleCfg.enable then
+              "${bundleCfg.launcherPackage}/bin/korri-bundle-launch inputd"
+            else
+              lib.getExe cfg.inputd.package;
           ExecStopPost = "+${lib.getExe virtualTargetAcl} revoke";
           User = inputdUser;
           Group = controlGroup;

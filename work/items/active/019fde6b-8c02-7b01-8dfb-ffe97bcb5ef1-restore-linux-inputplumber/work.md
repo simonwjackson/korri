@@ -8,7 +8,7 @@ source: direct
 
 # Restore Linux InputPlumber and Rust inputd
 
-Restore Korri's Linux normalized-input boundary using a pinned upstream InputPlumber package, Korri-owned profile composition, and a new Rust input-policy daemon. Zao is the first reversible physical-device gate. The browser input bridge, Android backend integration, Xvfb pointer repair, and Sunshine input seats remain separate work.
+Restore Korri's Linux normalized-input boundary using a pinned upstream InputPlumber package, Korri-owned profile composition, and a new Rust input-policy daemon. Portable development is now the default: `korri-dev` runs without host mutation, and an explicit physical flag reads only an existing validated normalized target. The optional hardened host layer selects one immutable service bundle and performs service-scoped rollback without a full NixOS activation. Zao remains the final physical and persistence gate, used only after explicit device availability and maintenance approval. The browser input bridge, Android backend integration, Xvfb pointer repair, and Sunshine input seats remain separate work.
 
 ## Execution decisions
 

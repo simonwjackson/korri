@@ -1,6 +1,7 @@
 {
   pkgs,
   module,
+  bundleModule,
   inputdPackage,
   inputplumberKorri,
 }:
@@ -38,6 +39,7 @@ let
     import "${pkgs.path}/nixos/lib/eval-config.nix" {
       system = pkgs.stdenv.hostPlatform.system;
       modules = [
+        bundleModule
         module
         {
           system.stateVersion = "26.05";
@@ -76,6 +78,7 @@ let
     system = pkgs.stdenv.hostPlatform.system;
     modules = [
       legacyInputModule
+      bundleModule
       module
       identities
       {
@@ -136,6 +139,22 @@ let
         "--help"
       ];
     };
+  };
+  bundleFixture = pkgs.runCommand "korri-module-bundle-fixture" { } ''
+    mkdir -p "$out/bin" "$out/share"
+    ln -s ${inputplumberKorri}/bin/inputplumber "$out/bin/inputplumber"
+    ln -s ${inputdPackage}/bin/korri-inputd "$out/bin/korri-inputd"
+    ln -s ${pkgs.coreutils}/bin/true "$out/bin/korrid"
+    ln -s ${inputplumberKorri}/share/inputplumber "$out/share/inputplumber"
+  '';
+  bundled = withInputd {
+    services.korriBundle = {
+      enable = true;
+      initialPackage = bundleFixture;
+      launcherPackage = inputdPackage;
+    };
+    services.korriLinuxInput.provider.enable = true;
+    services.korriLinuxInput.inputd.enable = true;
   };
   contradictory = withInputd {
     services.korriLinuxInput.inputd = {
@@ -227,6 +246,9 @@ let
   combinedRules = combined.config.services.udev.extraRules;
   inputdOnlyRules = inputdOnly.config.services.udev.extraRules;
   dbusPackages = map toString combined.config.services.dbus.packages;
+  bundledProvider = bundled.config.systemd.services.inputplumber;
+  bundledInputd = bundled.config.systemd.services.korri-inputd;
+  bundleSelector = bundled.config.systemd.services.korri-bundle-selector;
 in
 assert allAssertionsPass providerOnly;
 assert !(providerOnly.options.services ? korri);
@@ -246,13 +268,19 @@ assert providerOnly.config.services.inputplumber.package == inputplumberKorri;
 assert builtins.elem "uinput" providerOnly.config.boot.kernelModules;
 assert !(providerOnly.config.systemd.services ? korri-inputd);
 assert providerService.environment.XDG_DATA_DIRS == "${inputplumberKorri}/share";
-assert builtins.elem "systemd-tmpfiles-setup-dev.service" hiddenProvider.config.systemd.services.inputplumber.after;
-assert builtins.elem "systemd-tmpfiles-resetup.service" hiddenProvider.config.systemd.services.inputplumber.after;
-assert builtins.elem "korri-input-source-guard.service" hiddenProvider.config.systemd.services.inputplumber.requires;
+assert builtins.elem "systemd-tmpfiles-setup-dev.service"
+  hiddenProvider.config.systemd.services.inputplumber.after;
+assert builtins.elem "systemd-tmpfiles-resetup.service"
+  hiddenProvider.config.systemd.services.inputplumber.after;
+assert builtins.elem "korri-input-source-guard.service"
+  hiddenProvider.config.systemd.services.inputplumber.requires;
 assert hiddenProvider.config.systemd.services ? korri-input-source-guard;
-assert lib.hasInfix "install -d -m 0700 -o root -g root /dev/inputplumber /dev/inputplumber/sources" hiddenProvider.config.systemd.services.korri-input-source-guard.serviceConfig.ExecStart;
-assert builtins.elem "d /dev/inputplumber 0700 root root -" hiddenProvider.config.systemd.tmpfiles.rules;
-assert builtins.elem "d /dev/inputplumber/sources 0700 root root -" hiddenProvider.config.systemd.tmpfiles.rules;
+assert lib.hasInfix "install -d -m 0700 -o root -g root /dev/inputplumber /dev/inputplumber/sources"
+  hiddenProvider.config.systemd.services.korri-input-source-guard.serviceConfig.ExecStart;
+assert builtins.elem "d /dev/inputplumber 0700 root root -"
+  hiddenProvider.config.systemd.tmpfiles.rules;
+assert builtins.elem "d /dev/inputplumber/sources 0700 root root -"
+  hiddenProvider.config.systemd.tmpfiles.rules;
 assert
   providerWithData.config.services.inputplumber.package.additionalDataPackages == [ additionalData ];
 assert
@@ -314,6 +342,20 @@ assert lib.hasInfix "045e" combinedRules;
 assert lib.hasInfix "028e" combinedRules;
 assert !(lib.hasInfix "SUBSYSTEM==\"input\", KERNEL==\"event*\", MODE" combinedRules);
 assert lib.any (path: lib.hasInfix "korri-inputplumber-dbus-policy" path) dbusPackages;
+assert allAssertionsPass bundled;
+assert bundled.config.services.korriBundle.activePath == "/nix/var/nix/gcroots/korri-bundle/active";
+assert builtins.elem "korri-bundle-selector.service" bundledProvider.requires;
+assert builtins.elem "korri-bundle-selector.service" bundledInputd.requires;
+assert
+  bundledProvider.environment.KORRI_BUNDLE_ACTIVE == "/nix/var/nix/gcroots/korri-bundle/active";
+assert bundledInputd.environment.KORRI_BUNDLE_ACTIVE == "/nix/var/nix/gcroots/korri-bundle/active";
+assert
+  bundledProvider.serviceConfig.ExecStart == "${inputdPackage}/bin/korri-bundle-launch inputplumber";
+assert bundledInputd.serviceConfig.ExecStart == "${inputdPackage}/bin/korri-bundle-launch inputd";
+assert bundleSelector.serviceConfig.UMask == "0077";
+assert
+  bundleSelector.serviceConfig.ExecStart
+  == "${inputdPackage}/bin/korri-bundle-select initialize ${bundleFixture}";
 assert hasFailedAssertion "requires its configured provider" contradictory;
 assert hasFailedAssertion "broad raw-input" broad;
 assert hasFailedAssertion "must exactly match the action user's primary identity"
