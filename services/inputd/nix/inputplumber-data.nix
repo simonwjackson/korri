@@ -26,6 +26,7 @@ let
       test "$(yq eval '.version' "$selected_device")" = 1 \
         && test "$(yq eval '.kind' "$selected_device")" = CompositeDevice \
         && test "$(yq eval '.name' "$selected_device")" = '${selectedDeviceName}' \
+        && test "$(yq eval '.options.auto_manage // false' "$selected_device")" = false \
         && test "$(yq eval -o=json -I=0 '.target_devices' "$selected_device")" = '["xbox-series","mouse","keyboard"]' || {
           echo "selected upstream profile ${selectedDeviceProfile} changed schema or target policy" >&2
           exit 1
@@ -45,13 +46,14 @@ let
         exit 1
       }
 
-      yq eval -i '.target_devices = ["xb360", "mouse", "keyboard", "dbus"]' "$selected_device"
+      yq eval -i '.options.auto_manage = true | .target_devices = ["xb360", "mouse", "keyboard", "dbus"]' "$selected_device"
       cp "$default_profile" "$resolved_profile"
       yq eval -i '.name = "Korri ${selectedDeviceName}"' "$resolved_profile"
       cat ${shortcutMappings} >> "$resolved_profile"
 
-      test "$(yq eval -o=json -I=0 '.target_devices' "$selected_device")" = '["xb360","mouse","keyboard","dbus"]' || {
-        echo "selected profile target transform produced unexpected data" >&2
+      test "$(yq eval '.options.auto_manage' "$selected_device")" = true \
+        && test "$(yq eval -o=json -I=0 '.target_devices' "$selected_device")" = '["xb360","mouse","keyboard","dbus"]' || {
+        echo "selected profile auto-management or target transform produced unexpected data" >&2
         exit 1
       }
       upstream_mapping_count="$(yq eval '.mapping | length' "$default_profile")"

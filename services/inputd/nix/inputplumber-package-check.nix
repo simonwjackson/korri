@@ -73,6 +73,10 @@ pkgs.runCommand "inputplumber-korri-package-check"
       echo "selected upstream profile ${data.selectedDeviceProfile} is missing" >&2
       exit 1
     }
+    test "$(yq eval '.options.auto_manage' "$selected_device")" = true || {
+      echo "selected device profile must auto-manage its supported physical controllers" >&2
+      exit 1
+    }
     test "$(yq eval '[.target_devices[] | select(. == "xb360")] | length' "$selected_device")" = 1 || {
       echo "selected device profile must target xb360 exactly once" >&2
       exit 1
