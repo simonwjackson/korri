@@ -24,6 +24,8 @@ CANDIDATE_SYSTEM_UNITS=(korrid.service sunshine.service x11-headless.service)
 SUNSHINE_UINPUT_GROUP='korri-sunshine-uinput'
 KORRID_CONTROL_GROUP='korri-control'
 KORRID_CONTROL_SOCKET='/run/korrid-control/control.sock'
+# This path comes from HostSessionControl's existing private-state producer.
+KORRID_HOST_SESSION_ROOT='/var/lib/korrid/host-session'
 EXPECTED_KEYS='304,305,307,308,310,311,314,315,316,317,318,704,705,706,707'
 EXPECTED_ABS='0,1,2,3,4,5,16,17'
 
@@ -93,32 +95,54 @@ remote_user_unit_enabled() {
   esac
 }
 
+remote_control_socket_present() {
+  [[ -S "$KORRID_CONTROL_SOCKET" ]]
+}
+
+remote_private_session_state_absent() {
+  local mode entries
+  [[ ! -L "$KORRID_HOST_SESSION_ROOT" ]] || return 1
+  [[ -e "$KORRID_HOST_SESSION_ROOT" ]] || return 0
+  [[ -d "$KORRID_HOST_SESSION_ROOT" ]] || return 1
+  mode="$(stat -Lc '%a' -- "$KORRID_HOST_SESSION_ROOT" 2>/dev/null)" || return 1
+  [[ "$mode" == 700 ]] || return 1
+  entries="$(find "$KORRID_HOST_SESSION_ROOT" -mindepth 1 -maxdepth 1 -printf '%f\n' 2>/dev/null)" \
+    || return 1
+  [[ -z "$entries" ]]
+}
+
 remote_refuse_active_game() {
-  local response phase code live_units
-  if [[ -S "$KORRID_CONTROL_SOCKET" ]]; then
-    response="$(curl --fail --silent --connect-timeout 1 --max-time 2 \
+  local response phase code live_units rpc_proven=false proof_source=local-state
+  if remote_control_socket_present; then
+    if response="$(curl --fail --silent --connect-timeout 1 --max-time 2 \
       --unix-socket "$KORRID_CONTROL_SOCKET" http://localhost/rpc \
-      -H 'content-type: application/json' -d '{"_tag":"app.session.status","payload":{}}' 2>/dev/null)" \
-      || fail 'exact local game status is unavailable; refusing service mutation'
-    phase="$(jq -r 'if ._tag == "app.session.status" and .outcome._tag == "Ok" then (.outcome.payload.active.phase // "none") else "none" end' <<<"$response" 2>/dev/null)" \
-      || fail 'exact local game status is invalid; refusing service mutation'
-    case "${phase,,}" in
-      running|stopping) fail "exact local game status is ${phase}; refusing service mutation" ;;
-      none)
-        code="$(jq -r 'if ._tag == "app.session.status" and .outcome._tag == "Err" then .outcome.payload.code else "" end' <<<"$response" 2>/dev/null || true)"
-        if [[ "$(jq -r 'if ._tag == "app.session.status" and .outcome._tag == "Ok" and (.outcome.payload.active // null) == null then "safe" else "" end' <<<"$response" 2>/dev/null || true)" != safe \
-          && "$code" != NoActiveSession && "$code" != SessionCompleted ]]; then
-          fail 'exact local game status cannot prove that no game is active; refusing service mutation'
-        fi
-        ;;
-      *) fail 'exact local game status has an unknown phase; refusing service mutation' ;;
-    esac
+      -H 'content-type: application/json' -d '{"_tag":"app.session.status","payload":{}}' 2>/dev/null)"; then
+      phase="$(jq -r 'if ._tag == "app.session.status" and .outcome._tag == "Ok" then (.outcome.payload.active.phase // "none") else "none" end' <<<"$response" 2>/dev/null)" \
+        || fail 'exact local game status is invalid; refusing service mutation'
+      case "${phase,,}" in
+        running|stopping) fail "exact local game status is ${phase}; refusing service mutation" ;;
+        none)
+          code="$(jq -r 'if ._tag == "app.session.status" and .outcome._tag == "Err" then .outcome.payload.code else "" end' <<<"$response" 2>/dev/null || true)"
+          if [[ "$(jq -r 'if ._tag == "app.session.status" and .outcome._tag == "Ok" and (.outcome.payload.active // null) == null then "safe" else "" end' <<<"$response" 2>/dev/null || true)" != safe \
+            && "$code" != NoActiveSession && "$code" != SessionCompleted ]]; then
+            fail 'exact local game status cannot prove that no game is active; refusing service mutation'
+          fi
+          rpc_proven=true
+          proof_source=rpc
+          ;;
+        *) fail 'exact local game status has an unknown phase; refusing service mutation' ;;
+      esac
+    fi
   fi
   live_units="$(systemctl list-units --type=service --state=activating,active,reloading,deactivating \
     --no-legend --plain 'korri-game-*.service' 2>/dev/null)" \
     || fail 'Korri game unit state is unavailable; refusing service mutation'
   [[ -z "$live_units" ]] || fail 'a Korri game unit is live; refusing service mutation'
-  printf 'active-game-check=clear\n'
+  if [[ "$rpc_proven" != true ]]; then
+    remote_private_session_state_absent \
+      || fail 'private launch state is not empty and exact local game status is unavailable; refusing service mutation'
+  fi
+  printf 'active-game-check=clear source=%s\n' "$proof_source"
 }
 
 remote_quiesce_old_user_units() {

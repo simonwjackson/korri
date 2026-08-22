@@ -593,6 +593,13 @@ assert_fails_with() {
   }
 }
 
+assert_fails() {
+  if "$@"; then
+    printf 'expected command to fail: %s\n' "$*" >&2
+    exit 1
+  fi
+}
+
 assert_no_mutation() {
   if grep -E 'action=(activate-test|persistent-switch|restore|inject-health-failure)' "$HARNESS_LOG" >/dev/null; then
     printf 'unexpected mutation; log follows:\n' >&2
@@ -667,6 +674,92 @@ assert_fails_with 'Sunshine dedicated uinput group must be supplementary' \
   run_production_group_policy sunshine.service 40
 assert_fails_with 'system Sunshine lacks its dedicated uinput group' \
   run_production_group_policy sunshine.service 50 no
+
+# Cleanup may use the persisted host-session state only when exact private RPC
+# is unavailable and no live game unit exists. Exercise the production proof
+# functions directly so a stale control socket cannot strand a safe rollback.
+PRIVATE_SESSION_SOURCE="$(awk '
+  /^remote_private_session_state_absent\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$PRIVATE_SESSION_SOURCE" == remote_private_session_state_absent* ]]
+run_private_session_state_check() (
+  local root="$1"
+  eval "$PRIVATE_SESSION_SOURCE"
+  export KORRID_HOST_SESSION_ROOT="$root"
+  remote_private_session_state_absent
+)
+missing_session_root="$TMP/missing-host-session"
+run_private_session_state_check "$missing_session_root"
+private_session_root="$TMP/private-host-session"
+mkdir -m 0700 "$private_session_root"
+run_private_session_state_check "$private_session_root"
+chmod 0755 "$private_session_root"
+assert_fails run_private_session_state_check "$private_session_root"
+chmod 0700 "$private_session_root"
+: >"$private_session_root/launch-id"
+assert_fails run_private_session_state_check "$private_session_root"
+rm "$private_session_root/launch-id"
+ln -s "$private_session_root" "$TMP/linked-host-session"
+assert_fails run_private_session_state_check "$TMP/linked-host-session"
+
+ACTIVE_GAME_SOURCE="$(awk '
+  /^remote_refuse_active_game\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$ACTIVE_GAME_SOURCE" == remote_refuse_active_game* ]]
+run_production_active_game_check() (
+  local model="$1" private_state="${2:-empty}" modeled_live_units="${3:-none}"
+  export KORRID_CONTROL_SOCKET=/run/korrid-control/control.sock
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  fail() {
+    printf 'device gate: %s\n' "$*" >&2
+    exit 1
+  }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  remote_control_socket_present() {
+    [[ "$model" != no-socket ]]
+  }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  curl() {
+    case "$model" in
+      rpc-none) printf '%s\n' '{"_tag":"app.session.status","outcome":{"_tag":"Ok","payload":{"active":null}}}' ;;
+      rpc-running) printf '%s\n' '{"_tag":"app.session.status","outcome":{"_tag":"Ok","payload":{"active":{"phase":"Running"}}}}' ;;
+      rpc-unavailable) return 22 ;;
+      no-socket) return 1 ;;
+      *) return 1 ;;
+    esac
+  }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  systemctl() {
+    if [[ "$modeled_live_units" == live ]]; then
+      printf '%s\n' 'korri-game-fixture.service loaded active running Fixture'
+    fi
+    return 0
+  }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  remote_private_session_state_absent() {
+    [[ "$private_state" == empty ]]
+  }
+  eval "$ACTIVE_GAME_SOURCE"
+  remote_refuse_active_game
+)
+grep -Fx 'active-game-check=clear source=local-state' \
+  < <(run_production_active_game_check rpc-unavailable) >/dev/null
+grep -Fx 'active-game-check=clear source=local-state' \
+  < <(run_production_active_game_check no-socket) >/dev/null
+assert_fails_with 'private launch state is not empty and exact local game status is unavailable' \
+  run_production_active_game_check rpc-unavailable ambiguous
+assert_fails_with 'a Korri game unit is live' \
+  run_production_active_game_check rpc-unavailable empty live
+assert_fails_with 'exact local game status is Running' \
+  run_production_active_game_check rpc-running
+# Exact daemon proof remains authoritative after korrid has reconciled a
+# completed session and removed it from its in-memory active state.
+grep -Fx 'active-game-check=clear source=rpc' \
+  < <(run_production_active_game_check rpc-none ambiguous) >/dev/null
 
 # Exercise the production user-manager and pairing proof paths. Both root
 # without SUDO_UID and a different SSH caller must target the explicit user.
