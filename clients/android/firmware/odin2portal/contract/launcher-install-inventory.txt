@@ -9,6 +9,7 @@ evidence/extracted-apk-verification/apk-SHA256SUMS
 evidence/extracted-apk-verification/apksigner.txt
 evidence/extracted-apk-verification/dex-packages.txt
 evidence/extracted-apk-verification/files.txt
+evidence/extracted-apk-verification/native-library-packaging.txt
 evidence/extracted-apk-verification/portal-index.html
 evidence/extracted-apk-verification/portal-script-1.js
 evidence/extracted-apk-verification/portal-scripts.txt
