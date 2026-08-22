@@ -7,6 +7,7 @@ evidence/build.prop.stock
 evidence/extracted-apk-verification/AndroidManifest.xml
 evidence/extracted-apk-verification/apk-SHA256SUMS
 evidence/extracted-apk-verification/apksigner.txt
+evidence/extracted-apk-verification/zipalign.txt
 evidence/extracted-apk-verification/dex-packages.txt
 evidence/extracted-apk-verification/files.txt
 evidence/extracted-apk-verification/native-library-packaging.txt

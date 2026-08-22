@@ -35,8 +35,9 @@ expected_apk_sha256="$(tr -d '[:space:]' < "$APK_SHA256_CONTRACT")"
 }
 ANDROID_HOME="${ANDROID_HOME:?run through a Nix Android task}"
 apksigner="$(find -L "$ANDROID_HOME/build-tools" -mindepth 2 -maxdepth 2 -name apksigner -type f -print | sort -V | tail -n1)"
+zipalign="$(find -L "$ANDROID_HOME/build-tools" -mindepth 2 -maxdepth 2 -name zipalign -type f -print | sort -V | tail -n1)"
 apkanalyzer="$(find -L "$ANDROID_HOME/cmdline-tools" -mindepth 3 -maxdepth 3 -name apkanalyzer -type f -print | sort -V | tail -n1)"
-[[ -x "$apksigner" && -x "$apkanalyzer" ]] || {
+[[ -x "$apksigner" && -x "$zipalign" && -x "$apkanalyzer" ]] || {
   echo 'Android APK inspection tools are unavailable' >&2
   exit 1
 }
@@ -61,6 +62,7 @@ actual_apk_sha256="$(sha256sum "$VERIFIED_APK" | awk '{print $1}')"
 }
 
 "$apksigner" verify --verbose --print-certs "$VERIFIED_APK" > "$EVIDENCE/apksigner.txt"
+"$zipalign" -c -P 16 -v 4 "$VERIFIED_APK" > "$EVIDENCE/zipalign.txt"
 "$apkanalyzer" manifest print "$VERIFIED_APK" > "$EVIDENCE/AndroidManifest.xml"
 "$apkanalyzer" files list "$VERIFIED_APK" > "$EVIDENCE/files.txt"
 "$apkanalyzer" files cat --file /assets/portal/index.html "$VERIFIED_APK" \

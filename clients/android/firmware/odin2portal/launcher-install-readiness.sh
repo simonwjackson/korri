@@ -5,7 +5,12 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LAUNCHER="${1:?usage: launcher-install-readiness.sh <launcher-output> <rollback-bundle>}"
 ROLLBACK="${2:?usage: launcher-install-readiness.sh <launcher-output> <rollback-bundle>}"
 CONTRACT="$HERE/contract"
+VERIFY_APK_EVIDENCE="$HERE/verify-launcher-apk-evidence.sh"
 
+[[ -x "$VERIFY_APK_EVIDENCE" && ! -L "$VERIFY_APK_EVIDENCE" ]] || {
+  echo 'launcher APK evidence verifier is missing or symbolic' >&2
+  exit 1
+}
 for directory in "$LAUNCHER" "$ROLLBACK"; do
   [[ -d "$directory" && ! -L "$directory" ]] || {
     echo "input directory is missing or symbolic: $directory" >&2
@@ -17,7 +22,9 @@ ROLLBACK="$(cd "$ROLLBACK" && pwd -P)"
 
 launcher_required=(
   MANIFEST-SHA256SUMS HOME-PROVISIONING.md NOT-FLASHABLE.md RESULT.txt
-  evidence/output-SHA256SUMS korri-odin2portal-avb.avbpubkey
+  evidence/output-SHA256SUMS
+  evidence/extracted-apk-verification/apk-SHA256SUMS
+  korri-odin2portal-avb.avbpubkey
   NON_FLASHABLE_ARTIFACTS/super.img.not-flashable
   NON_FLASHABLE_ARTIFACTS/vbmeta_a.img.not-flashable
   NON_FLASHABLE_ARTIFACTS/vbmeta_system_a.img.not-flashable
@@ -47,6 +54,9 @@ done
 ) >/dev/null
 diff -u "$CONTRACT/launcher-install-SHA256SUMS" \
   "$LAUNCHER/evidence/output-SHA256SUMS" >/dev/null
+"$VERIFY_APK_EVIDENCE" \
+  "$LAUNCHER/evidence/extracted-apk-verification/apk-SHA256SUMS" \
+  "$CONTRACT/korri-launcher-apk-SHA256.txt"
 grep -Fx 'ODIN2PORTAL_LAUNCHER_IMAGE_DRY_RUN_VERIFIED' "$LAUNCHER/RESULT.txt" >/dev/null
 grep -Fx 'Korri APK path: /product/app/Korri/Korri.apk' "$LAUNCHER/RESULT.txt" >/dev/null
 grep -Fx 'AYN launcher: retained as fallback' "$LAUNCHER/RESULT.txt" >/dev/null

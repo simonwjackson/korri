@@ -7,6 +7,9 @@ VERIFY_SOURCE="$HERE/verify-korri-launcher-apk.sh"
 PIPELINE="$HERE/launcher-image-dry-run.sh"
 PRODUCT="$HERE/launcher-product-dry-run.sh"
 MANIFEST="$ROOT/clients/android/app/src/main/AndroidManifest.xml"
+REAL_ANDROID_HOME="${ANDROID_HOME:?run through a Nix Android task}"
+REAL_ZIPALIGN="$(find -L "$REAL_ANDROID_HOME/build-tools" -mindepth 2 -maxdepth 2 -name zipalign -type f -print | sort -V | tail -n1)"
+[[ -x "$REAL_ZIPALIGN" ]]
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/verifier/contract"
@@ -96,7 +99,8 @@ else
 fi
 SCRIPT
 chmod +x "$TMP/sdk/build-tools/35.0.0/apksigner" "$TMP/sdk/cmdline-tools/19.0/bin/apkanalyzer"
-python3 - "$TMP/Korri.apk" "$TMP/Korri-compressed.apk" <<'PY'
+ln -s "$REAL_ZIPALIGN" "$TMP/sdk/build-tools/35.0.0/zipalign"
+python3 - "$TMP/Korri-unaligned.apk" "$TMP/Korri-compressed-unaligned.apk" <<'PY'
 import sys
 import zipfile
 
@@ -106,21 +110,31 @@ for path, compression in (
 ):
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr(
-            "lib/arm64-v8a/libkorrid.so",
-            b"fixture korrid library",
-            compress_type=compression,
-        )
-        archive.writestr(
             "lib/arm64-v8a/libmoonlight-core.so",
             b"fixture moonlight library",
             compress_type=zipfile.ZIP_STORED,
         )
+        archive.writestr(
+            "lib/arm64-v8a/libkorrid.so",
+            b"fixture korrid library",
+            compress_type=compression,
+        )
 PY
+"$REAL_ZIPALIGN" -f -P 16 4 "$TMP/Korri-unaligned.apk" "$TMP/Korri.apk"
+"$REAL_ZIPALIGN" -f -P 16 4 \
+  "$TMP/Korri-compressed-unaligned.apk" "$TMP/Korri-compressed.apk"
 sha256sum "$TMP/Korri.apk" | awk '{print $1}' \
   > "$TMP/verifier/contract/korri-launcher-apk-SHA256.txt"
 
 ANDROID_HOME="$TMP/sdk" "$VERIFY" "$TMP/Korri.apk" "$TMP/pass"
 grep -Fx KORRI_LAUNCHER_APK_VERIFIED "$TMP/pass/RESULT.txt" >/dev/null
+grep -F 'lib/arm64-v8a/libkorrid.so (OK)' "$TMP/pass/zipalign.txt" >/dev/null
+cut -f1 "$TMP/pass/native-library-packaging.txt" > "$TMP/native-library-paths.txt"
+printf '%s\n' \
+  '/lib/arm64-v8a/libkorrid.so' \
+  '/lib/arm64-v8a/libmoonlight-core.so' \
+  > "$TMP/expected-native-library-paths.txt"
+cmp "$TMP/expected-native-library-paths.txt" "$TMP/native-library-paths.txt"
 
 expect_rejection() {
   local name="$1"
@@ -161,6 +175,15 @@ expect_rejection missing-portal-font MOCK_PORTAL_FONT_FILE=/assets/other.woff2
 expect_rejection external-portal-font MOCK_PORTAL_CSS='@font-face { src: url(https://example.invalid/font.woff2); }'
 expect_rejection imported-portal-css MOCK_PORTAL_CSS='@import "./theme.css";'
 expect_rejection imported-portal-js MOCK_PORTAL_JS='import("./chunk.js");'
+
+sha256sum "$TMP/Korri-unaligned.apk" | awk '{print $1}' \
+  > "$TMP/verifier/contract/korri-launcher-apk-SHA256.txt"
+if ANDROID_HOME="$TMP/sdk" "$VERIFY" "$TMP/Korri-unaligned.apk" "$TMP/unaligned-korrid" \
+  >/dev/null 2>&1; then
+  echo 'launcher APK verifier accepted unaligned native libraries' >&2
+  exit 1
+fi
+[[ ! -e "$TMP/unaligned-korrid" ]]
 
 sha256sum "$TMP/Korri-compressed.apk" | awk '{print $1}' \
   > "$TMP/verifier/contract/korri-launcher-apk-SHA256.txt"
