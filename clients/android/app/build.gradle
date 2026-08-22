@@ -58,6 +58,11 @@ android {
     }
 
     packaging {
+        jniLibs {
+            // System images do not extract compressed APK libraries into the
+            // read-only product partition. Keep them directly loadable.
+            useLegacyPackaging = false
+        }
         resources {
             pickFirsts.add('META-INF/versions/9/OSGI-INF/MANIFEST.MF')
         }

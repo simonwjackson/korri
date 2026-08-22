@@ -54,11 +54,12 @@ if [[ "$1 $2" == 'manifest print' ]]; then
   home="${MOCK_HOME_CATEGORY:-android.intent.category.HOME}"
   debuggable="${MOCK_DEBUGGABLE:-false}"
   application_enabled="${MOCK_APPLICATION_ENABLED:-true}"
+  extract_native_libs="${MOCK_EXTRACT_NATIVE_LIBS:-false}"
   activity_enabled="${MOCK_ACTIVITY_ENABLED:-true}"
   activity_name="${MOCK_ACTIVITY_NAME:-com.limelight.KorriShellActivity}"
   cat <<XML
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="$package">
-  <application android:debuggable="$debuggable" android:enabled="$application_enabled">
+  <application android:debuggable="$debuggable" android:enabled="$application_enabled" android:extractNativeLibs="$extract_native_libs">
     <activity android:name="$activity_name" android:exported="true" android:enabled="$activity_enabled">
       <intent-filter>
         <action android:name="android.intent.action.MAIN"/>
@@ -95,7 +96,21 @@ else
 fi
 SCRIPT
 chmod +x "$TMP/sdk/build-tools/35.0.0/apksigner" "$TMP/sdk/cmdline-tools/19.0/bin/apkanalyzer"
-printf 'fixture apk\n' > "$TMP/Korri.apk"
+python3 - "$TMP/Korri.apk" "$TMP/Korri-compressed.apk" <<'PY'
+import sys
+import zipfile
+
+for path, compression in (
+    (sys.argv[1], zipfile.ZIP_STORED),
+    (sys.argv[2], zipfile.ZIP_DEFLATED),
+):
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(
+            "lib/arm64-v8a/libkorrid.so",
+            b"fixture korrid library",
+            compress_type=compression,
+        )
+PY
 sha256sum "$TMP/Korri.apk" | awk '{print $1}' \
   > "$TMP/verifier/contract/korri-launcher-apk-SHA256.txt"
 
@@ -126,6 +141,7 @@ expect_rejection wrong-package MOCK_PACKAGE=com.simonwjackson.korri.debug
 expect_rejection missing-home MOCK_HOME_CATEGORY=android.intent.category.LAUNCHER
 expect_rejection debuggable MOCK_DEBUGGABLE=true
 expect_rejection disabled-application MOCK_APPLICATION_ENABLED=false
+expect_rejection extracted-native-libraries MOCK_EXTRACT_NATIVE_LIBS=true
 expect_rejection disabled-activity MOCK_ACTIVITY_ENABLED=false
 expect_rejection relative-home-class MOCK_ACTIVITY_NAME=.KorriShellActivity
 expect_rejection wrong-abi MOCK_KORRID_FILE=/lib/x86_64/libkorrid.so
@@ -140,6 +156,17 @@ expect_rejection missing-portal-font MOCK_PORTAL_FONT_FILE=/assets/other.woff2
 expect_rejection external-portal-font MOCK_PORTAL_CSS='@font-face { src: url(https://example.invalid/font.woff2); }'
 expect_rejection imported-portal-css MOCK_PORTAL_CSS='@import "./theme.css";'
 expect_rejection imported-portal-js MOCK_PORTAL_JS='import("./chunk.js");'
+
+sha256sum "$TMP/Korri-compressed.apk" | awk '{print $1}' \
+  > "$TMP/verifier/contract/korri-launcher-apk-SHA256.txt"
+if ANDROID_HOME="$TMP/sdk" "$VERIFY" "$TMP/Korri-compressed.apk" "$TMP/compressed-korrid" \
+  >/dev/null 2>&1; then
+  echo 'launcher APK verifier accepted compressed libkorrid.so' >&2
+  exit 1
+fi
+[[ ! -e "$TMP/compressed-korrid" ]]
+sha256sum "$TMP/Korri.apk" | awk '{print $1}' \
+  > "$TMP/verifier/contract/korri-launcher-apk-SHA256.txt"
 
 for script in "$VERIFY_SOURCE" "$PIPELINE" "$PRODUCT"; do
   if grep -Eq '(^|[[:space:]])(adb|fastboot)([[:space:]]|$)' "$script"; then

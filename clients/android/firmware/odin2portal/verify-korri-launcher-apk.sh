@@ -96,6 +96,8 @@ if application.get(android + "debuggable", "false") == "true":
     raise SystemExit("Korri release APK is debuggable")
 if application.get(android + "enabled", "true") == "false":
     raise SystemExit("Korri release application is disabled")
+if application.get(android + "extractNativeLibs") != "false":
+    raise SystemExit("Korri system APK must load native libraries directly from the APK")
 activity = None
 for candidate in application.findall("activity"):
     name = candidate.get(android + "name", "")
@@ -122,6 +124,35 @@ for intent_filter in activity.findall("intent-filter"):
         break
 if not matched:
     raise SystemExit("Korri HOME activity lacks one MAIN+HOME+DEFAULT filter")
+PY
+
+python3 - "$VERIFIED_APK" "$EVIDENCE/native-library-packaging.txt" <<'PY'
+import sys
+import zipfile
+
+apk_path, evidence_path = sys.argv[1:]
+try:
+    with zipfile.ZipFile(apk_path) as archive:
+        libraries = sorted(
+            entry
+            for entry in archive.infolist()
+            if entry.filename.startswith("lib/arm64-v8a/")
+            and entry.filename.endswith(".so")
+        )
+except zipfile.BadZipFile as error:
+    raise SystemExit("Korri APK is not a valid ZIP archive") from error
+
+for library in libraries:
+    if library.compress_type != zipfile.ZIP_STORED:
+        raise SystemExit(
+            f"Korri system APK contains a compressed native library: {library.filename}"
+        )
+
+with open(evidence_path, "w", encoding="utf-8") as evidence:
+    for library in libraries:
+        evidence.write(
+            f"/{library.filename}\tstored\t{library.file_size}\t{library.CRC:08x}\n"
+        )
 PY
 
 if ! grep -Fx '/lib/arm64-v8a/libkorrid.so' "$EVIDENCE/files.txt" >/dev/null; then
