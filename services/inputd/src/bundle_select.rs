@@ -114,7 +114,7 @@ fn prepare_state_root(state_root: &Path, require_root_owner: bool) -> Result<(),
     if !link_metadata.file_type().is_dir() {
         return Err("bundle state path must be a directory, not a symbolic link".into());
     }
-    fs::set_permissions(state_root, fs::Permissions::from_mode(0o700))
+    fs::set_permissions(state_root, fs::Permissions::from_mode(0o711))
         .map_err(|error| format!("could not protect bundle state directory: {error}"))?;
     let metadata = fs::metadata(state_root)
         .map_err(|error| format!("could not inspect bundle state directory: {error}"))?;
@@ -332,6 +332,19 @@ mod tests {
         assert_eq!(
             error,
             "bundle state path must be a directory, not a symbolic link"
+        );
+    }
+
+    #[test]
+    fn state_root_is_traversable_without_granting_write_access() {
+        let root = tempfile::tempdir().unwrap();
+        let state = root.path().join("state");
+
+        prepare_state_root(&state, false).unwrap();
+
+        assert_eq!(
+            fs::metadata(&state).unwrap().permissions().mode() & 0o777,
+            0o711
         );
     }
 
