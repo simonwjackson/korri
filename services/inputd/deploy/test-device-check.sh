@@ -622,6 +622,7 @@ confirm="CONFIRM-$(printf '%s' "$MACHINE_ID|$HOSTNAME|$CANDIDATE" | sha256sum | 
 # This is a literal source-level regression check.
 # shellcheck disable=SC2016
 grep -F -- '--setenv="PATH=$candidate/sw/bin"' "$GATE" >/dev/null
+grep -Fx 'UNHEALTHY_OBSERVE_SECONDS=60' "$GATE" >/dev/null
 # stat(1) canonicalizes 0700/0600 to 700/600; candidate calls must use the
 # canonical forms so post-chmod verification compares equal.
 # shellcheck disable=SC2016
@@ -760,6 +761,112 @@ assert_fails_with 'exact local game status is Running' \
 # completed session and removed it from its in-memory active state.
 grep -Fx 'active-game-check=clear source=rpc' \
   < <(run_production_active_game_check rpc-none ambiguous) >/dev/null
+
+# Observe both instantaneous failures and restart-counter growth. A service
+# that happens to be active during one sample still enters the baseline when
+# it restarts during the bounded observation window.
+OBSERVED_UNHEALTHY_SOURCE="$(awk '
+  /^remote_observed_unhealthy_system_units\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$OBSERVED_UNHEALTHY_SOURCE" == remote_observed_unhealthy_system_units* ]]
+run_production_unhealthy_observation() (
+  local model="$1" health_probe="$TMP/health-probe-$RANDOM" restart_probe="$TMP/restart-probe-$RANDOM"
+  printf '0\n' >"$health_probe"
+  printf '0\n' >"$restart_probe"
+  export UNHEALTHY_OBSERVE_SECONDS=60
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  remote_unhealthy_system_units() {
+    local call
+    call="$(<"$health_probe")"
+    printf '%s\n' "$((call + 1))" >"$health_probe"
+    case "$model:$call" in
+      instantaneous:*) printf '%s\n' 'failed-fixture.service' ;;
+      resolved:0) printf '%s\n' 'failed-fixture.service' ;;
+      *) : ;;
+    esac
+  }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  remote_service_restart_counts() {
+    local call
+    call="$(<"$restart_probe")"
+    printf '%s\n' "$((call + 1))" >"$restart_probe"
+    case "$model:$call" in
+      restart-loop:0) printf '%s\n' 'loop-fixture.service=4' ;;
+      restart-loop:1) printf '%s\n' 'loop-fixture.service=5' ;;
+      *) printf '%s\n' 'stable-fixture.service=2' ;;
+    esac
+  }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  sleep() { :; }
+  eval "$OBSERVED_UNHEALTHY_SOURCE"
+  remote_observed_unhealthy_system_units
+)
+[[ -z "$(run_production_unhealthy_observation stable)" ]]
+grep -Fx 'loop-fixture.service' < <(run_production_unhealthy_observation restart-loop) >/dev/null
+grep -Fx 'failed-fixture.service' < <(run_production_unhealthy_observation instantaneous) >/dev/null
+grep -Fx 'failed-fixture.service' < <(run_production_unhealthy_observation resolved) >/dev/null
+
+# NixOS switch-to-configuration reports exit 4 for failed units. Accept that
+# narrow status only when the requested generation became current and every
+# unhealthy unit was already unhealthy before activation.
+ACTIVATE_GENERATION_SOURCE="$(awk '
+  /^remote_activate_generation\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$ACTIVATE_GENERATION_SOURCE" == remote_activate_generation* ]]
+run_production_generation_activation() (
+  local model="$1" probe="$TMP/activation-probe-$RANDOM" candidate="$CANDIDATE"
+  printf '0\n' >"$probe"
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  fail() {
+    printf 'device gate: %s\n' "$*" >&2
+    exit 1
+  }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  remote_observed_unhealthy_system_units() {
+    local call
+    call="$(<"$probe")"
+    printf '%s\n' "$((call + 1))" >"$probe"
+    if [[ "$call" -eq 0 ]]; then
+      printf '%s\n' 'tsnet-proxy-fixture.service'
+      return 0
+    fi
+    case "$model" in
+      exit-zero|exit-four-same|generation-mismatch) printf '%s\n' 'tsnet-proxy-fixture.service' ;;
+      exit-four-new) printf '%s\n' 'korri-inputd.service' 'tsnet-proxy-fixture.service' ;;
+      exit-four-resolved|exit-one) : ;;
+    esac
+  }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  sudo() {
+    case "$model" in
+      exit-zero) return 0 ;;
+      exit-one) return 1 ;;
+      *) return 4 ;;
+    esac
+  }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  remote_generation() {
+    [[ "$model" != generation-mismatch ]] && printf '%s\n' "$candidate" \
+      || printf '%s\n' "$ROLLBACK"
+  }
+  eval "$ACTIVATE_GENERATION_SOURCE"
+  remote_activate_generation "$candidate" test
+)
+run_production_generation_activation exit-zero
+grep -Fx 'activation=accepted status=4 remaining-unhealthy=tsnet-proxy-fixture.service' \
+  < <(run_production_generation_activation exit-four-same) >/dev/null
+grep -Fx 'activation=accepted status=4 remaining-unhealthy=none' \
+  < <(run_production_generation_activation exit-four-resolved) >/dev/null
+assert_fails_with 'activation introduced unhealthy system unit: korri-inputd.service' \
+  run_production_generation_activation exit-four-new
+assert_fails_with 'activation did not make the requested generation current' \
+  run_production_generation_activation generation-mismatch
+assert_fails_with 'switch-to-configuration failed with status 1' \
+  run_production_generation_activation exit-one
 
 # Exercise the production user-manager and pairing proof paths. Both root
 # without SUDO_UID and a different SSH caller must target the explicit user.

@@ -14,6 +14,7 @@ LOCAL_SSH_TIMEOUT="${KORRI_DEVICE_GATE_SSH_TIMEOUT:-1170}"
 HITL_READ_TIMEOUT="${KORRI_DEVICE_GATE_HITL_READ_TIMEOUT:-300}"
 HITL_OVERALL_TIMEOUT="${KORRI_DEVICE_GATE_HITL_OVERALL_TIMEOUT:-2400}"
 ATTEMPT_TIMEOUT="${KORRI_DEVICE_GATE_ATTEMPT_TIMEOUT:-4800}"
+UNHEALTHY_OBSERVE_SECONDS=60
 GATE_LOCK='/run/lock/korri-device-gate.lock'
 ATTEMPT_MARKER='/var/lib/korri-device-gate/attempt'
 ATTEMPT_UNIT='korri-device-gate-attempt.service'
@@ -708,12 +709,79 @@ remote_preflight() {
   fi
 }
 
+remote_unhealthy_system_units() {
+  systemctl list-units --type=service --all --no-legend --plain 2>/dev/null \
+    | awk '$3 == "failed" || ($3 == "activating" && $4 == "auto-restart") { print $1 }' \
+    | LC_ALL=C sort -u
+}
+
+remote_service_restart_counts() {
+  systemctl show --type=service --all -p Id -p NRestarts --no-pager 2>/dev/null \
+    | awk -F= '
+        $1 == "Id" { unit = $2 }
+        $1 == "NRestarts" && unit != "" && $2 ~ /^[0-9]+$/ {
+          print unit "=" $2
+          unit = ""
+        }
+      '
+}
+
+remote_observed_unhealthy_system_units() {
+  local first before second after unit count prior
+  local -A prior_counts=()
+  first="$(remote_unhealthy_system_units)" || return 1
+  before="$(remote_service_restart_counts)" || return 1
+  while IFS='=' read -r unit count; do
+    [[ -z "$unit" ]] && continue
+    [[ "$count" =~ ^[0-9]+$ ]] || return 1
+    prior_counts["$unit"]="$count"
+  done <<<"$before"
+  sleep "$UNHEALTHY_OBSERVE_SECONDS"
+  second="$(remote_unhealthy_system_units)" || return 1
+  after="$(remote_service_restart_counts)" || return 1
+  {
+    [[ -z "$first" ]] || printf '%s\n' "$first"
+    [[ -z "$second" ]] || printf '%s\n' "$second"
+    while IFS='=' read -r unit count; do
+      [[ -z "$unit" ]] && continue
+      [[ "$count" =~ ^[0-9]+$ ]] || return 1
+      prior="${prior_counts[$unit]:-0}"
+      ((count <= prior)) || printf '%s\n' "$unit"
+    done <<<"$after"
+  } | awk 'NF' | LC_ALL=C sort -u
+}
+
+remote_activate_generation() {
+  local generation="$1" action="$2" before after status unit summary
+  before="$(remote_observed_unhealthy_system_units)" \
+    || fail 'pre-activation system unit health is unavailable'
+  if sudo -n "$generation/bin/switch-to-configuration" "$action"; then
+    status=0
+  else
+    status=$?
+  fi
+  [[ "$status" == 0 || "$status" == 4 ]] \
+    || fail "switch-to-configuration failed with status $status"
+  [[ "$(remote_generation)" == "$generation" ]] \
+    || fail 'activation did not make the requested generation current'
+  after="$(remote_observed_unhealthy_system_units)" \
+    || fail 'post-activation system unit health is unavailable'
+  while IFS= read -r unit; do
+    [[ -z "$unit" ]] || grep -Fqx -- "$unit" <<<"$before" \
+      || fail "activation introduced unhealthy system unit: $unit"
+  done <<<"$after"
+  if [[ "$status" == 4 ]]; then
+    summary="$(tr '\n' ',' <<<"$after" | sed 's/,$//')"
+    printf 'activation=accepted status=4 remaining-unhealthy=%s\n' "${summary:-none}"
+  fi
+}
+
 remote_activate_test() {
   local candidate="$1" gameplay_user="$2"
   remote_refuse_active_game
   remote_quiesce_old_user_units "$gameplay_user"
   remote_set_pairing_state_modes "$gameplay_user" 700 600 >/dev/null
-  sudo -n "$candidate/bin/switch-to-configuration" test
+  remote_activate_generation "$candidate" test
   remote_disable_old_user_units "$gameplay_user"
   remote_restart_user_manager "$gameplay_user"
   remote_start_candidate_services "$gameplay_user"
@@ -729,9 +797,9 @@ remote_restore() {
   fi
   if [[ "$persistent" == true ]]; then
     sudo -n nix-env -p /nix/var/nix/profiles/system --set "$rollback"
-    sudo -n "$rollback/bin/switch-to-configuration" switch
+    remote_activate_generation "$rollback" switch
   else
-    sudo -n "$rollback/bin/switch-to-configuration" test
+    remote_activate_generation "$rollback" test
   fi
   remote_set_pairing_state_modes "$gameplay_user" "$7" "$8" >/dev/null
   remote_restart_user_manager "$gameplay_user"
@@ -833,7 +901,7 @@ remote_persistent_switch() {
   remote_quiesce_old_user_units "$gameplay_user"
   remote_set_pairing_state_modes "$gameplay_user" 700 600 >/dev/null
   sudo -n nix-env -p /nix/var/nix/profiles/system --set "$candidate"
-  sudo -n "$candidate/bin/switch-to-configuration" switch
+  remote_activate_generation "$candidate" switch
   remote_disable_old_user_units "$gameplay_user"
   remote_restart_user_manager "$gameplay_user"
   remote_start_candidate_services "$gameplay_user"
