@@ -134,10 +134,13 @@ apk_path, evidence_path = sys.argv[1:]
 try:
     with zipfile.ZipFile(apk_path) as archive:
         libraries = sorted(
-            entry
-            for entry in archive.infolist()
-            if entry.filename.startswith("lib/arm64-v8a/")
-            and entry.filename.endswith(".so")
+            (
+                entry
+                for entry in archive.infolist()
+                if entry.filename.startswith("lib/arm64-v8a/")
+                and entry.filename.endswith(".so")
+            ),
+            key=lambda entry: entry.filename,
         )
 except zipfile.BadZipFile as error:
     raise SystemExit("Korri APK is not a valid ZIP archive") from error

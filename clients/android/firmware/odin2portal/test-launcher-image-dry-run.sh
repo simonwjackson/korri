@@ -110,6 +110,11 @@ for path, compression in (
             b"fixture korrid library",
             compress_type=compression,
         )
+        archive.writestr(
+            "lib/arm64-v8a/libmoonlight-core.so",
+            b"fixture moonlight library",
+            compress_type=zipfile.ZIP_STORED,
+        )
 PY
 sha256sum "$TMP/Korri.apk" | awk '{print $1}' \
   > "$TMP/verifier/contract/korri-launcher-apk-SHA256.txt"
