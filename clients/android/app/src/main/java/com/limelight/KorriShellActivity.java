@@ -27,6 +27,9 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.webkit.WebViewAssetLoader;
 
 import com.limelight.computers.ComputerManagerListener;
@@ -99,6 +102,7 @@ public class KorriShellActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        applyImmersiveFullscreen();
 
         // Embedded korrid: only this exact portal origin may present the
         // per-server capability to the localhost brain.
@@ -205,6 +209,26 @@ public class KorriShellActivity extends AppCompatActivity {
                 new KorriNativeBridgeOperations(webView));
         webView.loadUrl(portalUrl);
         setContentView(webView);
+    }
+
+    /**
+     * Korri owns the whole screen, so the status and navigation bars are not
+     * part of its surface. Hiding them also hands their insets back to the
+     * portal, which otherwise lays out inside a shorter window.
+     *
+     * Android restores the bars after dialogs, pickers, permission prompts, and
+     * returns from a game, so this runs again on every resume and focus gain
+     * rather than once at startup.
+     */
+    private void applyImmersiveFullscreen() {
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        WindowInsetsControllerCompat insetsController =
+                WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        // Transient bars on swipe: a stuck launcher must still expose the
+        // system bars without a keyboard or a reboot.
+        insetsController.setSystemBarsBehavior(
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        insetsController.hide(WindowInsetsCompat.Type.systemBars());
     }
 
     /** The portal ships as bundled assets (built by `nix run .#portal-bundle`). */
@@ -352,9 +376,20 @@ public class KorriShellActivity extends AppCompatActivity {
         // never a gameplay-overlay target. Returning from a stream, Android
         // picker, or settings lets the web surface refresh its state.
         KorriBrainService.setOverlayArmed(false);
+        applyImmersiveFullscreen();
         if (webView != null) {
             webView.evaluateJavascript(
                     "window.dispatchEvent(new Event('korri-shell-resumed'))", null);
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        // Focus returns after the bars have already been shown by the system.
+        // Re-hiding here is what keeps the launcher edge to edge over time.
+        if (hasFocus) {
+            applyImmersiveFullscreen();
         }
     }
 

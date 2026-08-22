@@ -95,6 +95,38 @@ public class KorriShellActivityLifecycleContractTest {
         assertFalse(onDestroy.contains("if (managerBinder != null)"));
     }
 
+    @Test
+    public void shellTakesTheWholeScreenAndReclaimsItWhenFocusReturns() throws Exception {
+        String source = source();
+        String onCreate = method(source, "protected void onCreate(Bundle savedInstanceState)",
+                "private void applyImmersiveFullscreen()");
+        String applyImmersive = method(source, "private void applyImmersiveFullscreen()",
+                "private boolean notificationsAllowed()");
+        String onResume = method(source, "protected void onResume()",
+                "public void onWindowFocusChanged(boolean hasFocus)");
+        String onWindowFocusChanged = method(source,
+                "public void onWindowFocusChanged(boolean hasFocus)",
+                "protected void onActivityResult(");
+
+        assertTrue(source.contains("import androidx.core.view.WindowCompat;"));
+        assertTrue(source.contains("import androidx.core.view.WindowInsetsCompat;"));
+        assertTrue(source.contains("import androidx.core.view.WindowInsetsControllerCompat;"));
+
+        assertTrue(applyImmersive.contains(
+                "WindowCompat.setDecorFitsSystemWindows(getWindow(), false);"));
+        assertTrue(applyImmersive.contains(
+                "WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE"));
+        assertTrue(applyImmersive.contains("hide(WindowInsetsCompat.Type.systemBars());"));
+
+        assertTrue(onCreate.contains("applyImmersiveFullscreen();"));
+        assertTrue(onResume.contains("applyImmersiveFullscreen();"));
+        assertTrue(onWindowFocusChanged.contains("if (hasFocus)"));
+        assertTrue(onWindowFocusChanged.contains("applyImmersiveFullscreen();"));
+
+        assertFalse(source.contains("FLAG_FULLSCREEN"));
+        assertFalse(source.contains("SYSTEM_UI_FLAG"));
+    }
+
     private static String source() throws Exception {
         return new String(Files.readAllBytes(
                 Path.of("src/main/java/com/limelight/KorriShellActivity.java")),
