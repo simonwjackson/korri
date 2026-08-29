@@ -705,6 +705,79 @@ rm "$private_session_root/launch-id"
 ln -s "$private_session_root" "$TMP/linked-host-session"
 assert_fails run_private_session_state_check "$TMP/linked-host-session"
 
+SELECTOR_CLEAR_SOURCE="$(awk '
+  /^clear_bundle_selector_root\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$SELECTOR_CLEAR_SOURCE" == clear_bundle_selector_root* ]]
+run_selector_clear() (
+  local root="$1"
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  fail() {
+    printf 'device gate: %s\n' "$*" >&2
+    exit 1
+  }
+  eval "$SELECTOR_CLEAR_SOURCE"
+  clear_bundle_selector_root "$root" "$(id -u)" "$(id -g)"
+)
+selector_absent="$TMP/selector-absent"
+grep -Fx 'bundle-selector=absent' < <(run_selector_clear "$selector_absent") >/dev/null
+for selector_mode in 700 711; do
+  selector_root="$TMP/selector-$selector_mode"
+  mkdir -m "$selector_mode" "$selector_root"
+  ln -s /nix/store/00000000000000000000000000000000-korri-bundle-0.0.0 "$selector_root/active"
+  ln -s /nix/store/11111111111111111111111111111111-korri-bundle-0.0.0 "$selector_root/previous"
+  grep -Fx 'bundle-selector=cleared-orphan' < <(run_selector_clear "$selector_root") >/dev/null
+  [[ ! -e "$selector_root" ]]
+done
+selector_unexpected="$TMP/selector-unexpected"
+mkdir -m 0700 "$selector_unexpected"
+: >"$selector_unexpected/other"
+assert_fails_with 'orphan bundle selector contains an unexpected entry: other' \
+  run_selector_clear "$selector_unexpected"
+selector_bad_target="$TMP/selector-bad-target"
+mkdir -m 0700 "$selector_bad_target"
+ln -s /tmp/mutable-bundle "$selector_bad_target/active"
+assert_fails_with 'orphan bundle selector target is invalid: active' \
+  run_selector_clear "$selector_bad_target"
+selector_bad_mode="$TMP/selector-bad-mode"
+mkdir -m 0755 "$selector_bad_mode"
+assert_fails_with 'orphan bundle selector root ownership or mode is invalid' \
+  run_selector_clear "$selector_bad_mode"
+ln -s "$TMP" "$TMP/selector-root-link"
+assert_fails_with 'orphan bundle selector root is a symbolic link' \
+  run_selector_clear "$TMP/selector-root-link"
+[[ "$(grep -Fc 'remote_clear_orphan_bundle_selector' "$GATE")" -eq 4 ]]
+
+SELECTOR_SERVICE_SOURCE="$(awk '
+  /^remote_bundle_selector_service_loaded\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$SELECTOR_SERVICE_SOURCE" == remote_bundle_selector_service_loaded* ]]
+run_selector_service_check() (
+  local modeled_load="$1"
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  fail() {
+    printf 'device gate: %s\n' "$*" >&2
+    exit 1
+  }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  systemctl() {
+    [[ "$modeled_load" != query-failure ]] || return 1
+    printf '%s\n' "$modeled_load"
+  }
+  eval "$SELECTOR_SERVICE_SOURCE"
+  remote_bundle_selector_service_loaded
+)
+run_selector_service_check loaded
+assert_fails run_selector_service_check not-found
+assert_fails_with 'bundle selector service state is unavailable' \
+  run_selector_service_check query-failure
+assert_fails_with 'bundle selector service has an unexpected load state: masked' \
+  run_selector_service_check masked
+
 ACTIVE_GAME_SOURCE="$(awk '
   /^remote_refuse_active_game\(\) \{/ { found=1 }
   found { print }

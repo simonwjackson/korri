@@ -400,6 +400,7 @@ pkgs.runCommand "korri-input-module-check" { } ''
   grep -F '<deny send_destination="org.shadowblip.InputPlumber" send_type="method_call"/>' "$policy" >/dev/null
   grep -F 'send_interface="org.freedesktop.DBus.Introspectable" send_member="Introspect"' "$policy" >/dev/null
   grep -F 'send_interface="org.freedesktop.DBus.Properties" send_member="Get"' "$policy" >/dev/null
+  ! grep -F 'send_interface="org.freedesktop.DBus.Properties" send_member="GetAll"' "$policy" >/dev/null
   grep -F 'send_interface="org.shadowblip.Input.CompositeDevice" send_member="LoadProfilePath"' "$policy" >/dev/null
 
   export KORRI_TEST_ACL_LOG="$TMPDIR/acl.log"

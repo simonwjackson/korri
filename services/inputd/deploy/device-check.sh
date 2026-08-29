@@ -27,6 +27,7 @@ KORRID_CONTROL_GROUP='korri-control'
 KORRID_CONTROL_SOCKET='/run/korrid-control/control.sock'
 # This path comes from HostSessionControl's existing private-state producer.
 KORRID_HOST_SESSION_ROOT='/var/lib/korrid/host-session'
+BUNDLE_SELECTOR_ROOT='/nix/var/nix/gcroots/korri-bundle'
 EXPECTED_KEYS='304,305,307,308,310,311,314,315,316,317,318,704,705,706,707'
 EXPECTED_ABS='0,1,2,3,4,5,16,17'
 
@@ -144,6 +145,66 @@ remote_refuse_active_game() {
       || fail 'private launch state is not empty and exact local game status is unavailable; refusing service mutation'
   fi
   printf 'active-game-check=clear source=%s\n' "$proof_source"
+}
+
+remote_bundle_selector_service_loaded() {
+  local load
+  load="$(systemctl show korri-bundle-selector.service -p LoadState --value 2>/dev/null)" \
+    || fail 'bundle selector service state is unavailable'
+  case "$load" in
+    loaded) return 0 ;;
+    not-found) return 1 ;;
+    *) fail "bundle selector service has an unexpected load state: ${load:-<empty>}" ;;
+  esac
+}
+
+clear_bundle_selector_root() {
+  local root="$1" expected_uid="$2" expected_gid="$3"
+  local metadata entries name selector target
+  [[ ! -L "$root" ]] || fail 'orphan bundle selector root is a symbolic link'
+  if [[ ! -e "$root" ]]; then
+    printf 'bundle-selector=absent\n'
+    return 0
+  fi
+  [[ -d "$root" ]] || fail 'orphan bundle selector root is not a directory'
+  metadata="$(stat -Lc '%u:%g:%a' -- "$root" 2>/dev/null)" \
+    || fail 'orphan bundle selector root metadata is unavailable'
+  [[ "$metadata" == "$expected_uid:$expected_gid:700" \
+    || "$metadata" == "$expected_uid:$expected_gid:711" ]] \
+    || fail 'orphan bundle selector root ownership or mode is invalid'
+  entries="$(find "$root" -mindepth 1 -maxdepth 1 -printf '%f\n' 2>/dev/null)" \
+    || fail 'orphan bundle selector entries are unavailable'
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    case "$name" in
+      active|previous) ;;
+      *) fail "orphan bundle selector contains an unexpected entry: $name" ;;
+    esac
+  done <<<"$entries"
+  for name in active previous; do
+    selector="$root/$name"
+    [[ -e "$selector" || -L "$selector" ]] || continue
+    [[ -L "$selector" ]] \
+      || fail "orphan bundle selector entry is not a symbolic link: $name"
+    target="$(readlink -- "$selector")" \
+      || fail "orphan bundle selector target is unavailable: $name"
+    [[ "$target" =~ ^/nix/store/[0-9a-df-np-sv-z]{32}-korri-bundle-[A-Za-z0-9+._?=-]+$ ]] \
+      || fail "orphan bundle selector target is invalid: $name"
+    rm -- "$selector"
+  done
+  rmdir -- "$root"
+  sync -f "${root%/*}"
+  printf 'bundle-selector=cleared-orphan\n'
+}
+
+remote_clear_orphan_bundle_selector() {
+  local unit
+  remote_bundle_selector_service_loaded && return 0
+  for unit in korri-inputd.service korrid.service x11-headless.service sunshine.service; do
+    ! systemctl is-active --quiet "$unit" \
+      || fail "orphan bundle selector cleanup found an active candidate service: $unit"
+  done
+  clear_bundle_selector_root "$BUNDLE_SELECTOR_ROOT" 0 0
 }
 
 remote_quiesce_old_user_units() {
@@ -779,6 +840,7 @@ remote_activate_generation() {
 remote_activate_test() {
   local candidate="$1" gameplay_user="$2"
   remote_refuse_active_game
+  remote_clear_orphan_bundle_selector
   remote_quiesce_old_user_units "$gameplay_user"
   remote_set_pairing_state_modes "$gameplay_user" 700 600 >/dev/null
   remote_activate_generation "$candidate" test
@@ -801,6 +863,7 @@ remote_restore() {
   else
     remote_activate_generation "$rollback" test
   fi
+  remote_clear_orphan_bundle_selector
   remote_set_pairing_state_modes "$gameplay_user" "$7" "$8" >/dev/null
   remote_restart_user_manager "$gameplay_user"
   remote_restore_old_user_units "$gameplay_user" "$1" "$2" "$3" "$4" "$5" "$6"
@@ -898,6 +961,7 @@ remote_inject_health_failure() {
 remote_persistent_switch() {
   local candidate="$1" gameplay_user="$2"
   remote_refuse_active_game
+  remote_clear_orphan_bundle_selector
   remote_quiesce_old_user_units "$gameplay_user"
   remote_set_pairing_state_modes "$gameplay_user" 700 600 >/dev/null
   sudo -n nix-env -p /nix/var/nix/profiles/system --set "$candidate"

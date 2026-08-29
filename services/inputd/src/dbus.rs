@@ -2,7 +2,7 @@ use std::{fmt, future::Future, path::Path, time::Duration};
 
 use futures_util::StreamExt;
 use korri_input_core::controls::{Control, ControlTransition, DpadAxis};
-use zbus::{message::Type, MatchRule, Message, MessageStream};
+use zbus::{message::Type, proxy::CacheProperties, MatchRule, Message, MessageStream};
 
 pub const INPUTPLUMBER_BUS_NAME: &str = "org.shadowblip.InputPlumber";
 pub const INPUTPLUMBER_ROOT_PATH: &str = "/org/shadowblip/InputPlumber";
@@ -11,6 +11,7 @@ pub const DBUS_TARGET_PATH: &str = "/org/shadowblip/InputPlumber/devices/target/
 pub const DBUS_TARGET_INTERFACE: &str = "org.shadowblip.Input.DBusDevice";
 pub const DBUS_INPUT_MEMBER: &str = "InputEvent";
 pub const DBUS_OPERATION_TIMEOUT: Duration = Duration::from_millis(500);
+const COMPOSITE_CACHE_PROPERTIES: CacheProperties = CacheProperties::No;
 
 #[zbus::proxy(interface = "org.shadowblip.Input.CompositeDevice")]
 trait CompositeDevice {
@@ -204,6 +205,7 @@ async fn ensure_profile_unbounded(
         let proxy = CompositeDeviceProxy::builder(connection)
             .destination(owner.as_str())?
             .path(path.as_str())?
+            .cache_properties(COMPOSITE_CACHE_PROPERTIES)
             .build()
             .await?;
         if proxy
@@ -226,6 +228,7 @@ async fn ensure_profile_unbounded(
     let proxy = CompositeDeviceProxy::builder(connection)
         .destination(owner.as_str())?
         .path(path.as_str())?
+        .cache_properties(COMPOSITE_CACHE_PROPERTIES)
         .build()
         .await?;
     if proxy.profile_path().await? == profile_path {
@@ -407,7 +410,11 @@ pub fn map_capability(capability: &str, value: f64) -> Option<SemanticInput> {
 mod tests {
     use std::{future, time::Duration};
 
-    use super::{bounded_with_timeout, composite_paths_from_introspection, DbusRuntimeError};
+    use super::{
+        bounded_with_timeout, composite_paths_from_introspection, DbusRuntimeError,
+        COMPOSITE_CACHE_PROPERTIES,
+    };
+    use zbus::proxy::CacheProperties;
 
     #[tokio::test]
     async fn bounded_wait_times_out_and_allows_a_fresh_retry() {
@@ -417,6 +424,11 @@ mod tests {
 
         let retry = bounded_with_timeout(Duration::ZERO, future::ready(Ok(42))).await;
         assert_eq!(retry.expect("ready retry"), 42);
+    }
+
+    #[test]
+    fn composite_properties_are_read_only_by_exact_get_calls() {
+        assert_eq!(COMPOSITE_CACHE_PROPERTIES, CacheProperties::No);
     }
 
     #[test]
