@@ -630,6 +630,30 @@ remote_stop_candidate_services() {
   done
 }
 
+remote_stable_raw_topology_record() {
+  local name="$1" phys="$2" uniq="$3" id="$4" props="$5" sysfs="$6" readable="$7"
+  local key value serial='' path='' stable_sysfs
+  while IFS='=' read -r key value; do
+    case "$key" in
+      ID_SERIAL)
+        [[ -z "$serial" ]] || fail 'raw controller has duplicate ID_SERIAL properties'
+        serial="$value"
+        ;;
+      ID_PATH)
+        [[ -z "$path" ]] || fail 'raw controller has duplicate ID_PATH properties'
+        path="$value"
+        ;;
+    esac
+  done <<<"$props"
+  [[ -n "$serial" ]] || fail 'raw controller ID_SERIAL is unavailable'
+  [[ -n "$path" ]] || fail 'raw controller ID_PATH is unavailable'
+  [[ "$sysfs" =~ ^(/sys/devices/.+)/input/input[0-9]+/event[0-9]+$ ]] \
+    || fail 'raw controller sysfs path is not canonical'
+  stable_sysfs="${BASH_REMATCH[1]}"
+  printf '%q|%q|%q|%s|%q|%q|%q|%s\n' \
+    "$name" "$phys" "$uniq" "$id" "$serial" "$path" "$stable_sysfs" "$readable"
+}
+
 remote_topology_digest() {
   local kind="$1" event node name phys uniq id props dev sysfs readable
   {
@@ -648,10 +672,14 @@ remote_topology_digest() {
       phys="$(cat "$event/device/phys" 2>/dev/null || true)"
       uniq="$(cat "$event/device/uniq" 2>/dev/null || true)"
       id="$(cat "$event/device/id/bustype" 2>/dev/null || true):$(cat "$event/device/id/vendor" 2>/dev/null || true):$(cat "$event/device/id/product" 2>/dev/null || true):$(cat "$event/device/id/version" 2>/dev/null || true)"
-      dev="$(cat "$event/dev" 2>/dev/null || true)"
       sysfs="$(realpath -e -- "$event" 2>/dev/null || true)"
       readable="$(test -r "$node" && printf yes || printf no)"
-      printf '%q|%q|%q|%s|%s|%s|%s\n' "$name" "$phys" "$uniq" "$id" "$dev" "$sysfs" "$readable"
+      if [[ "$kind" == raw ]]; then
+        remote_stable_raw_topology_record "$name" "$phys" "$uniq" "$id" "$props" "$sysfs" "$readable"
+      else
+        dev="$(cat "$event/dev" 2>/dev/null || true)"
+        printf '%q|%q|%q|%s|%s|%s|%s\n' "$name" "$phys" "$uniq" "$id" "$dev" "$sysfs" "$readable"
+      fi
     done | sort
   } | sha256sum | cut -d' ' -f1
 }

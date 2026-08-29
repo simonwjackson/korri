@@ -705,6 +705,53 @@ rm "$private_session_root/launch-id"
 ln -s "$private_session_root" "$TMP/linked-host-session"
 assert_fails run_private_session_state_check "$TMP/linked-host-session"
 
+RAW_TOPOLOGY_SOURCE="$(awk '
+  /^remote_stable_raw_topology_record\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$RAW_TOPOLOGY_SOURCE" == remote_stable_raw_topology_record* ]]
+run_raw_topology_record() (
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  fail() {
+    printf 'device gate: %s\n' "$*" >&2
+    exit 1
+  }
+  eval "$RAW_TOPOLOGY_SOURCE"
+  remote_stable_raw_topology_record "$@"
+)
+raw_props=$'ID_SERIAL=Microsoft_Controller_exact\nID_PATH=pci-0000:00:14.0-usb-0:4:1.0'
+raw_record_input35="$(run_raw_topology_record \
+  'Microsoft Xbox Series S|X Controller' 'usb-0000:00:14.0-4/input0' '' \
+  '0003:045e:0b12:0501' "$raw_props" \
+  '/sys/devices/pci0000:00/0000:00:14.0/usb3/3-4/3-4:1.0/input/input35/event16' yes)"
+raw_record_input47="$(run_raw_topology_record \
+  'Microsoft Xbox Series S|X Controller' 'usb-0000:00:14.0-4/input0' '' \
+  '0003:045e:0b12:0501' "$raw_props" \
+  '/sys/devices/pci0000:00/0000:00:14.0/usb3/3-4/3-4:1.0/input/input47/event16' yes)"
+[[ "$raw_record_input35" == "$raw_record_input47" ]]
+changed_serial_props=$'ID_SERIAL=Microsoft_Controller_replaced\nID_PATH=pci-0000:00:14.0-usb-0:4:1.0'
+changed_path_props=$'ID_SERIAL=Microsoft_Controller_exact\nID_PATH=pci-0000:00:14.0-usb-0:5:1.0'
+[[ "$raw_record_input35" != "$(run_raw_topology_record \
+  'Microsoft Xbox Series S|X Controller' 'usb-0000:00:14.0-4/input0' '' \
+  '0003:045e:0b12:0501' "$changed_serial_props" \
+  '/sys/devices/pci0000:00/0000:00:14.0/usb3/3-4/3-4:1.0/input/input47/event16' yes)" ]]
+[[ "$raw_record_input35" != "$(run_raw_topology_record \
+  'Microsoft Xbox Series S|X Controller' 'usb-0000:00:14.0-5/input0' '' \
+  '0003:045e:0b12:0501' "$changed_path_props" \
+  '/sys/devices/pci0000:00/0000:00:14.0/usb3/3-5/3-5:1.0/input/input47/event16' yes)" ]]
+assert_fails_with 'raw controller ID_SERIAL is unavailable' \
+  run_raw_topology_record Controller phys '' '0003:045e:0b12:0501' \
+  'ID_PATH=pci-0000:00:14.0-usb-0:4:1.0' \
+  '/sys/devices/pci0000:00/usb3/3-4/3-4:1.0/input/input47/event16' yes
+assert_fails_with 'raw controller ID_PATH is unavailable' \
+  run_raw_topology_record Controller phys '' '0003:045e:0b12:0501' \
+  'ID_SERIAL=Microsoft_Controller_exact' \
+  '/sys/devices/pci0000:00/usb3/3-4/3-4:1.0/input/input47/event16' yes
+assert_fails_with 'raw controller sysfs path is not canonical' \
+  run_raw_topology_record Controller phys '' '0003:045e:0b12:0501' "$raw_props" \
+  '/sys/devices/pci0000:00/usb3/3-4/event16' yes
+
 SELECTOR_CLEAR_SOURCE="$(awk '
   /^clear_bundle_selector_root\(\) \{/ { found=1 }
   found { print }
