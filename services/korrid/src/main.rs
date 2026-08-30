@@ -278,7 +278,7 @@ fn resolve_private_state_root(
 
 fn private_state_root() -> PathBuf {
     resolve_private_state_root(
-        std::env::var_os("KORRI_PRIVATE_STATE_ROOT"),
+        std::env::var_os("KORRID_PRIVATE_STATE_ROOT"),
         std::env::var_os("XDG_STATE_HOME"),
         std::env::var_os("HOME"),
     )

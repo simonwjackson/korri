@@ -2379,7 +2379,7 @@ fn default_local_storage_root() -> PathBuf {
 }
 
 fn default_private_state_root() -> PathBuf {
-    std::env::var_os("KORRI_PRIVATE_STATE_ROOT")
+    std::env::var_os("KORRID_PRIVATE_STATE_ROOT")
         .map(PathBuf::from)
         .or_else(|| {
             std::env::var_os("XDG_STATE_HOME")

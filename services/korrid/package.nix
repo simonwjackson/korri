@@ -83,10 +83,20 @@ craneLib.buildPackage (
     cargoBuildExtraArgs = "--bin korrid --lib";
     cargoTestExtraArgs = "--bin korrid";
     postInstall = ''
+      if ${pkgs.gnugrep}/bin/grep -R -F 'KORRI_PRIVATE_STATE_ROOT' src; then
+        echo 'korrid source contains the retired private-state environment name' >&2
+        exit 1
+      fi
       wrapProgram "$out/bin/korrid" \
         --set KORRI_RETROARCH_EXECUTABLE ${pkgs.retroarch-bare}/bin/retroarch \
         --set KORRI_MGBA_CORE ${pkgs.libretro.mgba}/lib/retroarch/cores/mgba_libretro.so \
         --set KORRI_RETROARCH_AUTOCONFIG ${retroarchInputplumberAutoconfig}/share/libretro/autoconfig
+      ${pkgs.bash}/bin/bash ${./package-runtime-check.sh} \
+        "$out/bin/korrid" \
+        ${pkgs.bash}/bin/bash \
+        ${pkgs.curl}/bin/curl \
+        ${pkgs.jq}/bin/jq \
+        ${pkgs.coreutils}/bin
     '';
   }
 )
