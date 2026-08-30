@@ -363,6 +363,15 @@ remote_controller_candidates() {
   done
 }
 
+remote_dbus_unique_owner() {
+  local name="$1" reply
+  [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$ ]] || return 1
+  reply="$(busctl --system call org.freedesktop.DBus /org/freedesktop/DBus \
+    org.freedesktop.DBus GetNameOwner s "$name" 2>/dev/null)" || return 1
+  [[ "$reply" =~ ^s\ \"(:[0-9]+\.[0-9]+)\"$ ]] || return 1
+  printf '%s\n' "${BASH_REMATCH[1]}"
+}
+
 remote_profile_selects_event() {
   local event_name="$1" profile="$2" exe expected_path object profile_property sources_property
   exe="$(readlink -f /proc/"$(systemctl show inputplumber.service -p MainPID --value)"/exe 2>/dev/null || true)"
@@ -990,7 +999,8 @@ remote_automated_gates() {
     fi
   done
   [[ "$readable_raw" -eq 0 ]] || fail "gameplay user can read $readable_raw raw controller node(s)"
-  [[ "$(busctl --system get-name-owner org.shadowblip.InputPlumber 2>/dev/null || true)" == :* ]] || fail 'InputPlumber has no unique DBus owner'
+  remote_dbus_unique_owner org.shadowblip.InputPlumber >/dev/null \
+    || fail 'InputPlumber has no unique DBus owner'
   busctl --system introspect org.shadowblip.InputPlumber /org/shadowblip/InputPlumber/devices/target/dbus0 org.shadowblip.Input.DBusDevice --no-pager 2>/dev/null \
     | grep -F 'InputEvent' >/dev/null || fail 'InputPlumber DBus target interface is unavailable'
   [[ "$(stat -fc %T /sys/fs/cgroup)" == cgroup2fs ]] || fail 'cgroup v2 is unavailable'

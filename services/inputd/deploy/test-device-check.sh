@@ -934,6 +934,40 @@ assert_fails run_controller_node_resolution "$TMP/regular-controller-node" "$mis
 ln -s /dev/null "$TMP/controller-node-link"
 assert_fails run_controller_node_resolution "$TMP/controller-node-link" "$missing_node"
 
+DBUS_OWNER_SOURCE="$(awk '
+  /^remote_dbus_unique_owner\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$DBUS_OWNER_SOURCE" == remote_dbus_unique_owner* ]]
+run_dbus_owner_check() (
+  local model="$1" call_log="$TMP/dbus-owner-$RANDOM.log" owner
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  busctl() {
+    printf '%s\n' "$*" >"$call_log"
+    case "$model" in
+      owned) printf 's ":1.42"\n' ;;
+      malformed) printf 's "org.shadowblip.InputPlumber"\n' ;;
+      query-failure) return 1 ;;
+    esac
+  }
+  eval "$DBUS_OWNER_SOURCE"
+  owner="$(remote_dbus_unique_owner "${2:-org.shadowblip.InputPlumber}")" || return 1
+  printf '%s\n' "$owner"
+  cat "$call_log"
+)
+dbus_owner_output="$(run_dbus_owner_check owned)"
+[[ "$(head -n 1 <<<"$dbus_owner_output")" == ':1.42' ]]
+grep -Fx -- '--system call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus GetNameOwner s org.shadowblip.InputPlumber' \
+  <<<"$dbus_owner_output" >/dev/null
+assert_fails run_dbus_owner_check malformed
+assert_fails run_dbus_owner_check query-failure
+assert_fails run_dbus_owner_check owned invalid-name
+if grep -F 'get-name-owner' "$GATE" >/dev/null; then
+  printf 'device gate uses a busctl command that systemd 259 does not provide\n' >&2
+  exit 1
+fi
+
 PROFILE_SELECT_SOURCE="$(awk '
   /^remote_profile_selects_event\(\) \{/ { found=1 }
   found { print }
