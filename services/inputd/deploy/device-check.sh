@@ -54,17 +54,6 @@ remote_wait_unit() {
   return 1
 }
 
-remote_wait_unit_inactive() {
-  local unit="$1" active attempt
-  for ((attempt = 1; attempt <= POLL_ATTEMPTS; attempt++)); do
-    active="$(systemctl show "$unit" -p ActiveState --value 2>/dev/null || true)"
-    [[ "$active" == inactive || "$active" == failed ]] && return 0
-    sleep "$POLL_DELAY"
-  done
-  printf 'timed out waiting for %s to become inactive\n' "$unit" >&2
-  return 1
-}
-
 remote_generation() { realpath -e /run/current-system; }
 remote_user_systemctl() {
   local gameplay_user="$1" uid
@@ -271,30 +260,13 @@ remote_restore_old_user_units() {
   local gameplay_user="$1"
   local korrid_active="$2" korrid_enabled="$3" sunshine_active="$4" sunshine_enabled="$5"
   local x11_active="$6" x11_enabled="$7"
+  remote_user_systemctl "$gameplay_user" daemon-reload
   remote_restore_old_user_unit_enablement "$gameplay_user" x11-headless.service "$x11_enabled"
   remote_restore_old_user_unit_enablement "$gameplay_user" sunshine.service "$sunshine_enabled"
   remote_restore_old_user_unit_enablement "$gameplay_user" korrid.service "$korrid_enabled"
   remote_restore_old_user_unit_activity "$gameplay_user" x11-headless.service "$x11_active"
   remote_restore_old_user_unit_activity "$gameplay_user" sunshine.service "$sunshine_active"
   remote_restore_old_user_unit_activity "$gameplay_user" korrid.service "$korrid_active"
-}
-
-remote_restart_user_manager() {
-  local gameplay_user="$1" uid old_pid old_start new_pid new_start
-  uid="$(id -u "$gameplay_user")" || fail 'gameplay user is unavailable'
-  old_pid="$(systemctl show "user@$uid.service" -p MainPID --value 2>/dev/null || true)"
-  old_start="$(awk '{print $22}' "/proc/$old_pid/stat" 2>/dev/null || true)"
-  [[ "$old_pid" =~ ^[1-9][0-9]*$ && -n "$old_start" ]] \
-    || fail 'existing gameplay user manager credentials could not be captured'
-  systemctl stop "user@$uid.service"
-  remote_wait_unit_inactive "user@$uid.service"
-  systemctl start "user@$uid.service"
-  remote_wait_unit "user@$uid.service"
-  new_pid="$(systemctl show "user@$uid.service" -p MainPID --value 2>/dev/null || true)"
-  new_start="$(awk '{print $22}' "/proc/$new_pid/stat" 2>/dev/null || true)"
-  [[ "$new_pid" =~ ^[1-9][0-9]*$ && -n "$new_start" && "$new_pid:$new_start" != "$old_pid:$old_start" ]] \
-    || fail 'gameplay user manager did not restart with fresh credentials'
-  printf 'user-manager=fresh pid=%s\n' "$new_pid"
 }
 
 # Print the exact set bits in a Linux sysfs capability bitmap. Sysfs prints
@@ -626,7 +598,6 @@ remote_candidate_credentials() {
 remote_start_candidate_services() {
   local gameplay_user="$1" unit
   for unit in x11-headless.service korrid.service sunshine.service; do
-    systemctl enable "$unit" >/dev/null
     systemctl start "$unit"
     remote_wait_unit "$unit"
   done
@@ -636,7 +607,6 @@ remote_start_candidate_services() {
 remote_stop_candidate_services() {
   local unit
   for unit in sunshine.service korrid.service x11-headless.service; do
-    systemctl disable "$unit" >/dev/null
     systemctl stop "$unit" >/dev/null
     ! systemctl is-active --quiet "$unit" || fail "candidate system service remained active: $unit"
   done
@@ -922,7 +892,6 @@ remote_activate_test() {
   remote_set_pairing_state_modes "$gameplay_user" 700 600 >/dev/null
   remote_activate_generation "$candidate" test
   remote_disable_old_user_units "$gameplay_user"
-  remote_restart_user_manager "$gameplay_user"
   remote_start_candidate_services "$gameplay_user"
 }
 
@@ -943,7 +912,6 @@ remote_restore() {
   remote_restore_raw_joystick_udev
   remote_clear_orphan_bundle_selector
   remote_set_pairing_state_modes "$gameplay_user" "$7" "$8" >/dev/null
-  remote_restart_user_manager "$gameplay_user"
   remote_restore_old_user_units "$gameplay_user" "$1" "$2" "$3" "$4" "$5" "$6"
   [[ "$(remote_generation)" == "$rollback" ]]
 }
@@ -1045,7 +1013,6 @@ remote_persistent_switch() {
   sudo -n nix-env -p /nix/var/nix/profiles/system --set "$candidate"
   remote_activate_generation "$candidate" switch
   remote_disable_old_user_units "$gameplay_user"
-  remote_restart_user_manager "$gameplay_user"
   remote_start_candidate_services "$gameplay_user"
   [[ "$(remote_generation)" == "$candidate" ]]
 }

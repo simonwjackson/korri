@@ -880,6 +880,40 @@ assert_fails_with 'incomplete user unit enablement state for legacy.service' \
   run_user_unit_enabled_check incomplete
 assert_fails run_user_unit_enabled_check query-failure
 
+# Candidate deployment must not restart the gameplay user manager or mutate
+# declarative system-unit enablement. Only targeted user daemon reloads and
+# targeted Korri service start/stop operations are allowed.
+if grep -F 'remote_restart_user_manager' "$GATE" >/dev/null \
+  || grep -E 'systemctl (start|stop) "user@' "$GATE" >/dev/null; then
+  printf 'device gate can stop or restart the complete gameplay user manager\n' >&2
+  exit 1
+fi
+START_CANDIDATE_SOURCE="$(awk '
+  /^remote_start_candidate_services\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+STOP_CANDIDATE_SOURCE="$(awk '
+  /^remote_stop_candidate_services\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+RESTORE_OLD_USER_SOURCE="$(awk '
+  /^remote_restore_old_user_units\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$START_CANDIDATE_SOURCE" == remote_start_candidate_services* ]]
+[[ "$STOP_CANDIDATE_SOURCE" == remote_stop_candidate_services* ]]
+[[ "$RESTORE_OLD_USER_SOURCE" == remote_restore_old_user_units* ]]
+grep -F "systemctl start \"\$unit\"" <<<"$START_CANDIDATE_SOURCE" >/dev/null
+grep -F "systemctl stop \"\$unit\"" <<<"$STOP_CANDIDATE_SOURCE" >/dev/null
+if grep -E 'systemctl (enable|disable)' <<<"$START_CANDIDATE_SOURCE$STOP_CANDIDATE_SOURCE" >/dev/null; then
+  printf 'device gate mutates declarative system-unit enablement\n' >&2
+  exit 1
+fi
+grep -F "remote_user_systemctl \"\$gameplay_user\" daemon-reload" <<<"$RESTORE_OLD_USER_SOURCE" >/dev/null
+
 RESTORE_RAW_JOYSTICK_SOURCE="$(awk '
   /^remote_restore_raw_joystick_udev\(\) \{/ { found=1 }
   found { print }
