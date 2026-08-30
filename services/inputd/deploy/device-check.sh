@@ -463,8 +463,30 @@ remote_unit_value() {
   fi
 }
 
+remote_korrid_api_port() {
+  local environment token address='' port count=0
+  local -a tokens
+  environment="$(systemctl show korrid.service -p Environment --value 2>/dev/null)" || return 1
+  read -r -a tokens <<<"$environment"
+  for token in "${tokens[@]}"; do
+    case "$token" in
+      KORRID_ADDRESS=*)
+        address="${token#KORRID_ADDRESS=}"
+        count=$((count + 1))
+        ;;
+    esac
+  done
+  [[ "$count" -eq 1 ]] || return 1
+  [[ "$address" =~ ^(0\.0\.0\.0|127\.0\.0\.1):([1-9][0-9]{0,4})$ ]] || return 1
+  port="${BASH_REMATCH[2]}"
+  ((10#$port <= 65535)) || return 1
+  printf '%s\n' "$port"
+}
+
 remote_catalog_health() {
-  curl --fail --silent --connect-timeout 1 --max-time 2 http://127.0.0.1:43117/rpc \
+  local port
+  port="$(remote_korrid_api_port)" || { printf unavailable; return 0; }
+  curl --fail --silent --connect-timeout 1 --max-time 2 "http://127.0.0.1:$port/rpc" \
     -H 'content-type: application/json' -d '{"_tag":"app.catalog.snapshot","payload":{}}' \
     | jq -r 'if .outcome._tag == "Ok" then "Ok" else "unhealthy" end' 2>/dev/null || printf unavailable
 }
@@ -1018,9 +1040,9 @@ remote_automated_gates() {
 }
 
 remote_rollback_gates() {
-  remote_wait_unit inputplumber.service
+  remote_refuse_active_game
   remote_temporary_artifacts_dirty && fail 'temporary U7 artifacts remain after rollback'
-  [[ "$(remote_catalog_health)" == Ok ]] || fail 'rollback korrid catalog is unhealthy'
+  remote_private_session_state_absent || fail 'private launch recovery state remains after rollback'
   printf 'rollback-gates=pass\n'
 }
 

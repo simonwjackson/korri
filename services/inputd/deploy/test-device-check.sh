@@ -968,6 +968,61 @@ if grep -F 'get-name-owner' "$GATE" >/dev/null; then
   exit 1
 fi
 
+KORRID_PORT_SOURCE="$(awk '
+  /^remote_korrid_api_port\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$KORRID_PORT_SOURCE" == remote_korrid_api_port* ]]
+run_korrid_port_check() (
+  local model="$1"
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  systemctl() {
+    case "$model" in
+      port-39217) printf 'PATH=/bin KORRID_ADDRESS=0.0.0.0:39217 OTHER=value\n' ;;
+      port-43117) printf 'KORRID_ADDRESS=127.0.0.1:43117\n' ;;
+      missing) printf 'PATH=/bin\n' ;;
+      duplicate) printf 'KORRID_ADDRESS=0.0.0.0:39217 KORRID_ADDRESS=127.0.0.1:43117\n' ;;
+      bad-host) printf 'KORRID_ADDRESS=192.168.1.243:39217\n' ;;
+      zero) printf 'KORRID_ADDRESS=0.0.0.0:0\n' ;;
+      too-large) printf 'KORRID_ADDRESS=0.0.0.0:65536\n' ;;
+      query-failure) return 1 ;;
+    esac
+  }
+  eval "$KORRID_PORT_SOURCE"
+  remote_korrid_api_port
+)
+[[ "$(run_korrid_port_check port-39217)" == 39217 ]]
+[[ "$(run_korrid_port_check port-43117)" == 43117 ]]
+for invalid_port_model in missing duplicate bad-host zero too-large query-failure; do
+  assert_fails run_korrid_port_check "$invalid_port_model"
+done
+CATALOG_HEALTH_SOURCE="$(awk '
+  /^remote_catalog_health\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$CATALOG_HEALTH_SOURCE" == remote_catalog_health* ]]
+grep -F 'remote_korrid_api_port' <<<"$CATALOG_HEALTH_SOURCE" >/dev/null
+grep -F "http://127.0.0.1:\$port/rpc" <<<"$CATALOG_HEALTH_SOURCE" >/dev/null
+if grep -F 'http://127.0.0.1:43117/rpc' <<<"$CATALOG_HEALTH_SOURCE" >/dev/null; then
+  printf 'catalog health retained a fixed legacy korrid port\n' >&2
+  exit 1
+fi
+ROLLBACK_GATES_SOURCE="$(awk '
+  /^remote_rollback_gates\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$ROLLBACK_GATES_SOURCE" == remote_rollback_gates* ]]
+grep -F 'remote_refuse_active_game' <<<"$ROLLBACK_GATES_SOURCE" >/dev/null
+grep -F 'remote_private_session_state_absent' <<<"$ROLLBACK_GATES_SOURCE" >/dev/null
+if grep -F 'remote_wait_unit inputplumber.service' <<<"$ROLLBACK_GATES_SOURCE" >/dev/null \
+  || grep -F 'remote_catalog_health' <<<"$ROLLBACK_GATES_SOURCE" >/dev/null; then
+  printf 'rollback gates assume one fixed legacy service layout\n' >&2
+  exit 1
+fi
+
 PROFILE_SELECT_SOURCE="$(awk '
   /^remote_profile_selects_event\(\) \{/ { found=1 }
   found { print }
