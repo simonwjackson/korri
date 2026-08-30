@@ -25,6 +25,7 @@ trait CompositeDevice {
     fn source_device_paths(&self) -> zbus::Result<Vec<String>>;
 
     fn load_profile_path(&self, path: String) -> zbus::Result<()>;
+    fn stop(&self) -> zbus::Result<()>;
 }
 
 #[derive(Debug)]
@@ -57,6 +58,14 @@ pub enum ProfileStatus {
     AmbiguousSources,
     Ready,
     Applied,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CompositeDisposition {
+    Required,
+    MissingRequired,
+    EmptyOther,
+    Other,
 }
 
 impl std::error::Error for DbusRuntimeError {}
@@ -206,6 +215,8 @@ async fn ensure_profile_unbounded(
         .map_err(|error| DbusRuntimeError::Zbus(error.into()))?;
     let composite_paths = composite_paths_from_introspection(&xml);
     let mut candidates = Vec::new();
+    let mut missing_required = false;
+    let mut stopped_empty = false;
     for path in composite_paths {
         let proxy = CompositeDeviceProxy::builder(connection)
             .destination(owner.as_str())?
@@ -213,14 +224,36 @@ async fn ensure_profile_unbounded(
             .cache_properties(COMPOSITE_CACHE_PROPERTIES)
             .build()
             .await?;
-        if proxy
-            .dbus_devices()
-            .await?
-            .iter()
-            .any(|target| target == DBUS_TARGET_PATH)
-        {
-            candidates.push(path);
+        let dbus_devices = proxy.dbus_devices().await?;
+        let source_paths = proxy.source_device_paths().await?;
+        match composite_disposition(&dbus_devices, &source_paths) {
+            CompositeDisposition::Required => candidates.push(path),
+            CompositeDisposition::MissingRequired => missing_required = true,
+            CompositeDisposition::EmptyOther => {
+                proxy.stop().await?;
+                stopped_empty = true;
+                tracing::info!(
+                    event = "inputd_empty_composite_stopped",
+                    "stopped an empty non-authoritative InputPlumber composite"
+                );
+            }
+            CompositeDisposition::Other => {}
         }
+    }
+    if current_unique_owner(connection).await?.as_deref() != Some(owner.as_str()) {
+        return Ok(ProfileStatus::Pending);
+    }
+    if missing_required {
+        return if candidates.is_empty() {
+            Ok(ProfileStatus::MissingSource)
+        } else {
+            Err(DbusRuntimeError::Rejected(
+                "more than one InputPlumber composite owns the required DBus target".into(),
+            ))
+        };
+    }
+    if stopped_empty {
+        return Ok(ProfileStatus::Pending);
     }
     let [path] = candidates.as_slice() else {
         return match candidates.len() {
@@ -258,6 +291,16 @@ async fn ensure_profile_unbounded(
         return Ok(ProfileStatus::Pending);
     }
     Ok(profile_status_with_sources(profile_status, &source_paths))
+}
+
+fn composite_disposition(dbus_devices: &[String], source_paths: &[String]) -> CompositeDisposition {
+    let required = dbus_devices.iter().any(|target| target == DBUS_TARGET_PATH);
+    match (required, source_paths.is_empty()) {
+        (true, false) => CompositeDisposition::Required,
+        (true, true) => CompositeDisposition::MissingRequired,
+        (false, true) => CompositeDisposition::EmptyOther,
+        (false, false) => CompositeDisposition::Other,
+    }
 }
 
 fn profile_status_with_sources(status: ProfileStatus, source_paths: &[String]) -> ProfileStatus {
@@ -426,8 +469,9 @@ mod tests {
     use std::{future, time::Duration};
 
     use super::{
-        bounded_with_timeout, composite_paths_from_introspection, profile_status_with_sources,
-        DbusRuntimeError, ProfileStatus, COMPOSITE_CACHE_PROPERTIES,
+        bounded_with_timeout, composite_disposition, composite_paths_from_introspection,
+        profile_status_with_sources, CompositeDisposition, DbusRuntimeError, ProfileStatus,
+        COMPOSITE_CACHE_PROPERTIES,
     };
     use zbus::proxy::CacheProperties;
 
@@ -484,6 +528,26 @@ mod tests {
                 &["source-a".into(), "source-b".into()]
             ),
             ProfileStatus::AmbiguousSources
+        );
+    }
+
+    #[test]
+    fn empty_non_authoritative_composites_are_stopped_without_removing_the_primary_target() {
+        assert_eq!(
+            composite_disposition(&[super::DBUS_TARGET_PATH.into()], &["source".into()]),
+            CompositeDisposition::Required
+        );
+        assert_eq!(
+            composite_disposition(&[super::DBUS_TARGET_PATH.into()], &[]),
+            CompositeDisposition::MissingRequired
+        );
+        assert_eq!(
+            composite_disposition(&[], &[]),
+            CompositeDisposition::EmptyOther
+        );
+        assert_eq!(
+            composite_disposition(&[], &["source".into()]),
+            CompositeDisposition::Other
         );
     }
 }

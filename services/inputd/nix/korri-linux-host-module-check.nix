@@ -89,6 +89,7 @@ in
 assert allAssertionsPass valid;
 assert cfg.services.korriBundle.enable;
 assert cfg.services.korriLinuxInput.provider.enable;
+assert !cfg.services.korriLinuxInput.provider.sourceHiding.enable;
 assert cfg.services.korriLinuxInput.inputd.enable;
 assert cfg.services.korridLinuxDevice.enable;
 assert cfg.services.inputplumber.enable;

@@ -230,11 +230,9 @@ in
     services.korriLinuxInput = {
       provider = {
         enable = true;
-        sourceHiding = {
-          enable = true;
-          sameFilesystem = true;
-          supportedLayout = true;
-        };
+        # Keep source nodes in /dev/input so InputPlumber's upstream watcher can
+        # preserve one persistent target across hotplug. InputPlumber removes
+        # uaccess and sets mode 000; the device gate proves gameplay denial.
         sunshine = {
           enableUinputAccess = true;
           serviceName = "sunshine";

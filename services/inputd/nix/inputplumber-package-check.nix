@@ -82,6 +82,10 @@ pkgs.runCommand "inputplumber-korri-package-check"
       echo "selected device profile must auto-manage its supported physical controllers" >&2
       exit 1
     }
+    test "$(yq eval '.options.persist' "$selected_device")" = true || {
+      echo "selected device profile must preserve its normalized target across source reconnects" >&2
+      exit 1
+    }
     test "$(yq eval '[.source_devices[].evdev | select(.vendor_id == "045e" and (.product_id | contains("02ea")))] | length' "$selected_device")" = 1 || {
       echo "selected device profile must match Sunshine's exact virtual Xbox One identity" >&2
       exit 1

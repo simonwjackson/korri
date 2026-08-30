@@ -235,25 +235,6 @@ let
   recordingSetfacl = pkgs.writeShellScript "recording-setfacl" ''
     printf '%s\n' "$*" >> "$KORRI_TEST_ACL_LOG"
   '';
-  hotplugRecoverySystemctl = pkgs.writeShellScript "hotplug-recovery-systemctl" ''
-    set -euo pipefail
-    case "$1" in
-      is-active)
-        printf '%s\n' active
-        ;;
-      show)
-        cat "$KORRI_TEST_HOTPLUG_HEALTH"
-        ;;
-      restart)
-        test "$2" = inputplumber.service
-        printf '%s\n' "$*" >> "$KORRI_TEST_HOTPLUG_LOG"
-        printf '%s\n' Ready > "$KORRI_TEST_HOTPLUG_HEALTH"
-        ;;
-      *)
-        exit 64
-        ;;
-    esac
-  '';
   fixtureAcl = import ./virtual-target-acl.nix {
     inherit pkgs;
     deviceRoot = "${aclFixture}/dev/input";
@@ -266,10 +247,6 @@ let
   combinedEnvironment = combinedService.environment;
   combinedRules = combined.config.services.udev.extraRules;
   inputdOnlyRules = inputdOnly.config.services.udev.extraRules;
-  hotplugRecoveryService = combined.config.systemd.services.korri-inputplumber-hotplug-recovery;
-  hotplugRecoveryCommand = lib.splitString " " hotplugRecoveryService.serviceConfig.ExecStart;
-  hotplugRecoveryScript = builtins.elemAt hotplugRecoveryCommand 1;
-  hotplugRecoverySystemctlPath = builtins.elemAt hotplugRecoveryCommand 2;
   dbusPackages = map toString combined.config.services.dbus.packages;
   bundledProvider = bundled.config.systemd.services.inputplumber;
   bundledInputd = bundled.config.systemd.services.korri-inputd;
@@ -319,7 +296,6 @@ assert
   !(builtins.elem "korri-sunshine-uinput" sunshineProvider.config.users.users.gameplay.extraGroups);
 assert allAssertionsPass inputdOnly;
 assert inputdOnly.config.systemd.services ? korri-inputd;
-assert !(inputdOnly.config.systemd.services ? korri-inputplumber-hotplug-recovery);
 assert !inputdOnly.config.services.inputplumber.enable;
 assert inputdService.serviceConfig.RestrictAddressFamilies == [ "AF_UNIX" ];
 assert inputdService.serviceConfig.IPAddressDeny == "any";
@@ -348,20 +324,6 @@ assert lib.hasSuffix " reapply 977 1001" inputdService.serviceConfig.ExecStartPr
 assert lib.hasSuffix " revoke" inputdService.serviceConfig.ExecStopPost;
 assert !(inputdService.environment ? KORRI_INPUTD_KILL_CURRENT_GAME);
 assert allAssertionsPass combined;
-assert combined.config.systemd.services ? korri-inputplumber-hotplug-recovery;
-assert lib.hasInfix "SYSTEMD_WANTS}+=\"korri-inputplumber-hotplug-recovery.service\"" combinedRules;
-assert builtins.head hotplugRecoveryCommand == "${pkgs.bash}/bin/bash";
-assert lib.hasPrefix "/nix/store/" hotplugRecoveryScript;
-assert hotplugRecoverySystemctlPath == "${pkgs.systemd}/bin/systemctl";
-assert builtins.elem "inputplumber.service" hotplugRecoveryService.after;
-assert builtins.elem "korri-inputd.service" hotplugRecoveryService.after;
-assert hotplugRecoveryService.serviceConfig.Type == "oneshot";
-assert hotplugRecoveryService.serviceConfig.CapabilityBoundingSet == "";
-assert hotplugRecoveryService.serviceConfig.AmbientCapabilities == "";
-assert hotplugRecoveryService.serviceConfig.PrivateDevices;
-assert hotplugRecoveryService.serviceConfig.NoNewPrivileges;
-assert hotplugRecoveryService.serviceConfig.RestrictAddressFamilies == [ "AF_UNIX" ];
-assert hotplugRecoveryService.serviceConfig.IPAddressDeny == "any";
 assert builtins.elem "inputplumber.service" combinedService.after;
 assert builtins.elem "inputplumber.service" combinedService.wants;
 assert combined.config.users.users.korri-inputd.uid == 977;
@@ -375,6 +337,8 @@ assert
 assert lib.hasInfix "org.shadowblip.Input.CompositeDevice.LoadProfilePath"
   combined.config.security.polkit.extraConfig;
 assert lib.hasInfix "org.shadowblip.Input.CompositeDevice.SourceDevicePaths"
+  combined.config.security.polkit.extraConfig;
+assert lib.hasInfix "org.shadowblip.Input.CompositeDevice.Stop"
   combined.config.security.polkit.extraConfig;
 assert
   (builtins.fromJSON (
@@ -442,21 +406,7 @@ pkgs.runCommand "korri-input-module-check" { } ''
   grep -F 'send_interface="org.freedesktop.DBus.Properties" send_member="Get"' "$policy" >/dev/null
   ! grep -F 'send_interface="org.freedesktop.DBus.Properties" send_member="GetAll"' "$policy" >/dev/null
   grep -F 'send_interface="org.shadowblip.Input.CompositeDevice" send_member="LoadProfilePath"' "$policy" >/dev/null
-
-  recovery_script=${hotplugRecoveryScript}
-  test -f "$recovery_script"
-  test "$(stat -c %a "$recovery_script")" = 444
-  ${pkgs.bash}/bin/bash -n "$recovery_script"
-  grep -F '[[ "$health" == "Missing" ]]' "$recovery_script" >/dev/null
-  grep -F '"$systemctl" restart inputplumber.service' "$recovery_script" >/dev/null
-  grep -F '"$health" == "Ready"' "$recovery_script" >/dev/null
-  ! grep -F 'restart korri-inputd.service' "$recovery_script" >/dev/null
-  export KORRI_TEST_HOTPLUG_HEALTH="$TMPDIR/hotplug-health"
-  export KORRI_TEST_HOTPLUG_LOG="$TMPDIR/hotplug.log"
-  printf '%s\n' Missing > "$KORRI_TEST_HOTPLUG_HEALTH"
-  ${pkgs.bash}/bin/bash "$recovery_script" ${hotplugRecoverySystemctl}
-  test "$(cat "$KORRI_TEST_HOTPLUG_HEALTH")" = Ready
-  test "$(cat "$KORRI_TEST_HOTPLUG_LOG")" = 'restart inputplumber.service'
+  grep -F 'send_interface="org.shadowblip.Input.CompositeDevice" send_member="Stop"' "$policy" >/dev/null
 
   export KORRI_TEST_ACL_LOG="$TMPDIR/acl.log"
   ${fixtureAcl}/bin/korri-virtual-target-acl grant 888 889 ${aclFixture}/dev/input/event4
