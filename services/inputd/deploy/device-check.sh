@@ -379,21 +379,43 @@ remote_profile_selects_event() {
   return 1
 }
 
+remote_resolve_physical_controller_node() {
+  local original="$1" isolated="$2" source node
+  if [[ -e "$original" && -e "$isolated" ]]; then
+    return 1
+  elif [[ -e "$original" ]]; then
+    source=direct
+    node="$original"
+  elif [[ -e "$isolated" ]]; then
+    source=isolated
+    node="$isolated"
+  else
+    return 1
+  fi
+  [[ -c "$node" && ! -L "$node" ]] || return 1
+  printf '%s|%s\n' "$source" "$node"
+}
+
 remote_physical_controller_evidence() {
-  local expected_identity="$1" profile="$2" require_profile="${3:-true}" event node name identity properties sysfs dev_sys dev_stat count=0
+  local expected_identity="$1" profile="$2" require_profile="${3:-true}"
+  local event original_node isolated_node resolved source node name identity properties sysfs dev_sys dev_stat count=0
   [[ "$profile" == "$SUPPORTED_PRODUCTION_PROFILE" ]] || return 1
   shopt -s nullglob
   for event in /sys/class/input/event*; do
-    node="/dev/input/${event##*/}"
-    [[ -r "$event/device/name" && -e "$node" ]] || continue
+    [[ -r "$event/device/name" ]] || continue
     name="$(<"$event/device/name")"
     [[ "$name" != "$NORMALIZED_NAME" && "$name" != 'Korri U7 Synthetic Controller' ]] || continue
     identity="$(cat "$event/device/id/bustype" 2>/dev/null || true):$(cat "$event/device/id/vendor" 2>/dev/null || true):$(cat "$event/device/id/product" 2>/dev/null || true):$(cat "$event/device/id/version" 2>/dev/null || true)"
     [[ "${identity,,}" == "$expected_identity" ]] || continue
-    properties="$(udevadm info --query=property --name="$node" 2>/dev/null || true)"
-    grep -Fx 'ID_INPUT_JOYSTICK=1' <<<"$properties" >/dev/null || continue
     sysfs="$(realpath -e -- "$event" 2>/dev/null || true)"
     [[ "$sysfs" == /sys/devices/* && "$sysfs" != /sys/devices/virtual/* ]] || continue
+    properties="$(udevadm info --query=property --path="$sysfs" 2>/dev/null || true)"
+    grep -Fx 'ID_INPUT_JOYSTICK=1' <<<"$properties" >/dev/null || continue
+    original_node="/dev/input/${event##*/}"
+    isolated_node="/dev/inputplumber/sources/${event##*/}"
+    resolved="$(remote_resolve_physical_controller_node "$original_node" "$isolated_node")" || continue
+    source="${resolved%%|*}"
+    node="${resolved#*|}"
     dev_sys="$(<"$event/dev")"
     dev_stat="$(stat -Lc '%t:%T' "$node" 2>/dev/null || true)"
     [[ "$dev_stat" =~ ^[0-9a-fA-F]+:[0-9a-fA-F]+$ ]] || continue
@@ -401,7 +423,9 @@ remote_physical_controller_evidence() {
     if [[ "$require_profile" == true ]]; then
       remote_profile_selects_event "${event##*/}" "$profile" || continue
     fi
-    printf 'identity=%s event=%s sysfs=%s profile=%s\n' "$expected_identity" "${event##*/}" "$sysfs" "$([[ "$require_profile" == true ]] && printf '%s' "$profile" || printf pending-candidate)"
+    printf 'identity=%s event=%s sysfs=%s profile=%s source=%s\n' \
+      "$expected_identity" "${event##*/}" "$sysfs" \
+      "$([[ "$require_profile" == true ]] && printf '%s' "$profile" || printf pending-candidate)" "$source"
     count=$((count + 1))
   done
   [[ "$count" -eq 1 ]]

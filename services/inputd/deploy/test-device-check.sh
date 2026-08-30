@@ -914,6 +914,41 @@ if grep -E 'systemctl (enable|disable)' <<<"$START_CANDIDATE_SOURCE$STOP_CANDIDA
 fi
 grep -F "remote_user_systemctl \"\$gameplay_user\" daemon-reload" <<<"$RESTORE_OLD_USER_SOURCE" >/dev/null
 
+RESOLVE_CONTROLLER_NODE_SOURCE="$(awk '
+  /^remote_resolve_physical_controller_node\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$RESOLVE_CONTROLLER_NODE_SOURCE" == remote_resolve_physical_controller_node* ]]
+run_controller_node_resolution() (
+  eval "$RESOLVE_CONTROLLER_NODE_SOURCE"
+  remote_resolve_physical_controller_node "$1" "$2"
+)
+missing_node="$TMP/missing-controller-node"
+[[ "$(run_controller_node_resolution /dev/null "$missing_node")" == 'direct|/dev/null' ]]
+[[ "$(run_controller_node_resolution "$missing_node" /dev/null)" == 'isolated|/dev/null' ]]
+assert_fails run_controller_node_resolution /dev/null /dev/zero
+assert_fails run_controller_node_resolution "$missing_node" "$TMP/also-missing-controller-node"
+printf 'not a device\n' >"$TMP/regular-controller-node"
+assert_fails run_controller_node_resolution "$TMP/regular-controller-node" "$missing_node"
+ln -s /dev/null "$TMP/controller-node-link"
+assert_fails run_controller_node_resolution "$TMP/controller-node-link" "$missing_node"
+
+PHYSICAL_CONTROLLER_SOURCE="$(awk '
+  /^remote_physical_controller_evidence\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$PHYSICAL_CONTROLLER_SOURCE" == remote_physical_controller_evidence* ]]
+grep -F 'remote_resolve_physical_controller_node' <<<"$PHYSICAL_CONTROLLER_SOURCE" >/dev/null
+grep -F "udevadm info --query=property --path=\"\$sysfs\"" <<<"$PHYSICAL_CONTROLLER_SOURCE" >/dev/null
+grep -F "stat -Lc '%t:%T' \"\$node\"" <<<"$PHYSICAL_CONTROLLER_SOURCE" >/dev/null
+grep -F 'source=%s' <<<"$PHYSICAL_CONTROLLER_SOURCE" >/dev/null
+if grep -F "&& -e \"\$node\"" <<<"$PHYSICAL_CONTROLLER_SOURCE" >/dev/null; then
+  printf 'physical controller evidence still requires the hidden original node\n' >&2
+  exit 1
+fi
+
 RESTORE_RAW_JOYSTICK_SOURCE="$(awk '
   /^remote_restore_raw_joystick_udev\(\) \{/ { found=1 }
   found { print }
