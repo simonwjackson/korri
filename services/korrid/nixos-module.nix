@@ -229,7 +229,7 @@ in
       polkit.addRule(function(action, subject) {
         var unit = action.lookup("unit");
         if (action.id == "org.freedesktop.systemd1.manage-units" &&
-            subject.system_unit == "korrid.service" &&
+            subject.user == "korrid" &&
             typeof unit == "string" && /^korri-game-[0-9a-f]{32}\\.service$/.test(unit)) {
           return polkit.Result.YES;
         }
