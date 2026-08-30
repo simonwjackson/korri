@@ -34,6 +34,7 @@
         korri-bundle = import ./services/inputd/nix/korri-bundle-module.nix { korri = self; };
         korri-input = import ./services/inputd/nix/korri-input.nix { korri = self; };
         korrid-linux-device = import ./services/korrid/nixos-module.nix { korri = self; };
+        korri-linux-host = import ./services/inputd/nix/korri-linux-host.nix { korri = self; };
       };
     in
     {
@@ -54,17 +55,22 @@
         korridPackage = import ./services/korrid/package.nix {
           inherit pkgs proseql crane;
         };
+        sunshinePackage = pkgs.callPackage ./services/sunshine/package.nix {
+          sunshine = pkgs.sunshine;
+        };
         inputplumber = import ./services/inputd/nix {
           inherit
             pkgs
             system
             crane
             korridPackage
+            sunshinePackage
             ;
           inputplumberNixpkgs = inputplumber-nixpkgs;
           korriBundleModule = nixosModules.korri-bundle;
           korriInputModule = nixosModules.korri-input;
           korridLinuxDeviceModule = nixosModules.korrid-linux-device;
+          korriLinuxHostModule = nixosModules.korri-linux-host;
         };
       in
       {

@@ -2,7 +2,21 @@
 
 Routine development does not use a NixOS activation. Run `nix run .#korri-dev` to start isolated korrid and inputd processes. Physical input and all actions are disabled by default. `nix run .#korri-dev -- --physical` opts in to the existing validated normalized InputPlumber target, but actions remain disabled.
 
-The optional NixOS host layer imports `nixosModules.korri-bundle` and enables `services.korriBundle`. It installs stable units and initializes `/nix/var/nix/gcroots/korri-bundle/active` once. The active and previous selectors are Nix garbage-collection roots, so both exact bundles remain available for rollback. Each unit uses `korri-bundle-launch` to validate the selected immutable bundle and execute one fixed component without a shell. `nix run .#korri-bundle-select -- switch BUNDLE SYSTEMCTL` changes only that root-owned selector, restarts only InputPlumber, inputd, and korrid, waits for their health, and restores the prior selector if the candidate fails. It does not run `switch-to-configuration`, reload Home Manager, or restart unrelated user services. During first installation, the device gate removes a strictly validated orphan selector only when the current generation does not provide the selector service and no candidate service is active. Routine host generations that already own the selector keep the selected bundle unchanged.
+A normal NixOS consumer imports only `nixosModules.korri-linux-host` and enables `services.korriLinuxHost`. The consumer supplies its existing gameplay identity and allowed network interfaces. Korri owns InputPlumber, Rust inputd, isolated korrid, the patched Sunshine package, Xvfb, service identities, permissions, ordering, validation actions, and the immutable bundle selector. The lower-level `korri-bundle`, `korri-input`, and `korrid-linux-device` modules remain available for Korri development and unusual platform composition, but a device configuration does not copy their policy.
+
+```nix
+{
+  services.korriLinuxHost = {
+    enable = true;
+    gameplayUser = "gameplay";
+    gameplayUid = 1000;
+    gameplayGid = 100;
+    firewallInterfaces = [ "tailscale0" ];
+  };
+}
+```
+
+The host module installs stable units and initializes `/nix/var/nix/gcroots/korri-bundle/active` once. The active and previous selectors are Nix garbage-collection roots, so both exact bundles remain available for rollback. Each unit uses `korri-bundle-launch` to validate the selected immutable bundle and execute one fixed component without a shell. `nix run .#korri-bundle-select -- switch BUNDLE SYSTEMCTL` changes only that root-owned selector, restarts only InputPlumber, inputd, and korrid, waits for their health, and restores the prior selector if the candidate fails. It does not run `switch-to-configuration`, reload Home Manager, or restart unrelated user services. During first installation, the device gate removes a strictly validated orphan selector only when the current generation does not provide the selector service and no candidate service is active. Routine host generations that already own the selector keep the selected bundle unchanged.
 
 A complete NixOS activation remains necessary only when the stable host layer changes, such as users, groups, udev rules, Polkit policy, kernel settings, or unit structure. Treat that operation as maintenance work that needs explicit approval.
 

@@ -6,7 +6,9 @@
   korriBundleModule,
   korriInputModule,
   korridLinuxDeviceModule,
+  korriLinuxHostModule,
   korridPackage,
+  sunshinePackage,
 }:
 
 let
@@ -47,8 +49,15 @@ in
     retroarch-inputplumber-autoconfig = retroarchInputplumberAutoconfig;
     korri-inputd = inputdPackage;
     korri-bundle = korriBundle;
+    sunshine-korri = sunshinePackage;
   };
   checks = {
+    sunshine-korri-package = pkgs.runCommand "sunshine-korri-package-check" { } ''
+      test -x ${sunshinePackage}/bin/sunshine
+      test "${sunshinePackage.pname}" = sunshine-korri
+      test "${sunshinePackage.version}" = "${pkgs.sunshine.version}-korri"
+      touch "$out"
+    '';
     inputplumber-korri-package = import ./inputplumber-package-check.nix {
       inherit
         pkgs
@@ -99,6 +108,17 @@ in
         pkgs
         korridPackage
         inputdPackage
+        korriBundle
+        ;
+    };
+    korri-linux-host-module = import ./korri-linux-host-module-check.nix {
+      module = korriLinuxHostModule;
+      inherit
+        pkgs
+        sunshinePackage
+        inputdPackage
+        inputplumberKorri
+        korridPackage
         korriBundle
         ;
     };

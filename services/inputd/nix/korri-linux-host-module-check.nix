@@ -1,0 +1,135 @@
+{
+  pkgs,
+  module,
+  sunshinePackage,
+  inputdPackage,
+  inputplumberKorri,
+  korridPackage,
+  korriBundle,
+}:
+let
+  lib = pkgs.lib;
+  evaluate =
+    extra:
+    import "${pkgs.path}/nixos/lib/eval-config.nix" {
+      system = pkgs.stdenv.hostPlatform.system;
+      modules = [
+        module
+        {
+          system.stateVersion = "26.05";
+          boot.loader.grub.enable = false;
+          fileSystems."/" = {
+            device = "none";
+            fsType = "tmpfs";
+          };
+          networking.hostName = "consumer";
+          users.groups.games.gid = 1001;
+          users.users.gameplay = {
+            isNormalUser = true;
+            uid = 1001;
+            group = "games";
+            home = "/home/gameplay";
+          };
+          services.korriBundle = {
+            initialPackage = korriBundle;
+            launcherPackage = inputdPackage;
+          };
+          services.korriLinuxInput = {
+            provider.package = inputplumberKorri;
+            inputd.package = inputdPackage;
+          };
+          services.korridLinuxDevice.package = korridPackage;
+          services.korriLinuxHost = {
+            enable = true;
+            gameplayUser = "gameplay";
+            gameplayUid = 1001;
+            gameplayGroup = "games";
+            gameplayGid = 1001;
+            firewallInterfaces = [ "tailscale0" ];
+            sunshine.package = sunshinePackage;
+          };
+        }
+        extra
+      ];
+    };
+  allAssertionsPass =
+    system:
+    lib.all (
+      entry: if entry.assertion then true else builtins.trace entry.message false
+    ) system.config.assertions;
+  hasFailedAssertion =
+    needle: system:
+    lib.any (entry: !entry.assertion && lib.hasInfix needle entry.message) system.config.assertions;
+  evaluationRejected =
+    system: !(builtins.tryEval system.config.system.build.toplevel.drvPath).success;
+  valid = evaluate { };
+  noValidation = evaluate {
+    services.korriLinuxHost.validation.enable = false;
+  };
+  wrongGameplayUid = evaluate {
+    services.korriLinuxHost.gameplayUid = lib.mkForce 1002;
+  };
+  stockSunshine = evaluate {
+    services.korriLinuxHost.sunshine.package = lib.mkForce pkgs.sunshine;
+  };
+  collidingIdentity = evaluate {
+    services.korriLinuxHost.serviceIdentities.inputdUid = lib.mkForce 1001;
+  };
+  invalidLabel = evaluate {
+    services.korriLinuxHost.label = "bad label";
+  };
+  cfg = valid.config;
+  inputd = cfg.systemd.services.korri-inputd;
+  korrid = cfg.systemd.services.korrid;
+  sunshine = cfg.systemd.services.sunshine;
+  x11 = cfg.systemd.services.x11-headless;
+  deviceConfig = cfg.services.korridLinuxDevice.deviceConfig;
+  sunshineExec = pkgs.writeText "korri-linux-host-sunshine-exec" sunshine.serviceConfig.ExecStart;
+  udevRules = pkgs.writeText "korri-linux-host-udev-rules" cfg.services.udev.extraRules;
+in
+assert allAssertionsPass valid;
+assert cfg.services.korriBundle.enable;
+assert cfg.services.korriLinuxInput.provider.enable;
+assert cfg.services.korriLinuxInput.inputd.enable;
+assert cfg.services.korridLinuxDevice.enable;
+assert cfg.services.inputplumber.enable;
+assert cfg.services.sunshine.enable;
+assert !cfg.services.sunshine.autoStart;
+assert !cfg.systemd.user.services.sunshine.enable;
+assert cfg.services.sunshine.package == sunshinePackage;
+assert cfg.hardware.graphics.enable;
+assert builtins.elem "uinput" cfg.boot.kernelModules;
+assert cfg.users.users.korri-inputd.uid == 977;
+assert cfg.users.groups.korri-control.gid == 977;
+assert cfg.users.users.korrid.uid == 976;
+assert cfg.users.groups.korrid.gid == 976;
+assert cfg.users.groups.korri-sunshine-uinput.gid == 979;
+assert builtins.elem "render" cfg.users.users.gameplay.extraGroups;
+assert builtins.elem "video" cfg.users.users.gameplay.extraGroups;
+assert !(builtins.elem "input" cfg.users.users.gameplay.extraGroups);
+assert !(builtins.elem "uinput" cfg.users.users.gameplay.extraGroups);
+assert inputd.serviceConfig.User == "korri-inputd";
+assert korrid.serviceConfig.User == "korrid";
+assert sunshine.serviceConfig.User == "gameplay";
+assert x11.serviceConfig.User == "gameplay";
+assert x11.serviceConfig.PrivateDevices;
+assert !(builtins.elem "/dev/inputplumber/sources" (x11.serviceConfig.InaccessiblePaths or [ ]));
+assert builtins.elem "korri-input-source-guard.service" sunshine.requires;
+assert builtins.elem "x11-headless.service" sunshine.requires;
+assert builtins.elem "/dev/inputplumber/sources" sunshine.serviceConfig.InaccessiblePaths;
+assert builtins.elem 39217 cfg.networking.firewall.interfaces.tailscale0.allowedTCPPorts;
+assert builtins.hasAttr "workspace-next" cfg.services.korriLinuxInput.inputd.actions;
+assert noValidation.config.services.korriLinuxInput.inputd.actions == { };
+assert hasFailedAssertion "gameplay identity" wrongGameplayUid;
+assert evaluationRejected wrongGameplayUid;
+assert hasFailedAssertion "patched Sunshine" stockSunshine;
+assert evaluationRejected stockSunshine;
+assert hasFailedAssertion "differ from the gameplay identity" collidingIdentity;
+assert evaluationRejected invalidLabel;
+pkgs.runCommand "korri-linux-host-module-check" { } ''
+  grep -F 'id = "inputd-gate"' ${deviceConfig} >/dev/null
+  grep -F 'DISPLAY = ":0"' ${deviceConfig} >/dev/null
+  grep -F '${sunshinePackage}/bin/sunshine' ${sunshineExec} >/dev/null
+  grep -F 'TAG-="uaccess"' ${udevRules} >/dev/null
+  touch "$out"
+''

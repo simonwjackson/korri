@@ -1,0 +1,91 @@
+--- a/src/video.cpp	2026-06-01 22:58:01.912584709 -0600
++++ b/src/video.cpp	2026-06-01 22:59:34.946519947 -0600
+@@ -670,6 +670,7 @@
+     std::thread capture_thread;
+ 
+     safe::signal_t reinit_event;
++    safe::signal_t runtime_reinit_event;
+     const encoder_t *encoder_p;
+     sync_util::sync_t<std::weak_ptr<platf::display_t>> display_wp;
+   };
+@@ -1344,6 +1345,7 @@
+     std::shared_ptr<safe::queue_t<capture_ctx_t>> capture_ctx_queue,
+     sync_util::sync_t<std::weak_ptr<platf::display_t>> &display_wp,
+     safe::signal_t &reinit_event,
++    safe::signal_t &runtime_reinit_event,
+     const encoder_t &encoder
+   ) {
+     std::vector<capture_ctx_t> capture_ctxs;
+@@ -1506,7 +1508,7 @@
+           capture_ctxs.emplace_back(std::move(*capture_ctx_queue->pop()));
+         }
+ 
+-        if (switch_display_event->peek()) {
++        if (runtime_reinit_event.peek() || switch_display_event->peek()) {
+           artificial_reinit = true;
+           return false;
+         }
+@@ -1581,7 +1583,9 @@
+ 
+             display_wp = disp;
+ 
++            runtime_reinit_event.reset();
+             reinit_event.reset();
++            BOOST_LOG(info) << "live-settings-mvp: async capture runtime reinit complete"sv;
+             continue;
+           }
+         case platf::capture_e::error:
+@@ -2118,6 +2122,7 @@
+     std::shared_ptr<platf::display_t> disp,
+     std::unique_ptr<platf::encode_device_t> encode_device,
+     safe::signal_t &reinit_event,
++    safe::signal_t &runtime_reinit_event,
+     const encoder_t &encoder,
+     void *channel_data
+   ) {
+@@ -2154,7 +2159,6 @@
+     auto runtime_bitrate_events = mail->queue<runtime_bitrate_request_t>(mail::runtime_bitrate);
+     auto runtime_bitrate_ack_events = mail->queue<runtime_bitrate_ack_t>(mail::runtime_bitrate_ack);
+     auto runtime_settings_supports_encoder_restart = mail->event<bool>(mail::runtime_settings_supports_encoder_restart);
+-    auto switch_display_events = mail->event<int>(mail::switch_display);
+     auto touch_port_events = mail->event<input::touch_port_t>(mail::touch_port);
+     auto invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);
+     std::uint32_t runtime_fps = config.framerate;
+@@ -2292,11 +2296,8 @@
+                     runtime_resolution_idr_frames = 1800;
+                     runtime_resolution_diag_frames = 0;
+                     BOOST_LOG(info)
+-                      << "live-settings-mvp: scheduling capture reinit after runtime resolution request_id="sv << request->request_id;
+-                    std::thread {[switch_display_events]() {
+-                      std::this_thread::sleep_for(250ms);
+-                      switch_display_events->raise(0);
+-                    }}.detach();
++                      << "live-settings-mvp: requesting async capture reinit after runtime resolution request_id="sv << request->request_id;
++                    runtime_reinit_event.raise(true);
+                     BOOST_LOG(info)
+                       << "live-settings-mvp: async encoder restarted for runtime resolution request_id="sv << request->request_id
+                       << " applied_width="sv << applied_width
+@@ -2894,6 +2895,7 @@
+         display,
+         std::move(encode_device),
+         ref->reinit_event,
++        ref->runtime_reinit_event,
+         *ref->encoder_p,
+         channel_data
+       );
+@@ -3450,6 +3452,7 @@
+   int start_capture_async(capture_thread_async_ctx_t &capture_thread_ctx) {
+     capture_thread_ctx.encoder_p = chosen_encoder;
+     capture_thread_ctx.reinit_event.reset();
++    capture_thread_ctx.runtime_reinit_event.reset();
+ 
+     capture_thread_ctx.capture_ctx_queue = std::make_shared<safe::queue_t<capture_ctx_t>>(30);
+ 
+@@ -3458,6 +3461,7 @@
+       capture_thread_ctx.capture_ctx_queue,
+       std::ref(capture_thread_ctx.display_wp),
+       std::ref(capture_thread_ctx.reinit_event),
++      std::ref(capture_thread_ctx.runtime_reinit_event),
+       std::ref(*capture_thread_ctx.encoder_p)
+     };
+ 
