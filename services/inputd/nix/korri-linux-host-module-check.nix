@@ -119,6 +119,10 @@ assert builtins.elem "x11-headless.service" sunshine.requires;
 assert builtins.elem "/dev/inputplumber/sources" sunshine.serviceConfig.InaccessiblePaths;
 assert builtins.elem 39217 cfg.networking.firewall.interfaces.tailscale0.allowedTCPPorts;
 assert builtins.hasAttr "workspace-next" cfg.services.korriLinuxInput.inputd.actions;
+assert builtins.length cfg.services.korriLinuxInput.inputd.actions.workspace-next.command == 1;
+assert lib.hasSuffix "/bin/korri-input-action-fixture" (
+  builtins.head cfg.services.korriLinuxInput.inputd.actions.workspace-next.command
+);
 assert noValidation.config.services.korriLinuxInput.inputd.actions == { };
 assert hasFailedAssertion "gameplay identity" wrongGameplayUid;
 assert evaluationRejected wrongGameplayUid;

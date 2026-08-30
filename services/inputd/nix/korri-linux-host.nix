@@ -41,10 +41,23 @@ let
     echo "X11 display ${cfg.display} did not become ready" >&2
     exit 1
   '';
+  validationActionSource = pkgs.writeText "korri-input-action-fixture.c" ''
+    #include <unistd.h>
+
+    int main(void) {
+      for (;;) {
+        pause();
+      }
+    }
+  '';
+  validationActionFixture = pkgs.runCommandCC "korri-input-action-fixture" { } ''
+    mkdir -p "$out/bin"
+    "$CC" -O2 -Wall -Wextra -Werror ${validationActionSource} \
+      -o "$out/bin/korri-input-action-fixture"
+  '';
   validationActions = lib.optionalAttrs cfg.validation.enable {
     workspace-next.command = [
-      "${pkgs.coreutils}/bin/sleep"
-      "5"
+      "${validationActionFixture}/bin/korri-input-action-fixture"
     ];
   };
   validAbsolutePath =

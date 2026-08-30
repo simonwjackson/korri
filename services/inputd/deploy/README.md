@@ -130,6 +130,8 @@ Immediately before acceptance, the gate re-reads the exact InputPlumber 0.75.2 `
 
 Do not enter a token until the named stage passes.
 
+The validation-only `workspace-next` action runs an immutable blocking C fixture. Inputd must place it in the isolated action cgroup, then its 10-second action timeout must kill it and remove the cgroup.
+
 | HITL stage | Operator action and required observation |
 |---|---|
 | `normalized-gameplay` | Start a fresh game process. Confirm exactly one Xbox 360 target works and no raw physical controller opens under the gameplay identity. |
