@@ -934,6 +934,20 @@ assert_fails run_controller_node_resolution "$TMP/regular-controller-node" "$mis
 ln -s /dev/null "$TMP/controller-node-link"
 assert_fails run_controller_node_resolution "$TMP/controller-node-link" "$missing_node"
 
+PROFILE_SELECT_SOURCE="$(awk '
+  /^remote_profile_selects_event\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$PROFILE_SELECT_SOURCE" == remote_profile_selects_event* ]]
+grep -F 'busctl --system tree org.shadowblip.InputPlumber --list --no-pager' \
+  <<<"$PROFILE_SELECT_SOURCE" >/dev/null
+if grep -F 'tree org.shadowblip.InputPlumber /org/shadowblip/InputPlumber' \
+  <<<"$PROFILE_SELECT_SOURCE" >/dev/null; then
+  printf 'InputPlumber object enumeration passes an object path as a second service name\n' >&2
+  exit 1
+fi
+
 PHYSICAL_CONTROLLER_SOURCE="$(awk '
   /^remote_physical_controller_evidence\(\) \{/ { found=1 }
   found { print }

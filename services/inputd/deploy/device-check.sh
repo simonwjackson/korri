@@ -375,7 +375,7 @@ remote_profile_selects_event() {
     [[ "$profile_property" == "s \"$expected_path\"" ]] || continue
     sources_property="$(busctl --system get-property org.shadowblip.InputPlumber "$object" org.shadowblip.Input.CompositeDevice SourceDevicePaths 2>/dev/null || true)"
     grep -F "\"/dev/input/$event_name\"" <<<"$sources_property" >/dev/null && return 0
-  done < <(busctl --system tree org.shadowblip.InputPlumber /org/shadowblip/InputPlumber --list --no-pager 2>/dev/null || true)
+  done < <(busctl --system tree org.shadowblip.InputPlumber --list --no-pager 2>/dev/null || true)
   return 1
 }
 
