@@ -308,8 +308,8 @@ in
           ExecStart = "${pkgs.bash}/bin/bash ${hotplugRecovery} ${pkgs.systemd}/bin/systemctl";
           User = "root";
           Group = "root";
-          CapabilityBoundingSet = [ ];
-          AmbientCapabilities = [ ];
+          CapabilityBoundingSet = "";
+          AmbientCapabilities = "";
           NoNewPrivileges = true;
           PrivateTmp = true;
           PrivateDevices = true;
