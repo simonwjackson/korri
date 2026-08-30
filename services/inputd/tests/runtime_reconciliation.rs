@@ -372,6 +372,40 @@ fn ambiguity_closes_the_stream_clears_held_state_and_recovers_after_hotplug() {
 }
 
 #[test]
+fn missing_source_overrides_a_stale_target_and_clears_held_state() {
+    let first = target("event10");
+    let mut provider = InMemoryTargetProvider::with(vec![first]);
+    let mut runtime = ready_runtime(&mut provider);
+    assert!(runtime.handle_evdev(1, 0x13c, 1).is_empty());
+
+    runtime.source_missing();
+    assert_eq!(runtime.state(), &RuntimeState::Missing { raw_gamepads: 0 });
+    assert!(!runtime.has_open_target());
+    assert!(runtime.handle_evdev(1, 0x136, 1).is_empty());
+
+    runtime.reconcile(&mut provider);
+    assert!(matches!(runtime.state(), RuntimeState::Ready { .. }));
+    assert!(runtime.handle_evdev(1, 0x136, 1).is_empty());
+}
+
+#[test]
+fn ambiguous_source_topology_fails_closed_and_clears_held_state() {
+    let mut provider = InMemoryTargetProvider::with(vec![target("event10")]);
+    let mut runtime = ready_runtime(&mut provider);
+    assert!(runtime.handle_evdev(1, 0x13c, 1).is_empty());
+
+    runtime.source_ambiguous();
+    assert_eq!(
+        runtime.state(),
+        &RuntimeState::Recovering {
+            reason: RecoveryReason::SourceTopologyAmbiguous
+        }
+    );
+    assert!(!runtime.has_open_target());
+    assert!(runtime.handle_evdev(1, 0x136, 1).is_empty());
+}
+
+#[test]
 fn renumbered_target_reopens_without_carrying_held_controls() {
     let first = target("event10");
     let mut provider = InMemoryTargetProvider::with(vec![first]);

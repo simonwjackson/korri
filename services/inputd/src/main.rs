@@ -103,18 +103,24 @@ async fn run(services: ConfiguredServices, health: &mut impl HealthPublisher) {
                         }
                     }
                 }
-                let profile_ready = ensure_runtime_profile(
+                let profile_status = ensure_runtime_profile(
                     &mut runtime,
                     &mut dbus,
                     services.profile_path.as_deref(),
                     &mut profile_wait_logged,
                 )
                 .await;
-                let dbus_available = if profile_ready {
-                    refresh_owner(&mut runtime, &mut dbus).await
-                } else {
-                    runtime.set_dbus_owner(None);
-                    dbus.is_some()
+                let dbus_available = match profile_status {
+                    ProfileStatus::Ready
+                    | ProfileStatus::Applied
+                    | ProfileStatus::MissingSource
+                    | ProfileStatus::AmbiguousSources => {
+                        refresh_owner(&mut runtime, &mut dbus).await
+                    }
+                    ProfileStatus::Pending => {
+                        runtime.set_dbus_owner(None);
+                        dbus.is_some()
+                    }
                 };
                 if dbus_available && dbus_failure_logged {
                     tracing::info!(
@@ -123,7 +129,16 @@ async fn run(services: ConfiguredServices, health: &mut impl HealthPublisher) {
                     );
                 }
                 dbus_failure_logged = !dbus_available;
-                runtime.reconcile(&mut provider);
+                if runtime.dbus_owner().is_some() {
+                    match profile_status {
+                        ProfileStatus::Ready | ProfileStatus::Applied => {
+                            runtime.reconcile(&mut provider)
+                        }
+                        ProfileStatus::MissingSource => runtime.source_missing(),
+                        ProfileStatus::AmbiguousSources => runtime.source_ambiguous(),
+                        ProfileStatus::Pending => {}
+                    }
+                }
             }
             message = next_dbus_message(&mut dbus), if has_dbus => {
                 match message {
@@ -193,13 +208,13 @@ async fn ensure_runtime_profile(
     source: &mut Option<DbusSignalSource>,
     profile_path: Option<&std::path::Path>,
     wait_logged: &mut bool,
-) -> bool {
+) -> ProfileStatus {
     let Some(profile_path) = profile_path else {
-        return true;
+        return ProfileStatus::Ready;
     };
     let Some(connected) = source.as_ref() else {
         runtime.set_dbus_owner(None);
-        return false;
+        return ProfileStatus::Pending;
     };
     match connected.ensure_profile(profile_path).await {
         Ok(ProfileStatus::Ready) => {
@@ -211,7 +226,7 @@ async fn ensure_runtime_profile(
                 );
             }
             *wait_logged = false;
-            true
+            ProfileStatus::Ready
         }
         Ok(ProfileStatus::Applied) => {
             tracing::info!(
@@ -220,7 +235,15 @@ async fn ensure_runtime_profile(
                 "loaded immutable Korri profile into the supported composite"
             );
             *wait_logged = false;
-            true
+            ProfileStatus::Applied
+        }
+        Ok(ProfileStatus::MissingSource) => {
+            *wait_logged = false;
+            ProfileStatus::MissingSource
+        }
+        Ok(ProfileStatus::AmbiguousSources) => {
+            *wait_logged = false;
+            ProfileStatus::AmbiguousSources
         }
         Ok(ProfileStatus::Pending) => {
             if !*wait_logged {
@@ -232,7 +255,7 @@ async fn ensure_runtime_profile(
             }
             *wait_logged = true;
             runtime.set_dbus_owner(None);
-            false
+            ProfileStatus::Pending
         }
         Err(error) => {
             if !*wait_logged {
@@ -248,7 +271,7 @@ async fn ensure_runtime_profile(
             if error.is_transport_failure() {
                 *source = None;
             }
-            false
+            ProfileStatus::Pending
         }
     }
 }

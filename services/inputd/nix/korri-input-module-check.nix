@@ -336,6 +336,8 @@ assert
   == "${inputplumberKorri}/share/inputplumber/profiles/korri-60-xbox_one_gamepad.yaml";
 assert lib.hasInfix "org.shadowblip.Input.CompositeDevice.LoadProfilePath"
   combined.config.security.polkit.extraConfig;
+assert lib.hasInfix "org.shadowblip.Input.CompositeDevice.SourceDevicePaths"
+  combined.config.security.polkit.extraConfig;
 assert
   (builtins.fromJSON (
     builtins.unsafeDiscardStringContext combinedEnvironment.KORRI_INPUTD_WORKSPACE_NEXT

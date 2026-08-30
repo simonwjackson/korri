@@ -353,6 +353,7 @@ in
           if (subject.user == "${inputdUser}" && [
             "org.shadowblip.Input.CompositeDevice.DbusDevices",
             "org.shadowblip.Input.CompositeDevice.ProfilePath",
+            "org.shadowblip.Input.CompositeDevice.SourceDevicePaths",
             "org.shadowblip.Input.CompositeDevice.LoadProfilePath"
           ].indexOf(action.id) >= 0) {
             return polkit.Result.YES;

@@ -21,6 +21,9 @@ trait CompositeDevice {
     #[zbus(property)]
     fn profile_path(&self) -> zbus::Result<String>;
 
+    #[zbus(property)]
+    fn source_device_paths(&self) -> zbus::Result<Vec<String>>;
+
     fn load_profile_path(&self, path: String) -> zbus::Result<()>;
 }
 
@@ -50,6 +53,8 @@ impl fmt::Display for DbusRuntimeError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProfileStatus {
     Pending,
+    MissingSource,
+    AmbiguousSources,
     Ready,
     Applied,
 }
@@ -231,26 +236,36 @@ async fn ensure_profile_unbounded(
         .cache_properties(COMPOSITE_CACHE_PROPERTIES)
         .build()
         .await?;
-    if proxy.profile_path().await? == profile_path {
-        return if current_unique_owner(connection).await?.as_deref() == Some(owner.as_str()) {
-            Ok(ProfileStatus::Ready)
-        } else {
-            Ok(ProfileStatus::Pending)
-        };
-    }
-    proxy.load_profile_path(profile_path.to_owned()).await?;
+    let profile_status = if proxy.profile_path().await? == profile_path {
+        ProfileStatus::Ready
+    } else {
+        proxy.load_profile_path(profile_path.to_owned()).await?;
+        if current_unique_owner(connection).await?.as_deref() != Some(owner.as_str()) {
+            return Ok(ProfileStatus::Pending);
+        }
+        if proxy.profile_path().await? != profile_path {
+            return Err(DbusRuntimeError::Rejected(
+                "InputPlumber did not retain the immutable Korri profile".into(),
+            ));
+        }
+        if current_unique_owner(connection).await?.as_deref() != Some(owner.as_str()) {
+            return Ok(ProfileStatus::Pending);
+        }
+        ProfileStatus::Applied
+    };
+    let source_paths = proxy.source_device_paths().await?;
     if current_unique_owner(connection).await?.as_deref() != Some(owner.as_str()) {
         return Ok(ProfileStatus::Pending);
     }
-    if proxy.profile_path().await? != profile_path {
-        return Err(DbusRuntimeError::Rejected(
-            "InputPlumber did not retain the immutable Korri profile".into(),
-        ));
+    Ok(profile_status_with_sources(profile_status, &source_paths))
+}
+
+fn profile_status_with_sources(status: ProfileStatus, source_paths: &[String]) -> ProfileStatus {
+    match source_paths.len() {
+        0 => ProfileStatus::MissingSource,
+        1 => status,
+        _ => ProfileStatus::AmbiguousSources,
     }
-    if current_unique_owner(connection).await?.as_deref() != Some(owner.as_str()) {
-        return Ok(ProfileStatus::Pending);
-    }
-    Ok(ProfileStatus::Applied)
 }
 
 pub fn composite_paths_from_introspection(xml: &str) -> Vec<String> {
@@ -411,8 +426,8 @@ mod tests {
     use std::{future, time::Duration};
 
     use super::{
-        bounded_with_timeout, composite_paths_from_introspection, DbusRuntimeError,
-        COMPOSITE_CACHE_PROPERTIES,
+        bounded_with_timeout, composite_paths_from_introspection, profile_status_with_sources,
+        DbusRuntimeError, ProfileStatus, COMPOSITE_CACHE_PROPERTIES,
     };
     use zbus::proxy::CacheProperties;
 
@@ -450,6 +465,25 @@ mod tests {
                 "/org/shadowblip/InputPlumber/CompositeDevice10",
                 "/org/shadowblip/InputPlumber/CompositeDevice2",
             ]
+        );
+    }
+
+    #[test]
+    fn profile_readiness_requires_one_live_source() {
+        assert_eq!(
+            profile_status_with_sources(ProfileStatus::Ready, &[]),
+            ProfileStatus::MissingSource
+        );
+        assert_eq!(
+            profile_status_with_sources(ProfileStatus::Applied, &["source".into()]),
+            ProfileStatus::Applied
+        );
+        assert_eq!(
+            profile_status_with_sources(
+                ProfileStatus::Ready,
+                &["source-a".into(), "source-b".into()]
+            ),
+            ProfileStatus::AmbiguousSources
         );
     }
 }

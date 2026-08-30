@@ -47,6 +47,7 @@ pub enum RecoveryReason {
     RequiredTargetUnreadable,
     DescriptorChangedAfterOpen,
     EventStreamLost,
+    SourceTopologyAmbiguous,
 }
 
 impl From<&RuntimeState> for RuntimeHealth {
@@ -453,6 +454,18 @@ impl Runtime {
         self.close_target();
         self.transition(RuntimeState::Recovering {
             reason: RecoveryReason::EventStreamLost,
+        });
+    }
+
+    pub fn source_missing(&mut self) {
+        self.close_target();
+        self.transition(RuntimeState::Missing { raw_gamepads: 0 });
+    }
+
+    pub fn source_ambiguous(&mut self) {
+        self.close_target();
+        self.transition(RuntimeState::Recovering {
+            reason: RecoveryReason::SourceTopologyAmbiguous,
         });
     }
 
