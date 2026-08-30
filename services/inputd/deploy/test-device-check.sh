@@ -866,14 +866,91 @@ run_user_unit_enabled_check() (
 for disabled_state in disabled static masked masked-runtime; do
   [[ "$(run_user_unit_enabled_check loaded "$disabled_state")" == false ]]
 done
+for masked_state in masked masked-runtime; do
+  [[ "$(run_user_unit_enabled_check masked "$masked_state")" == false ]]
+done
 [[ "$(run_user_unit_enabled_check not-found '')" == false ]]
 assert_fails_with 'unexpected user unit enablement state for legacy.service: LoadState=not-found UnitFileState=disabled' \
   run_user_unit_enabled_check not-found disabled
+assert_fails_with 'unexpected user unit enablement state for legacy.service: LoadState=masked UnitFileState=disabled' \
+  run_user_unit_enabled_check masked disabled
 assert_fails_with 'unexpected user unit enablement state for legacy.service: LoadState=loaded UnitFileState=<empty>' \
   run_user_unit_enabled_check loaded ''
 assert_fails_with 'incomplete user unit enablement state for legacy.service' \
   run_user_unit_enabled_check incomplete
 assert_fails run_user_unit_enabled_check query-failure
+
+RESTORE_RAW_JOYSTICK_SOURCE="$(awk '
+  /^remote_restore_raw_joystick_udev\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$RESTORE_RAW_JOYSTICK_SOURCE" == remote_restore_raw_joystick_udev* ]]
+run_raw_joystick_restore() (
+  local model="$1" restore_log="$TMP/raw-joystick-restore-$RANDOM.log"
+  : >"$restore_log"
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  fail() {
+    printf 'device gate: %s\n' "$*" >&2
+    exit 1
+  }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  systemctl() {
+    [[ "$model" != active ]] && printf 'inactive\n' || printf 'active\n'
+  }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  find() {
+    [[ "$model" != hide-rules ]] || printf '/run/udev/rules.d/50-inputplumber-hide-fixture.rules\n'
+  }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  remote_raw_joystick_events() {
+    [[ "$model" == no-events ]] || printf '/sys/class/input/event16\n/sys/class/input/event18\n'
+  }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  sudo() {
+    [[ "$model" != sudo-failure ]] || return 1
+    printf '%s\n' "$*" >>"$restore_log"
+  }
+  eval "$RESTORE_RAW_JOYSTICK_SOURCE"
+  remote_restore_raw_joystick_udev
+  cat "$restore_log"
+)
+restore_output="$(run_raw_joystick_restore success)"
+grep -Fx -- '-n udevadm control --reload-rules' <<<"$restore_output" >/dev/null
+grep -Fx -- '-n udevadm trigger --action=add --settle /sys/class/input/event16' <<<"$restore_output" >/dev/null
+grep -Fx -- '-n udevadm trigger --action=add --settle /sys/class/input/event18' <<<"$restore_output" >/dev/null
+grep -Fx -- '-n udevadm settle --timeout=30' <<<"$restore_output" >/dev/null
+[[ "$(grep -c 'trigger --action=add' <<<"$restore_output")" -eq 2 ]]
+restore_output="$(run_raw_joystick_restore no-events)"
+[[ "$(grep -c 'trigger --action=add' <<<"$restore_output" || true)" -eq 0 ]]
+assert_fails_with 'InputPlumber is still active during raw joystick restore' \
+  run_raw_joystick_restore active
+assert_fails_with 'InputPlumber hide rules remain during raw joystick restore' \
+  run_raw_joystick_restore hide-rules
+assert_fails_with 'raw joystick udev rule reload failed' \
+  run_raw_joystick_restore sudo-failure
+
+ACL_DIGEST_SOURCE="$(awk '
+  /^remote_acl_digest\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$ACL_DIGEST_SOURCE" == remote_acl_digest* ]]
+grep -F 'remote_raw_joystick_events' <<<"$ACL_DIGEST_SOURCE" >/dev/null
+grep -F 'remote_stable_raw_topology_record' <<<"$ACL_DIGEST_SOURCE" >/dev/null
+grep -F "stat -Lc '%a:%u:%g'" <<<"$ACL_DIGEST_SOURCE" >/dev/null
+if grep -F "stat -Lc '%a:%u:%g:%t:%T'" <<<"$ACL_DIGEST_SOURCE" >/dev/null \
+  || grep -F "\"\${event##*/}\"" <<<"$ACL_DIGEST_SOURCE" >/dev/null; then
+  printf 'rollback ACL digest retained a volatile event index or device number\n' >&2
+  exit 1
+fi
+REMOTE_RESTORE_SOURCE="$(awk '
+  /^remote_restore\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+grep -F 'remote_restore_raw_joystick_udev' <<<"$REMOTE_RESTORE_SOURCE" >/dev/null
+[[ "$(grep -Fc 'remote_restore_raw_joystick_udev' "$GATE")" -eq 2 ]]
 
 ACTIVE_GAME_SOURCE="$(awk '
   /^remote_refuse_active_game\(\) \{/ { found=1 }
@@ -1088,6 +1165,12 @@ grep -Fx 'old-user.korrid.active=false' <<<"$predicates" >/dev/null
 grep -Fx 'old-user.korrid.enabled=false' <<<"$predicates" >/dev/null
 grep -Fx 'old-user.sunshine.enabled=false' <<<"$predicates" >/dev/null
 grep -Fx 'old-user.x11-headless.enabled=false' <<<"$predicates" >/dev/null
+for masked_state in masked masked-runtime; do
+  predicates="$(run_production_predicates \
+    HARNESS_USER_ACTIVE_STATE=inactive HARNESS_USER_LOAD_STATE=masked HARNESS_USER_ENABLED_STATE="$masked_state")"
+  grep -Fx 'old-user.korrid.enabled=false' <<<"$predicates" >/dev/null
+  grep -Fx 'old-user.sunshine.enabled=false' <<<"$predicates" >/dev/null
+done
 assert_fails_with 'old user unit enablement query failed' \
   run_production_predicates HARNESS_USER_LOAD_STATE=not-found HARNESS_USER_ENABLED_STATE=disabled
 

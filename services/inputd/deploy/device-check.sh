@@ -98,7 +98,9 @@ remote_user_unit_enabled() {
     || { printf 'incomplete user unit enablement state for %s\n' "$unit" >&2; return 1; }
   case "$load:$state" in
     loaded:enabled) printf 'true\n' ;;
-    loaded:disabled|loaded:static|loaded:masked|loaded:masked-runtime|not-found:) printf 'false\n' ;;
+    loaded:disabled|loaded:static|loaded:masked|loaded:masked-runtime|masked:masked|masked:masked-runtime|not-found:)
+      printf 'false\n'
+      ;;
     *)
       printf 'unexpected user unit enablement state for %s: LoadState=%s UnitFileState=%s\n' \
         "$unit" "${load:-<empty>}" "${state:-<empty>}" >&2
@@ -640,6 +642,37 @@ remote_stop_candidate_services() {
   done
 }
 
+remote_raw_joystick_events() {
+  local event node name props
+  shopt -s nullglob
+  for event in /sys/class/input/event*; do
+    node="/dev/input/${event##*/}"
+    [[ -r "$event/device/name" ]] || continue
+    name="$(<"$event/device/name")"
+    [[ "$name" != "$NORMALIZED_NAME" ]] || continue
+    props="$(udevadm info --query=property --name="$node" 2>/dev/null || true)"
+    grep -Fx 'ID_INPUT_JOYSTICK=1' <<<"$props" >/dev/null || continue
+    printf '%s\n' "$event"
+  done
+}
+
+remote_restore_raw_joystick_udev() {
+  local event
+  [[ "$(systemctl show inputplumber.service -p ActiveState --value 2>/dev/null || true)" != active ]] \
+    || fail 'InputPlumber is still active during raw joystick restore'
+  [[ -z "$(find /run/udev/rules.d -maxdepth 1 -type f -name '*inputplumber-hide*' -print -quit 2>/dev/null)" ]] \
+    || fail 'InputPlumber hide rules remain during raw joystick restore'
+  sudo -n udevadm control --reload-rules \
+    || fail 'raw joystick udev rule reload failed'
+  while IFS= read -r event; do
+    [[ -n "$event" ]] || continue
+    sudo -n udevadm trigger --action=add --settle "$event" \
+      || fail "raw joystick udev trigger failed: $event"
+  done < <(remote_raw_joystick_events)
+  sudo -n udevadm settle --timeout=30 \
+    || fail 'raw joystick udev settle failed'
+}
+
 remote_stable_raw_topology_record() {
   local name="$1" phys="$2" uniq="$3" id="$4" props="$5" sysfs="$6" readable="$7"
   local key value serial='' path='' stable_sysfs
@@ -695,19 +728,25 @@ remote_topology_digest() {
 }
 
 remote_acl_digest() {
-  local gameplay_user="$1" event node name game_read
+  local gameplay_user="$1" event node name props phys uniq id sysfs readable identity game_read
   {
-    shopt -s nullglob
-    for event in /sys/class/input/event*; do
+    while IFS= read -r event; do
+      [[ -n "$event" ]] || continue
       node="/dev/input/${event##*/}"
-      [[ -r "$event/device/name" ]] || continue
       name="$(<"$event/device/name")"
+      props="$(udevadm info --query=property --name="$node" 2>/dev/null || true)"
+      phys="$(cat "$event/device/phys" 2>/dev/null || true)"
+      uniq="$(cat "$event/device/uniq" 2>/dev/null || true)"
+      id="$(cat "$event/device/id/bustype" 2>/dev/null || true):$(cat "$event/device/id/vendor" 2>/dev/null || true):$(cat "$event/device/id/product" 2>/dev/null || true):$(cat "$event/device/id/version" 2>/dev/null || true)"
+      sysfs="$(realpath -e -- "$event" 2>/dev/null || true)"
+      readable="$(test -r "$node" && printf yes || printf no)"
+      identity="$(remote_stable_raw_topology_record "$name" "$phys" "$uniq" "$id" "$props" "$sysfs" "$readable")"
       game_read="$(sudo -n -u "$gameplay_user" test -r "$node" && printf yes || printf no)"
-      printf '%s|%q|%s|%s|' "${event##*/}" "$name" "$(stat -Lc '%a:%u:%g:%t:%T' "$node" 2>/dev/null || true)" "$game_read"
+      printf '%s|%s|%s|' "$identity" "$(stat -Lc '%a:%u:%g' "$node" 2>/dev/null || true)" "$game_read"
       getfacl -cpn "$node" 2>/dev/null | LC_ALL=C sort | tr '\n' ','
       printf '\n'
-    done | sort
-  } | sha256sum | cut -d' ' -f1
+    done < <(remote_raw_joystick_events)
+  } | sort | sha256sum | cut -d' ' -f1
 }
 
 remote_source_artifacts_digest() {
@@ -901,6 +940,7 @@ remote_restore() {
   else
     remote_activate_generation "$rollback" test
   fi
+  remote_restore_raw_joystick_udev
   remote_clear_orphan_bundle_selector
   remote_set_pairing_state_modes "$gameplay_user" "$7" "$8" >/dev/null
   remote_restart_user_manager "$gameplay_user"
