@@ -278,10 +278,14 @@ in
 
     hardware.graphics.enable = true;
 
-    users.users.${cfg.gameplayUser}.extraGroups = lib.mkAfter [
-      "render"
-      "video"
-    ];
+    users.users.${cfg.gameplayUser} = {
+      uid = lib.mkDefault cfg.gameplayUid;
+      group = lib.mkDefault cfg.gameplayGroup;
+      extraGroups = lib.mkAfter [
+        "render"
+        "video"
+      ];
+    };
 
     systemd.tmpfiles.rules = [
       "d ${cfg.storageRoot} 0700 korrid korrid -"

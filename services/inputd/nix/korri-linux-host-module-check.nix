@@ -26,7 +26,6 @@ let
           users.groups.games.gid = 1001;
           users.users.gameplay = {
             isNormalUser = true;
-            uid = 1001;
             group = "games";
             home = "/home/gameplay";
           };
@@ -67,7 +66,7 @@ let
     services.korriLinuxHost.validation.enable = false;
   };
   wrongGameplayUid = evaluate {
-    services.korriLinuxHost.gameplayUid = lib.mkForce 1002;
+    users.users.gameplay.uid = lib.mkForce 1002;
   };
   stockSunshine = evaluate {
     services.korriLinuxHost.sunshine.package = lib.mkForce pkgs.sunshine;
