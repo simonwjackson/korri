@@ -17,9 +17,11 @@ Restore Korri's Linux normalized-input boundary using a pinned upstream InputPlu
 - `korri-bundle` contains exact korrid, inputd, InputPlumber, and profile store paths.
 - The optional `nixosModules.korri-bundle` host adapter initializes GC-rooted active and previous selectors.
 - Rust launch and selection helpers reject mutable components or data, use no shell, restart only InputPlumber, inputd, and korrid, and restore the previous selector after failed health.
-- Local Rust, package, NixOS module, dev-runner, and repository korrid checks pass.
-- Zao physical development proof passed with controller `0003:045e:0b12:0501`. A transient candidate InputPlumber created one Xbox 360 target and the DBus target; `korri-dev --physical` reached `Ready` with actions disabled. Only InputPlumber restarted, the original provider returned, the candidate target was removed, and unrelated user-service states and both NixOS generation links remained unchanged.
-- The first hardened host-layer installation remains pending. It needs either an approved NixOS activation or a reboot into a prepared generation. Later bundle tests restart only InputPlumber, inputd, and korrid and do not need another NixOS activation.
+- Local Rust, packaged-runtime, NixOS module, dev-runner, inputd, and repository korrid checks pass.
+- Mountainous `unified` imports only `nixosModules.korri-linux-host` and pins Korri revision `7f524990f627ba1234e60ecc99303d2c215fe30a`. The pin remains local until publication is explicitly approved.
+- Zao candidate v14 passed every automated gate with controller `0003:045e:0b12:0501`, one normalized Xbox target, `Ready` inputd health, service-specific credentials, and raw input denied to gameplay. The exact validation session started and stopped through the dedicated korrid authority. The package now verifies `KORRID_PRIVATE_STATE_ROOT`, and the rendered Polkit rule permits only the dedicated `korrid` identity and exact `korri-game-<32 hex>.service` units.
+- The 45-second and 120-second normalized-input observers received no physical controller event. Candidate v14 then stopped the exact game, rolled back to `/nix/store/ac46r72fh00p9g81z5hv45pw8zdsbpy4-nixos-system-zao-26.05.20260313.c06b4ae`, and reconciled cleanly. `user@1000` stayed at PID `363588` and invocation `31dfefc905ea49fd8ec0b05a4a0e53fd`.
+- U7 remains blocked on physical controller input. After that proof, complete the `usu` Sunshine stream HITL, persistent installation, reboot, and post-reboot recovery check.
 
 ## Execution decisions
 
@@ -31,11 +33,11 @@ Restore Korri's Linux normalized-input boundary using a pinned upstream InputPlu
 
 ## Execution tracker
 
-- [ ] U1: Portable Rust input core
-- [ ] U2: Korri InputPlumber package and profile composition
-- [ ] U3: Linux evdev and authenticated DBus runtime
-- [ ] U4: Direct action dispatch and recoverable exact session control
-- [ ] U5: NixOS modules, service isolation, and project checks
-- [ ] U6: Linux RetroArch normalized-input policy
+- [x] U1: Portable Rust input core
+- [x] U2: Korri InputPlumber package and profile composition
+- [x] U3: Linux evdev and authenticated DBus runtime
+- [x] U4: Direct action dispatch and recoverable exact session control
+- [x] U5: NixOS modules, service isolation, and project checks
+- [x] U6: Linux RetroArch normalized-input policy
 - [ ] U7: Reversible Zao rollout, rollback, and reboot proof
 - [ ] Repository-wide verification and review
