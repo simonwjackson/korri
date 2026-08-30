@@ -88,12 +88,22 @@ remote_user_unit_active() {
 }
 
 remote_user_unit_enabled() {
-  local gameplay_user="$1" unit="$2" state
-  state="$(remote_user_systemctl "$gameplay_user" show "$unit" -p UnitFileState --value)" || return 1
-  case "$state" in
-    enabled) printf 'true\n' ;;
-    disabled|static) printf 'false\n' ;;
-    *) printf 'unexpected user unit UnitFileState for %s: %s\n' "$unit" "${state:-<empty>}" >&2; return 1 ;;
+  local gameplay_user="$1" unit="$2" snapshot load state
+  snapshot="$(remote_user_systemctl "$gameplay_user" show "$unit" -p LoadState -p UnitFileState)" \
+    || return 1
+  load="$(awk -F= '$1 == "LoadState" { print substr($0, index($0, "=") + 1) }' <<<"$snapshot")"
+  state="$(awk -F= '$1 == "UnitFileState" { print substr($0, index($0, "=") + 1) }' <<<"$snapshot")"
+  [[ "$(grep -c '^LoadState=' <<<"$snapshot")" -eq 1 \
+    && "$(grep -c '^UnitFileState=' <<<"$snapshot")" -eq 1 ]] \
+    || { printf 'incomplete user unit enablement state for %s\n' "$unit" >&2; return 1; }
+  case "$load:$state" in
+    loaded:enabled) printf 'true\n' ;;
+    loaded:disabled|loaded:static|loaded:masked|loaded:masked-runtime|not-found:) printf 'false\n' ;;
+    *)
+      printf 'unexpected user unit enablement state for %s: LoadState=%s UnitFileState=%s\n' \
+        "$unit" "${load:-<empty>}" "${state:-<empty>}" >&2
+      return 1
+      ;;
   esac
 }
 

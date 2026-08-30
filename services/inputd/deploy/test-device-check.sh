@@ -33,38 +33,53 @@ case "$(basename "$0")" in
     exit 0
     ;;
   systemctl)
-    scope=system property='' unit=''
+    scope=system unit='' values_only=false
+    properties=()
     for arg in "$@"; do
       [[ "$arg" != --user ]] || scope=user
       [[ "$arg" != *.service ]] || unit="$arg"
+      [[ "$arg" != --value ]] || values_only=true
     done
     while [[ $# -gt 0 ]]; do
       if [[ "$1" == -p ]]; then
-        property="${2:-}"
-        break
+        properties+=("${2:-}")
+        shift 2
+        continue
       fi
       shift
     done
+    property="$(IFS=,; printf '%s' "${properties[*]}")"
     if [[ "$scope" == user ]]; then
       [[ "${HARNESS_MODELED_USER:-root}" == gameplay ]] || exit 1
       [[ "${XDG_RUNTIME_DIR:-}" == "/run/user/${HARNESS_GAMEPLAY_UID:-1000}" ]] || exit 1
       [[ "${DBUS_SESSION_BUS_ADDRESS:-}" == "unix:path=/run/user/${HARNESS_GAMEPLAY_UID:-1000}/bus" ]] || exit 1
       printf 'systemctl-user=%s property=%s runtime=%s bus=%s\n' \
         "$unit" "$property" "$XDG_RUNTIME_DIR" "$DBUS_SESSION_BUS_ADDRESS" >>"${HARNESS_USER_SCOPE_LOG:?}"
-      [[ "${HARNESS_USER_QUERY_ERROR:-}" != "$property:$unit" \
-        && "${HARNESS_USER_QUERY_ERROR:-}" != all ]] || exit 69
+      [[ "${HARNESS_USER_QUERY_ERROR:-}" != all ]] || exit 69
+      for queried_property in "${properties[@]}"; do
+        [[ "${HARNESS_USER_QUERY_ERROR:-}" != "$queried_property:$unit" ]] || exit 69
+      done
       active="${HARNESS_USER_ACTIVE_STATE:-active}"
-      enabled="${HARNESS_USER_ENABLED_STATE:-enabled}"
+      enabled="${HARNESS_USER_ENABLED_STATE-enabled}"
+      load="${HARNESS_USER_LOAD_STATE-loaded}"
     else
-      active=active enabled=enabled
+      active=active enabled=enabled load=loaded
     fi
-    case "$property" in
-      ActiveState) printf '%s\n' "$active" ;;
-      UnitFileState) printf '%s\n' "$enabled" ;;
-      LoadState) printf 'loaded\n' ;;
-      SubState) printf 'running\n' ;;
-      StatusText) printf '\n' ;;
-    esac
+    for queried_property in "${properties[@]}"; do
+      case "$queried_property" in
+        ActiveState) value="$active" ;;
+        UnitFileState) value="$enabled" ;;
+        LoadState) value="$load" ;;
+        SubState) value=running ;;
+        StatusText) value='' ;;
+        *) value='' ;;
+      esac
+      if [[ "$values_only" == true ]]; then
+        printf '%s\n' "$value"
+      else
+        printf '%s=%s\n' "$queried_property" "$value"
+      fi
+    done
     exit 0
     ;;
   ssh-command-harness)
@@ -825,6 +840,41 @@ assert_fails_with 'bundle selector service state is unavailable' \
 assert_fails_with 'bundle selector service has an unexpected load state: masked' \
   run_selector_service_check masked
 
+USER_UNIT_ENABLED_SOURCE="$(awk '
+  /^remote_user_unit_enabled\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$USER_UNIT_ENABLED_SOURCE" == remote_user_unit_enabled* ]]
+run_user_unit_enabled_check() (
+  local modeled_load="$1" modeled_state="${2:-}"
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  remote_user_systemctl() {
+    case "$modeled_load" in
+      query-failure) return 1 ;;
+      incomplete)
+        printf 'LoadState=loaded\n'
+        return 0
+        ;;
+    esac
+    printf 'LoadState=%s\nUnitFileState=%s\n' "$modeled_load" "$modeled_state"
+  }
+  eval "$USER_UNIT_ENABLED_SOURCE"
+  remote_user_unit_enabled gameplay legacy.service
+)
+[[ "$(run_user_unit_enabled_check loaded enabled)" == true ]]
+for disabled_state in disabled static masked masked-runtime; do
+  [[ "$(run_user_unit_enabled_check loaded "$disabled_state")" == false ]]
+done
+[[ "$(run_user_unit_enabled_check not-found '')" == false ]]
+assert_fails_with 'unexpected user unit enablement state for legacy.service: LoadState=not-found UnitFileState=disabled' \
+  run_user_unit_enabled_check not-found disabled
+assert_fails_with 'unexpected user unit enablement state for legacy.service: LoadState=loaded UnitFileState=<empty>' \
+  run_user_unit_enabled_check loaded ''
+assert_fails_with 'incomplete user unit enablement state for legacy.service' \
+  run_user_unit_enabled_check incomplete
+assert_fails run_user_unit_enabled_check query-failure
+
 ACTIVE_GAME_SOURCE="$(awk '
   /^remote_refuse_active_game\(\) \{/ { found=1 }
   found { print }
@@ -1027,11 +1077,19 @@ if grep -F 'old-user.korrid.active=false' "$TMP/failure.stdout" >/dev/null; then
 fi
 assert_fails_with 'old user unit active state query failed' \
   run_production_predicates HARNESS_USER_ACTIVE_STATE=failed
-for enabled_state in disabled static; do
+for enabled_state in disabled static masked masked-runtime; do
   predicates="$(run_production_predicates HARNESS_USER_ACTIVE_STATE=inactive HARNESS_USER_ENABLED_STATE="$enabled_state")"
   grep -Fx 'old-user.korrid.active=false' <<<"$predicates" >/dev/null
   grep -Fx 'old-user.korrid.enabled=false' <<<"$predicates" >/dev/null
 done
+predicates="$(run_production_predicates \
+  HARNESS_USER_ACTIVE_STATE=inactive HARNESS_USER_LOAD_STATE=not-found HARNESS_USER_ENABLED_STATE='')"
+grep -Fx 'old-user.korrid.active=false' <<<"$predicates" >/dev/null
+grep -Fx 'old-user.korrid.enabled=false' <<<"$predicates" >/dev/null
+grep -Fx 'old-user.sunshine.enabled=false' <<<"$predicates" >/dev/null
+grep -Fx 'old-user.x11-headless.enabled=false' <<<"$predicates" >/dev/null
+assert_fails_with 'old user unit enablement query failed' \
+  run_production_predicates HARNESS_USER_LOAD_STATE=not-found HARNESS_USER_ENABLED_STATE=disabled
 
 # Pairing proof records only a boolean. It rejects permissions and links, and
 # never exposes the state file contents.
