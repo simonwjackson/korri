@@ -752,6 +752,24 @@ remote_topology_digest() {
   } | sha256sum | cut -d' ' -f1
 }
 
+remote_canonical_acl() {
+  local node="$1" acl line named=false
+  local -a lines=()
+  acl="$(getfacl -cpn "$node" 2>/dev/null)" || return 1
+  mapfile -t lines <<<"$acl"
+  for line in "${lines[@]}"; do
+    [[ "$line" =~ ^(user|group):[^:]+: ]] && named=true
+  done
+  {
+    printf '\n'
+    for line in "${lines[@]}"; do
+      [[ -n "$line" ]] || continue
+      [[ "$named" == true || "$line" != mask::* ]] || continue
+      printf '%s\n' "$line"
+    done
+  } | LC_ALL=C sort | tr '\n' ','
+}
+
 remote_acl_digest() {
   local gameplay_user="$1" event node name props phys uniq id sysfs readable identity game_read
   {
@@ -768,7 +786,7 @@ remote_acl_digest() {
       identity="$(remote_stable_raw_topology_record "$name" "$phys" "$uniq" "$id" "$props" "$sysfs" "$readable")"
       game_read="$(sudo -n -u "$gameplay_user" test -r "$node" && printf yes || printf no)"
       printf '%s|%s|%s|' "$identity" "$(stat -Lc '%a:%u:%g' "$node" 2>/dev/null || true)" "$game_read"
-      getfacl -cpn "$node" 2>/dev/null | LC_ALL=C sort | tr '\n' ','
+      remote_canonical_acl "$node"
       printf '\n'
     done < <(remote_raw_joystick_events)
   } | sort | sha256sum | cut -d' ' -f1

@@ -555,6 +555,27 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GATE="$HERE/device-check.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+# The test extracts the exact gate function under test.
+# shellcheck disable=SC1090
+source <(awk '
+  /^remote_canonical_acl\(\) \{/ { capture = 1 }
+  capture { print }
+  capture && /^}/ { exit }
+' "$GATE")
+acl_fixture="$TMP/acl-canonicalization"
+: >"$acl_fixture"
+chmod 0660 "$acl_fixture"
+setfacl -b "$acl_fixture"
+simple_acl="$(remote_canonical_acl "$acl_fixture")"
+[[ "$simple_acl" == ',group::rw-,other::---,user::rw-,' ]]
+setfacl -m m::rw- "$acl_fixture"
+[[ "$(remote_canonical_acl "$acl_fixture")" == "$simple_acl" ]]
+setfacl -m u:1234:r-- "$acl_fixture"
+named_read_acl="$(remote_canonical_acl "$acl_fixture")"
+[[ "$named_read_acl" != "$simple_acl" ]]
+grep -F 'user:1234:r--' <<<"$named_read_acl" >/dev/null
+setfacl -m u:1234:rw- "$acl_fixture"
+[[ "$(remote_canonical_acl "$acl_fixture")" != "$named_read_acl" ]]
 SELF="$(realpath "$0")"
 ln -s "$SELF" "$TMP/ssh-command-harness"
 mkdir "$TMP/user-scope-bin"
