@@ -29,6 +29,34 @@ let
   controlGroup = "korri-control";
   sunshineGroup = "korri-sunshine-uinput";
   virtualTargetAcl = import ./virtual-target-acl.nix { inherit pkgs; };
+  hotplugRecovery = pkgs.writeText "korri-inputplumber-hotplug-recovery.sh" ''
+    set -Eeuo pipefail
+    [[ "$#" -eq 1 ]] || {
+      echo "InputPlumber hotplug recovery requires one systemctl path" >&2
+      exit 64
+    }
+    systemctl="$1"
+
+    for _ in $(${pkgs.coreutils}/bin/seq 1 50); do
+      inputd_state="$("$systemctl" is-active korri-inputd.service 2>/dev/null || true)"
+      [[ "$inputd_state" == "active" ]] || exit 0
+      health="$("$systemctl" show korri-inputd.service -p StatusText --value 2>/dev/null || true)"
+      if [[ "$health" == "Missing" ]]; then
+        "$systemctl" restart inputplumber.service
+        for _ in $(${pkgs.coreutils}/bin/seq 1 100); do
+          inputd_state="$("$systemctl" is-active korri-inputd.service 2>/dev/null || true)"
+          health="$("$systemctl" show korri-inputd.service -p StatusText --value 2>/dev/null || true)"
+          if [[ "$inputd_state" == "active" && "$health" == "Ready" ]]; then
+            exit 0
+          fi
+          ${pkgs.coreutils}/bin/sleep 0.2
+        done
+        echo "InputPlumber hotplug recovery did not restore Ready input health" >&2
+        exit 1
+      fi
+      ${pkgs.coreutils}/bin/sleep 0.2
+    done
+  '';
   actionNames = [
     "system-panel"
     "volume-up"
@@ -267,6 +295,40 @@ in
         };
       };
     })
+    (lib.mkIf (cfg.inputd.enable && cfg.provider.enable) {
+      systemd.services.korri-inputplumber-hotplug-recovery = {
+        description = "Recover Korri InputPlumber after controller hotplug";
+        after = [
+          "inputplumber.service"
+          "korri-inputd.service"
+          "systemd-udevd.service"
+        ];
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = "${pkgs.bash}/bin/bash ${hotplugRecovery} ${pkgs.systemd}/bin/systemctl";
+          User = "root";
+          Group = "root";
+          CapabilityBoundingSet = [ ];
+          AmbientCapabilities = [ ];
+          NoNewPrivileges = true;
+          PrivateTmp = true;
+          PrivateDevices = true;
+          ProtectSystem = "strict";
+          ProtectHome = true;
+          ProtectKernelTunables = true;
+          ProtectKernelModules = true;
+          ProtectKernelLogs = true;
+          ProtectControlGroups = true;
+          RestrictAddressFamilies = [ "AF_UNIX" ];
+          IPAddressDeny = "any";
+          RestrictSUIDSGID = true;
+          LockPersonality = true;
+          MemoryDenyWriteExecute = true;
+          SystemCallArchitectures = "native";
+          UMask = "0077";
+        };
+      };
+    })
     (lib.mkIf cfg.provider.sunshine.enableUinputAccess {
       users.groups.${sunshineGroup}.gid = cfg.provider.sunshine.gid;
       systemd.services.${cfg.provider.sunshine.serviceName}.serviceConfig.SupplementaryGroups =
@@ -342,6 +404,9 @@ in
       # match limits hotplug invocation and sets a closed base mode first.
       services.udev.extraRules = ''
         SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Microsoft X-Box 360 pad", ATTRS{id/bustype}=="0003", ATTRS{id/vendor}=="045e", ATTRS{id/product}=="028e", ATTRS{id/version}=="0001", OWNER="root", GROUP="root", MODE="0600", RUN+="${lib.getExe virtualTargetAcl} grant ${toString cfg.inputd.uid} ${toString cfg.inputd.actionUid} $env{DEVNAME}"
+        ${lib.optionalString cfg.provider.enable ''
+          ACTION=="add", SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_JOYSTICK}=="1", TAG+="systemd", ENV{SYSTEMD_WANTS}+="korri-inputplumber-hotplug-recovery.service"
+        ''}
       '';
       services.dbus.packages = [ providerDbusPolicy ];
       security.polkit.enable = true;
