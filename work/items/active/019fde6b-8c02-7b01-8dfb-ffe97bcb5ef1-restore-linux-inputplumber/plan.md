@@ -103,7 +103,7 @@ Zao already runs stock InputPlumber 0.75.2 as an active NixOS system service, bu
 
 - InputPlumber owns hardware normalization; `inputd` owns product shortcut policy. Gameplay reads the virtual target directly rather than being forwarded through `inputd`.
 - Fix virtual device identity at InputPlumber rather than accumulating downstream per-device SDL mappings. The intended stable target is Xbox 360-compatible.
-- Device hiding must remove raw sources from consumers rather than rely only on permission bits that privileged children can bypass. InputPlumber's `HIDE_DEVICES_FROM_ROOT`/moved-source behavior is the relevant provider boundary.
+- Zao keeps physical source nodes in `/dev/input` so InputPlumber 0.75.2 receives upstream add and remove events. InputPlumber removes `uaccess` and sets source mode `000`; service namespaces and the device gate prove that games cannot open the raw node. Moved-source hiding remains available in the lower-level module but is not the Zao host policy.
 - Never grant blanket access to every `/dev/input/event*`. Irrelevant unreadable devices should be ignored; inability to consume the required normalized target is actionable.
 - Destructive chords need exact matching, one-shot-until-release behavior, and a launch-identity race guard.
 - Nix evaluation tests must inspect generated units, permissions, ordering, and assertions; Rust tests cannot prove the deployed service shape.

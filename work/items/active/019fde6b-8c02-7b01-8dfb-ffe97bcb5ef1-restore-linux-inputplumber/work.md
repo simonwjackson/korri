@@ -12,16 +12,34 @@ Restore Korri's Linux normalized-input boundary using a pinned upstream InputPlu
 
 ## Current status
 
-- Portable `korri-dev` starts isolated korrid and inputd processes. Physical input and actions are off by default.
-- `--physical` reads only the validated normalized InputPlumber target. Actions stay off.
-- `korri-bundle` contains exact korrid, inputd, InputPlumber, and profile store paths.
-- The optional `nixosModules.korri-bundle` host adapter initializes GC-rooted active and previous selectors.
-- Rust launch and selection helpers reject mutable components or data, use no shell, restart only InputPlumber, inputd, and korrid, and restore the previous selector after failed health.
-- Local Rust, packaged-runtime, NixOS module, dev-runner, inputd, and repository korrid checks pass.
-- Mountainous `unified` imports only `nixosModules.korri-linux-host` and pins Korri revision `7f524990f627ba1234e60ecc99303d2c215fe30a`. The pin remains local until publication is explicitly approved.
-- Zao candidate v14 passed every automated gate with controller `0003:045e:0b12:0501`, one normalized Xbox target, `Ready` inputd health, service-specific credentials, and raw input denied to gameplay. The exact validation session started and stopped through the dedicated korrid authority. The package now verifies `KORRID_PRIVATE_STATE_ROOT`, and the rendered Polkit rule permits only the dedicated `korrid` identity and exact `korri-game-<32 hex>.service` units.
-- The 45-second and 120-second normalized-input observers received no physical controller event. Candidate v14 then stopped the exact game, rolled back to `/nix/store/ac46r72fh00p9g81z5hv45pw8zdsbpy4-nixos-system-zao-26.05.20260313.c06b4ae`, and reconciled cleanly. `user@1000` stayed at PID `363588` and invocation `31dfefc905ea49fd8ec0b05a4a0e53fd`.
-- U7 remains blocked on physical controller input. After that proof, complete the `usu` Sunshine stream HITL, persistent installation, reboot, and post-reboot recovery check.
+- Portable development, the pinned InputPlumber 0.75.2 package, Rust inputd, exact local session control, immutable bundles, NixOS modules, and RetroArch normalization are complete.
+- `nix run .#inputd-check` passes at Korri commit `de99db20b1a5bfe36d859096d1ce2e3f83e84d62`.
+- Mountainous branch `unified` is clean at `acdce624e1979c485069abc6c5d5e80e171f1f69`. It imports only `nixosModules.korri-linux-host` and pins the exact local Korri revision above. Nothing is pushed and no PR exists.
+- The current candidate is `/nix/store/vfmwdpa7ng62gklfxgqi06q835w0vlax-nixos-system-zao-26.05.20260313.c06b4ae`. Its gate digest is `aa98c40488b3af0fee4cd3dde16225c2e21794fc2981d15dcd58e8bfe16a840e`.
+- The rollback generation remains `/nix/store/ac46r72fh00p9g81z5hv45pw8zdsbpy4-nixos-system-zao-26.05.20260313.c06b4ae`.
+- Zao is at the exact rollback baseline. The controller is connected to USB port `3-4`. No Korri game unit is active. The attempt marker is absent and the attempt lease is inactive.
+- `user@1000` remains PID `363588`, invocation `31dfefc905ea49fd8ec0b05a4a0e53fd`. No rollout test restarted it.
+- The selected InputPlumber composite now persists one normalized target across physical disconnect and reconnect. Inputd reports `Missing`, then `Ready`, without restarting InputPlumber or inputd.
+- A bounded second controller fixture produces two normalized targets and `Ambiguous` health. Inputd suppresses actions, clears held state, then stops the empty non-authoritative composite after fixture removal. Health returns to `Ready` with one target.
+- The rollback predicate now canonicalizes a redundant POSIX ACL mask when no named ACL entry exists. Candidate v24 proved that physical reconnect and rollback reconcile without manual ACL repair.
+- The validation-only `workspace-next` action now uses an immutable blocking C fixture. Inputd must contain it, expose it for isolation inspection, then kill it through the 10-second action timeout. Repository and NixOS checks pass, but physical candidate proof remains outstanding.
+- Candidate v23 and v24 passed normalized gameplay, hotplug and ambiguity, authenticated DBus under an exclusive grab, spoof rejection, exact hold-to-stop, stale-stop rejection, child-exit recovery, and korrid/InputPlumber restart races.
+- Candidate v24 exposed that coreutils `sleep 5` exited before direct-action inspection. Commit `de99db20b1a5bfe36d859096d1ce2e3f83e84d62` replaces it with the deterministic fixture.
+- Candidate v25 was paused by the user during `health-recovery-ambiguity`. The exact validation session and stale monitor were stopped. A guarded restore returned Zao to the rollback generation. Official reconcile passed. The archived ledger is `~/.local/state/korri-device-gate/.archive/zao-20260830-inputplumber-unified-v25-reconciled-user-pause`.
+
+## Resume checkpoint
+
+1. Verify the Korri worktree is clean and contains candidate code commit `de99db20b1a5bfe36d859096d1ce2e3f83e84d62`; later commits can be documentation-only pause records. Verify Mountainous is clean at `acdce624e1979c485069abc6c5d5e80e171f1f69` and still pins `de99db20b1a5bfe36d859096d1ce2e3f83e84d62`.
+2. Verify Zao current and default generations equal the rollback generation. Verify the marker is absent, the lease is inactive, and active `korri-game-*.service` count is zero.
+3. Keep the controller in USB port `3-4`. Verify identity `0003:045e:0b12:0501`, `ID_SERIAL=Microsoft_Controller_3039373138353136313636313332`, and `ID_PATH=pci-0000:00:14.0-usb-0:4:1.0`.
+4. Use candidate `/nix/store/vfmwdpa7ng62gklfxgqi06q835w0vlax-nixos-system-zao-26.05.20260313.c06b4ae` and confirmation `CONFIRM-0b474377bf7f3327`.
+5. Create a new ledger after v25. Start with `zao-20260830-inputplumber-unified-v26` or a later unused suffix.
+6. Do not overlap physical `ask_user` prompts. Wait for each answer before posting the next prompt. For hotplug, use one prompt: unplug, wait 15 seconds, reconnect to port `3-4`.
+7. Run the full temporary candidate gate. The first four stages have prior evidence but tokens must bind the new nonce. At `direct-action-isolation`, trigger Guide plus RB, verify `action-isolation=verified`, wait for timeout, then verify `action-cleanup=verified`.
+8. Complete `sunshine-video-controller-recovery` with Android device `usu`, then complete `catalog-and-session`.
+9. After `candidate-green`, decide whether to keep the current repeated-HITL policy or implement the separate backlog item that reduces repeated stages. Do not silently weaken the gate.
+10. If the current policy remains, run `inject-health-failure`, explicit `rollback`, reboot and `rollback-reboot-verify`, `persistent-switch` with all seven HITL stages, reboot, then `candidate-reboot-verify` with all seven stages.
+11. Publish the local Korri revision only after explicit push approval. Replace the final `git+file` consumer pin with an exact portable Git revision before completion.
 
 ## Execution decisions
 
