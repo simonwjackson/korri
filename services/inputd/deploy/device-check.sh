@@ -23,6 +23,10 @@ SUPPORTED_PRODUCTION_PROFILE='korri-60-xbox_one_gamepad.yaml'
 OLD_USER_UNITS=(korrid.service sunshine.service x11-headless.service)
 CANDIDATE_SYSTEM_UNITS=(korrid.service sunshine.service x11-headless.service)
 SUNSHINE_UINPUT_GROUP='korri-sunshine-uinput'
+EXPECTED_SUNSHINE_FORMAT='1'
+EXPECTED_SUNSHINE_BASE_VERSION='2025.924.154138'
+EXPECTED_SUNSHINE_BASE_SOURCE_HASH='sha256-QrPfZqd9pgufohUjxlTpO6V0v7B41UrXHZaESsFjZ48='
+EXPECTED_SUNSHINE_LIBAVCODEC_VERSION='62.11.100'
 EXPECTED_SUNSHINE_PATCH_SET_SHA256='30121b5d935b435482814b2c2801c6c3c456bc42c6019123f77018cb0294a62a'
 KORRID_CONTROL_GROUP='korri-control'
 KORRID_CONTROL_SOCKET='/run/korrid-control/control.sock'
@@ -31,6 +35,22 @@ KORRID_HOST_SESSION_ROOT='/var/lib/korrid/host-session'
 BUNDLE_SELECTOR_ROOT='/nix/var/nix/gcroots/korri-bundle'
 EXPECTED_KEYS='304,305,307,308,310,311,314,315,316,317,318,704,705,706,707'
 EXPECTED_ABS='0,1,2,3,4,5,16,17'
+
+
+expected_sunshine_patch_manifest() {
+  cat <<'EOF'
+patch=0001-add-runtime-settings-protocol-surface.patch sha256=8a9522e39de85cb4ea7c0558a806780ae39d588555c7a84c600a56b9fdbe3bd4
+patch=0002-wire-runtime-settings-control-plane.patch sha256=12c34b55082514039b25e09062ff4735bf4bae6dd4de20f2ec53aad6f0536557
+patch=0003-apply-runtime-bitrate-and-fps-changes.patch sha256=d7d89d4a8b4b06d2c473f4c2156a17ecfe369f805132e90a2d05197e69e7e01d
+patch=0004-add-proof-gated-runtime-resolution-apply-path.patch sha256=599d3db14ea57e9712148e83fd7f0404dba96c5c40506c3209c5dbaa7778646e
+patch=0005-add-seamless-vaapi-runtime-bitrate-path.patch sha256=387a1ef4aef168e3af1f49acd301cd616a86db2bf4728028089d7875d7c25e42
+patch=0010-extend-runtime-resolution-fresh-idr-window.patch sha256=9b484831fd38123e8d840f24aeba2995a6818aab34e0ce0a47a23fff4eaad937
+patch=0012-persist-runtime-config-and-reinit-capture-after-resolution.patch sha256=aeaa80bd7362e2fc71be70d2504fb61eabb04ed3491b8d308c931098d02b14b1
+patch=0013-request-async-capture-reinit-after-runtime-resolution.patch sha256=aeb667ade5c747220bb3a18cdc26c9b718a0a0d77eecf64634047db7c86f74d9
+patch=0014-skip-runtime-vaapi-destructor-flush.patch sha256=083ffb66bbad903396ffd4a233abf5d203b0276e3ba223799feb8ca28c7300af
+patch=0015-add-korri-input-seat-event-mirror.patch sha256=fd0b433165f77920df24c2141a3d91f2c088fead3507fdc11fdb6737cff31fa1
+EOF
+}
 
 fail() {
   printf 'device gate: %s\n' "$*" >&2
@@ -524,36 +544,20 @@ remote_pairing_state_present() {
 }
 
 remote_sunshine_private_state_digest() {
-  local gameplay_user="$1" uid home home_real config_tree root root_real entry rel stat_record
-  local file_type owner mode content_hash
+  local gameplay_user="$1" uid home home_real self_real helper digest
   uid="$(id -u "$gameplay_user")" || return 1
   home="$(getent passwd "$gameplay_user" | cut -d: -f6)" || return 1
   home_real="$(realpath -e -- "$home" 2>/dev/null)" || return 1
-  config_tree="$home_real/.config"
-  [[ "$(realpath -e -- "$home/.config" 2>/dev/null)" == "$config_tree" ]] || return 1
-  root="$home/.config/sunshine"
-  root_real="$(realpath -e -- "$root" 2>/dev/null)" || return 1
-  [[ "$root_real" == "$config_tree/sunshine" && -d "$root" && ! -L "$root" ]] || return 1
-  [[ -s "$root/sunshine.conf" && -f "$root/sunshine.conf" && ! -L "$root/sunshine.conf" ]] || return 1
-  [[ -s "$root/sunshine_state.json" && -f "$root/sunshine_state.json" && ! -L "$root/sunshine_state.json" ]] || return 1
-
-  {
-    while IFS= read -r -d '' entry; do
-      [[ "$entry" == "$root_real" || "$entry" == "$root_real/"* ]] || return 1
-      rel="${entry#"$root_real"}"
-      rel="${rel#/}"
-      stat_record="$(stat -c '%F|%u|%a|%s' -- "$entry" 2>/dev/null)" || return 1
-      IFS='|' read -r file_type owner mode _ <<<"$stat_record"
-      [[ "$owner" == "$uid" && "$mode" =~ ^[0-7]{3,4}$ ]] || return 1
-      (( (8#$mode & 8#022) == 0 )) || return 1
-      case "$file_type" in
-        directory) content_hash='-' ;;
-        'regular file') content_hash="$(sha256sum -- "$entry" | cut -d' ' -f1)" || return 1 ;;
-        *) return 1 ;;
-      esac
-      printf '%q|%s|%s|%s\n' "$rel" "$stat_record" "$content_hash" "$owner"
-    done < <(find -P "$root_real" -print0 | LC_ALL=C sort -z)
-  } | sha256sum | cut -d' ' -f1
+  self_real="$(readlink -f -- "$0" 2>/dev/null)" || return 1
+  if [[ "$self_real" != /nix/store/*     && "${KORRI_DEVICE_GATE_TEST_PRIVATE_DIGEST:-}" =~ ^[0-9a-f]{64}$ ]]; then
+    printf '%s\n' "$KORRI_DEVICE_GATE_TEST_PRIVATE_DIGEST"
+    return 0
+  fi
+  helper="${self_real%/*}/korri-sunshine-state-digest"
+  [[ "$helper" == /nix/store/*/bin/korri-sunshine-state-digest && -x "$helper" ]] || return 1
+  digest="$("$helper" "$home_real" "$uid" 2>/dev/null)" || return 1
+  [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || return 1
+  printf '%s\n' "$digest"
 }
 
 remote_set_pairing_state_modes() {
@@ -642,8 +646,8 @@ remote_process_group_policy() {
 }
 
 remote_sunshine_package_provenance() {
-  local pid running expected execstart package_root provenance package_name patch_set
-  local patch_count=0 line
+  local pid running expected execstart package_root provenance patch_set computed_patch_set
+  local field expected_value
   local -a sunshine_execs=()
   pid="$(systemctl show sunshine.service -p MainPID --value 2>/dev/null || true)"
   [[ "$pid" =~ ^[1-9][0-9]*$ ]] || fail 'Sunshine MainPID is unavailable'
@@ -667,26 +671,32 @@ remote_sunshine_package_provenance() {
     && "$(stat -c '%u:%g:%a' -- "$provenance" 2>/dev/null)" == 0:0:444 ]] \
     || fail 'sunshine-korri provenance is absent or mutable'
 
-  package_name="$(sed -n 's/^package=//p' "$provenance")"
-  patch_set="$(sed -n 's/^patch_set_sha256=//p' "$provenance")"
-  [[ "$package_name" == sunshine-korri ]] \
-    || fail 'sunshine-korri provenance has the wrong package identity'
-  [[ "$patch_set" == "$EXPECTED_SUNSHINE_PATCH_SET_SHA256" ]] \
-    || fail 'sunshine-korri provenance does not match the approved patch-set digest'
-  [[ "$(grep -c '^package=' "$provenance")" -eq 1 \
-    && "$(grep -c '^patch_set_sha256=' "$provenance")" -eq 1 \
-    && "$(grep -c '^executable=bin/sunshine$' "$provenance")" -eq 1 ]] \
-    || fail 'sunshine-korri provenance has duplicate or incomplete identity fields'
-  while IFS= read -r line; do
-    [[ "$line" =~ ^patch=[^[:space:]]+\.patch[[:space:]]sha256=[0-9a-f]{64}$ ]] \
-      || fail 'sunshine-korri provenance has a malformed patch record'
-    patch_count=$((patch_count + 1))
-  done < <(grep '^patch=' "$provenance")
-  [[ "$patch_count" -eq 10 ]] \
-    || fail 'sunshine-korri provenance does not contain the complete approved patch set'
+  while IFS='|' read -r field expected_value; do
+    [[ "$(grep -c "^${field}=" "$provenance")" -eq 1 \
+      && "$(grep "^${field}=" "$provenance")" == "${field}=${expected_value}" ]] \
+      || fail "sunshine-korri provenance has an invalid ${field} field"
+  done <<EOF
+format|$EXPECTED_SUNSHINE_FORMAT
+package|sunshine-korri
+base_sunshine_version|$EXPECTED_SUNSHINE_BASE_VERSION
+approved_base_sunshine_source_hash|$EXPECTED_SUNSHINE_BASE_SOURCE_HASH
+reviewed_libavcodec_version|$EXPECTED_SUNSHINE_LIBAVCODEC_VERSION
+executable|bin/sunshine
+patch_set_sha256|$EXPECTED_SUNSHINE_PATCH_SET_SHA256
+EOF
 
-  printf 'sunshine-executable=%s patch-set-sha256=%s patches=%s\n' \
-    "$running" "$patch_set" "$patch_count"
+  cmp -s <(grep '^patch=' "$provenance") <(expected_sunshine_patch_manifest) \
+    || fail 'sunshine-korri provenance does not match the approved ordered patch manifest'
+  patch_set="$(sed -n 's/^patch_set_sha256=//p' "$provenance")"
+  computed_patch_set="$(grep '^patch=' "$provenance" \
+    | sed -E 's/^patch=([^ ]+) sha256=([0-9a-f]{64})$/\1 \2/' \
+    | sha256sum | cut -d' ' -f1)"
+  [[ "$computed_patch_set" == "$EXPECTED_SUNSHINE_PATCH_SET_SHA256" \
+    && "$computed_patch_set" == "$patch_set" ]] \
+    || fail 'sunshine-korri provenance ordered patch digest is invalid'
+
+  printf 'sunshine-executable=%s patch-set-sha256=%s patches=10 base-version=%s libavcodec=%s\n' \
+    "$running" "$patch_set" "$EXPECTED_SUNSHINE_BASE_VERSION" "$EXPECTED_SUNSHINE_LIBAVCODEC_VERSION"
 }
 
 remote_candidate_credentials() {
@@ -1073,10 +1083,13 @@ remote_restore() {
 }
 
 remote_acceptance_fingerprint() {
-  local expected_identity="$1" profile="$2" require_physical="$3" normalized physical sunshine
+  local gameplay_user="$1" expected_identity="$2" profile="$3" require_physical="$4"
+  local normalized physical sunshine private_state
   normalized="$(remote_normalized_fingerprint)" || return 1
   sunshine="$(remote_sunshine_package_provenance)" || return 1
-  printf 'normalized=%s sunshine=%q' "$normalized" "$sunshine"
+  private_state="$(remote_sunshine_private_state_digest "$gameplay_user" 2>/dev/null)" || return 1
+  [[ "$private_state" =~ ^[0-9a-f]{64}$ ]] || return 1
+  printf 'normalized=%s sunshine=%q private-state=%s' "$normalized" "$sunshine" "$private_state"
   if [[ "$require_physical" == true ]]; then
     physical="$(remote_physical_controller_evidence "$expected_identity" "$profile")" || return 1
     printf ' physical=%s' "$physical"
@@ -1141,7 +1154,7 @@ remote_automated_gates() {
   [[ "$delegate" == yes ]] || fail 'inputd Delegate is not enabled'
   [[ " $delegate_controllers " == *' pids '* ]] || fail 'inputd DelegateControllers does not contain pids'
   [[ "$(remote_catalog_health)" == Ok ]] || fail 'korrid catalog is unhealthy'
-  acceptance="$(remote_acceptance_fingerprint "$expected_identity" "$profile" "$require_physical")" \
+  acceptance="$(remote_acceptance_fingerprint "$gameplay_user" "$expected_identity" "$profile" "$require_physical")" \
     || fail 'acceptance fingerprint could not be captured'
   printf 'automated-gates=pass raw-readable=0 inputd-status=Ready system-korrid=active system-x11-headless=active system-sunshine=active pairing-state=present credentials=service-specific sunshine-package=attested catalog=Ok delegate=yes controllers=pids\n'
   printf '%s\n' "$sunshine_provenance"
@@ -1264,7 +1277,7 @@ remote_attempt_execute_root() {
     predicates) remote_predicates "${1:?}" ;;
     boot-id) tr -d '\n' </proc/sys/kernel/random/boot_id ;;
     current-generation) remote_generation ;;
-    acceptance-fingerprint) remote_acceptance_fingerprint "${1:-}" "${2:-}" "${3:?}" ;;
+    acceptance-fingerprint) remote_acceptance_fingerprint "${1:?}" "${2:-}" "${3:-}" "${4:?}" ;;
     automated-gates) remote_automated_gates "${1:?}" "${2:-}" "${3:-}" "${4:?}" ;;
     rollback-gates) remote_rollback_gates ;;
     activate-test) remote_activate_test "${1:?}" "${2:?}" ;;
@@ -1573,17 +1586,73 @@ if [[ "$MODE" != reconcile && "$CONFIRM" != "$expected_confirm" ]]; then
   fail 'mutation confirmation token is missing or does not match the captured host and candidate generation'
 fi
 
+validate_private_state_predicates() {
+  local predicates="$1" present digest
+  [[ "$(grep -c '^sunshine.pairing-state-present=' "$predicates")" -eq 1     && "$(grep -c '^sunshine.private-state-digest=' "$predicates")" -eq 1 ]]     || fail 'Sunshine baseline has duplicate or incomplete private-state predicates'
+  present="$(awk -F= '$1 == "sunshine.pairing-state-present" {print $2}' "$predicates")"
+  digest="$(awk -F= '$1 == "sunshine.private-state-digest" {print $2}' "$predicates")"
+  [[ "$present" == true ]] || fail 'Sunshine baseline pairing state is absent'
+  [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || fail 'Sunshine baseline private-state digest is invalid'
+}
+
+verify_private_state_before_mutation() {
+  local current="$LEDGER/private-state.current" baseline_digest current_digest
+  validate_private_state_predicates "$LEDGER/baseline.predicates"
+  run_remote_deadlined predicates "$GAMEPLAY_USER" >"$current"
+  chmod 0600 "$current"
+  validate_private_state_predicates "$current"
+  baseline_digest="$(awk -F= '$1 == "sunshine.private-state-digest" {print $2}' "$LEDGER/baseline.predicates")"
+  current_digest="$(awk -F= '$1 == "sunshine.private-state-digest" {print $2}' "$current")"
+  rm -f "$current"
+  [[ "$current_digest" == "$baseline_digest" ]]     || fail 'Sunshine private state changed before mutation'
+}
+
+extract_automated_private_digest() {
+  local evidence="$1" digest
+  digest="$(sed -n 's/^sunshine-private-state=protected digest=//p' "$evidence")"
+  [[ "$(grep -c '^sunshine-private-state=protected digest=' "$evidence")" -eq 1     && "$digest" =~ ^[0-9a-f]{64}$ ]]     || fail 'automated Sunshine private-state proof is invalid'
+  printf '%s\n' "$digest"
+}
+
+save_accepted_private_digest() {
+  local evidence="$1" digest next="$LEDGER/sunshine-private-state.accepted.next"
+  digest="$(extract_automated_private_digest "$evidence")"
+  printf '%s\n' "$digest" >"$next"
+  chmod 0600 "$next"
+  mv -f "$next" "$LEDGER/sunshine-private-state.accepted"
+  sync -f "$LEDGER/sunshine-private-state.accepted"
+}
+
+verify_accepted_private_digest() {
+  local evidence="$1" accepted current
+  [[ -f "$LEDGER/sunshine-private-state.accepted"     && ! -L "$LEDGER/sunshine-private-state.accepted"     && "$(stat -c %a "$LEDGER/sunshine-private-state.accepted")" == 600 ]]     || fail 'accepted Sunshine private-state proof is absent'
+  accepted="$(cat "$LEDGER/sunshine-private-state.accepted")"
+  [[ "$accepted" =~ ^[0-9a-f]{64}$ ]]     || fail 'accepted Sunshine private-state proof is invalid'
+  current="$(extract_automated_private_digest "$evidence")"
+  [[ "$current" == "$accepted" ]]     || fail 'Sunshine private state changed across candidate reboot'
+}
+
 if [[ ! -f "$LEDGER/baseline.predicates" ]]; then
   [[ -z "$state" ]] || fail 'ledger state exists without baseline predicates'
-  run_remote_deadlined predicates "$GAMEPLAY_USER" >"$LEDGER/baseline.predicates"
-  chmod 0600 "$LEDGER/baseline.predicates"
-  grep -Fx "generation.current=$ROLLBACK" "$LEDGER/baseline.predicates" >/dev/null || fail 'baseline current generation is not the rollback generation'
-  grep -Fx "generation.default=$ROLLBACK" "$LEDGER/baseline.predicates" >/dev/null || fail 'baseline default generation is not the rollback generation'
+  run_remote_deadlined predicates "$GAMEPLAY_USER" >"$LEDGER/baseline.predicates.next"
+  chmod 0600 "$LEDGER/baseline.predicates.next"
+  grep -Fx "generation.current=$ROLLBACK" "$LEDGER/baseline.predicates.next" >/dev/null || fail 'baseline current generation is not the rollback generation'
+  grep -Fx "generation.default=$ROLLBACK" "$LEDGER/baseline.predicates.next" >/dev/null || fail 'baseline default generation is not the rollback generation'
+  validate_private_state_predicates "$LEDGER/baseline.predicates.next"
+  mv -f "$LEDGER/baseline.predicates.next" "$LEDGER/baseline.predicates"
   run_remote_deadlined inspect "$GAMEPLAY_USER" >"$LEDGER/baseline.txt"
   chmod 0600 "$LEDGER/baseline.txt"
   sync -f "$LEDGER/baseline.predicates"
   sync -f "$LEDGER/baseline.txt"
 fi
+validate_private_state_predicates "$LEDGER/baseline.predicates"
+case "$state" in
+  candidate-accepted-pending-boot|candidate-await-reboot|candidate-reboot-verifying|candidate-reboot-verifying-starting|complete)
+    [[ -f "$LEDGER/sunshine-private-state.accepted" ]]       || fail 'accepted Sunshine private-state proof is absent'
+    accepted_private_state="$(cat "$LEDGER/sunshine-private-state.accepted" 2>/dev/null || true)"
+    [[ "$accepted_private_state" =~ ^[0-9a-f]{64}$ ]]       || fail 'accepted Sunshine private-state proof is invalid'
+    ;;
+esac
 old_korrid_active="$(awk -F= '$1 == "old-user.korrid.active" {print $2}' "$LEDGER/baseline.predicates")"
 old_korrid_enabled="$(awk -F= '$1 == "old-user.korrid.enabled" {print $2}' "$LEDGER/baseline.predicates")"
 old_sunshine_active="$(awk -F= '$1 == "old-user.sunshine.active" {print $2}' "$LEDGER/baseline.predicates")"
@@ -1617,7 +1686,7 @@ finish_attempt() {
 verify_fingerprint_unchanged() {
   local evidence="$1" require_physical="$2"
   awk -F= '$1 == "acceptance-fingerprint" {print substr($0, index($0, "=") + 1)}' "$evidence" >"$LEDGER/fingerprint.expected"
-  run_remote_attempt acceptance-fingerprint "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" "$require_physical" \
+  run_remote_attempt acceptance-fingerprint "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" "$require_physical" \
     >"$LEDGER/fingerprint.current"
   cmp -s "$LEDGER/fingerprint.expected" "$LEDGER/fingerprint.current" \
     || fail 'normalized target, Sunshine provenance, or expected physical controller proof changed before acceptance'
@@ -1697,6 +1766,7 @@ if [[ "$MODE" == reconcile ]]; then
       start_attempt candidate-reboot-verifying
       run_remote_attempt automated-gates "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" true \
         | tee "$LEDGER/reconcile-candidate-reboot.txt"
+      verify_accepted_private_digest "$LEDGER/reconcile-candidate-reboot.txt"
       verify_fingerprint_unchanged "$LEDGER/reconcile-candidate-reboot.txt" true
       finish_attempt
       verification_active=false
@@ -1731,6 +1801,18 @@ if [[ "$MODE" == reconcile ]]; then
           || fail 'candidate reboot reconcile requires the candidate generation to remain active'
         grep -Fx 'expected-controller=yes' <<<"$preflight" >/dev/null \
           || fail 'candidate reboot reconcile requires the exact expected physical controller and production profile'
+        attempt_boot_id="$(run_remote_deadlined boot-id)"
+        resume_after_failure="$resume"
+        failure_resume_boot_id="$resume_boot"
+        verification_resume_state="$resume"
+        verification_active=true
+        start_attempt candidate-reboot-verifying
+        run_remote_attempt automated-gates "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" true \
+          | tee "$LEDGER/reconcile-candidate-reboot.txt"
+        verify_accepted_private_digest "$LEDGER/reconcile-candidate-reboot.txt"
+        verify_fingerprint_unchanged "$LEDGER/reconcile-candidate-reboot.txt" true
+        finish_attempt
+        verification_active=false
         write_state candidate-await-reboot "$resume_boot"
       else
         [[ "$(run_remote_deadlined current-generation)" == "$ROLLBACK" ]] \
@@ -1772,6 +1854,7 @@ require_hitl() {
 
 begin_mutation() {
   rollback_persistent="$1"
+  verify_private_state_before_mutation
   attempt_boot_id="$(run_remote_deadlined boot-id)"
   mutation_active=true
   start_attempt pending-mutation
@@ -1847,6 +1930,7 @@ case "$MODE" in
         | tee "$LEDGER/persistent-automated.txt"
       require_hitl pending-mutation
       verify_fingerprint_unchanged "$LEDGER/persistent-automated.txt" true
+      save_accepted_private_digest "$LEDGER/persistent-automated.txt"
       # This durable accepted state makes a failed boot-ID fetch resumable.
       finish_attempt
       mutation_active=false
@@ -1865,6 +1949,7 @@ case "$MODE" in
     start_attempt candidate-reboot-verifying
     run_remote_attempt automated-gates "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" true \
       | tee "$LEDGER/candidate-reboot.txt"
+    verify_accepted_private_digest "$LEDGER/candidate-reboot.txt"
     require_hitl candidate-reboot-verifying
     verify_fingerprint_unchanged "$LEDGER/candidate-reboot.txt" true
     finish_attempt

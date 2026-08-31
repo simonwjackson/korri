@@ -21,6 +21,10 @@ let
   retroarchInputplumberAutoconfig = pkgs.callPackage ./retroarch-inputplumber-autoconfig.nix { };
   sunshineApprovedPatches = import ../../sunshine/approved-patches.nix;
   sunshinePatchPaths = map (record: record.path) sunshineApprovedPatches.patches;
+  sunshinePatchManifest = builtins.concatStringsSep "\n" (
+    map (record: "patch=${record.name} sha256=${record.sha256}") sunshineApprovedPatches.patches
+  ) + "\n";
+  sunshinePatchManifestFile = pkgs.writeText "sunshine-korri-approved-patch-manifest" sunshinePatchManifest;
   androidMoonlightRoot = ../../../clients/android/app/src/main/jni/moonlight-core/moonlight-common-c/src;
   inputdPackage = import ../package.nix { inherit pkgs crane; };
   devApp = import ./dev-app.nix {
@@ -119,8 +123,15 @@ in
       test -x ${inputdPackage}/bin/korri-device-gate
       test "$(sha256sum ${inputdPackage}/bin/korri-device-gate | cut -d' ' -f1)" = \
         "$(sha256sum ${../deploy/device-check.sh} | cut -d' ' -f1)"
-      grep -Fx "EXPECTED_SUNSHINE_PATCH_SET_SHA256='${sunshineApprovedPatches.patchSetSha256}'" \
-        ${inputdPackage}/bin/korri-device-gate >/dev/null
+      gate=${inputdPackage}/bin/korri-device-gate
+      grep -Fx "EXPECTED_SUNSHINE_FORMAT='1'" "$gate" >/dev/null
+      grep -Fx "EXPECTED_SUNSHINE_BASE_VERSION='${sunshineApprovedPatches.baseSunshineVersion}'" "$gate" >/dev/null
+      grep -Fx "EXPECTED_SUNSHINE_BASE_SOURCE_HASH='${sunshineApprovedPatches.approvedBaseSourceHash}'" "$gate" >/dev/null
+      grep -Fx "EXPECTED_SUNSHINE_LIBAVCODEC_VERSION='${sunshineApprovedPatches.reviewedLibavcodecVersion}'" "$gate" >/dev/null
+      grep -Fx "EXPECTED_SUNSHINE_PATCH_SET_SHA256='${sunshineApprovedPatches.patchSetSha256}'" "$gate" >/dev/null
+      grep '^patch=' "$gate" > actual-patch-manifest
+      cmp actual-patch-manifest ${sunshinePatchManifestFile}
+      test -x ${inputdPackage}/bin/korri-sunshine-state-digest
       test -x ${devApp}/bin/korri-dev
       grep -F 'KORRI_INPUTD_PROFILE=development' ${devApp}/bin/korri-dev >/dev/null
       grep -F 'KORRI_INPUTD_SOURCE="$physical_input"' ${devApp}/bin/korri-dev >/dev/null

@@ -318,7 +318,12 @@ case "$(basename "$0")" in
           printf 'inputplumber.enabled=%s\n' "${HARNESS_IP_ENABLED:-enabled}"
           printf 'sunshine.pairing-state-modes=%s\n' "${HARNESS_PAIRING_MODES:-700:600}"
           printf 'sunshine.pairing-state-present=%s\n' "${HARNESS_PAIRING_PRESENT:-true}"
-          printf 'sunshine.private-state-digest=%s\n' "${HARNESS_PRIVATE_STATE_DIGEST:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
+          if [[ "${HARNESS_LEDGER:-}" == *baseline-private-* ]]; then
+            private_digest=invalid
+          else
+            private_digest="${HARNESS_PRIVATE_STATE_DIGEST:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
+          fi
+          printf 'sunshine.private-state-digest=%s\n' "$private_digest"
           printf 'catalog.health=%s\n' "${HARNESS_CATALOG:-Ok}"
           ;;
         preflight)
@@ -386,6 +391,18 @@ case "$(basename "$0")" in
               printf 'device gate: sunshine-korri provenance does not match the approved patch-set digest\n' >&2
               exit 87
               ;;
+            duplicate-patch|reordered-patch|wrong-patch-hash)
+              printf 'device gate: sunshine-korri provenance does not match the approved ordered patch manifest\n' >&2
+              exit 87
+              ;;
+            wrong-base)
+              printf 'device gate: sunshine-korri provenance has an invalid base_sunshine_version field\n' >&2
+              exit 87
+              ;;
+            wrong-libavcodec)
+              printf 'device gate: sunshine-korri provenance has an invalid reviewed_libavcodec_version field\n' >&2
+              exit 87
+              ;;
             *) exit 87 ;;
           esac
           [[ "${HARNESS_PAIRING_PRESENT:-true}" == true ]] || {
@@ -449,30 +466,36 @@ case "$(basename "$0")" in
           normalized="${HARNESS_FINGERPRINT:-node=/dev/input/event9 sysfs=/sys/devices/virtual/input/input9/event9 dev=13:73 inode=1:9 inputplumber=/nix/store/provider/bin/inputplumber version=0.75.2 keys=exact abs=exact ff=yes}"
           physical="identity=$expected_identity event=event8 sysfs=/sys/devices/pci0000:00/input/input8/event8 profile=$profile"
           printf 'automated-gates=pass raw-readable=0 inputd-status=Ready system-korrid=active system-x11-headless=active system-sunshine=active pairing-state=present credentials=service-specific sunshine-package=attested catalog=Ok delegate=yes controllers=pids\n'
-          printf 'sunshine-executable=/nix/store/sunshine-korri/bin/sunshine patch-set-sha256=%064d patches=10\n' 0
-          printf 'sunshine-private-state=protected digest=%064d\n' 0
+          printf 'sunshine-executable=/nix/store/sunshine-korri/bin/sunshine patch-set-sha256=%064d patches=10 base-version=2025.924.154138 libavcodec=62.11.100\n' 0
+          printf 'sunshine-private-state=protected digest=%s\n' "${HARNESS_PRIVATE_STATE_DIGEST:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
           printf 'normalized-fingerprint=%s\n' "$normalized"
           [[ "$require_physical" != true ]] || printf 'controller-evidence=%s\n' "$physical"
-          sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=10'
-          printf 'acceptance-fingerprint=normalized=%s sunshine=%q' "$normalized" "$sunshine"
+          sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=10 base-version=2025.924.154138 libavcodec=62.11.100'
+          printf 'acceptance-fingerprint=normalized=%s sunshine=%q private-state=%s' "$normalized" "$sunshine" "${HARNESS_PRIVATE_STATE_DIGEST:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
           [[ "$require_physical" != true ]] || printf ' physical=%s' "$physical"
           printf '\n'
           ;;
         acceptance-fingerprint)
-          expected_identity="${1:-}"
-          profile="${2:-}"
-          require_physical="${3:-false}"
+          [[ "${1:-}" == "${HARNESS_GAMEPLAY_USER:-gameplay}" ]] || exit 87
+          expected_identity="${2:-}"
+          profile="${3:-}"
+          require_physical="${4:-false}"
           if [[ "${HARNESS_REPLACE_TARGET:-no}" == yes ]]; then
             normalized='node=/dev/input/event10 sysfs=/sys/devices/virtual/input/input10/event10 dev=13:74 inode=1:10 inputplumber=/nix/store/provider/bin/inputplumber version=0.75.2 keys=exact abs=exact ff=yes'
           else
             normalized="${HARNESS_FINGERPRINT:-node=/dev/input/event9 sysfs=/sys/devices/virtual/input/input9/event9 dev=13:73 inode=1:9 inputplumber=/nix/store/provider/bin/inputplumber version=0.75.2 keys=exact abs=exact ff=yes}"
           fi
           if [[ "${HARNESS_REPLACE_SUNSHINE:-no}" == yes ]]; then
-            sunshine='sunshine-executable=/nix/store/replaced-sunshine/bin/sunshine patch-set-sha256=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff patches=10'
+            sunshine='sunshine-executable=/nix/store/replaced-sunshine/bin/sunshine patch-set-sha256=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff patches=10 base-version=2025.924.154138 libavcodec=62.11.100'
           else
-            sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=10'
+            sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=10 base-version=2025.924.154138 libavcodec=62.11.100'
           fi
-          printf 'normalized=%s sunshine=%q' "$normalized" "$sunshine"
+          if [[ "${HARNESS_REPLACE_PRIVATE_STATE:-no}" == yes ]]; then
+            private_state=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          else
+            private_state="${HARNESS_PRIVATE_STATE_DIGEST:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
+          fi
+          printf 'normalized=%s sunshine=%q private-state=%s' "$normalized" "$sunshine" "$private_state"
           if [[ "$require_physical" == true ]]; then
             [[ "${HARNESS_CONTROLLER_MODEL:-valid}" == valid ]] || exit 68
             printf ' physical=identity=%s event=event8 sysfs=/sys/devices/pci0000:00/input/input8/event8 profile=%s' "$expected_identity" "$profile"
@@ -1342,8 +1365,9 @@ assert_fails_with 'switch-to-configuration failed with status 1' \
 # Exercise the production user-manager and pairing proof paths. Both root
 # without SUDO_UID and a different SSH caller must target the explicit user.
 run_production_predicates() {
-  env -u SUDO_UID PATH="$TMP/user-scope-bin:$PATH" HARNESS_MODELED_USER=root "$@" \
-    "$GATE" --remote predicates "$GAMEPLAY_USER"
+  env -u SUDO_UID PATH="$TMP/user-scope-bin:$PATH" HARNESS_MODELED_USER=root \
+    KORRI_DEVICE_GATE_TEST_PRIVATE_DIGEST=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+    "$@" "$GATE" --remote predicates "$GAMEPLAY_USER"
 }
 : >"$HARNESS_USER_SCOPE_LOG"
 user_scope_predicates="$(run_production_predicates HARNESS_CALLER_UID=0)"
@@ -1406,11 +1430,10 @@ predicates="$(run_production_predicates)"
 grep -Fx 'sunshine.pairing-state-modes=700:600' <<<"$predicates" >/dev/null
 grep -E '^sunshine.private-state-digest=[0-9a-f]{64}$' <<<"$predicates" >/dev/null
 private_digest_before="$(sed -n 's/^sunshine.private-state-digest=//p' <<<"$predicates")"
-printf '%s\n' 'PRIVATE-CONFIG-CONTENTS-MUST-STAY-PRIVATE' >>"$HARNESS_GAMEPLAY_HOME/.config/sunshine/sunshine.conf"
-changed_predicates="$(run_production_predicates)"
+changed_predicates="$(run_production_predicates \
+  KORRI_DEVICE_GATE_TEST_PRIVATE_DIGEST=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb)"
 private_digest_after="$(sed -n 's/^sunshine.private-state-digest=//p' <<<"$changed_predicates")"
 [[ "$private_digest_before" != "$private_digest_after" ]]
-sed -i '$d' "$HARNESS_GAMEPLAY_HOME/.config/sunshine/sunshine.conf"
 predicates="$(run_production_predicates)"
 grep -Fx "sunshine.private-state-digest=$private_digest_before" <<<"$predicates" >/dev/null
 if grep -F "PRIVATE-CONFIG-CONTENTS-MUST-STAY-PRIVATE" <<<"$changed_predicates" >/dev/null; then
@@ -1507,6 +1530,24 @@ grep -F "$(printf '%q' "$quoted_candidate")" "$HARNESS_LOG" >/dev/null
 assert_no_mutation
 rm -rf "$quoted_ledger"
 
+run_baseline_failure_model() {
+  local name="$1" variable="$2" value="$3" expected="$4" ledger
+  ledger="$TMP/$name-ledger"
+  local -a args
+  mapfile -d '' -t args < <(common_for "$ledger")
+  export HARNESS_LEDGER="$ledger"
+  export "$variable=$value"
+  : >"$HARNESS_LOG"
+  assert_fails_with "$expected" run_gate --mode candidate-test "${args[@]}" --confirm "$confirm"
+  assert_no_mutation
+  [[ ! -f "$ledger/state" ]]
+  unset "$variable"
+}
+run_baseline_failure_model baseline-pairing-absent HARNESS_PAIRING_PRESENT false   'Sunshine baseline pairing state is absent'
+for private_baseline_model in invalid link special unsafe empty; do
+  run_baseline_failure_model "baseline-private-$private_baseline_model"     HARNESS_BASELINE_PRIVATE_MODEL "$private_baseline_model"     'Sunshine baseline private-state digest is invalid'
+done
+
 run_failure_model() {
   local name="$1" variable="$2" value="$3" expected="$4" ledger
   ledger="$TMP/$name-ledger"
@@ -1535,7 +1576,11 @@ done
 run_failure_model sunshine-stock HARNESS_SUNSHINE_PACKAGE stock 'candidate Sunshine package is not sunshine-korri'
 run_failure_model sunshine-executable HARNESS_SUNSHINE_PACKAGE wrong-executable 'running Sunshine executable differs from the candidate unit'
 run_failure_model sunshine-provenance HARNESS_SUNSHINE_PACKAGE bad-provenance 'sunshine-korri provenance does not match the approved patch-set digest'
-run_failure_model pairing-absent HARNESS_PAIRING_PRESENT false 'Sunshine pairing-state file is absent'
+for provenance_model in duplicate-patch reordered-patch wrong-patch-hash; do
+  run_failure_model "sunshine-$provenance_model" HARNESS_SUNSHINE_PACKAGE "$provenance_model"     'sunshine-korri provenance does not match the approved ordered patch manifest'
+done
+run_failure_model sunshine-wrong-base HARNESS_SUNSHINE_PACKAGE wrong-base   'sunshine-korri provenance has an invalid base_sunshine_version field'
+run_failure_model sunshine-wrong-libavcodec HARNESS_SUNSHINE_PACKAGE wrong-libavcodec   'sunshine-korri provenance has an invalid reviewed_libavcodec_version field'
 run_failure_model sunshine-private-state HARNESS_PRIVATE_STATE_MODEL unsafe 'Sunshine private configuration tree is unsafe or incomplete'
 run_failure_model post-stop-query-error HARNESS_POST_STOP_QUERY_ERROR yes 'old user unit active state query failed after stop'
 
@@ -2001,6 +2046,19 @@ run_interactive persistent-switch pending-mutation "$flow_ledger" "$TMP/persiste
 grep -Fx 'state=candidate-await-reboot' "$flow_ledger/state" >/dev/null
 export HARNESS_BOOT_ID=boot-three HARNESS_CURRENT_GENERATION="$CANDIDATE"
 
+# The private Sunshine tree accepted after persistent HITL must survive reboot.
+cross_reboot_private_ledger="$TMP/cross-reboot-private-ledger"
+cp -a "$flow_ledger" "$cross_reboot_private_ledger"
+mapfile -d '' -t cross_reboot_private_args < <(common_for "$cross_reboot_private_ledger")
+export HARNESS_LEDGER="$cross_reboot_private_ledger"
+export HARNESS_PRIVATE_STATE_DIGEST=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+: >"$HARNESS_LOG"
+assert_fails_with 'Sunshine private state changed across candidate reboot' run_gate   --mode candidate-reboot-verify "${cross_reboot_private_args[@]}" --confirm "$confirm"
+grep -Fx 'state=failed-needs-inspection' "$cross_reboot_private_ledger/state" >/dev/null
+assert_fails_with 'Sunshine private state changed across candidate reboot' run_gate   --mode reconcile "${cross_reboot_private_args[@]}"
+unset HARNESS_PRIVATE_STATE_DIGEST
+rm -f "$HARNESS_ATTEMPT_MARKER" "$HARNESS_ATTEMPT_LEASE"
+
 for startup_window in pre-marker post-marker; do
   startup_candidate_ledger="$TMP/startup-candidate-$startup_window-ledger"
   cp -a "$flow_ledger" "$startup_candidate_ledger"
@@ -2119,6 +2177,19 @@ grep -F 'normalized target, Sunshine provenance, or expected physical controller
   "$TMP/sunshine-replacement.tty" >/dev/null
 grep -Fx 'state=failed-needs-inspection' "$sunshine_replacement_ledger/state" >/dev/null
 unset HARNESS_REPLACE_SUNSHINE
+
+# Private Sunshine replacement during HITL fails the exact acceptance proof.
+private_replacement_ledger="$TMP/private-replacement-ledger"
+mapfile -d '' -t private_replacement_args < <(common_for "$private_replacement_ledger")
+export HARNESS_LEDGER="$private_replacement_ledger" HARNESS_REPLACE_PRIVATE_STATE=yes
+if run_interactive candidate-test pending-mutation "$private_replacement_ledger" "$TMP/private-replacement.tty"   "${private_replacement_args[@]}" --confirm "$confirm"; then
+  printf 'private Sunshine replacement acceptance unexpectedly passed
+' >&2
+  exit 1
+fi
+grep -F 'normalized target, Sunshine provenance, or expected physical controller proof changed before acceptance'   "$TMP/private-replacement.tty" >/dev/null
+grep -Fx 'state=failed-needs-inspection' "$private_replacement_ledger/state" >/dev/null
+unset HARNESS_REPLACE_PRIVATE_STATE
 
 # A failed boot-ID fetch after persistent acceptance does not roll back. The
 # accepted pending state resumes without repeating the switch or HITL gates.
