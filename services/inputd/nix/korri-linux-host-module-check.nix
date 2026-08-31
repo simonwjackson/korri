@@ -65,6 +65,9 @@ let
   noValidation = evaluate {
     services.korriLinuxHost.validation.enable = false;
   };
+  noRuntimeSettings = evaluate {
+    services.korriLinuxHost.sunshine.runtimeSettings.enable = false;
+  };
   wrongGameplayUid = evaluate {
     users.users.gameplay.uid = lib.mkForce 1002;
   };
@@ -97,6 +100,14 @@ assert cfg.services.sunshine.enable;
 assert !cfg.services.sunshine.autoStart;
 assert !cfg.systemd.user.services.sunshine.enable;
 assert cfg.services.sunshine.package == sunshinePackage;
+assert cfg.services.korriLinuxHost.sunshine.runtimeSettings.enable;
+assert sunshine.environment.SUNSHINE_LIVE_SETTINGS_MVP == "1";
+assert noRuntimeSettings.config.services.sunshine.package == sunshinePackage;
+assert
+  noRuntimeSettings.config.systemd.services.sunshine.serviceConfig.ExecStart
+  == "${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf";
+assert
+  !(builtins.hasAttr "SUNSHINE_LIVE_SETTINGS_MVP" noRuntimeSettings.config.systemd.services.sunshine.environment);
 assert cfg.hardware.graphics.enable;
 assert builtins.elem "uinput" cfg.boot.kernelModules;
 assert cfg.users.users.korri-inputd.uid == 977;
@@ -111,6 +122,16 @@ assert !(builtins.elem "uinput" cfg.users.users.gameplay.extraGroups);
 assert inputd.serviceConfig.User == "korri-inputd";
 assert korrid.serviceConfig.User == "korrid";
 assert sunshine.serviceConfig.User == "gameplay";
+assert sunshine.serviceConfig.WorkingDirectory == "/home/gameplay";
+assert sunshine.environment.DISPLAY == ":0";
+assert sunshine.environment.HOME == "/home/gameplay";
+assert sunshine.environment.XDG_CONFIG_HOME == "/home/gameplay/.config";
+assert
+  sunshine.serviceConfig.ExecStart
+  == "${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf";
+assert sunshine.serviceConfig.ProtectSystem == "strict";
+assert sunshine.serviceConfig.ProtectHome == "read-only";
+assert builtins.elem "/home/gameplay/.config/sunshine" sunshine.serviceConfig.ReadWritePaths;
 assert x11.serviceConfig.User == "gameplay";
 assert x11.serviceConfig.PrivateDevices;
 assert !(builtins.elem "/dev/inputplumber/sources" (x11.serviceConfig.InaccessiblePaths or [ ]));

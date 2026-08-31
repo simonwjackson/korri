@@ -44,7 +44,7 @@ VAAPI runtime-bitrate maintenance policy:
 
 - A stable FFmpeg helper/API is the preferred replacement for Sunshine-side private-struct mirroring, but Korri is not carrying that downstream FFmpeg API yet. The current path stays inside `sunshine-korri` because it has SM8550 evidence and avoids forking FFmpeg's encoder internals before an upstreamable helper shape is clear.
 - The private mirror is allowed only for the exact pinned FFmpeg/libavcodec version encoded in the patch. FFmpeg upgrades, including same-major minor/micro updates, must fail at compile/source-check time until the mirrored VAAPI layout is reviewed.
-- Rollback remains the Nix-owned live-settings gate: disable `services.korri.daemon.streaming.runtimeSettings.enable` to keep Sunshine deployed while omitting `SUNSHINE_LIVE_SETTINGS_MVP=1`.
+- Rollback remains the Nix-owned live-settings gate: disable `services.korriLinuxHost.sunshine.runtimeSettings.enable` to keep `sunshine-korri` deployed and omit `SUNSHINE_LIVE_SETTINGS_MVP=1`.
 
 Runtime-resolution VAAPI destructor teardown policy:
 

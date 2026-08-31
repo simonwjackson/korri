@@ -178,6 +178,11 @@ in
         type = lib.types.bool;
         default = true;
       };
+      runtimeSettings.enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable the Korri Sunshine live runtime-settings protocol.";
+      };
     };
 
     validation.enable = lib.mkOption {
@@ -354,6 +359,9 @@ in
         DISPLAY = cfg.display;
         HOME = gameplayHome;
         XDG_CONFIG_HOME = "${gameplayHome}/.config";
+      }
+      // lib.optionalAttrs cfg.sunshine.runtimeSettings.enable {
+        SUNSHINE_LIVE_SETTINGS_MVP = "1";
       };
       serviceConfig = {
         Type = "simple";
