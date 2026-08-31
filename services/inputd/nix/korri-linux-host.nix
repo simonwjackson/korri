@@ -8,6 +8,7 @@
 let
   cfg = config.services.korriLinuxHost;
   system = pkgs.stdenv.hostPlatform.system;
+  sunshineApproved = import ../../sunshine/approved-patches.nix;
   gameplayHome = config.users.users.${cfg.gameplayUser}.home or "/home/${cfg.gameplayUser}";
   sunshineConfig =
     if cfg.sunshine.configDirectory == null then
@@ -225,8 +226,17 @@ in
         message = "Korri service identities must remain distinct.";
       }
       {
-        assertion = lib.getName cfg.sunshine.package == "sunshine-korri";
-        message = "services.korriLinuxHost must use Korri's patched Sunshine package.";
+        assertion =
+          lib.getName cfg.sunshine.package == "sunshine-korri"
+          && (cfg.sunshine.package.korriPatchSetSha256 or null) == sunshineApproved.patchSetSha256
+          && (cfg.sunshine.package.korriBaseSunshineVersion or null) == sunshineApproved.baseSunshineVersion
+          && (cfg.sunshine.package.korriApprovedBaseSunshineSourceHash or null) == sunshineApproved.approvedBaseSourceHash
+          && (cfg.sunshine.package.korriReviewedLibavcodecVersion or null) == sunshineApproved.reviewedLibavcodecVersion
+          && (cfg.sunshine.package.korriBaseSunshineDerivation or null) == sunshineApproved.approvedBaseDerivation
+          && (cfg.sunshine.package.korriApprovedBaseSunshineDerivation or null) == sunshineApproved.approvedBaseDerivation
+          && (cfg.sunshine.package.korriProvenanceRelativePath or null) == "share/korri/sunshine-korri/provenance"
+          && builtins.elem "0015-add-korri-input-seat-event-mirror.patch" (cfg.sunshine.package.korriPatchNames or [ ]);
+        message = "services.korriLinuxHost must use the exact approved sunshine-korri package and provenance contract.";
       }
       {
         assertion = lib.all validAbsolutePath [
@@ -282,6 +292,7 @@ in
       address = "0.0.0.0:${toString cfg.apiPort}";
       storageRoot = cfg.storageRoot;
       privateStateRoot = cfg.privateStateRoot;
+      sunshinePrivateStateRoot = sunshineConfig;
     };
 
     services.sunshine = {

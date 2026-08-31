@@ -3,7 +3,7 @@ use std::{
     fs::{self, File},
     os::unix::fs::{symlink, MetadataExt, PermissionsExt},
     path::{Path, PathBuf},
-    process::ExitCode,
+    process::{ExitCode, Output},
     time::Duration,
 };
 
@@ -233,6 +233,14 @@ fn verify_systemctl(systemctl: &Path, store_root: &Path) -> Result<(), String> {
 }
 
 async fn restart_and_wait(systemctl: &Path) -> Result<(), String> {
+    restart_and_wait_with(systemctl, HEALTH_TIMEOUT, HEALTH_POLL).await
+}
+
+async fn restart_and_wait_with(
+    systemctl: &Path,
+    health_timeout: Duration,
+    health_poll: Duration,
+) -> Result<(), String> {
     run_systemctl(
         systemctl,
         ["--no-block", "restart"].into_iter().chain(UNITS),
@@ -243,7 +251,7 @@ async fn restart_and_wait(systemctl: &Path) -> Result<(), String> {
             .then_some(())
             .ok_or_else(|| "service restart was rejected".into())
     })?;
-    let deadline = Instant::now() + HEALTH_TIMEOUT;
+    let deadline = Instant::now() + health_timeout;
     loop {
         let mut all_active = true;
         for unit in UNITS {
@@ -253,12 +261,26 @@ async fn restart_and_wait(systemctl: &Path) -> Result<(), String> {
             }
         }
         if all_active {
-            return Ok(());
+            let status = run_systemctl_output(
+                systemctl,
+                [
+                    "show",
+                    "--property=StatusText",
+                    "--value",
+                    "korri-inputd.service",
+                ],
+            )
+            .await?;
+            if status.status.success()
+                && String::from_utf8_lossy(&status.stdout).trim_end() == "Ready"
+            {
+                return Ok(());
+            }
         }
         if Instant::now() >= deadline {
             return Err("Korri services did not become active before the deadline".into());
         }
-        tokio::time::sleep(HEALTH_POLL).await;
+        tokio::time::sleep(health_poll).await;
     }
 }
 
@@ -274,6 +296,19 @@ where
         .map_err(|_| "systemctl operation exceeded its deadline".to_owned())?
         .map_err(|error| format!("systemctl operation failed: {error}"))?;
     Ok(status.success())
+}
+
+async fn run_systemctl_output<I, S>(systemctl: &Path, arguments: I) -> Result<Output, String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<std::ffi::OsStr>,
+{
+    let mut command = Command::new(systemctl);
+    command.args(arguments);
+    tokio::time::timeout(COMMAND_TIMEOUT, command.output())
+        .await
+        .map_err(|_| "systemctl operation exceeded its deadline".to_owned())?
+        .map_err(|error| format!("systemctl operation failed: {error}"))
 }
 
 fn canonical_text(path: &Path) -> Result<String, String> {
@@ -380,5 +415,37 @@ mod tests {
 
         assert_eq!(fs::canonicalize(state.join("active")).unwrap(), second);
         assert_eq!(fs::canonicalize(state.join("previous")).unwrap(), first);
+    }
+
+    fn fake_systemctl(root: &Path, status: &str) -> PathBuf {
+        let script = root.join(format!("systemctl-{status}"));
+        let shell = std::env::var("SHELL").unwrap();
+        fs::write(
+            &script,
+            format!("#!{shell}\n[ \"$1\" != --no-block ] || shift\ncase \"$1\" in\n  restart) exit 0 ;;\n  is-active) exit 0 ;;\n  show) printf '%s\n' '{status}'; exit 0 ;;\nesac\nexit 1\n"),
+        )
+        .unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o555)).unwrap();
+        script
+    }
+
+    #[tokio::test]
+    async fn active_inputd_must_publish_ready() {
+        let root = tempfile::tempdir().unwrap();
+        let ready = fake_systemctl(root.path(), "Ready");
+        restart_and_wait_with(&ready, Duration::from_secs(1), Duration::from_millis(1))
+            .await
+            .unwrap();
+        for status in ["Missing", "Ambiguous", "Recovering"] {
+            let script = fake_systemctl(root.path(), status);
+            assert!(restart_and_wait_with(
+                &script,
+                Duration::from_millis(15),
+                Duration::from_millis(1)
+            )
+            .await
+            .unwrap_err()
+            .contains("did not become active"));
+        }
     }
 }

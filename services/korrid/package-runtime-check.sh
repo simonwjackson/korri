@@ -19,7 +19,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$root/home" "$root/private" "$root/storage"
+mkdir -p "$root/home" "$root/private" "$root/storage" "$root/sunshine"
 printf '%s\n' \
   'label = "package-check"' \
   '[[games]]' \
@@ -39,6 +39,7 @@ KORRID_ADDRESS=127.0.0.1:43999 \
 KORRID_HOST_CONFIG="$root/host.toml" \
 KORRID_STORAGE_ROOT="$root/storage" \
 KORRID_PRIVATE_STATE_ROOT="$root/private" \
+KORRID_SUNSHINE_PRIVATE_STATE_ROOT="$root/sunshine" \
 KORRID_SYSTEMCTL="$root/systemctl" \
 KORRID_SYSTEMD_RUN="$root/systemd-run" \
   "$binary" >"$root/stdout" 2>"$root/stderr" &

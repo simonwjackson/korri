@@ -1,7 +1,8 @@
-diff -ruN sunshine-korri-baseline/src/stream.cpp sunshine-korri-work/src/stream.cpp
---- a/src/stream.cpp	2026-05-31 09:57:31.553554581 -0600
-+++ b/src/stream.cpp	2026-05-31 09:59:45.815071491 -0600
-@@ -1040,6 +1040,7 @@
+diff --git a/src/stream.cpp b/src/stream.cpp
+index 8c2bcdcc..2d2fadfa 100644
+--- a/src/stream.cpp
++++ b/src/stream.cpp
+@@ -1047,6 +1047,7 @@ namespace stream {
      std::uint16_t status = enabled ? video::RUNTIME_SETTINGS_STATUS_APPLIED : video::RUNTIME_SETTINGS_STATUS_DISABLED;
      std::uint16_t reason = enabled ? video::RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER : video::RUNTIME_SETTINGS_REASON_GATE_DISABLED;
      if (runtime_supported) {
@@ -9,7 +10,7 @@ diff -ruN sunshine-korri-baseline/src/stream.cpp sunshine-korri-work/src/stream.
        supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_FPS;
        supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION;
        reason = video::RUNTIME_SETTINGS_REASON_NONE;
-@@ -1054,8 +1055,8 @@
+@@ -1061,8 +1062,8 @@ namespace stream {
      plaintext.reason = reason;
      plaintext.supported_operations = supported_operations;
      plaintext.proof_gated_operations = proof_gated_operations;
@@ -20,7 +21,7 @@ diff -ruN sunshine-korri-baseline/src/stream.cpp sunshine-korri-work/src/stream.
      plaintext.max_fps = session->control.runtime_settings_launch_fps;
      plaintext.launch_bitrate_kbps = session->control.runtime_settings_launch_bitrate_kbps;
      plaintext.launch_fps = session->control.runtime_settings_launch_fps;
-@@ -1188,7 +1189,7 @@
+@@ -1226,7 +1227,7 @@ namespace stream {
          accepted = false;
          rejection_status = video::RUNTIME_SETTINGS_STATUS_DISABLED;
          rejection_reason = video::RUNTIME_SETTINGS_REASON_GATE_DISABLED;
@@ -29,10 +30,11 @@ diff -ruN sunshine-korri-baseline/src/stream.cpp sunshine-korri-work/src/stream.
          accepted = false;
          rejection_status = video::RUNTIME_SETTINGS_STATUS_INVALID;
          rejection_reason = video::RUNTIME_SETTINGS_REASON_UNSUPPORTED_OPERATION;
-diff -ruN sunshine-korri-baseline/src/video.cpp sunshine-korri-work/src/video.cpp
---- a/src/video.cpp	2026-05-31 09:57:31.556511687 -0600
-+++ b/src/video.cpp	2026-05-31 09:59:02.685315629 -0600
-@@ -11,6 +11,12 @@
+diff --git a/src/video.cpp b/src/video.cpp
+index 64f162c6..982a3e99 100644
+--- a/src/video.cpp
++++ b/src/video.cpp
+@@ -11,7 +11,13 @@
  // lib includes
  #include <boost/pointer_cast.hpp>
  
@@ -45,7 +47,8 @@ diff -ruN sunshine-korri-baseline/src/video.cpp sunshine-korri-work/src/video.cp
 +#include <libavcodec/version_major.h>
  #include <libavutil/imgutils.h>
  #include <libavutil/mastering_display_metadata.h>
-@@ -379,6 +385,220 @@
+ #include <libavutil/opt.h>
+@@ -379,6 +385,220 @@ namespace video {
      int inject;
    };
  
@@ -266,7 +269,7 @@ diff -ruN sunshine-korri-baseline/src/video.cpp sunshine-korri-work/src/video.cp
    class nvenc_encode_session_t: public encode_session_t {
    public:
      nvenc_encode_session_t(std::unique_ptr<platf::nvenc_encode_device_t> encode_device):
-@@ -1975,19 +2184,29 @@
+@@ -1977,19 +2197,29 @@ namespace video {
            if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS) {
              std::uint32_t applied_bitrate_kbps = config.bitrate;
              std::uint16_t status = RUNTIME_SETTINGS_STATUS_FAILED;
@@ -303,7 +306,7 @@ diff -ruN sunshine-korri-baseline/src/video.cpp sunshine-korri-work/src/video.cp
              runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS, status, applied_bitrate_kbps, 0, 0, reason});
            } else if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_FPS) {
              std::uint32_t applied_fps = runtime_fps;
-@@ -2334,19 +2553,28 @@
+@@ -2375,19 +2605,28 @@ namespace video {
                if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS) {
                  std::uint32_t applied_bitrate_kbps = ctx->config.bitrate;
                  std::uint16_t status = RUNTIME_SETTINGS_STATUS_FAILED;

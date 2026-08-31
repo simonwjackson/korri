@@ -12,6 +12,13 @@ const MAX_PROOF_BYTES: usize = 1024 * 1024;
 const BASELINE: &[u8] = b"baseline.predicates";
 const ACCEPTED: &[u8] = b"sunshine-private-state.accepted";
 const STATE: &[u8] = b"state";
+const CANDIDATE_AUTOMATED: &[u8] = b"candidate-automated.txt";
+const PERSISTENT_AUTOMATED: &[u8] = b"persistent-automated.txt";
+const CANDIDATE_REBOOT: &[u8] = b"candidate-reboot.txt";
+const RECONCILE_CANDIDATE_REBOOT: &[u8] = b"reconcile-candidate-reboot.txt";
+const FINGERPRINT_EXPECTED: &[u8] = b"fingerprint.expected";
+const FINGERPRINT_CURRENT: &[u8] = b"fingerprint.current";
+const CONTROLLER_ACCEPTED: &[u8] = b"candidate-controller.accepted";
 const RESOLVE_NO_SYMLINKS: u64 = 0x04;
 const RENAME_NOREPLACE: u32 = 1;
 
@@ -108,6 +115,13 @@ fn proof_name(value: &str) -> io::Result<&'static [u8]> {
         BASELINE => Ok(BASELINE),
         ACCEPTED => Ok(ACCEPTED),
         STATE => Ok(STATE),
+        CANDIDATE_AUTOMATED => Ok(CANDIDATE_AUTOMATED),
+        PERSISTENT_AUTOMATED => Ok(PERSISTENT_AUTOMATED),
+        CANDIDATE_REBOOT => Ok(CANDIDATE_REBOOT),
+        RECONCILE_CANDIDATE_REBOOT => Ok(RECONCILE_CANDIDATE_REBOOT),
+        FINGERPRINT_EXPECTED => Ok(FINGERPRINT_EXPECTED),
+        FINGERPRINT_CURRENT => Ok(FINGERPRINT_CURRENT),
+        CONTROLLER_ACCEPTED => Ok(CONTROLLER_ACCEPTED),
         _ => Err(io::Error::from_raw_os_error(libc::EINVAL)),
     }
 }

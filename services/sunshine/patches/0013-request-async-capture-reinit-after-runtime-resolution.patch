@@ -1,6 +1,8 @@
---- a/src/video.cpp	2026-06-01 22:58:01.912584709 -0600
-+++ b/src/video.cpp	2026-06-01 22:59:34.946519947 -0600
-@@ -670,6 +670,7 @@
+diff --git a/src/video.cpp b/src/video.cpp
+index f77a326b..41e60483 100644
+--- a/src/video.cpp
++++ b/src/video.cpp
+@@ -681,6 +681,7 @@ namespace video {
      std::thread capture_thread;
  
      safe::signal_t reinit_event;
@@ -8,7 +10,7 @@
      const encoder_t *encoder_p;
      sync_util::sync_t<std::weak_ptr<platf::display_t>> display_wp;
    };
-@@ -1344,6 +1345,7 @@
+@@ -1355,6 +1356,7 @@ namespace video {
      std::shared_ptr<safe::queue_t<capture_ctx_t>> capture_ctx_queue,
      sync_util::sync_t<std::weak_ptr<platf::display_t>> &display_wp,
      safe::signal_t &reinit_event,
@@ -16,7 +18,7 @@
      const encoder_t &encoder
    ) {
      std::vector<capture_ctx_t> capture_ctxs;
-@@ -1506,7 +1508,7 @@
+@@ -1517,7 +1519,7 @@ namespace video {
            capture_ctxs.emplace_back(std::move(*capture_ctx_queue->pop()));
          }
  
@@ -25,7 +27,7 @@
            artificial_reinit = true;
            return false;
          }
-@@ -1581,7 +1583,9 @@
+@@ -1592,7 +1594,9 @@ namespace video {
  
              display_wp = disp;
  
@@ -35,7 +37,7 @@
              continue;
            }
          case platf::capture_e::error:
-@@ -2118,6 +2122,7 @@
+@@ -2112,6 +2116,7 @@ namespace video {
      std::shared_ptr<platf::display_t> disp,
      std::unique_ptr<platf::encode_device_t> encode_device,
      safe::signal_t &reinit_event,
@@ -43,7 +45,7 @@
      const encoder_t &encoder,
      void *channel_data
    ) {
-@@ -2154,7 +2159,6 @@
+@@ -2148,7 +2153,6 @@ namespace video {
      auto runtime_bitrate_events = mail->queue<runtime_bitrate_request_t>(mail::runtime_bitrate);
      auto runtime_bitrate_ack_events = mail->queue<runtime_bitrate_ack_t>(mail::runtime_bitrate_ack);
      auto runtime_settings_supports_encoder_restart = mail->event<bool>(mail::runtime_settings_supports_encoder_restart);
@@ -51,7 +53,7 @@
      auto touch_port_events = mail->event<input::touch_port_t>(mail::touch_port);
      auto invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);
      std::uint32_t runtime_fps = config.framerate;
-@@ -2292,11 +2296,8 @@
+@@ -2286,11 +2290,8 @@ namespace video {
                      runtime_resolution_idr_frames = 1800;
                      runtime_resolution_diag_frames = 0;
                      BOOST_LOG(info)
@@ -65,7 +67,7 @@
                      BOOST_LOG(info)
                        << "live-settings-mvp: async encoder restarted for runtime resolution request_id="sv << request->request_id
                        << " applied_width="sv << applied_width
-@@ -2894,6 +2895,7 @@
+@@ -2888,6 +2889,7 @@ namespace video {
          display,
          std::move(encode_device),
          ref->reinit_event,
@@ -73,7 +75,7 @@
          *ref->encoder_p,
          channel_data
        );
-@@ -3450,6 +3452,7 @@
+@@ -3444,6 +3446,7 @@ namespace video {
    int start_capture_async(capture_thread_async_ctx_t &capture_thread_ctx) {
      capture_thread_ctx.encoder_p = chosen_encoder;
      capture_thread_ctx.reinit_event.reset();
@@ -81,7 +83,7 @@
  
      capture_thread_ctx.capture_ctx_queue = std::make_shared<safe::queue_t<capture_ctx_t>>(30);
  
-@@ -3458,6 +3461,7 @@
+@@ -3452,6 +3455,7 @@ namespace video {
        capture_thread_ctx.capture_ctx_queue,
        std::ref(capture_thread_ctx.display_wp),
        std::ref(capture_thread_ctx.reinit_event),

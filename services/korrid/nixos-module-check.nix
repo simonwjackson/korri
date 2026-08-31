@@ -28,6 +28,7 @@ let
       inputdUid = 977;
       controlGid = 977;
       inherit deviceConfig;
+      sunshinePrivateStateRoot = "/home/gameplay/.config/sunshine";
     };
   };
   evaluate =
@@ -113,6 +114,7 @@ assert service.environment.KORRID_SYSTEMD_RUN == "${pkgs.systemd}/bin/systemd-ru
 assert service.environment.KORRID_SYSTEMCTL == "${pkgs.systemd}/bin/systemctl";
 assert service.environment.KORRID_ADDRESS == "127.0.0.1:43117";
 assert service.environment.KORRID_PRIVATE_STATE_ROOT == "/var/lib/korrid";
+assert service.environment.KORRID_SUNSHINE_PRIVATE_STATE_ROOT == "/home/gameplay/.config/sunshine";
 assert service.environment.KORRID_CONTROL_SOCKET == "/run/korrid-control/control.sock";
 assert service.environment.KORRID_CONTROL_DIRECTORY == "/run/korrid-control";
 assert builtins.elem "korrid-control.socket" service.requires;
@@ -155,7 +157,7 @@ assert customService.environment.KORRID_CONTROL_DIRECTORY == "/run/korri-test/co
 assert builtins.elem "d /run/korri-test/control 0750 root korri-control -" customTmpfiles;
 assert hasFailedAssertion "service UID must differ" sameUid;
 assert hasFailedAssertion "gameplay user must not hold raw input" broadGame;
-assert hasFailedAssertion "privateStateRoot must be a normalized absolute path" invalidPrivatePath;
+assert hasFailedAssertion "privateStateRoot and sunshinePrivateStateRoot must be normalized absolute paths" invalidPrivatePath;
 assert hasFailedAssertion "controlSocket and its directory must be normalized absolute paths"
   invalidControlPath;
 assert evaluationRejected sameUid;

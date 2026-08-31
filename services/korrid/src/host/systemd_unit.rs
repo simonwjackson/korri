@@ -69,6 +69,7 @@ struct ProtectedPaths {
     private_state_root: PathBuf,
     control_socket: PathBuf,
     control_directory: PathBuf,
+    sunshine_private_state_root: PathBuf,
 }
 
 #[derive(Clone, Debug)]
@@ -80,6 +81,7 @@ pub struct SystemdLaunchUnitBackend {
     private_state_root: PathBuf,
     control_socket: PathBuf,
     control_directory: PathBuf,
+    sunshine_private_state_root: PathBuf,
     helper_timeout: Duration,
 }
 
@@ -156,6 +158,7 @@ impl SystemdLaunchUnitBackend {
             PathBuf::from(DEFAULT_PRIVATE_STATE_ROOT),
             PathBuf::from(DEFAULT_CONTROL_SOCKET),
             PathBuf::from(DEFAULT_CONTROL_DIRECTORY),
+            PathBuf::from("/home/gameplay/.config/sunshine"),
         )
     }
 
@@ -167,6 +170,7 @@ impl SystemdLaunchUnitBackend {
         private_state_root: PathBuf,
         control_socket: PathBuf,
         control_directory: PathBuf,
+        sunshine_private_state_root: PathBuf,
     ) -> Result<Self, LaunchUnitError> {
         Self::with_timeout_and_paths(
             systemd_run,
@@ -177,6 +181,7 @@ impl SystemdLaunchUnitBackend {
                 private_state_root,
                 control_socket,
                 control_directory,
+                sunshine_private_state_root,
             },
             DEFAULT_HELPER_TIMEOUT,
         )
@@ -199,6 +204,7 @@ impl SystemdLaunchUnitBackend {
                 private_state_root: PathBuf::from(DEFAULT_PRIVATE_STATE_ROOT),
                 control_socket: PathBuf::from(DEFAULT_CONTROL_SOCKET),
                 control_directory: PathBuf::from(DEFAULT_CONTROL_DIRECTORY),
+                sunshine_private_state_root: PathBuf::from("/home/gameplay/.config/sunshine"),
             },
             helper_timeout,
         )
@@ -216,6 +222,7 @@ impl SystemdLaunchUnitBackend {
             private_state_root,
             control_socket,
             control_directory,
+            sunshine_private_state_root,
         } = paths;
         if !systemd_run.is_absolute() || !systemctl.is_absolute() {
             return Err(LaunchUnitError::new(
@@ -239,6 +246,7 @@ impl SystemdLaunchUnitBackend {
             ("private state root", &private_state_root),
             ("control socket", &control_socket),
             ("control directory", &control_directory),
+            ("Sunshine private state root", &sunshine_private_state_root),
         ] {
             if !valid_protected_path(path) {
                 return Err(LaunchUnitError::new(
@@ -261,6 +269,7 @@ impl SystemdLaunchUnitBackend {
             private_state_root,
             control_socket,
             control_directory,
+            sunshine_private_state_root,
             helper_timeout,
         })
     }
@@ -281,6 +290,9 @@ impl SystemdLaunchUnitBackend {
         let control_socket = configured_path("KORRID_CONTROL_SOCKET", DEFAULT_CONTROL_SOCKET);
         let control_directory =
             configured_path("KORRID_CONTROL_DIRECTORY", DEFAULT_CONTROL_DIRECTORY);
+        let sunshine_private_state_root = std::env::var_os("KORRID_SUNSHINE_PRIVATE_STATE_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_default();
         Self::with_protected_paths(
             systemd_run.clone(),
             systemctl.clone(),
@@ -289,6 +301,7 @@ impl SystemdLaunchUnitBackend {
             private_state_root.clone(),
             control_socket.clone(),
             control_directory.clone(),
+            sunshine_private_state_root.clone(),
         )
         .unwrap_or(Self {
             systemd_run,
@@ -298,6 +311,7 @@ impl SystemdLaunchUnitBackend {
             private_state_root,
             control_socket,
             control_directory,
+            sunshine_private_state_root,
             helper_timeout: DEFAULT_HELPER_TIMEOUT,
         })
     }
@@ -312,6 +326,7 @@ impl SystemdLaunchUnitBackend {
                 private_state_root: self.private_state_root.clone(),
                 control_socket: self.control_socket.clone(),
                 control_directory: self.control_directory.clone(),
+                sunshine_private_state_root: self.sunshine_private_state_root.clone(),
             },
             self.helper_timeout,
         )
@@ -553,10 +568,11 @@ impl SystemdLaunchUnitBackend {
             "--property=ProtectProc=invisible".into(),
             "--property=ProcSubset=pid".into(),
             format!(
-                "--property=InaccessiblePaths={} /run/korrid {} {} /dev/uinput /dev/inputplumber/sources",
+                "--property=InaccessiblePaths={} /run/korrid {} {} {} /dev/uinput /dev/inputplumber/sources",
                 self.private_state_root.display(),
                 self.control_socket.display(),
-                self.control_directory.display()
+                self.control_directory.display(),
+                self.sunshine_private_state_root.display()
             ),
             "--property=RestrictSUIDSGID=yes".into(),
         ];

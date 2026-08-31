@@ -74,6 +74,11 @@ let
   stockSunshine = evaluate {
     services.korriLinuxHost.sunshine.package = lib.mkForce pkgs.sunshine;
   };
+  lookalikeSunshine = evaluate {
+    services.korriLinuxHost.sunshine.package = lib.mkForce (pkgs.sunshine.overrideAttrs (_: {
+      pname = "sunshine-korri";
+    }));
+  };
   collidingIdentity = evaluate {
     services.korriLinuxHost.serviceIdentities.inputdUid = lib.mkForce 1001;
   };
@@ -121,6 +126,8 @@ assert !(builtins.elem "input" cfg.users.users.gameplay.extraGroups);
 assert !(builtins.elem "uinput" cfg.users.users.gameplay.extraGroups);
 assert inputd.serviceConfig.User == "korri-inputd";
 assert korrid.serviceConfig.User == "korrid";
+assert korrid.environment.KORRID_SUNSHINE_PRIVATE_STATE_ROOT == "/home/gameplay/.config/sunshine";
+assert cfg.services.korridLinuxDevice.sunshinePrivateStateRoot == "/home/gameplay/.config/sunshine";
 assert sunshine.serviceConfig.User == "gameplay";
 assert sunshine.serviceConfig.WorkingDirectory == "/home/gameplay";
 assert sunshine.environment.DISPLAY == ":0";
@@ -147,8 +154,10 @@ assert lib.hasSuffix "/bin/korri-input-action-fixture" (
 assert noValidation.config.services.korriLinuxInput.inputd.actions == { };
 assert hasFailedAssertion "gameplay identity" wrongGameplayUid;
 assert evaluationRejected wrongGameplayUid;
-assert hasFailedAssertion "patched Sunshine" stockSunshine;
+assert hasFailedAssertion "exact approved sunshine-korri" stockSunshine;
 assert evaluationRejected stockSunshine;
+assert hasFailedAssertion "exact approved sunshine-korri" lookalikeSunshine;
+assert evaluationRejected lookalikeSunshine;
 assert hasFailedAssertion "differ from the gameplay identity" collidingIdentity;
 assert evaluationRejected invalidLabel;
 pkgs.runCommand "korri-linux-host-module-check" { } ''

@@ -180,6 +180,40 @@ public class KorriSunshineRuntimeSettingsTest {
         assertEquals(0, nativeApi.mutationCalls);
     }
 
+
+    @Test
+    public void strictFinalCapabilitySnapshotIsReusedAcrossOwnersWithoutQueryBudget() {
+        FakeNative nativeApi = FakeNative.ready(72, 12345, 60, 60);
+        nativeApi.markStrictFinalCapability(41);
+        KorriSunshineRuntimeSettings.ProcessEpochQueryBudget budget =
+                new KorriSunshineRuntimeSettings.ProcessEpochQueryBudget();
+        KorriSunshineRuntimeSettings first = owner(
+                nativeApi, new FakeScheduler(), ignored -> {}, new ControlledWaiter(), budget);
+        KorriSunshineRuntimeSettings second = owner(
+                nativeApi, new FakeScheduler(), ignored -> {}, new ControlledWaiter(), budget);
+
+        assertTrue(first.start());
+        assertTrue(second.start());
+        assertTrue(nativeApi.queryIds.isEmpty());
+    }
+
+    @Test
+    public void exactStreamEndedMutationIsFailedBeforeInactiveSessionStaleness() throws Exception {
+        FakeNative nativeApi = FakeNative.ready(73, 12345, 60, 60);
+        ControlledWaiter waiter = new ControlledWaiter();
+        KorriSunshineRuntimeSettings owner = owner(
+                nativeApi, new FakeScheduler(), ignored -> {}, waiter,
+                new KorriSunshineRuntimeSettings.ProcessEpochQueryBudget());
+        KorriSunshineRuntimeSettings.MutationResult[] result = { null };
+        Thread mutation = new Thread(() -> result[0] = owner.setFps(30, CURRENT));
+        mutation.start();
+        assertTrue(waiter.entered.await(1, TimeUnit.SECONDS));
+        nativeApi.completeMutationAndEndStream();
+        waiter.advance();
+        mutation.join(1000);
+        assertEquals(KorriSunshineRuntimeSettings.MutationResult.FAILED, result[0]);
+    }
+
     @Test
     public void requestIdExhaustionNeverPublishesFulfillableControls() throws Exception {
         FakeNative nativeApi = FakeNative.ready(8, 12345, 60, 60);
@@ -555,6 +589,22 @@ public class KorriSunshineRuntimeSettingsTest {
                 mutationSent.countDown();
                 return 0;
             }
+        }
+
+        synchronized void markStrictFinalCapability(int requestId) {
+            wire = wire.clone();
+            wire[20] = requestId;
+            wire[21] = MoonBridge.SS_RUNTIME_SETTINGS_OUTCOME_APPLIED;
+            wire[22] = MoonBridge.SS_RUNTIME_SETTINGS_STATUS_APPLIED;
+            wire[23] = MoonBridge.SS_RUNTIME_SETTINGS_REASON_NONE;
+        }
+
+        synchronized void completeMutationAndEndStream() {
+            completeMutation(
+                    MoonBridge.SS_RUNTIME_SETTINGS_OUTCOME_STREAM_ENDED,
+                    MoonBridge.SS_RUNTIME_SETTINGS_STATUS_FAILED,
+                    MoonBridge.SS_RUNTIME_SETTINGS_REASON_STREAM_ENDED);
+            wire[3] = 0;
         }
 
         synchronized void completeQuery() {

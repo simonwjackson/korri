@@ -62,6 +62,7 @@ let
           inputdUid = 977;
           controlGid = 977;
           inherit deviceConfig;
+          sunshinePrivateStateRoot = "/home/gameplay/.config/sunshine";
         };
       }
     ];

@@ -32,6 +32,7 @@ let
     approved_base_sunshine_source_hash=${approved.approvedBaseSourceHash}
     base_sunshine_source=${sunshinePackage.korriBaseSunshineSource}
     base_sunshine_derivation=${sunshinePackage.korriBaseSunshineDerivation}
+    approved_base_sunshine_derivation=${approved.approvedBaseDerivation}
     reviewed_libavcodec_version=${approved.reviewedLibavcodecVersion}
     executable=bin/sunshine
     patch_set_sha256=${approved.patchSetSha256}
@@ -44,6 +45,8 @@ let
       && sunshinePackage.korriPatchSetSha256 == approved.patchSetSha256
       && sunshinePackage.korriBaseSunshineVersion == approved.baseSunshineVersion
       && sunshinePackage.korriApprovedBaseSunshineSourceHash == approved.approvedBaseSourceHash
+      && sunshinePackage.korriBaseSunshineDerivation == approved.approvedBaseDerivation
+      && sunshinePackage.korriApprovedBaseSunshineDerivation == approved.approvedBaseDerivation
       && pkgs.sunshine.src.outputHash == approved.approvedBaseSourceHash
       && sunshinePackage.korriReviewedLibavcodecVersion == approved.reviewedLibavcodecVersion
     ))
@@ -186,11 +189,15 @@ let
       && contains "aspect_abs_delta <= aspect_tolerance" patch
       && contains "!same_aspect" patch
     ))
-    (check "invalid payloads return invalid-payload before queueing" (
-      contains "payload.size() < sizeof(control_runtime_settings_resolution_request_t)" patch
-      && contains "payload.size() < sizeof(control_runtime_settings_request_t)" patch
-      && contains "rejection_reason = video::RUNTIME_SETTINGS_REASON_INVALID_PAYLOAD" patch
-      && contains "if (!accepted)" patch
+    (check "host requests are exact before logging, scheduling, or queueing" (
+      contains "request_id == 0 || reserved != 0 || payload.size() != expected_payload_size" patch
+      && contains "expected_payload_size = sizeof(control_runtime_settings_request_prefix_t)" patch
+      && contains "expected_payload_size = sizeof(control_runtime_settings_resolution_request_t)" patch
+      && contains "expected_payload_size = sizeof(control_runtime_settings_request_t)" patch
+      && contains "std::weak_ptr<session_t> weak_self" patch
+      && contains "runtime_settings_capability_timer_armed" patch
+      && contains "timer->async_wait([weak_session]" patch
+      && !(contains ").detach()" patch)
     ))
     (check "runtime resolution uses explicit width and height fields" (
       contains "control_runtime_settings_request_prefix_t" patch
@@ -251,6 +258,8 @@ let
       &&
         sunshinePackage.korriBaseSunshineDerivation
         == builtins.unsafeDiscardStringContext pkgs.sunshine.drvPath
+      && sunshinePackage.korriBaseSunshineDerivation == approved.approvedBaseDerivation
+      && sunshinePackage.korriApprovedBaseSunshineDerivation == approved.approvedBaseDerivation
       && contains "Package provenance" readme
     ))
   ];
@@ -261,8 +270,12 @@ if failures != [ ] then
     lib.concatMapStringsSep "\n" (failure: "- ${failure.message}") failures
   }"
 else
-  pkgs.runCommand "sunshine-korri-runtime-settings-check" { } ''
+  pkgs.runCommand "sunshine-korri-runtime-settings-check"
+    { nativeBuildInputs = [ pkgs.gcc pkgs.boost ]; } ''
     test -x ${sunshinePackage}/bin/sunshine
+    c++ -std=c++20 -O2 -Wall -Wextra -Werror -pthread \
+      ${./test-runtime-settings-host.cpp} -o host-runtime-settings-test
+    ./host-runtime-settings-test
 
     provenance=${sunshinePackage}/${sunshinePackage.korriProvenanceRelativePath}
     test -f "$provenance"

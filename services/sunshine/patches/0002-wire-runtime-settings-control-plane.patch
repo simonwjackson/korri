@@ -1,27 +1,41 @@
+diff --git a/src/stream.cpp b/src/stream.cpp
+index f56892d8..8c2bcdcc 100644
 --- a/src/stream.cpp
 +++ b/src/stream.cpp
 @@ -4,6 +4,7 @@
   */
-
+ 
  // standard includes
 +#include <cstdlib>
  #include <fstream>
  #include <future>
  #include <queue>
-@@ -440,6 +441,7 @@
+@@ -418,6 +419,7 @@ namespace stream {
+     config_t config;
+ 
+     safe::mail_t mail;
++    std::weak_ptr<session_t> weak_self;
+ 
+     std::shared_ptr<input::input_t> input;
+ 
+@@ -440,6 +442,7 @@ namespace stream {
        std::uint64_t gcm_iv_counter;
-
+ 
        safe::mail_raw_t::event_t<bool> idr_events;
 +      safe::mail_raw_t::queue_t<video::runtime_bitrate_request_t> runtime_bitrate_events;
        safe::mail_raw_t::event_t<std::pair<int64_t, int64_t>> invalidate_ref_frames_events;
-
+ 
        std::unique_ptr<platf::deinit_t> qos;
-@@ -476,6 +478,17 @@
-
+@@ -476,6 +479,21 @@ namespace stream {
+ 
        platf::feedback_queue_t feedback_queue;
        safe::mail_raw_t::event_t<video::hdr_info_t> hdr_queue;
 +      safe::mail_raw_t::queue_t<video::runtime_bitrate_ack_t> runtime_bitrate_ack_queue;
 +      safe::mail_raw_t::event_t<bool> runtime_settings_supports_encoder_restart;
++      std::shared_ptr<boost::asio::steady_timer> runtime_settings_capability_timer;
++      std::uint32_t runtime_settings_pending_capability_request_id;
++      bool runtime_settings_pending_capability_enabled;
++      bool runtime_settings_capability_timer_armed;
 +      bool runtime_settings_encoder_restart_supported;
 +      std::uint32_t runtime_settings_launch_bitrate_kbps;
 +      std::uint32_t runtime_settings_launch_fps;
@@ -32,12 +46,12 @@
 +      std::uint32_t runtime_settings_applied_width;
 +      std::uint32_t runtime_settings_applied_height;
      } control;
-
+ 
      std::uint32_t launch_session_id;
-@@ -959,6 +972,104 @@
+@@ -959,6 +977,104 @@ namespace stream {
      return 0;
    }
-
+ 
 +  template<class Ack>
 +  void send_runtime_settings_ack_payload(session_t *session, const Ack &plaintext) {
 +    std::array<std::uint8_t, sizeof(control_encrypted_t) + crypto::cipher::round_to_pkcs7_padded(sizeof(plaintext)) + crypto::cipher::tag_size>
@@ -139,21 +153,30 @@
    int send_hdr_mode(session_t *session, video::hdr_info_t hdr_info) {
      if (!session->control.peer) {
        BOOST_LOG(warning) << "Couldn't send HDR mode, still waiting for PING from Moonlight"sv;
-@@ -1023,6 +1133,144 @@
+@@ -1023,6 +1139,172 @@ namespace stream {
        session->video.idr_events->raise(true);
      });
-
+ 
 +    server->map(packetTypes[IDX_RUNTIME_SETTINGS_REQUEST], [&](session_t *session, const std::string_view &payload) {
-+      BOOST_LOG(debug) << "type [IDX_RUNTIME_SETTINGS_REQUEST]"sv;
-+
 +      if (payload.size() < sizeof(control_runtime_settings_request_prefix_t)) {
-+        BOOST_LOG(warning) << "live-settings-mvp: runt runtime settings request payload bytes="sv << payload.size();
 +        return;
 +      }
 +
 +      auto request_prefix = (const control_runtime_settings_request_prefix_t *) payload.data();
 +      auto request_id = (std::uint32_t) request_prefix->request_id;
 +      auto operation = (std::uint16_t) request_prefix->operation;
++      auto reserved = (std::uint16_t) request_prefix->reserved;
++      auto expected_payload_size = sizeof(control_runtime_settings_request_prefix_t);
++      if (operation == video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
++        expected_payload_size = sizeof(control_runtime_settings_resolution_request_t);
++      } else if (operation == video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS ||
++                 operation == video::RUNTIME_SETTINGS_OPERATION_SET_FPS) {
++        expected_payload_size = sizeof(control_runtime_settings_request_t);
++      }
++      if (request_id == 0 || reserved != 0 || payload.size() != expected_payload_size) {
++        return;
++      }
++      BOOST_LOG(debug) << "type [IDX_RUNTIME_SETTINGS_REQUEST]"sv;
 +      std::uint32_t requested_value = 0;
 +      std::uint32_t requested_width = 0;
 +      std::uint32_t requested_height = 0;
@@ -177,10 +200,29 @@
 +          << " current_fps="sv << session->control.runtime_settings_applied_fps
 +          << " current_width="sv << current_applied_width
 +          << " current_height="sv << current_applied_height;
-+        std::thread([session, request_id, enabled] {
-+          std::this_thread::sleep_for(100ms);
-+          send_runtime_settings_capability_ack(session, request_id, enabled);
-+        }).detach();
++        session->control.runtime_settings_pending_capability_request_id = request_id;
++        session->control.runtime_settings_pending_capability_enabled = enabled;
++        if (!session->control.runtime_settings_capability_timer_armed) {
++          session->control.runtime_settings_capability_timer_armed = true;
++          auto weak_session = session->weak_self;
++          auto &timer = session->control.runtime_settings_capability_timer;
++          if (!timer) {
++            timer = std::make_shared<boost::asio::steady_timer>(session->broadcast_ref->io_context);
++          }
++          timer->expires_after(100ms);
++          timer->async_wait([weak_session](const boost::system::error_code &error) {
++            if (error) {
++              return;
++            }
++            if (auto owned = weak_session.lock()) {
++              owned->control.runtime_settings_capability_timer_armed = false;
++              send_runtime_settings_capability_ack(
++                owned.get(),
++                owned->control.runtime_settings_pending_capability_request_id,
++                owned->control.runtime_settings_pending_capability_enabled);
++            }
++          });
++        }
 +        return;
 +      }
 +
@@ -284,8 +326,8 @@
      server->map(packetTypes[IDX_INVALIDATE_REF_FRAMES], [&](session_t *session, const std::string_view &payload) {
        auto frames = (std::int64_t *) payload.data();
        auto firstFrame = frames[0];
-@@ -1193,6 +1430,13 @@
-
+@@ -1193,6 +1475,13 @@ namespace stream {
+ 
                send_hdr_mode(session, std::move(hdr_info));
              }
 +
@@ -296,14 +338,26 @@
 +              }
 +            }
            }
-
+ 
            ++pos;
-@@ -2071,6 +2315,17 @@
+@@ -2060,6 +2349,7 @@ namespace stream {
+ 
+     std::shared_ptr<session_t> alloc(config_t &config, rtsp_stream::launch_session_t &launch_session) {
+       auto session = std::make_shared<session_t>();
++      session->weak_self = session;
+ 
+       auto mail = std::make_shared<safe::mail_raw_t>();
+ 
+@@ -2071,6 +2361,21 @@ namespace stream {
        session->control.connect_data = launch_session.control_connect_data;
        session->control.feedback_queue = mail->queue<platf::gamepad_feedback_msg_t>(mail::gamepad_feedback);
        session->control.hdr_queue = mail->event<video::hdr_info_t>(mail::hdr);
 +      session->control.runtime_bitrate_ack_queue = mail->queue<video::runtime_bitrate_ack_t>(mail::runtime_bitrate_ack);
 +      session->control.runtime_settings_supports_encoder_restart = mail->event<bool>(mail::runtime_settings_supports_encoder_restart);
++      session->control.runtime_settings_capability_timer.reset();
++      session->control.runtime_settings_pending_capability_request_id = 0;
++      session->control.runtime_settings_pending_capability_enabled = false;
++      session->control.runtime_settings_capability_timer_armed = false;
 +      session->control.runtime_settings_encoder_restart_supported = false;
 +      session->control.runtime_settings_launch_bitrate_kbps = (std::uint32_t) session->config.monitor.bitrate;
 +      session->control.runtime_settings_launch_fps = (std::uint32_t) session->config.monitor.framerate;
@@ -316,9 +370,9 @@
        session->control.legacy_input_enc_iv = launch_session.iv;
        session->control.cipher = crypto::cipher::gcm_t {
          launch_session.gcm_key,
-@@ -2078,7 +2333,8 @@
+@@ -2078,6 +2383,7 @@ namespace stream {
        };
-
+ 
        session->video.idr_events = mail->event<bool>(mail::idr);
 +      session->video.runtime_bitrate_events = mail->queue<video::runtime_bitrate_request_t>(mail::runtime_bitrate);
        session->video.invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);

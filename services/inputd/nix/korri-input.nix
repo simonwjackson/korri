@@ -28,7 +28,10 @@ let
   inputdUser = "korri-inputd";
   controlGroup = "korri-control";
   sunshineGroup = "korri-sunshine-uinput";
-  virtualTargetAcl = import ./virtual-target-acl.nix { inherit pkgs; };
+  virtualTargetAcl = import ./virtual-target-acl.nix {
+    inherit pkgs;
+    inputdPackage = cfg.inputd.package;
+  };
   actionNames = [
     "system-panel"
     "volume-up"

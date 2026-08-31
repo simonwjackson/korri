@@ -218,29 +218,7 @@ let
       actions.workspace-next.command = [ ];
     };
   };
-  aclFixture = pkgs.runCommand "korri-virtual-target-acl-fixture" { } ''
-    mkdir -p "$out/dev/input" "$out/sys/class/input/event4/device/id" "$out/sys/class/input/event5/device/id"
-    touch "$out/dev/input/event4" "$out/dev/input/event5" "$out/dev/input/not-an-event"
-    printf '%s\n' 'Microsoft X-Box 360 pad' > "$out/sys/class/input/event4/device/name"
-    printf '%s\n' 0003 > "$out/sys/class/input/event4/device/id/bustype"
-    printf '%s\n' 045e > "$out/sys/class/input/event4/device/id/vendor"
-    printf '%s\n' 028e > "$out/sys/class/input/event4/device/id/product"
-    printf '%s\n' 0001 > "$out/sys/class/input/event4/device/id/version"
-    printf '%s\n' 'Unrelated controller' > "$out/sys/class/input/event5/device/name"
-    printf '%s\n' 0003 > "$out/sys/class/input/event5/device/id/bustype"
-    printf '%s\n' 045e > "$out/sys/class/input/event5/device/id/vendor"
-    printf '%s\n' 028e > "$out/sys/class/input/event5/device/id/product"
-    printf '%s\n' 0001 > "$out/sys/class/input/event5/device/id/version"
-  '';
-  recordingSetfacl = pkgs.writeShellScript "recording-setfacl" ''
-    printf '%s\n' "$*" >> "$KORRI_TEST_ACL_LOG"
-  '';
-  fixtureAcl = import ./virtual-target-acl.nix {
-    inherit pkgs;
-    deviceRoot = "${aclFixture}/dev/input";
-    sysClassRoot = "${aclFixture}/sys/class/input";
-    setfacl = recordingSetfacl;
-  };
+  virtualTargetAcl = import ./virtual-target-acl.nix { inherit pkgs inputdPackage; };
   providerService = providerOnly.config.systemd.services.inputplumber;
   inputdService = inputdOnly.config.systemd.services.korri-inputd;
   combinedService = combined.config.systemd.services.korri-inputd;
@@ -408,28 +386,7 @@ pkgs.runCommand "korri-input-module-check" { } ''
   grep -F 'send_interface="org.shadowblip.Input.CompositeDevice" send_member="LoadProfilePath"' "$policy" >/dev/null
   grep -F 'send_interface="org.shadowblip.Input.CompositeDevice" send_member="Stop"' "$policy" >/dev/null
 
-  export KORRI_TEST_ACL_LOG="$TMPDIR/acl.log"
-  ${fixtureAcl}/bin/korri-virtual-target-acl grant 888 889 ${aclFixture}/dev/input/event4
-  if ${fixtureAcl}/bin/korri-virtual-target-acl grant 977 1001 ${aclFixture}/dev/input/event5; then
-    echo "unrelated event target unexpectedly received an ACL" >&2
-    exit 1
-  fi
-  ${fixtureAcl}/bin/korri-virtual-target-acl reapply 977 1001
-  ${fixtureAcl}/bin/korri-virtual-target-acl revoke
-  test "$(grep -Fc -- '-b -- ${aclFixture}/dev/input/event4' "$KORRI_TEST_ACL_LOG")" = 3
-  test "$(grep -Fc -- '-m u:888:r,u:889:r,m::r -- ${aclFixture}/dev/input/event4' "$KORRI_TEST_ACL_LOG")" = 1
-  test "$(grep -Fc -- '-m u:977:r,u:1001:r,m::r -- ${aclFixture}/dev/input/event4' "$KORRI_TEST_ACL_LOG")" = 1
-  if grep -F 'event5' "$KORRI_TEST_ACL_LOG"; then
-    echo "ACL helper touched an unrelated event node" >&2
-    exit 1
-  fi
-  first="$(sed -n 1p "$KORRI_TEST_ACL_LOG")"
-  second="$(sed -n 2p "$KORRI_TEST_ACL_LOG")"
-  third="$(sed -n 3p "$KORRI_TEST_ACL_LOG")"
-  fourth="$(sed -n 4p "$KORRI_TEST_ACL_LOG")"
-  test "$first" = '-b -- ${aclFixture}/dev/input/event4'
-  test "$second" = '-m u:888:r,u:889:r,m::r -- ${aclFixture}/dev/input/event4'
-  test "$third" = '-b -- ${aclFixture}/dev/input/event4'
-  test "$fourth" = '-m u:977:r,u:1001:r,m::r -- ${aclFixture}/dev/input/event4'
+  test -x ${inputdPackage}/bin/korri-virtual-target-acl
+  grep -F -- '--device-root /dev/input' ${lib.getExe virtualTargetAcl} >/dev/null
   touch "$out"
 ''

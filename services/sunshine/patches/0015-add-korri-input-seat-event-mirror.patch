@@ -1,17 +1,33 @@
+diff --git a/src/input.cpp b/src/input.cpp
+index 768ddece..7a26b273 100644
 --- a/src/input.cpp
 +++ b/src/input.cpp
-@@ -5,0 +6,2 @@
+@@ -3,21 +3,37 @@
+  * @brief Definitions for gamepad, keyboard, and mouse input handling.
+  */
+ #include <cstdint>
 +#include <cstdlib>
 +#include <cstring>
-@@ -11,0 +14,2 @@
+ extern "C" {
+ #include <moonlight-common-c/src/Input.h>
+ #include <moonlight-common-c/src/Limelight.h>
+ }
+ 
+ // standard includes
 +#include <array>
 +#include <atomic>
-@@ -12,0 +17 @@
+ #include <bitset>
 +#include <cerrno>
-@@ -15,0 +21,2 @@
+ #include <chrono>
+ #include <cmath>
+ #include <list>
 +#include <sstream>
 +#include <string>
-@@ -20,0 +28,9 @@
+ #include <thread>
+ #include <unordered_map>
+ 
+ // lib includes
+ #include <boost/endian/buffers.hpp>
 +#include <nlohmann/json.hpp>
 +
 +#ifdef __linux__
@@ -21,7 +37,13 @@
 +  #include <sys/un.h>
 +  #include <unistd.h>
 +#endif
-@@ -59,0 +76,285 @@
+ 
+ // local includes
+ #include "config.h"
+@@ -57,6 +73,291 @@ namespace input {
+     UP  ///< Button is up
+   };
+ 
 +  constexpr std::size_t KORRI_INPUT_SEAT_MAX_FRAME_BYTES = 2048;
 +  constexpr std::size_t KORRI_INPUT_SEAT_MAX_SIDECAR_BYTES = 4096;
 +  constexpr std::size_t KORRI_INPUT_SEAT_MAX_LAUNCH_ID_BYTES = 128;
@@ -307,18 +329,42 @@
 +  void korri_input_seat_emit_source_state(PNV_MULTI_CONTROLLER_PACKET) {}
 +#endif
 +
-@@ -851,0 +1153,2 @@
+   template<std::size_t N>
+   int alloc_id(std::bitset<N> &gamepad_mask) {
+     for (int x = 0; x < gamepad_mask.size(); ++x) {
+@@ -849,6 +1150,8 @@ namespace input {
+       return;
+     }
+ 
 +    korri_input_seat_emit_source_connected(packet->controllerNumber);
 +
-@@ -1096,0 +1400,2 @@
+     platf::gamepad_arrival_t arrival {
+       packet->type,
+       util::endian::little(packet->capabilities),
+@@ -1094,6 +1397,8 @@ namespace input {
+     // If this is an event for a new gamepad, create the gamepad now. Ideally, the client would
+     // send a controller arrival instead of this but it's still supported for legacy clients.
+     if ((packet->activeGamepadMask & (1 << packet->controllerNumber)) && gamepad.id < 0) {
 +      korri_input_seat_emit_source_connected(packet->controllerNumber);
 +
-@@ -1109,0 +1415 @@
+       auto id = alloc_id(gamepadMask);
+       if (id < 0) {
+         return;
+@@ -1107,11 +1412,17 @@ namespace input {
+       gamepad.id = id;
+     } else if (!(packet->activeGamepadMask & (1 << packet->controllerNumber)) && gamepad.id >= 0) {
+       // If this is the final event for a gamepad being removed, free the gamepad and return.
 +      korri_input_seat_emit_source_disconnected(packet->controllerNumber, "active-gamepad-mask-cleared"sv);
-@@ -1112,0 +1419,3 @@
+       free_gamepad(platf_input, gamepad.id);
+       gamepad.id = -1;
+       return;
 +    } else if (!(packet->activeGamepadMask & (1 << packet->controllerNumber))) {
 +      korri_input_seat_emit_source_disconnected(packet->controllerNumber, "active-gamepad-mask-cleared"sv);
 +      return;
-@@ -1113,0 +1423,2 @@
-+
+     }
+ 
 +    korri_input_seat_emit_source_state(packet);
++
+     // If this gamepad has not been initialized, ignore it.
+     // This could happen when platf::alloc_gamepad fails
+     if (gamepad.id < 0) {

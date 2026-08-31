@@ -69,12 +69,15 @@ in
       test "${pkgs.sunshine.src.outputHash}" = "${sunshineApprovedPatches.approvedBaseSourceHash}"
       test "${sunshinePackage.korriBaseSunshineSource}" = "${builtins.unsafeDiscardStringContext (toString pkgs.sunshine.src)}"
       test "${sunshinePackage.korriBaseSunshineDerivation}" = "${builtins.unsafeDiscardStringContext pkgs.sunshine.drvPath}"
+      test "${sunshinePackage.korriBaseSunshineDerivation}" = "${sunshineApprovedPatches.approvedBaseDerivation}"
+      test "${sunshinePackage.korriApprovedBaseSunshineDerivation}" = "${sunshineApprovedPatches.approvedBaseDerivation}"
       test "${sunshinePackage.korriReviewedLibavcodecVersion}" = "${sunshineApprovedPatches.reviewedLibavcodecVersion}"
       test "${sunshinePackage.korriPatchSetSha256}" = "${sunshineApprovedPatches.patchSetSha256}"
       provenance=${sunshinePackage}/${sunshinePackage.korriProvenanceRelativePath}
       test -f "$provenance"
       grep -Fx 'package=sunshine-korri' "$provenance" >/dev/null
       grep -Fx 'approved_base_sunshine_source_hash=${sunshineApprovedPatches.approvedBaseSourceHash}' "$provenance" >/dev/null
+      grep -Fx 'approved_base_sunshine_derivation=${sunshineApprovedPatches.approvedBaseDerivation}' "$provenance" >/dev/null
       grep -Fx 'executable=bin/sunshine' "$provenance" >/dev/null
       grep -Fx 'patch_set_sha256=${sunshinePackage.korriPatchSetSha256}' "$provenance" >/dev/null
       touch "$out"
@@ -127,6 +130,7 @@ in
       grep -Fx "EXPECTED_SUNSHINE_FORMAT='1'" "$gate" >/dev/null
       grep -Fx "EXPECTED_SUNSHINE_BASE_VERSION='${sunshineApprovedPatches.baseSunshineVersion}'" "$gate" >/dev/null
       grep -Fx "EXPECTED_SUNSHINE_BASE_SOURCE_HASH='${sunshineApprovedPatches.approvedBaseSourceHash}'" "$gate" >/dev/null
+      grep -Fx "EXPECTED_SUNSHINE_BASE_DERIVATION='${sunshineApprovedPatches.approvedBaseDerivation}'" "$gate" >/dev/null
       grep -Fx "EXPECTED_SUNSHINE_LIBAVCODEC_VERSION='${sunshineApprovedPatches.reviewedLibavcodecVersion}'" "$gate" >/dev/null
       grep -Fx "EXPECTED_SUNSHINE_PATCH_SET_SHA256='${sunshineApprovedPatches.patchSetSha256}'" "$gate" >/dev/null
       grep '^patch=' "$gate" > actual-patch-manifest
@@ -150,6 +154,7 @@ in
 
       test -x ${inputdPackage}/bin/korri-sunshine-state-digest
       test -x ${inputdPackage}/bin/korri-ledger-proof
+      test -x ${inputdPackage}/bin/korri-virtual-target-acl
       test -x ${devApp}/bin/korri-dev
       grep -F 'KORRI_INPUTD_PROFILE=development' ${devApp}/bin/korri-dev >/dev/null
       grep -F 'KORRI_INPUTD_SOURCE="$physical_input"' ${devApp}/bin/korri-dev >/dev/null

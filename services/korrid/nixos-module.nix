@@ -60,6 +60,10 @@ in
       type = lib.types.str;
       default = "/var/lib/korrid";
     };
+    sunshinePrivateStateRoot = lib.mkOption {
+      type = lib.types.str;
+      description = "Exact Sunshine private configuration directory hidden from every game unit.";
+    };
     controlSocket = lib.mkOption {
       type = lib.types.str;
       default = "/run/korrid-control/control.sock";
@@ -90,8 +94,8 @@ in
         message = "korrid deviceConfig must be an immutable Nix-store path.";
       }
       {
-        assertion = validAbsolutePath cfg.privateStateRoot;
-        message = "korrid privateStateRoot must be a normalized absolute path.";
+        assertion = validAbsolutePath cfg.privateStateRoot && validAbsolutePath cfg.sunshinePrivateStateRoot;
+        message = "korrid privateStateRoot and sunshinePrivateStateRoot must be normalized absolute paths.";
       }
       {
         assertion = validAbsolutePath cfg.controlSocket && validAbsolutePath controlDirectory;
@@ -168,6 +172,7 @@ in
         KORRID_HOST_CONFIG = toString cfg.deviceConfig;
         KORRID_STORAGE_ROOT = cfg.storageRoot;
         KORRID_PRIVATE_STATE_ROOT = cfg.privateStateRoot;
+        KORRID_SUNSHINE_PRIVATE_STATE_ROOT = cfg.sunshinePrivateStateRoot;
         KORRID_CONTROL_SOCKET = cfg.controlSocket;
         KORRID_CONTROL_DIRECTORY = controlDirectory;
         KORRID_CONTROL_PEER_UID = toString cfg.inputdUid;

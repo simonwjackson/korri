@@ -778,7 +778,7 @@ mod tests {
             "--property=ProtectKernelTunables=yes".into(),
             "--property=ProtectKernelModules=yes".into(),
             "--property=ProtectControlGroups=yes".into(),
-            "--property=InaccessiblePaths=/var/lib/korrid /run/korrid /run/korrid-control/control.sock /run/korrid-control /dev/uinput /dev/inputplumber/sources".into(),
+            "--property=InaccessiblePaths=/var/lib/korrid /run/korrid /run/korrid-control/control.sock /run/korrid-control /home/gameplay/.config/sunshine /dev/uinput /dev/inputplumber/sources".into(),
             "--property=RestrictSUIDSGID=yes".into(),
         ] {
             assert!(
@@ -807,6 +807,7 @@ mod tests {
             PathBuf::from("/srv/korri-test/private-recovery"),
             PathBuf::from("/run/korri-test/control/device.sock"),
             PathBuf::from("/run/korri-test/control"),
+            PathBuf::from("/home/gameplay/.config/sunshine"),
         )
         .unwrap();
         let launch = backend
@@ -817,7 +818,7 @@ mod tests {
             )
             .unwrap();
         assert!(launch.contains(
-            &"--property=InaccessiblePaths=/srv/korri-test/private-recovery /run/korrid /run/korri-test/control/device.sock /run/korri-test/control /dev/uinput /dev/inputplumber/sources".into()
+            &"--property=InaccessiblePaths=/srv/korri-test/private-recovery /run/korrid /run/korri-test/control/device.sock /run/korri-test/control /home/gameplay/.config/sunshine /dev/uinput /dev/inputplumber/sources".into()
         ));
     }
 
@@ -857,6 +858,7 @@ mod tests {
             PathBuf::from("relative/recovery"),
             PathBuf::from("/run/control.sock"),
             PathBuf::from("/run"),
+            PathBuf::from("/home/gameplay/.config/sunshine"),
         )
         .is_err());
         assert!(SystemdLaunchUnitBackend::with_protected_paths(
@@ -867,6 +869,7 @@ mod tests {
             PathBuf::from("/private/recovery"),
             PathBuf::from("/run/other/control.sock"),
             PathBuf::from("/run/control"),
+            PathBuf::from("/home/gameplay/.config/sunshine"),
         )
         .is_err());
         assert!(SystemdLaunchUnitBackend::with_protected_paths(
@@ -877,6 +880,7 @@ mod tests {
             PathBuf::from("/private/../recovery"),
             PathBuf::from("/run/control/device.sock"),
             PathBuf::from("/run/control"),
+            PathBuf::from("/home/gameplay/.config/sunshine"),
         )
         .is_err());
     }

@@ -26,8 +26,9 @@ SUNSHINE_UINPUT_GROUP='korri-sunshine-uinput'
 EXPECTED_SUNSHINE_FORMAT='1'
 EXPECTED_SUNSHINE_BASE_VERSION='2025.924.154138'
 EXPECTED_SUNSHINE_BASE_SOURCE_HASH='sha256-QrPfZqd9pgufohUjxlTpO6V0v7B41UrXHZaESsFjZ48='
+EXPECTED_SUNSHINE_BASE_DERIVATION='/nix/store/a1dm23k8b0v3qhs9mpj0yiz4jd8jmwpc-sunshine-2025.924.154138.drv'
 EXPECTED_SUNSHINE_LIBAVCODEC_VERSION='62.11.100'
-EXPECTED_SUNSHINE_PATCH_SET_SHA256='30121b5d935b435482814b2c2801c6c3c456bc42c6019123f77018cb0294a62a'
+EXPECTED_SUNSHINE_PATCH_SET_SHA256='6f679d8d25ce9154c8088482ccc00c46333908457295b3857e9ecc8e6ed8ebb5'
 KORRID_CONTROL_GROUP='korri-control'
 KORRID_CONTROL_SOCKET='/run/korrid-control/control.sock'
 # This path comes from HostSessionControl's existing private-state producer.
@@ -41,15 +42,15 @@ LEDGER_PROOF_HELPER=''
 expected_sunshine_patch_manifest() {
   cat <<'EOF'
 patch=0001-add-runtime-settings-protocol-surface.patch sha256=8a9522e39de85cb4ea7c0558a806780ae39d588555c7a84c600a56b9fdbe3bd4
-patch=0002-wire-runtime-settings-control-plane.patch sha256=12c34b55082514039b25e09062ff4735bf4bae6dd4de20f2ec53aad6f0536557
+patch=0002-wire-runtime-settings-control-plane.patch sha256=6c008405d640a665acf7706c07c09c26455ba4a01b6b01b897ceb59fb6bf43e4
 patch=0003-apply-runtime-bitrate-and-fps-changes.patch sha256=d7d89d4a8b4b06d2c473f4c2156a17ecfe369f805132e90a2d05197e69e7e01d
 patch=0004-add-proof-gated-runtime-resolution-apply-path.patch sha256=599d3db14ea57e9712148e83fd7f0404dba96c5c40506c3209c5dbaa7778646e
-patch=0005-add-seamless-vaapi-runtime-bitrate-path.patch sha256=387a1ef4aef168e3af1f49acd301cd616a86db2bf4728028089d7875d7c25e42
-patch=0010-extend-runtime-resolution-fresh-idr-window.patch sha256=9b484831fd38123e8d840f24aeba2995a6818aab34e0ce0a47a23fff4eaad937
-patch=0012-persist-runtime-config-and-reinit-capture-after-resolution.patch sha256=aeaa80bd7362e2fc71be70d2504fb61eabb04ed3491b8d308c931098d02b14b1
-patch=0013-request-async-capture-reinit-after-runtime-resolution.patch sha256=aeb667ade5c747220bb3a18cdc26c9b718a0a0d77eecf64634047db7c86f74d9
-patch=0014-skip-runtime-vaapi-destructor-flush.patch sha256=083ffb66bbad903396ffd4a233abf5d203b0276e3ba223799feb8ca28c7300af
-patch=0015-add-korri-input-seat-event-mirror.patch sha256=fd0b433165f77920df24c2141a3d91f2c088fead3507fdc11fdb6737cff31fa1
+patch=0005-add-seamless-vaapi-runtime-bitrate-path.patch sha256=304c98540a731559ec909797dc75edfc0d4bce43e5aab92dbcf74f0c4506509d
+patch=0010-extend-runtime-resolution-fresh-idr-window.patch sha256=86252208da87bff0b61623f7da86e50d9f35c19963910e5e30703b72b86a42eb
+patch=0012-persist-runtime-config-and-reinit-capture-after-resolution.patch sha256=2ac28eb76da2d02aa97812e9708094480cc1b7c4b897cf123772c24f16c493c6
+patch=0013-request-async-capture-reinit-after-runtime-resolution.patch sha256=0831530081f9551173ff1a74a5ca2771942e9c519ec476c27548a1d3cbea3fa2
+patch=0014-skip-runtime-vaapi-destructor-flush.patch sha256=59eedaf576f99223bd807205c45b12b1ac5f9850225614530b4ab925e3204e50
+patch=0015-add-korri-input-seat-event-mirror.patch sha256=69888a0ef824af105f0919ad354876b52ca0d003b0c46be619e732bc1cdbe726
 EOF
 }
 
@@ -694,6 +695,8 @@ format|$EXPECTED_SUNSHINE_FORMAT
 package|sunshine-korri
 base_sunshine_version|$EXPECTED_SUNSHINE_BASE_VERSION
 approved_base_sunshine_source_hash|$EXPECTED_SUNSHINE_BASE_SOURCE_HASH
+base_sunshine_derivation|$EXPECTED_SUNSHINE_BASE_DERIVATION
+approved_base_sunshine_derivation|$EXPECTED_SUNSHINE_BASE_DERIVATION
 reviewed_libavcodec_version|$EXPECTED_SUNSHINE_LIBAVCODEC_VERSION
 executable|bin/sunshine
 patch_set_sha256|$EXPECTED_SUNSHINE_PATCH_SET_SHA256
@@ -715,8 +718,13 @@ EOF
 
 remote_candidate_credentials() {
   local gameplay_user="$1" uid manager_pid manager_primary_gid unit name pid primary_gid game_units
-  local input_gid uinput_gid control_gid sunshine_gid
+  local input_gid uinput_gid control_gid sunshine_gid gameplay_home sunshine_private environment inaccessible
   uid="$(id -u "$gameplay_user")" || fail 'gameplay user is unavailable'
+  gameplay_home="$(getent passwd "$gameplay_user" | cut -d: -f6)" || fail 'gameplay home is unavailable'
+  sunshine_private="$gameplay_home/.config/sunshine"
+  environment="$(systemctl show korrid.service -p Environment --value 2>/dev/null || true)"
+  [[ " $environment " == *" KORRID_SUNSHINE_PRIVATE_STATE_ROOT=$sunshine_private "* ]] \
+    || fail 'korrid lacks the exact Sunshine private-state game isolation path'
   input_gid="$(remote_group_gid input)" || fail 'input group is unavailable'
   # A removed legacy uinput group has no credentials to leak. If it remains,
   # prove that no candidate or gameplay process retains its numeric authority.
@@ -750,6 +758,9 @@ remote_candidate_credentials() {
       || fail "game unit process credentials are unavailable: $unit"
     [[ "$pid" =~ ^[1-9][0-9]*$ && "$primary_gid" =~ ^[0-9]+$ ]] \
       || fail "game unit process credentials are invalid: $unit"
+    inaccessible="$(systemctl show "$unit" -p InaccessiblePaths --value 2>/dev/null || true)"
+    [[ " $inaccessible " == *" $sunshine_private "* ]] \
+      || fail "Sunshine private state is visible to game unit: $unit"
     remote_process_group_policy "$unit" "$pid" "$primary_gid" \
       "$input_gid" "$uinput_gid" "$control_gid" "$sunshine_gid"
   done <<<"$game_units"
@@ -1682,8 +1693,8 @@ validate_private_state_predicates() {
 
 extract_automated_private_digest() {
   local evidence="$1" digest
-  digest="$(sed -n 's/^sunshine-private-state=protected digest=//p' "$evidence")"
-  [[ "$(grep -c '^sunshine-private-state=protected digest=' "$evidence")" -eq 1
+  digest="$(sed -n 's/^sunshine-private-state=protected digest=//p' <<<"$evidence")"
+  [[ "$(grep -c '^sunshine-private-state=protected digest=' <<<"$evidence")" -eq 1
     && "$digest" =~ ^[0-9a-f]{64}$ ]] \
     || fail 'automated Sunshine private-state proof is invalid'
   printf '%s\n' "$digest"
@@ -1776,13 +1787,26 @@ finish_attempt() {
   attempt_remote_active=false
 }
 verify_fingerprint_unchanged() {
-  local evidence="$1" require_physical="$2"
-  awk -F= '$1 == "acceptance-fingerprint" {print substr($0, index($0, "=") + 1)}' "$evidence" >"$LEDGER/fingerprint.expected"
-  run_remote_attempt acceptance-fingerprint "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" "$require_physical" \
-    >"$LEDGER/fingerprint.current"
-  cmp -s "$LEDGER/fingerprint.expected" "$LEDGER/fingerprint.current" \
-    || fail 'normalized target, Sunshine provenance, or expected physical controller proof changed before acceptance'
-  chmod 0600 "$LEDGER/fingerprint.expected" "$LEDGER/fingerprint.current"
+  local evidence="$1" require_physical="$2" expected current
+  expected="$(awk -F= '$1 == "acceptance-fingerprint" {print substr($0, index($0, "=") + 1)}' <<<"$evidence")"
+  [[ -n "$expected" && "$(grep -c '^acceptance-fingerprint=' <<<"$evidence")" -eq 1 ]]     || fail 'automated acceptance fingerprint is invalid'
+  current="$(run_remote_attempt acceptance-fingerprint "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" "$require_physical")"
+  printf '%s\n' "$expected" | write_replace_ledger_proof fingerprint.expected     || fail 'expected acceptance fingerprint could not be stored safely'
+  printf '%s\n' "$current" | write_replace_ledger_proof fingerprint.current     || fail 'current acceptance fingerprint could not be stored safely'
+  [[ "$(read_ledger_proof fingerprint.expected)" == "$expected"     && "$(read_ledger_proof fingerprint.current)" == "$current"     && "$expected" == "$current" ]]     || fail 'normalized target, Sunshine provenance, or expected physical controller proof changed before acceptance'
+}
+
+store_automated_evidence() {
+  local name="$1" evidence="$2"
+  printf '%s\n' "$evidence" | write_replace_ledger_proof "$name"     || fail "automated evidence could not be stored safely: $name"
+  [[ "$(read_ledger_proof "$name")" == "$evidence" ]]     || fail "automated evidence could not be rebound safely: $name"
+}
+
+save_candidate_controller_proof() {
+  local evidence="$1" controller
+  controller="$(sed -n 's/^controller-evidence=//p' <<<"$evidence")"
+  [[ -n "$controller" && "$(grep -c '^controller-evidence=' <<<"$evidence")" -eq 1 ]]     || fail 'candidate controller evidence is invalid'
+  printf '%s\n' "$controller" | write_replace_ledger_proof candidate-controller.accepted     || fail 'candidate controller proof could not be stored safely'
 }
 
 compare_baseline() {
@@ -1853,10 +1877,11 @@ if [[ "$MODE" == reconcile ]]; then
       reconcile_active=false
       verification_active=true
       start_attempt candidate-reboot-verifying
-      run_remote_attempt automated-gates "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" true \
-        | tee "$LEDGER/reconcile-candidate-reboot.txt"
-      verify_accepted_private_digest "$LEDGER/reconcile-candidate-reboot.txt"
-      verify_fingerprint_unchanged "$LEDGER/reconcile-candidate-reboot.txt" true
+      automated_evidence="$(run_remote_attempt automated-gates "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" true)"
+      printf '%s\n' "$automated_evidence"
+      store_automated_evidence reconcile-candidate-reboot.txt "$automated_evidence"
+      verify_accepted_private_digest "$automated_evidence"
+      verify_fingerprint_unchanged "$automated_evidence" true
       finish_attempt
       verification_active=false
       write_state "$resume" "$resume_boot"
@@ -1896,10 +1921,11 @@ if [[ "$MODE" == reconcile ]]; then
         verification_resume_state="$resume"
         verification_active=true
         start_attempt candidate-reboot-verifying
-        run_remote_attempt automated-gates "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" true \
-          | tee "$LEDGER/reconcile-candidate-reboot.txt"
-        verify_accepted_private_digest "$LEDGER/reconcile-candidate-reboot.txt"
-        verify_fingerprint_unchanged "$LEDGER/reconcile-candidate-reboot.txt" true
+        automated_evidence="$(run_remote_attempt automated-gates "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" true)"
+        printf '%s\n' "$automated_evidence"
+        store_automated_evidence reconcile-candidate-reboot.txt "$automated_evidence"
+        verify_accepted_private_digest "$automated_evidence"
+        verify_fingerprint_unchanged "$automated_evidence" true
         finish_attempt
         verification_active=false
         write_state candidate-await-reboot "$resume_boot"
@@ -1958,9 +1984,12 @@ case "$MODE" in
     [[ -z "$state" || "$state" == candidate-green ]] || fail "candidate-test cannot follow ledger state $state"
     begin_mutation false
     run_remote_attempt activate-test "$CANDIDATE" "$GAMEPLAY_USER"
-    run_remote_attempt automated-gates "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" true | tee "$LEDGER/candidate-automated.txt"
+    automated_evidence="$(run_remote_attempt automated-gates "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" true)"
+    printf '%s\n' "$automated_evidence"
+    store_automated_evidence candidate-automated.txt "$automated_evidence"
     require_hitl pending-mutation
-    verify_fingerprint_unchanged "$LEDGER/candidate-automated.txt" true
+    verify_fingerprint_unchanged "$automated_evidence" true
+    save_candidate_controller_proof "$automated_evidence"
     run_remote_attempt restore "$ROLLBACK" false "$GAMEPLAY_USER" \
       "$old_korrid_active" "$old_korrid_enabled" "$old_sunshine_active" "$old_sunshine_enabled" \
       "$old_x11_active" "$old_x11_enabled" "$old_pairing_config_mode" "$old_pairing_state_mode"
@@ -2006,7 +2035,9 @@ case "$MODE" in
     write_state rollback-reboot-green "$current_boot"
     ;;
   persistent-switch)
-    grep -F 'controller-evidence=' "$LEDGER/candidate-automated.txt" >/dev/null \
+    candidate_controller_proof="$(read_ledger_proof candidate-controller.accepted 2>/dev/null)" \
+      || fail 'persistent switch requires safe prior candidate controller proof'
+    [[ -n "$candidate_controller_proof" ]] \
       || fail 'persistent switch requires prior candidate proof with the exact production controller profile'
     if [[ "$state" == candidate-accepted-pending-boot ]]; then
       current_boot="$(run_remote_deadlined boot-id)"
@@ -2015,11 +2046,12 @@ case "$MODE" in
       [[ "$state" == rollback-reboot-green ]] || fail 'persistent switch requires rollback-reboot-green ledger state'
       begin_mutation true
       run_remote_attempt persistent-switch "$CANDIDATE" "$GAMEPLAY_USER"
-      run_remote_attempt automated-gates "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" true \
-        | tee "$LEDGER/persistent-automated.txt"
+      automated_evidence="$(run_remote_attempt automated-gates "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" true)"
+      printf '%s\n' "$automated_evidence"
+      store_automated_evidence persistent-automated.txt "$automated_evidence"
       require_hitl pending-mutation
-      verify_fingerprint_unchanged "$LEDGER/persistent-automated.txt" true
-      save_accepted_private_digest "$LEDGER/persistent-automated.txt"
+      verify_fingerprint_unchanged "$automated_evidence" true
+      save_accepted_private_digest "$automated_evidence"
       # This durable accepted state makes a failed boot-ID fetch resumable.
       finish_attempt
       mutation_active=false
@@ -2036,11 +2068,12 @@ case "$MODE" in
     [[ "$(run_remote_deadlined current-generation)" == "$CANDIDATE" ]] || fail 'rebooted system is not the candidate generation'
     attempt_boot_id="$current_boot"
     start_attempt candidate-reboot-verifying
-    run_remote_attempt automated-gates "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" true \
-      | tee "$LEDGER/candidate-reboot.txt"
-    verify_accepted_private_digest "$LEDGER/candidate-reboot.txt"
+    automated_evidence="$(run_remote_attempt automated-gates "$GAMEPLAY_USER" "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" true)"
+    printf '%s\n' "$automated_evidence"
+    store_automated_evidence candidate-reboot.txt "$automated_evidence"
+    verify_accepted_private_digest "$automated_evidence"
     require_hitl candidate-reboot-verifying
-    verify_fingerprint_unchanged "$LEDGER/candidate-reboot.txt" true
+    verify_fingerprint_unchanged "$automated_evidence" true
     finish_attempt
     verification_active=false
     write_state complete "$current_boot"

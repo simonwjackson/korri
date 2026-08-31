@@ -1,1 +1,2 @@
 clients/android/app/src/main/java/com/limelight/nvstream/jni/MoonBridge.java whitespace=cr-at-eol
+services/sunshine/patches/*.patch whitespace=-blank-at-eol

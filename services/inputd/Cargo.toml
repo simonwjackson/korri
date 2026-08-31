@@ -21,6 +21,10 @@ name = "korri-bundle-select"
 path = "src/bundle_select.rs"
 
 [[bin]]
+name = "korri-virtual-target-acl"
+path = "src/virtual_target_acl.rs"
+
+[[bin]]
 name = "korri-sunshine-state-digest"
 path = "src/sunshine_state_digest.rs"
 

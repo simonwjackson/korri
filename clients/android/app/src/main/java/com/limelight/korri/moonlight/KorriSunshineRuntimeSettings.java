@@ -123,6 +123,7 @@ public final class KorriSunshineRuntimeSettings implements AutoCloseable {
                 terminal = true;
                 return false;
             }
+            if (finalCapabilitySnapshotLocked(state)) return true;
             attach = state.queryOutcome == MoonBridge.SS_RUNTIME_SETTINGS_OUTCOME_IN_FLIGHT;
         }
         if (attach) {
@@ -280,7 +281,7 @@ public final class KorriSunshineRuntimeSettings implements AutoCloseable {
             finishLocalMutationLocked(mutationSignal);
             return MutationResult.FAILED;
         }
-        if (!sameSessionLocked(state) || state.mutationRequestId != requestId) {
+        if (state.sessionEpoch != sessionEpoch || state.mutationRequestId != requestId) {
             finishLocalMutationLocked(mutationSignal);
             return MutationResult.STALE;
         }
@@ -297,6 +298,10 @@ public final class KorriSunshineRuntimeSettings implements AutoCloseable {
                 finishLocalMutationLocked(mutationSignal);
                 return MutationResult.FAILED;
             default:
+                if (!state.sessionActive) {
+                    finishLocalMutationLocked(mutationSignal);
+                    return MutationResult.STALE;
+                }
                 return null;
         }
     }
@@ -370,6 +375,14 @@ public final class KorriSunshineRuntimeSettings implements AutoCloseable {
             return true;
         }
         return false;
+    }
+
+    private boolean finalCapabilitySnapshotLocked(SunshineRuntimeSettingsSnapshot value) {
+        return sameSessionLocked(value)
+                && value.capabilityReceived
+                && value.queryRequestId > 0
+                && value.queryOutcome == MoonBridge.SS_RUNTIME_SETTINGS_OUTCOME_APPLIED
+                && factsRepresentable(value);
     }
 
     private boolean availableLocked(int operation) {

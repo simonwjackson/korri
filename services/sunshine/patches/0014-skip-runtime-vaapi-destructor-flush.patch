@@ -1,6 +1,8 @@
---- a/src/video.cpp	2026-06-01 23:04:21.672585687 -0600
-+++ b/src/video.cpp	2026-06-01 23:04:52.857995411 -0600
-@@ -318,9 +318,17 @@
+diff --git a/src/video.cpp b/src/video.cpp
+index 41e60483..81e0d41e 100644
+--- a/src/video.cpp
++++ b/src/video.cpp
+@@ -320,9 +320,17 @@ namespace video {
  
      avcodec_encode_session_t(avcodec_encode_session_t &&other) noexcept = default;
  
@@ -20,7 +22,7 @@
          packet_raw_avcodec pkt;
          while (avcodec_receive_packet(avcodec_ctx.get(), pkt.av_packet) == 0);
        }
-@@ -337,6 +343,7 @@
+@@ -339,6 +347,7 @@ namespace video {
        replacements = std::move(other.replacements);
        sps = std::move(other.sps);
        vps = std::move(other.vps);
@@ -28,7 +30,7 @@
  
        inject = other.inject;
  
-@@ -379,6 +386,8 @@
+@@ -381,6 +390,8 @@ namespace video {
      cbs::nal_t sps;
      cbs::nal_t vps;
  
@@ -37,7 +39,7 @@
      // inject sps/vps data into idr pictures
      int inject;
    };
-@@ -2285,6 +2294,12 @@
+@@ -2279,6 +2290,12 @@ namespace video {
                  if (replacement_session && first_img) {
                    replacement_session->request_idr_frame();
                    if (!replacement_session->convert(*first_img)) {
