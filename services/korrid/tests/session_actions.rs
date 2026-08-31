@@ -240,6 +240,12 @@ fn canonical_moonlight_resolves_typed_artemis_availability_only_when_enabled() {
             "@korri:moonlight/face-button-flip",
             "@korri:moonlight/rumble",
             "@korri:moonlight/picture-in-picture",
+            "@korri:moonlight/stream-bitrate",
+            "@korri:moonlight/restore-stream-bitrate",
+            "@korri:moonlight/stream-fps",
+            "@korri:moonlight/restore-stream-fps",
+            "@korri:moonlight/stream-width",
+            "@korri:moonlight/restore-stream-resolution",
             "@korri:moonlight/disconnect",
             "@korri:moonlight/quit-host",
         ]

@@ -153,6 +153,13 @@ let
       && contains "LI_RUNTIME_SETTINGS_ERROR_NOT_SUNSHINE" (builtins.readFile nativeTestPath)
       && contains "atomic_load(&context.readyCalls) == 0" (builtins.readFile nativeTestPath)
     ))
+    (check "native requests reject a stale expected session epoch before send" (
+      contains "LI_RUNTIME_SETTINGS_ERROR_STALE_SESSION -5609" header
+      && contains "expectedSessionEpoch != state->snapshot.sessionEpoch" protocol
+      && contains "uint64_t expectedSessionEpoch" dispatch
+      && contains "querySunshineRuntimeSettings(long expectedSessionEpoch" java
+      && contains "testExpectedEpochRejectsReplacementRace" (builtins.readFile nativeTestPath)
+    ))
     (check "client has no environment adaptation hook or raw packet log" (
       !(contains "getenv(" protocol)
       && !(contains "MOONLIGHT_RUNTIME_SETTINGS" protocol)

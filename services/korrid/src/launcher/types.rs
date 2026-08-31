@@ -567,6 +567,12 @@ pub enum AndroidMoonlightEffect {
     SetFaceButtonFlip,
     SetRumble,
     SetPictureInPicture,
+    SetStreamBitrateKbps,
+    RestoreStreamBitrate,
+    SetStreamFps,
+    RestoreStreamFps,
+    SetStreamWidth,
+    RestoreStreamResolution,
 }
 
 /** Closed platform effect vocabulary. Plugins may refer only to integrations

@@ -1010,6 +1010,7 @@ void LiRequestIdrFrame(void);
 #define LI_RUNTIME_SETTINGS_ERROR_SEND_FAILED -5606
 #define LI_RUNTIME_SETTINGS_ERROR_MALFORMED_ACK -5607
 #define LI_RUNTIME_SETTINGS_ERROR_STALE_ACK -5608
+#define LI_RUNTIME_SETTINGS_ERROR_STALE_SESSION -5609
 
 #define SS_RUNTIME_SETTINGS_SNAPSHOT_VERSION 2
 #define SS_RUNTIME_SETTINGS_SNAPSHOT_WIRE_LENGTH 31
@@ -1051,10 +1052,10 @@ typedef struct _SS_RUNTIME_SETTINGS_SNAPSHOT {
 // Request IDs must increase strictly within one sessionEpoch. A capability query
 // can run with one mutation. Mutations serialize across bitrate, FPS, and
 // resolution changes.
-int LiQuerySunshineRuntimeSettingsCapabilities(uint32_t requestId);
-int LiSetSunshineRuntimeBitrate(uint32_t requestId, uint32_t bitrateKbps);
-int LiSetSunshineRuntimeFps(uint32_t requestId, uint32_t fps);
-int LiSetSunshineRuntimeResolution(uint32_t requestId, uint32_t width, uint32_t height);
+int LiQuerySunshineRuntimeSettingsCapabilities(uint64_t expectedSessionEpoch, uint32_t requestId);
+int LiSetSunshineRuntimeBitrate(uint64_t expectedSessionEpoch, uint32_t requestId, uint32_t bitrateKbps);
+int LiSetSunshineRuntimeFps(uint64_t expectedSessionEpoch, uint32_t requestId, uint32_t fps);
+int LiSetSunshineRuntimeResolution(uint64_t expectedSessionEpoch, uint32_t requestId, uint32_t width, uint32_t height);
 void LiGetSunshineRuntimeSettingsSnapshot(PSS_RUNTIME_SETTINGS_SNAPSHOT snapshot);
 
 // This function returns any extended feature flags supported by the host.

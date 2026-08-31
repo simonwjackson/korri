@@ -65,7 +65,8 @@ static bool requestedValueWithinBounds(const SS_RUNTIME_SETTINGS_SNAPSHOT* snaps
                snapshot->maxBitrateKbps >= snapshot->minBitrateKbps &&
                value <= snapshot->maxBitrateKbps;
     case SS_RUNTIME_SETTINGS_OPERATION_SET_FPS:
-        return value != 0 && snapshot->maxFps != 0 && value <= snapshot->maxFps;
+        return value != 0 && snapshot->maxFps != 0 && snapshot->launchFps != 0 &&
+               value <= snapshot->maxFps && value <= snapshot->launchFps;
     case SS_RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION:
         return resolutionWithinLaunch(snapshot->launchWidth, snapshot->launchHeight,
                                       value, secondaryValue);
@@ -175,6 +176,7 @@ void SsRuntimeSettingsSetSessionActive(SS_RUNTIME_SETTINGS_STATE* state, bool ac
 }
 
 int SsRuntimeSettingsPrepareRequest(SS_RUNTIME_SETTINGS_STATE* state,
+                                    uint64_t expectedSessionEpoch,
                                     uint64_t nowMs,
                                     uint32_t requestId,
                                     uint16_t operation,
@@ -186,6 +188,9 @@ int SsRuntimeSettingsPrepareRequest(SS_RUNTIME_SETTINGS_STATE* state,
 
     if (!state->snapshot.sessionActive) {
         return LI_RUNTIME_SETTINGS_ERROR_CONTROL_NOT_READY;
+    }
+    if (expectedSessionEpoch == 0 || expectedSessionEpoch != state->snapshot.sessionEpoch) {
+        return LI_RUNTIME_SETTINGS_ERROR_STALE_SESSION;
     }
     if (operation > SS_RUNTIME_SETTINGS_OPERATION_MAX) {
         return LI_RUNTIME_SETTINGS_ERROR_UNSUPPORTED_OPERATION;

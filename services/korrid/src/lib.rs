@@ -332,6 +332,15 @@ pub struct MoonlightExecutorEffectState {
     pub fulfillable: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<SessionControlValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub range: Option<MoonlightExecutorRangeState>,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MoonlightExecutorRangeState {
+    pub min: f64,
+    pub max: f64,
+    pub step: f64,
 }
 
 impl MoonlightExecutorState {
@@ -363,6 +372,12 @@ impl MoonlightExecutorState {
             Effect::SetFaceButtonFlip,
             Effect::SetRumble,
             Effect::SetPictureInPicture,
+            Effect::SetStreamBitrateKbps,
+            Effect::RestoreStreamBitrate,
+            Effect::SetStreamFps,
+            Effect::RestoreStreamFps,
+            Effect::SetStreamWidth,
+            Effect::RestoreStreamResolution,
         ];
         if self.effects.len() != expected.len() {
             return false;
@@ -371,8 +386,17 @@ impl MoonlightExecutorState {
         self.effects.iter().all(|entry| {
             seen.insert(entry.effect)
                 && if !entry.fulfillable {
-                    entry.value.is_none()
+                    entry.value.is_none() && entry.range.is_none()
                 } else {
+                    let needs_live_range = matches!(
+                        entry.effect,
+                        Effect::SetStreamBitrateKbps
+                            | Effect::SetStreamFps
+                            | Effect::SetStreamWidth
+                    );
+                    if entry.range.is_some() != needs_live_range {
+                        return false;
+                    }
                     match (entry.effect, &entry.value) {
                         (
                             Effect::SetFillMode
@@ -392,6 +416,26 @@ impl MoonlightExecutorState {
                             valid_range_value(*value, 1.0, 32.0, 1.0)
                         }
                         (
+                            effect @ (Effect::SetStreamBitrateKbps
+                            | Effect::SetStreamFps
+                            | Effect::SetStreamWidth),
+                            Some(SessionControlValue::Range(value)),
+                        ) => {
+                            let Some(range) = &entry.range else {
+                                return false;
+                            };
+                            let outer = match effect {
+                                Effect::SetStreamBitrateKbps => (500.0, 150000.0, 1.0),
+                                Effect::SetStreamFps => (1.0, 240.0, 1.0),
+                                _ => (2.0, 8192.0, 2.0),
+                            };
+                            range.min >= outer.0
+                                && range.max <= outer.1
+                                && strict_dynamic_integer_range(
+                                    effect, *value, range.min, range.max, range.step,
+                                )
+                        }
+                        (
                             Effect::Disconnect
                             | Effect::QuitHost
                             | Effect::ToggleKeyboard
@@ -401,13 +445,31 @@ impl MoonlightExecutorState {
                             | Effect::ToggleFloatingMenu
                             | Effect::ToggleKeyboardController
                             | Effect::SwitchTouchSensitivity
-                            | Effect::SetLocalCursor,
+                            | Effect::SetLocalCursor
+                            | Effect::RestoreStreamBitrate
+                            | Effect::RestoreStreamFps
+                            | Effect::RestoreStreamResolution,
                             None,
                         ) => true,
                         _ => false,
                     }
                 }
         }) && expected.iter().all(|effect| seen.contains(effect))
+            && [
+                (Effect::SetStreamBitrateKbps, Effect::RestoreStreamBitrate),
+                (Effect::SetStreamFps, Effect::RestoreStreamFps),
+                (Effect::SetStreamWidth, Effect::RestoreStreamResolution),
+            ]
+            .iter()
+            .all(|(set, restore)| {
+                self.effect(*set).is_some_and(|entry| {
+                    self.effect(*restore).is_some_and(|other| {
+                        entry.fulfillable == other.fulfillable
+                            && other.value.is_none()
+                            && other.range.is_none()
+                    })
+                })
+            })
     }
 }
 
@@ -418,6 +480,37 @@ fn ulp_at(value: f64) -> f64 {
     }
     let exponent = ((magnitude.to_bits() >> 52) & 0x7ff) as i32 - 1023;
     2.0_f64.powi(exponent - 52)
+}
+
+fn exact_integer(value: f64) -> bool {
+    value.is_finite() && value.fract() == 0.0
+}
+
+fn strict_dynamic_integer_range(
+    effect: launcher::AndroidMoonlightEffect,
+    value: f64,
+    min: f64,
+    max: f64,
+    step: f64,
+) -> bool {
+    use launcher::AndroidMoonlightEffect as Effect;
+    if !exact_integer(value) || !exact_integer(min) || !exact_integer(max) || !exact_integer(step) {
+        return false;
+    }
+    let expected_step = if effect == Effect::SetStreamWidth {
+        2.0
+    } else {
+        1.0
+    };
+    if step != expected_step {
+        return false;
+    }
+    if effect == Effect::SetStreamWidth
+        && (value % 2.0 != 0.0 || min % 2.0 != 0.0 || max % 2.0 != 0.0)
+    {
+        return false;
+    }
+    valid_range_value(value, min, max, step)
 }
 
 fn valid_range_value(value: f64, min: f64, max: f64, step: f64) -> bool {
@@ -1435,12 +1528,23 @@ fn materialize_session_controls_snapshot(
                     (
                         plugin::SessionControlDeclarationInteraction::Range { min, max, step },
                         Some(SessionControlValue::Range(value)),
-                    ) if valid_range_value(*value, *min, *max, *step) => {
+                    ) => {
+                        let (live_min, live_max, live_step) =
+                            live.range.as_ref().map_or((*min, *max, *step), |range| {
+                                (range.min, range.max, range.step)
+                            });
+                        if live_min < *min
+                            || live_max > *max
+                            || live_step != *step
+                            || !valid_range_value(*value, live_min, live_max, live_step)
+                        {
+                            continue;
+                        }
                         SessionControlInteraction::Range {
                             value: *value,
-                            min: *min,
-                            max: *max,
-                            step: *step,
+                            min: live_min,
+                            max: live_max,
+                            step: live_step,
                         }
                     }
                     _ => continue,
@@ -3533,6 +3637,9 @@ mod tests {
             Effect::SetMouseMode => Some(SessionControlValue::Choice("0".into())),
             Effect::SetSgsrSharpness => Some(SessionControlValue::Range(20.0)),
             Effect::SetSgsrEdgeThreshold => Some(SessionControlValue::Range(8.0)),
+            Effect::SetStreamBitrateKbps => Some(SessionControlValue::Range(12345.0)),
+            Effect::SetStreamFps => Some(SessionControlValue::Range(60.0)),
+            Effect::SetStreamWidth => Some(SessionControlValue::Range(1920.0)),
             _ => None,
         };
         let effects = [
@@ -3554,12 +3661,36 @@ mod tests {
             Effect::SetFaceButtonFlip,
             Effect::SetRumble,
             Effect::SetPictureInPicture,
+            Effect::SetStreamBitrateKbps,
+            Effect::RestoreStreamBitrate,
+            Effect::SetStreamFps,
+            Effect::RestoreStreamFps,
+            Effect::SetStreamWidth,
+            Effect::RestoreStreamResolution,
         ]
         .into_iter()
         .map(|effect| MoonlightExecutorEffectState {
             effect,
             fulfillable: true,
             value: value(effect),
+            range: match effect {
+                Effect::SetStreamBitrateKbps => Some(MoonlightExecutorRangeState {
+                    min: 500.0,
+                    max: 150000.0,
+                    step: 1.0,
+                }),
+                Effect::SetStreamFps => Some(MoonlightExecutorRangeState {
+                    min: 1.0,
+                    max: 120.0,
+                    step: 1.0,
+                }),
+                Effect::SetStreamWidth => Some(MoonlightExecutorRangeState {
+                    min: 2.0,
+                    max: 1920.0,
+                    step: 2.0,
+                }),
+                _ => None,
+            },
         })
         .collect();
         MoonlightExecutorState {
@@ -3567,6 +3698,220 @@ mod tests {
             executor_id: "android-moonlight".into(),
             generation: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
             effects,
+        }
+    }
+
+    #[test]
+    fn moonlight_live_ranges_are_strict_and_unfulfillable_effects_have_no_payload() {
+        use launcher::AndroidMoonlightEffect as Effect;
+        let mut state = moonlight_executor_state("launch");
+        assert!(state.is_strict());
+        let bitrate = state
+            .effects
+            .iter_mut()
+            .find(|entry| entry.effect == Effect::SetStreamBitrateKbps)
+            .unwrap();
+        bitrate.range.as_mut().unwrap().max = 150500.0;
+        assert!(!state.is_strict());
+        let mut state = moonlight_executor_state("launch");
+        let fps = state
+            .effects
+            .iter_mut()
+            .find(|entry| entry.effect == Effect::SetStreamFps)
+            .unwrap();
+        fps.fulfillable = false;
+        fps.value = None;
+        fps.range = None;
+        assert!(!state.is_strict());
+        let restore = state
+            .effects
+            .iter_mut()
+            .find(|entry| entry.effect == Effect::RestoreStreamFps)
+            .unwrap();
+        restore.fulfillable = false;
+        assert!(state.is_strict());
+        for (set, restore) in [
+            (Effect::SetStreamBitrateKbps, Effect::RestoreStreamBitrate),
+            (Effect::SetStreamFps, Effect::RestoreStreamFps),
+            (Effect::SetStreamWidth, Effect::RestoreStreamResolution),
+        ] {
+            let mut state = moonlight_executor_state("launch");
+            let entry = state
+                .effects
+                .iter_mut()
+                .find(|entry| entry.effect == set)
+                .unwrap();
+            entry.fulfillable = false;
+            entry.value = None;
+            entry.range = None;
+            assert!(!state.is_strict());
+            let entry = state
+                .effects
+                .iter_mut()
+                .find(|entry| entry.effect == restore)
+                .unwrap();
+            entry.fulfillable = false;
+            assert!(state.is_strict());
+        }
+    }
+
+    #[test]
+    fn moonlight_dynamic_ranges_reject_fractional_and_odd_integer_facts() {
+        use launcher::AndroidMoonlightEffect as Effect;
+        let mut malformed = Vec::new();
+
+        let mut state = moonlight_executor_state("launch");
+        state
+            .effects
+            .iter_mut()
+            .find(|entry| entry.effect == Effect::SetStreamBitrateKbps)
+            .unwrap()
+            .value = Some(SessionControlValue::Range(12345.5));
+        malformed.push(state);
+
+        let mut state = moonlight_executor_state("launch");
+        state
+            .effects
+            .iter_mut()
+            .find(|entry| entry.effect == Effect::SetStreamBitrateKbps)
+            .unwrap()
+            .range
+            .as_mut()
+            .unwrap()
+            .min = 500.5;
+        malformed.push(state);
+
+        let mut state = moonlight_executor_state("launch");
+        state
+            .effects
+            .iter_mut()
+            .find(|entry| entry.effect == Effect::SetStreamFps)
+            .unwrap()
+            .range
+            .as_mut()
+            .unwrap()
+            .max = 120.5;
+        malformed.push(state);
+
+        for odd in [
+            (Some(1919.0), None, None),
+            (None, Some(3.0), None),
+            (None, None, Some(1919.0)),
+        ] {
+            let mut state = moonlight_executor_state("launch");
+            let width = state
+                .effects
+                .iter_mut()
+                .find(|entry| entry.effect == Effect::SetStreamWidth)
+                .unwrap();
+            if let Some(value) = odd.0 {
+                width.value = Some(SessionControlValue::Range(value));
+            }
+            if let Some(min) = odd.1 {
+                width.range.as_mut().unwrap().min = min;
+            }
+            if let Some(max) = odd.2 {
+                width.range.as_mut().unwrap().max = max;
+            }
+            malformed.push(state);
+        }
+
+        let mut state = moonlight_executor_state("launch");
+        state
+            .effects
+            .iter_mut()
+            .find(|entry| entry.effect == Effect::SetStreamWidth)
+            .unwrap()
+            .value = Some(SessionControlValue::Range(1918.5));
+        malformed.push(state);
+
+        for state in malformed {
+            assert!(!state.is_strict());
+        }
+    }
+
+    #[test]
+    fn malformed_dynamic_ranges_cannot_materialize_moonlight_controls() {
+        use launcher::AndroidMoonlightEffect as Effect;
+        let root = tempfile::tempdir().unwrap();
+        let config = config::snapshot::ConfigSnapshotCoordinator::new(root.path());
+        let active = launcher::AndroidActiveLaunch {
+            launch_id: "launch".into(),
+            game_id: None,
+            title: Some("Stream".into()),
+            content_crc32: None,
+            contributors: vec![launcher::LaunchRouteContributor {
+                kind: launcher::LaunchContributorKind::Transport,
+                id: "@korri:moonlight/moonlight".into(),
+            }],
+            executor: Some(launcher::LaunchExecutor {
+                id: "android-moonlight".into(),
+                available: true,
+            }),
+            foreground: launcher::LaunchForegroundRule {
+                kind: launcher::LaunchForegroundKind::ArtemisGame,
+                package_name: None,
+                class_name: None,
+            },
+        };
+        let active_slot = Arc::new(Mutex::new(Some(active)));
+        let authority_slot: RetroarchControlSlot = Arc::new(Mutex::new(None));
+
+        let mut states = Vec::new();
+        let mut odd_width = moonlight_executor_state("launch");
+        odd_width
+            .effects
+            .iter_mut()
+            .find(|entry| entry.effect == Effect::SetStreamWidth)
+            .unwrap()
+            .value = Some(SessionControlValue::Range(1919.0));
+        states.push(odd_width);
+
+        let mut fractional_min = moonlight_executor_state("launch");
+        fractional_min
+            .effects
+            .iter_mut()
+            .find(|entry| entry.effect == Effect::SetStreamBitrateKbps)
+            .unwrap()
+            .range
+            .as_mut()
+            .unwrap()
+            .min = 500.5;
+        states.push(fractional_min);
+
+        let mut fractional_max = moonlight_executor_state("launch");
+        fractional_max
+            .effects
+            .iter_mut()
+            .find(|entry| entry.effect == Effect::SetStreamFps)
+            .unwrap()
+            .range
+            .as_mut()
+            .unwrap()
+            .max = 120.5;
+        states.push(fractional_max);
+
+        let mut fractional_value = moonlight_executor_state("launch");
+        fractional_value
+            .effects
+            .iter_mut()
+            .find(|entry| entry.effect == Effect::SetStreamWidth)
+            .unwrap()
+            .value = Some(SessionControlValue::Range(1918.5));
+        states.push(fractional_value);
+
+        for state in states {
+            let moonlight_slot = Arc::new(Mutex::new(Some(state)));
+            let failure = materialize_session_controls_snapshot(
+                &active_slot,
+                &authority_slot,
+                &moonlight_slot,
+                &config,
+                "launch",
+            )
+            .err()
+            .expect("malformed executor state must not materialize");
+            assert_eq!(failure.reason, SessionControlFailureReason::Unavailable);
         }
     }
 
@@ -5515,7 +5860,7 @@ command = ["game-two"]
                 .as_array()
                 .unwrap()
                 .len(),
-            18
+            24
         );
         let fill = controls["outcome"]["payload"]["groups"][0]["controls"]
             .as_array()
@@ -5532,6 +5877,19 @@ command = ["game-two"]
                     "trueLabel": "crop to fill",
                     "falseLabel": "fit (letterbox)"
                 }
+            })
+        );
+        let bitrate = controls["outcome"]["payload"]["groups"][0]["controls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|control| control["id"] == "@korri:moonlight/stream-bitrate")
+            .unwrap();
+        assert_eq!(
+            bitrate["interaction"],
+            serde_json::json!({
+                "kind": "range",
+                "payload": { "value": 12345.0, "min": 500.0, "max": 150000.0, "step": 1.0 }
             })
         );
         let invoke = client
@@ -5695,6 +6053,19 @@ command = ["game-two"]
             .unwrap();
         unavailable_mouse.fulfillable = false;
         unavailable_mouse.value = None;
+        for effect in [
+            launcher::AndroidMoonlightEffect::SetStreamBitrateKbps,
+            launcher::AndroidMoonlightEffect::RestoreStreamBitrate,
+        ] {
+            let entry = replacement_executor
+                .effects
+                .iter_mut()
+                .find(|entry| entry.effect == effect)
+                .unwrap();
+            entry.fulfillable = false;
+            entry.value = None;
+            entry.range = None;
+        }
         assert!(publish_moonlight_executor_state(
             &serde_json::to_string(&replacement_executor).unwrap()
         ));
@@ -5724,10 +6095,16 @@ command = ["game-two"]
         let available_controls = partially_available["outcome"]["payload"]["groups"][0]["controls"]
             .as_array()
             .unwrap();
-        assert_eq!(available_controls.len(), 17);
+        assert_eq!(available_controls.len(), 21);
         assert!(!available_controls
             .iter()
             .any(|control| control["id"] == "@korri:moonlight/mouse-mode"));
+        assert!(!available_controls
+            .iter()
+            .any(|control| control["id"] == "@korri:moonlight/stream-bitrate"));
+        assert!(!available_controls
+            .iter()
+            .any(|control| control["id"] == "@korri:moonlight/restore-stream-bitrate"));
         assert!(available_controls
             .iter()
             .any(|control| control["id"] == "@korri:moonlight/keyboard"));

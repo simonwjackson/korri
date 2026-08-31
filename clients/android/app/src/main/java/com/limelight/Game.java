@@ -31,6 +31,8 @@ import com.limelight.nvstream.input.MouseButtonPacket;
 import com.limelight.nvstream.jni.MoonBridge;
 import com.limelight.korri.moonlight.KorriMoonlightActionCoordinator;
 import com.limelight.korri.moonlight.KorriMoonlightActionExecutor;
+import com.limelight.korri.moonlight.KorriMoonlightExecutorPublicationRepair;
+import com.limelight.korri.moonlight.KorriSunshineRuntimeSettings;
 import com.limelight.korri.overlay.KorriOverlayHostExclusion;
 import com.limelight.korri.overlay.KorriOverlayService;
 import com.limelight.preferences.GlPreferences;
@@ -290,9 +292,15 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     private String korriLaunchId;
     private String korriMoonlightExecutorGeneration;
     private KorriMoonlightActionExecutor korriMoonlightExecutor;
+    private boolean korriMoonlightRegistrationStarting;
+    private long korriMoonlightRegistrationToken;
+    private KorriMoonlightExecutorPublicationRepair korriMoonlightPublicationRepair;
+    private volatile KorriSunshineRuntimeSettings korriSunshineRuntimeSettings;
     private int activeMouseMode;
     private final KorriGameLaunchScope korriLaunchScope =
             new KorriGameLaunchScope(this::endKorriLaunch);
+    private final KorriConnectionLifecycle korriConnectionLifecycle =
+            new KorriConnectionLifecycle();
 
     public boolean isInputOnly = true;
     public boolean allowChangeMouseMode = true;
@@ -1764,6 +1772,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     @Override
     protected void onDestroy() {
+        korriConnectionLifecycle.retire();
         unregisterMoonlightExecutor();
         if (korriOverlay != null) {
             KorriOverlayService.unregisterLegacyHost(korriOverlayOwner);
@@ -3342,6 +3351,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     }
 
     private void endKorriLaunch() {
+        korriConnectionLifecycle.retire();
         unregisterMoonlightExecutor();
         if (korriLaunchId != null) {
             KorriBrainService.clearActiveLaunchOnEnd(korriLaunchId);
@@ -3349,7 +3359,15 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     }
 
     private void registerMoonlightExecutor() {
-        if (korriLaunchId == null || korriMoonlightExecutor != null) return;
+        String exactLaunch;
+        long registrationToken;
+        synchronized (this) {
+            if (korriLaunchId == null || korriMoonlightExecutor != null
+                    || korriMoonlightRegistrationStarting) return;
+            korriMoonlightRegistrationStarting = true;
+            registrationToken = ++korriMoonlightRegistrationToken;
+            exactLaunch = korriLaunchId;
+        }
         KorriMoonlightActionExecutor next = new KorriMoonlightActionExecutor(
                 this,
                 new KorriMoonlightActionExecutor.UiDispatcher() {
@@ -3363,22 +3381,99 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                         runOnUiThread(action);
                     }
                 });
-        String generation =
-                KorriMoonlightActionCoordinator.process().register(korriLaunchId, next);
-        if (generation != null) {
-            korriMoonlightExecutor = next;
+        KorriSunshineRuntimeSettings owner = new KorriSunshineRuntimeSettings(
+                KorriSunshineRuntimeSettings.moonBridge(),
+                new KorriSunshineRuntimeSettings.Scheduler() {
+                    public void postDelayed(Runnable action, long delayMs) { timerHandler.postDelayed(action, delayMs); }
+                    public void remove(Runnable action) { timerHandler.removeCallbacks(action); }
+                },
+                this::repairMoonlightExecutorPublication);
+        KorriMoonlightExecutorPublicationRepair repair =
+                new KorriMoonlightExecutorPublicationRepair(
+                        KorriMoonlightActionCoordinator.process(),
+                        (action, delayMs) -> timerHandler.postDelayed(action, delayMs),
+                        () -> isMoonlightPublicationCurrent(exactLaunch, next, owner),
+                        generation -> updateMoonlightGeneration(exactLaunch, next, generation),
+                        exactLaunch,
+                        next);
+        boolean installed;
+        synchronized (this) {
+            installed = registrationToken == korriMoonlightRegistrationToken
+                    && exactLaunch.equals(korriLaunchId)
+                    && korriMoonlightExecutor == null
+                    && korriSunshineRuntimeSettings == null
+                    && korriMoonlightPublicationRepair == null;
+            if (installed) {
+                korriMoonlightExecutor = next;
+                korriSunshineRuntimeSettings = owner;
+                korriMoonlightPublicationRepair = repair;
+            }
+            if (registrationToken == korriMoonlightRegistrationToken) {
+                korriMoonlightRegistrationStarting = false;
+            }
+        }
+        if (!installed) {
+            owner.close();
+            repair.close();
+            return;
+        }
+        repair.start();
+        if (!owner.start() && owner.terminal()) {
+            Log.w("KorriSunshine", "runtime-settings unavailable for the current stream");
+        }
+    }
+
+    private synchronized void updateMoonlightGeneration(
+            String launch, KorriMoonlightActionExecutor executor, String generation) {
+        if (launch.equals(korriLaunchId) && executor == korriMoonlightExecutor) {
             korriMoonlightExecutorGeneration = generation;
         }
     }
 
+    private synchronized boolean isMoonlightPublicationCurrent(
+            String launch, KorriMoonlightActionExecutor executor,
+            KorriSunshineRuntimeSettings owner) {
+        return launch.equals(korriLaunchId)
+                && korriMoonlightExecutor == executor
+                && korriSunshineRuntimeSettings == owner
+                && korriMoonlightPublicationRepair != null;
+    }
+
+    private void repairMoonlightExecutorPublication(
+            KorriSunshineRuntimeSettings expectedOwner) {
+        KorriMoonlightExecutorPublicationRepair repair;
+        synchronized (this) {
+            if (expectedOwner != korriSunshineRuntimeSettings) return;
+            repair = korriMoonlightPublicationRepair;
+        }
+        if (repair != null) repair.snapshotChanged();
+    }
+
     private void unregisterMoonlightExecutor() {
-        if (korriLaunchId == null || korriMoonlightExecutor == null) return;
-        KorriMoonlightActionExecutor current = korriMoonlightExecutor;
-        String generation = korriMoonlightExecutorGeneration;
-        korriMoonlightExecutor = null;
-        korriMoonlightExecutorGeneration = null;
-        KorriMoonlightActionCoordinator.process().unregister(
-                korriLaunchId, generation, current);
+        KorriMoonlightActionExecutor executor;
+        KorriSunshineRuntimeSettings owner;
+        KorriMoonlightExecutorPublicationRepair repair;
+        synchronized (this) {
+            executor = korriMoonlightExecutor;
+            owner = korriSunshineRuntimeSettings;
+            repair = korriMoonlightPublicationRepair;
+            korriMoonlightRegistrationStarting = false;
+            korriMoonlightRegistrationToken++;
+        }
+        // Revoke repair installation before the Game guard can become false. This
+        // orders a concurrent final publish/install against exact teardown.
+        if (repair != null) repair.close();
+        if (owner != null) owner.close();
+        synchronized (this) {
+            if (korriMoonlightExecutor == executor
+                    && korriSunshineRuntimeSettings == owner
+                    && korriMoonlightPublicationRepair == repair) {
+                korriSunshineRuntimeSettings = null;
+                korriMoonlightPublicationRepair = null;
+                korriMoonlightExecutor = null;
+                korriMoonlightExecutorGeneration = null;
+            }
+        }
     }
 
     private void logKorriLifecycle(String event, String reason) {
@@ -3663,56 +3758,44 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     @Override
     public void connectionStarted() {
+        final long connectionToken = korriConnectionLifecycle.started();
         korriLaunchScope.connectionStarted();
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                if (spinner != null) {
-                    spinner.dismiss();
-                    spinner = null;
-                }
-
-                // Korri sessions: the stream is rendering beneath — announce
-                // and remove the overlay (the sanctioned reveal signal).
-                if (korriSessionOverlay != null) {
-                    korriSessionOverlay.publish(KorriSessionOverlay.connectedEvent());
-                    korriSessionOverlay.reveal();
-                }
-
-                connected = true;
-                connecting = false;
-                updatePipAutoEnter();
-                // Gameplay controls become truthful only after the live stream
-                // and all Game-owned action fields are ready.
-                registerMoonlightExecutor();
-                logKorriLifecycle("connection-started", "connected");
-
-                // Hide the mouse cursor now after a short delay.
-                // Doing it before dismissing the spinner seems to be undone
-                // when the spinner gets displayed. On Android Q, even now
-                // is too early to capture. We will delay a second to allow
-                // the spinner to dismiss before capturing.
-                timerHandler.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        setInputGrabState(true);
+                korriConnectionLifecycle.runIfCurrent(connectionToken, () -> {
+                    if (spinner != null) {
+                        spinner.dismiss();
+                        spinner = null;
                     }
-                }, 500);
 
-                // Keep the display on
-                getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    // Korri sessions: the stream is rendering beneath — announce
+                    // and remove the overlay (the sanctioned reveal signal).
+                    if (korriSessionOverlay != null) {
+                        korriSessionOverlay.publish(KorriSessionOverlay.connectedEvent());
+                        korriSessionOverlay.reveal();
+                    }
 
-                // Update GameManager state to indicate we're in game
-                UiHelper.notifyStreamConnected(Game.this);
+                    connected = true;
+                    connecting = false;
+                    updatePipAutoEnter();
+                    // Gameplay controls become truthful only after the live stream
+                    // and all Game-owned action fields are ready.
+                    registerMoonlightExecutor();
+                    logKorriLifecycle("connection-started", "connected");
 
-                // Ensure overlay toggle button visibility is properly set
-                setupOverlayToggleButton();
+                    // Hide the mouse cursor after the spinner is gone.
+                    timerHandler.postDelayed(() -> setInputGrabState(true), 500);
 
-                hideSystemUi(1000);
+                    getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    UiHelper.notifyStreamConnected(Game.this);
+                    setupOverlayToggleButton();
+                    hideSystemUi(1000);
 
-                if (prefConfig.preventPacketLoss) {
-                    timerHandler.postDelayed(backgroundPing, 1000);
-                }
+                    if (prefConfig.preventPacketLoss) {
+                        timerHandler.postDelayed(backgroundPing, 1000);
+                    }
+                });
             }
         });
 
@@ -4231,6 +4314,24 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                 return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                         && getPackageManager().hasSystemFeature(
                                 PackageManager.FEATURE_PICTURE_IN_PICTURE);
+            case SET_STREAM_BITRATE_KBPS:
+            case RESTORE_STREAM_BITRATE: {
+                KorriSunshineRuntimeSettings owner = korriSunshineRuntimeSettings;
+                return owner != null && owner.available(
+                        MoonBridge.SS_RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS);
+            }
+            case SET_STREAM_FPS:
+            case RESTORE_STREAM_FPS: {
+                KorriSunshineRuntimeSettings owner = korriSunshineRuntimeSettings;
+                return owner != null && owner.available(
+                        MoonBridge.SS_RUNTIME_SETTINGS_OPERATION_SET_FPS);
+            }
+            case SET_STREAM_WIDTH:
+            case RESTORE_STREAM_RESOLUTION: {
+                KorriSunshineRuntimeSettings owner = korriSunshineRuntimeSettings;
+                return owner != null && owner.available(
+                        MoonBridge.SS_RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION);
+            }
             default:
                 return true;
         }
@@ -4312,6 +4413,54 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                 this, "checkbox_enable_pip", String.valueOf(value));
         applyLivePrefs();
         updatePipAutoEnter();
+    }
+
+    private KorriSunshineRuntimeSettings runtimeSettingsOwner() {
+        KorriSunshineRuntimeSettings owner = korriSunshineRuntimeSettings;
+        if (owner == null) throw new IllegalStateException("runtime settings owner is absent");
+        return owner;
+    }
+
+    private static KorriSunshineRuntimeSettings.Authorization runtimeAuthorization(
+            KorriMoonlightActionExecutor.Authorization authorization) {
+        return new KorriSunshineRuntimeSettings.Authorization() {
+            @Override public boolean isCurrent() { return authorization.isCurrent(); }
+            @Override public <T> T commit(java.util.function.Supplier<T> action, T staleResult) {
+                return authorization.commit(action, staleResult);
+            }
+        };
+    }
+
+    @Override public int streamBitrateKbps() { return runtimeSettingsOwner().bitrate(); }
+    @Override public int streamBitrateMinKbps() { return runtimeSettingsOwner().bitrateMin(); }
+    @Override public int streamBitrateMaxKbps() { return runtimeSettingsOwner().bitrateMax(); }
+    @Override public KorriSunshineRuntimeSettings.MutationResult setStreamBitrateKbps(int value, KorriMoonlightActionExecutor.Authorization authorization) {
+        KorriSunshineRuntimeSettings owner = korriSunshineRuntimeSettings;
+        return owner == null ? KorriSunshineRuntimeSettings.MutationResult.STALE : owner.setBitrate(value, runtimeAuthorization(authorization));
+    }
+    @Override public KorriSunshineRuntimeSettings.MutationResult restoreStreamBitrate(KorriMoonlightActionExecutor.Authorization authorization) {
+        KorriSunshineRuntimeSettings owner = korriSunshineRuntimeSettings;
+        return owner == null ? KorriSunshineRuntimeSettings.MutationResult.STALE : owner.restoreBitrate(runtimeAuthorization(authorization));
+    }
+    @Override public int streamFps() { return runtimeSettingsOwner().fps(); }
+    @Override public int streamFpsMax() { return runtimeSettingsOwner().fpsMax(); }
+    @Override public KorriSunshineRuntimeSettings.MutationResult setStreamFps(int value, KorriMoonlightActionExecutor.Authorization authorization) {
+        KorriSunshineRuntimeSettings owner = korriSunshineRuntimeSettings;
+        return owner == null ? KorriSunshineRuntimeSettings.MutationResult.STALE : owner.setFps(value, runtimeAuthorization(authorization));
+    }
+    @Override public KorriSunshineRuntimeSettings.MutationResult restoreStreamFps(KorriMoonlightActionExecutor.Authorization authorization) {
+        KorriSunshineRuntimeSettings owner = korriSunshineRuntimeSettings;
+        return owner == null ? KorriSunshineRuntimeSettings.MutationResult.STALE : owner.restoreFps(runtimeAuthorization(authorization));
+    }
+    @Override public int streamWidth() { return runtimeSettingsOwner().width(); }
+    @Override public int streamWidthMax() { return runtimeSettingsOwner().widthMax(); }
+    @Override public KorriSunshineRuntimeSettings.MutationResult setStreamWidth(int value, KorriMoonlightActionExecutor.Authorization authorization) {
+        KorriSunshineRuntimeSettings owner = korriSunshineRuntimeSettings;
+        return owner == null ? KorriSunshineRuntimeSettings.MutationResult.STALE : owner.setWidth(value, runtimeAuthorization(authorization));
+    }
+    @Override public KorriSunshineRuntimeSettings.MutationResult restoreStreamResolution(KorriMoonlightActionExecutor.Authorization authorization) {
+        KorriSunshineRuntimeSettings owner = korriSunshineRuntimeSettings;
+        return owner == null ? KorriSunshineRuntimeSettings.MutationResult.STALE : owner.restoreResolution(runtimeAuthorization(authorization));
     }
 
     @Override

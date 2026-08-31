@@ -43,6 +43,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /** Production session scope, input edge, and global gameplay-overlay window. */
 public final class KorriOverlayService extends AccessibilityService {
@@ -352,6 +356,16 @@ public final class KorriOverlayService extends AccessibilityService {
             });
 
             Handler handler = new Handler(Looper.getMainLooper());
+            ExecutorService instructionExecutor = new ThreadPoolExecutor(
+                    1, 1, 0L, TimeUnit.MILLISECONDS,
+                    new ArrayBlockingQueue<>(1),
+                    runnable -> {
+                        Thread thread = new Thread(runnable, "korri-overlay-instructions");
+                        thread.setDaemon(true);
+                        return thread;
+                    },
+                    new ThreadPoolExecutor.AbortPolicy());
+            resources.add(instructionExecutor::shutdownNow);
             boolean[] fatalDuringCreate = { false };
             Runnable fatal = () -> {
                 fatalDuringCreate[0] = true;
@@ -404,10 +418,13 @@ public final class KorriOverlayService extends AccessibilityService {
                             return KorridServer.authorizePlatformInstruction(instructionJson);
                         }
                     },
-                    messageJson -> web.evaluateJavascript(
+                    messageJson -> handler.post(() -> web.evaluateJavascript(
                             "window.__korriOverlayMessage && window.__korriOverlayMessage("
                                     + JSONObject.quote(messageJson) + ")",
-                            null));
+                            null)),
+                    instructionExecutor,
+                    action -> handler.post(action));
+            resources.add(bridge::close);
             if (!bridge.attachTo(web)) {
                 throw new IllegalStateException("WebMessageListener is unavailable");
             }

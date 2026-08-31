@@ -95,7 +95,7 @@ static void prepareQuery(SS_RUNTIME_SETTINGS_STATE* state,
                          uint32_t requestId) {
     uint8_t request[SS_RUNTIME_SETTINGS_MAX_REQUEST_BYTES];
     size_t requestLength;
-    assert(SsRuntimeSettingsPrepareRequest(state, nowMs, requestId,
+    assert(SsRuntimeSettingsPrepareRequest(state, state->snapshot.sessionEpoch, nowMs, requestId,
                                            SS_RUNTIME_SETTINGS_OPERATION_QUERY_CAPABILITIES,
                                            0, 0, request, &requestLength) == 0);
     assert(requestLength == 8);
@@ -120,14 +120,14 @@ static void testEpochGenerationAndEncoding(void) {
     SsRuntimeSettingsInitialize(&state);
     assert(state.snapshot.version == SS_RUNTIME_SETTINGS_SNAPSHOT_VERSION);
     assert(state.snapshot.generation == 0);
-    assert(SsRuntimeSettingsPrepareRequest(&state, 0, 1, 0, 0, 0,
+    assert(SsRuntimeSettingsPrepareRequest(&state, state.snapshot.sessionEpoch, 0, 1, 0, 0, 0,
                                            request, &requestLength) ==
            LI_RUNTIME_SETTINGS_ERROR_CONTROL_NOT_READY);
     beginActive(&state, 41);
     generation = state.snapshot.generation;
     assert(state.snapshot.sessionEpoch == 41);
     assert(state.snapshot.sessionActive == 1);
-    assert(SsRuntimeSettingsPrepareRequest(&state, 10, 0x11223344,
+    assert(SsRuntimeSettingsPrepareRequest(&state, state.snapshot.sessionEpoch, 10, 0x11223344,
                                            SS_RUNTIME_SETTINGS_OPERATION_QUERY_CAPABILITIES,
                                            0, 0, request, &requestLength) == 0);
     assert(requestLength == sizeof(expectedQuery));
@@ -186,7 +186,7 @@ static void testCapabilityStatusAndMasks(void) {
     assert(state.snapshot.supportedOperations == 0);
     assert(state.snapshot.maxBitrateKbps == 0);
     assert(state.snapshot.maxFps == 60);
-    assert(SsRuntimeSettingsPrepareRequest(&state, 0, 2,
+    assert(SsRuntimeSettingsPrepareRequest(&state, state.snapshot.sessionEpoch, 0, 2,
                                            SS_RUNTIME_SETTINGS_OPERATION_SET_FPS,
                                            30, 0, request, &requestLength) ==
            LI_RUNTIME_SETTINGS_ERROR_CONTROL_NOT_READY);
@@ -243,7 +243,7 @@ static void testMutationStatusMatrixAndAuthoritativeCurrent(void) {
         SsRuntimeSettingsInitialize(&state);
         beginActive(&state, 1);
         establishCapabilities(&state, 1);
-        assert(SsRuntimeSettingsPrepareRequest(&state, 0, 2,
+        assert(SsRuntimeSettingsPrepareRequest(&state, state.snapshot.sessionEpoch, 0, 2,
                                                SS_RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS,
                                                10000, 0, request, &requestLength) == 0);
         valueAck(ack, 2, SS_RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS,
@@ -271,7 +271,7 @@ static void testRejectedBitrateCurrentBounds(void) {
         SsRuntimeSettingsInitialize(&state);
         beginActive(&state, 1);
         establishCapabilities(&state, 1);
-        assert(SsRuntimeSettingsPrepareRequest(&state, 0, 2,
+        assert(SsRuntimeSettingsPrepareRequest(&state, state.snapshot.sessionEpoch, 0, 2,
                                                SS_RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS,
                                                10000, 0, request, &requestLength) == 0);
         valueAck(ack, 2, SS_RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS,
@@ -293,7 +293,7 @@ static void testRejectedBitrateCurrentBounds(void) {
         SsRuntimeSettingsInitialize(&state);
         beginActive(&state, 1);
         establishCapabilities(&state, 1);
-        assert(SsRuntimeSettingsPrepareRequest(&state, 0, 2,
+        assert(SsRuntimeSettingsPrepareRequest(&state, state.snapshot.sessionEpoch, 0, 2,
                                                SS_RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS,
                                                10000, 0, request, &requestLength) == 0);
         prepareQuery(&state, 0, 3);
@@ -319,7 +319,7 @@ static void testResolutionRejectionCurrent(void) {
     SsRuntimeSettingsInitialize(&state);
     beginActive(&state, 1);
     establishCapabilities(&state, 1);
-    assert(SsRuntimeSettingsPrepareRequest(&state, 0, 2,
+    assert(SsRuntimeSettingsPrepareRequest(&state, state.snapshot.sessionEpoch, 0, 2,
                                            SS_RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION,
                                            854, 480, request, &requestLength) == 0);
     resolutionAck(ack, 2, SS_RUNTIME_SETTINGS_STATUS_FAILED,
@@ -335,10 +335,10 @@ static void startMutationAndQuery(SS_RUNTIME_SETTINGS_STATE* state,
                                   uint32_t queryRequest) {
     uint8_t request[SS_RUNTIME_SETTINGS_MAX_REQUEST_BYTES];
     size_t requestLength;
-    assert(SsRuntimeSettingsPrepareRequest(state, 0, mutationRequest,
+    assert(SsRuntimeSettingsPrepareRequest(state, state->snapshot.sessionEpoch, 0, mutationRequest,
                                            SS_RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS,
                                            10000, 0, request, &requestLength) == 0);
-    assert(SsRuntimeSettingsPrepareRequest(state, 0, queryRequest,
+    assert(SsRuntimeSettingsPrepareRequest(state, state->snapshot.sessionEpoch, 0, queryRequest,
                                            SS_RUNTIME_SETTINGS_OPERATION_QUERY_CAPABILITIES,
                                            0, 0, request, &requestLength) == 0);
 }
@@ -394,7 +394,7 @@ static void testQueryAcceptedBeforeMutation(void) {
     beginActive(&state, 1);
     establishCapabilities(&state, 1);
     prepareQuery(&state, 0, 2);
-    assert(SsRuntimeSettingsPrepareRequest(&state, 0, 3,
+    assert(SsRuntimeSettingsPrepareRequest(&state, state.snapshot.sessionEpoch, 0, 3,
                                            SS_RUNTIME_SETTINGS_OPERATION_SET_FPS,
                                            30, 0, request, &requestLength) == 0);
     capabilityAck(queryAck, 2, SS_RUNTIME_SETTINGS_STATUS_APPLIED,
@@ -408,6 +408,31 @@ static void testQueryAcceptedBeforeMutation(void) {
     assert(state.snapshot.currentFps == 30);
 }
 
+static void testFpsNeverExceedsLaunchLimit(void) {
+    SS_RUNTIME_SETTINGS_STATE state;
+    uint8_t request[SS_RUNTIME_SETTINGS_MAX_REQUEST_BYTES];
+    uint8_t ack[16];
+    size_t requestLength;
+
+    SsRuntimeSettingsInitialize(&state);
+    beginActive(&state, 1);
+    establishCapabilities(&state, 1);
+    state.snapshot.maxFps = 120;
+    assert(state.snapshot.launchFps == 60);
+    assert(SsRuntimeSettingsPrepareRequest(&state, state.snapshot.sessionEpoch, 0, 2,
+                                           SS_RUNTIME_SETTINGS_OPERATION_SET_FPS,
+                                           61, 0, request, &requestLength) ==
+           LI_RUNTIME_SETTINGS_ERROR_INVALID_BOUNDS);
+    assert(SsRuntimeSettingsPrepareRequest(&state, state.snapshot.sessionEpoch, 0, 2,
+                                           SS_RUNTIME_SETTINGS_OPERATION_SET_FPS,
+                                           60, 0, request, &requestLength) == 0);
+    valueAck(ack, 2, SS_RUNTIME_SETTINGS_OPERATION_SET_FPS,
+             SS_RUNTIME_SETTINGS_STATUS_APPLIED, 60,
+             SS_RUNTIME_SETTINGS_REASON_NONE);
+    assert(SsRuntimeSettingsProcessAck(&state, ack, sizeof(ack)) == 0);
+    assert(state.snapshot.currentFps == 60);
+}
+
 static void testClockRegressionDoesNotTimeout(void) {
     SS_RUNTIME_SETTINGS_STATE state;
     uint8_t request[SS_RUNTIME_SETTINGS_MAX_REQUEST_BYTES];
@@ -416,7 +441,7 @@ static void testClockRegressionDoesNotTimeout(void) {
     SsRuntimeSettingsInitialize(&state);
     beginActive(&state, 1);
     establishCapabilities(&state, 1);
-    assert(SsRuntimeSettingsPrepareRequest(&state, 5000, 2,
+    assert(SsRuntimeSettingsPrepareRequest(&state, state.snapshot.sessionEpoch, 5000, 2,
                                            SS_RUNTIME_SETTINGS_OPERATION_SET_FPS,
                                            30, 0, request, &requestLength) == 0);
     assert(SsRuntimeSettingsNextTimeoutMs(&state, 4000, 9000) ==
@@ -453,7 +478,7 @@ static void testTimeoutStaleAndPerLaneTerminal(void) {
     assert(state.snapshot.generation > generation);
     assert(state.snapshot.mutationOutcome == SS_RUNTIME_SETTINGS_OUTCOME_TIMED_OUT);
 
-    assert(SsRuntimeSettingsPrepareRequest(&state, 4000, 4,
+    assert(SsRuntimeSettingsPrepareRequest(&state, state.snapshot.sessionEpoch, 4000, 4,
                                            SS_RUNTIME_SETTINGS_OPERATION_SET_FPS,
                                            30, 0, request, &requestLength) == 0);
     SsRuntimeSettingsRecordStreamEnd(&state);
@@ -578,8 +603,7 @@ static bool mockSend(void* opaque, const uint8_t* payload, size_t payloadLength)
 static void* requestThread(void* opaque) {
     REQUEST_THREAD* request = opaque;
     atomic_store(&request->started, true);
-    request->result = SsRuntimeSettingsDispatchRequest(request->dispatch,
-                                                       request->requestId,
+    request->result = SsRuntimeSettingsDispatchRequest(request->dispatch, 7, request->requestId,
                                                        request->operation,
                                                        request->value,
                                                        0);
@@ -667,12 +691,12 @@ static void testDispatchLifecycleAndOrdering(void) {
     SsRuntimeSettingsDispatchInitialize(&dispatch, &state, &context,
                                         mockLock, mockUnlock, mockReady, mockSend, mockClock);
 
-    assert(SsRuntimeSettingsDispatchRequest(&dispatch, 1, 0, 0, 0) ==
+    assert(SsRuntimeSettingsDispatchRequest(&dispatch, 7, 1, 0, 0, 0) ==
            LI_RUNTIME_SETTINGS_ERROR_CONTROL_NOT_READY);
     assert(atomic_load(&context.readyCalls) == 0);
     assert(context.sentCount == 0);
     SsRuntimeSettingsDispatchBeginSession(&dispatch, 7);
-    assert(SsRuntimeSettingsDispatchRequest(&dispatch, 1, 0, 0, 0) ==
+    assert(SsRuntimeSettingsDispatchRequest(&dispatch, 7, 1, 0, 0, 0) ==
            LI_RUNTIME_SETTINGS_ERROR_CONTROL_NOT_READY);
     assert(atomic_load(&context.readyCalls) == 0);
 
@@ -681,7 +705,7 @@ static void testDispatchLifecycleAndOrdering(void) {
     SsRuntimeSettingsDispatchGetSnapshot(&dispatch, &snapshot);
     assert(snapshot.sessionActive == 0);
     assert(atomic_load(&context.readyCalls) == 1);
-    assert(SsRuntimeSettingsDispatchRequest(&dispatch, 1, 0, 0, 0) ==
+    assert(SsRuntimeSettingsDispatchRequest(&dispatch, 7, 1, 0, 0, 0) ==
            LI_RUNTIME_SETTINGS_ERROR_NOT_SUNSHINE);
     assert(atomic_load(&context.readyCalls) == 1);
     assert(context.sentCount == 0);
@@ -691,8 +715,12 @@ static void testDispatchLifecycleAndOrdering(void) {
     SsRuntimeSettingsDispatchGetSnapshot(&dispatch, &snapshot);
     assert(snapshot.sessionActive == 1);
     assert(atomic_load(&context.readyCalls) == 2);
+    assert(SsRuntimeSettingsDispatchRequest(&dispatch, 6, 1, 0, 0, 0) ==
+           LI_RUNTIME_SETTINGS_ERROR_STALE_SESSION);
+    assert(atomic_load(&context.readyCalls) == 2);
+    assert(context.sentCount == 0);
     context.readinessError = LI_RUNTIME_SETTINGS_ERROR_CONTROL_NOT_READY;
-    assert(SsRuntimeSettingsDispatchRequest(&dispatch, 1, 0, 0, 0) ==
+    assert(SsRuntimeSettingsDispatchRequest(&dispatch, 7, 1, 0, 0, 0) ==
            LI_RUNTIME_SETTINGS_ERROR_CONTROL_NOT_READY);
     assert(atomic_load(&context.readyCalls) == 3);
     assert(context.sentCount == 0);
@@ -738,7 +766,7 @@ static void testDispatchLifecycleAndOrdering(void) {
     assert(snapshot.queryOutcome == SS_RUNTIME_SETTINGS_OUTCOME_STREAM_ENDED);
     {
         unsigned int readyCallsAfterEnd = atomic_load(&context.readyCalls);
-        assert(SsRuntimeSettingsDispatchRequest(&dispatch, 13, 0, 0, 0) ==
+        assert(SsRuntimeSettingsDispatchRequest(&dispatch, 7, 13, 0, 0, 0) ==
                LI_RUNTIME_SETTINGS_ERROR_CONTROL_NOT_READY);
         assert(atomic_load(&context.readyCalls) == readyCallsAfterEnd);
     }
@@ -752,7 +780,33 @@ static void testDispatchLifecycleAndOrdering(void) {
     assert(pthread_mutex_destroy(&context.dispatchMutex) == 0);
 }
 
+static void testExpectedEpochRejectsReplacementRace(void) {
+    SS_RUNTIME_SETTINGS_STATE state;
+    uint8_t request[SS_RUNTIME_SETTINGS_MAX_REQUEST_BYTES];
+    size_t length;
+    SsRuntimeSettingsInitialize(&state);
+    beginActive(&state, 9);
+    assert(SsRuntimeSettingsPrepareRequest(&state, 8, 0, 1,
+                                           SS_RUNTIME_SETTINGS_OPERATION_QUERY_CAPABILITIES,
+                                           0, 0, request, &length) ==
+           LI_RUNTIME_SETTINGS_ERROR_STALE_SESSION);
+    assert(state.lastIssuedRequestId == 0);
+    assert(!state.query.active);
+    assert(SsRuntimeSettingsPrepareRequest(&state, 9, 0, 1,
+                                           SS_RUNTIME_SETTINGS_OPERATION_QUERY_CAPABILITIES,
+                                           0, 0, request, &length) == 0);
+    SsRuntimeSettingsRecordStreamEnd(&state);
+    SsRuntimeSettingsBeginSession(&state, 10);
+    SsRuntimeSettingsSetSessionActive(&state, true);
+    assert(SsRuntimeSettingsPrepareRequest(&state, 9, 1, 2,
+                                           SS_RUNTIME_SETTINGS_OPERATION_QUERY_CAPABILITIES,
+                                           0, 0, request, &length) ==
+           LI_RUNTIME_SETTINGS_ERROR_STALE_SESSION);
+    assert(state.lastIssuedRequestId == 0);
+}
+
 int main(void) {
+    testExpectedEpochRejectsReplacementRace();
     testEpochGenerationAndEncoding();
     testCapabilityStatusAndMasks();
     testMutationStatusMatrixAndAuthoritativeCurrent();
@@ -760,6 +814,7 @@ int main(void) {
     testResolutionRejectionCurrent();
     testAckOrderReconciliation();
     testQueryAcceptedBeforeMutation();
+    testFpsNeverExceedsLaunchLimit();
     testClockRegressionDoesNotTimeout();
     testTimeoutStaleAndPerLaneTerminal();
     testSnapshotWireMapping();

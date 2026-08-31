@@ -15,7 +15,49 @@ import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
 public class KorriMoonlightActionExecutorTest {
+    @Test
+    public void nativeRuntimeSnapshotOwnsAllSixRuntimePublications() {
+        for (KorriMoonlightActionExecutor.Effect effect : new KorriMoonlightActionExecutor.Effect[] {
+                KorriMoonlightActionExecutor.Effect.SET_STREAM_BITRATE_KBPS,
+                KorriMoonlightActionExecutor.Effect.RESTORE_STREAM_BITRATE,
+                KorriMoonlightActionExecutor.Effect.SET_STREAM_FPS,
+                KorriMoonlightActionExecutor.Effect.RESTORE_STREAM_FPS,
+                KorriMoonlightActionExecutor.Effect.SET_STREAM_WIDTH,
+                KorriMoonlightActionExecutor.Effect.RESTORE_STREAM_RESOLUTION,
+        }) {
+            KorriMoonlightActionExecutor.Request request = effect == KorriMoonlightActionExecutor.Effect.SET_STREAM_BITRATE_KBPS
+                    ? KorriMoonlightActionExecutor.Request.range(LAUNCH, effect, 20000)
+                    : effect == KorriMoonlightActionExecutor.Effect.SET_STREAM_FPS
+                    ? KorriMoonlightActionExecutor.Request.range(LAUNCH, effect, 60)
+                    : effect == KorriMoonlightActionExecutor.Effect.SET_STREAM_WIDTH
+                    ? KorriMoonlightActionExecutor.Request.range(LAUNCH, effect, 1280)
+                    : KorriMoonlightActionExecutor.Request.command(LAUNCH, effect);
+            assertFalse(request.needsStatePublication());
+        }
+    }
     private static final String LAUNCH = "0123456789abcdef0123456789abcdef";
+
+    @Test
+    public void finalAuthorizationCommitOwnsNonRuntimeSideEffect() {
+        KorriMoonlightActionCoordinatorTest.RecordingActions actions =
+                new KorriMoonlightActionCoordinatorTest.RecordingActions();
+        KorriMoonlightActionExecutor executor = new KorriMoonlightActionExecutor(
+                actions, new KorriMoonlightActionCoordinatorTest.ImmediateUiDispatcher());
+        KorriMoonlightActionExecutor.Authorization revokedAtCommit =
+                new KorriMoonlightActionExecutor.Authorization() {
+                    @Override public boolean isCurrent() { return true; }
+                    @Override public <T> T commit(
+                            java.util.function.Supplier<T> action, T staleResult) {
+                        return staleResult;
+                    }
+                };
+
+        assertEquals(KorriMoonlightActionExecutor.Outcome.STALE,
+                executor.execute(KorriMoonlightActionExecutor.Request.command(
+                        LAUNCH, KorriMoonlightActionExecutor.Effect.DISCONNECT),
+                        revokedAtCommit));
+        assertTrue(actions.calls.isEmpty());
+    }
 
     @Test
     public void publishesOnlyTheClosedInventoryWithExactCurrentValues() throws Exception {
@@ -36,12 +78,16 @@ public class KorriMoonlightActionExecutorTest {
         JSONObject state = new JSONObject(executor.stateJson(LAUNCH, "executor-generation"));
         assertEquals(LAUNCH, state.getString("launchId"));
         assertEquals("executor-generation", state.getString("generation"));
-        assertEquals(18, state.getJSONArray("effects").length());
+        assertEquals(24, state.getJSONArray("effects").length());
         assertEquals(true, value(state, "set-fill-mode").getBoolean("value"));
         assertEquals(true, value(state, "set-zoom-mode").getBoolean("value"));
         assertEquals("5", value(state, "set-mouse-mode").getString("value"));
         assertEquals(37, value(state, "set-sgsr-sharpness").getInt("value"));
         assertEquals(19, value(state, "set-sgsr-edge-threshold").getInt("value"));
+        assertEquals(20000, value(state, "set-stream-bitrate-kbps").getInt("value"));
+        assertEquals(150000, effect(state, "set-stream-bitrate-kbps").getJSONObject("range").getInt("max"));
+        assertEquals(120, effect(state, "set-stream-fps").getJSONObject("range").getInt("max"));
+        assertEquals(1920, effect(state, "set-stream-width").getJSONObject("range").getInt("max"));
         assertEquals(true, value(state, "set-face-button-flip").getBoolean("value"));
         assertEquals(false, value(state, "set-rumble").getBoolean("value"));
         assertEquals(true, value(state, "set-picture-in-picture").getBoolean("value"));

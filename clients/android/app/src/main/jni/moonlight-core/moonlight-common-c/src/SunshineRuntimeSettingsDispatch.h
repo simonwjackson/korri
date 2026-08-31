@@ -32,6 +32,7 @@ void SsRuntimeSettingsDispatchBeginSession(SS_RUNTIME_SETTINGS_DISPATCH* dispatc
                                            uint64_t sessionEpoch);
 void SsRuntimeSettingsDispatchSetActive(SS_RUNTIME_SETTINGS_DISPATCH* dispatch, bool active);
 int SsRuntimeSettingsDispatchRequest(SS_RUNTIME_SETTINGS_DISPATCH* dispatch,
+                                     uint64_t expectedSessionEpoch,
                                      uint32_t requestId,
                                      uint16_t operation,
                                      uint32_t value,

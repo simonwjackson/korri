@@ -29,48 +29,60 @@ Java_com_limelight_nvstream_jni_MoonBridge_sendEmptyPayload(JNIEnv *env, jclass 
 
 JNIEXPORT jint JNICALL
 Java_com_limelight_nvstream_jni_MoonBridge_querySunshineRuntimeSettings(JNIEnv *env, jclass clazz,
-                                                                        jint requestId) {
+                                                                        jlong expectedSessionEpoch, jint requestId) {
+    if (expectedSessionEpoch <= 0) {
+        return LI_RUNTIME_SETTINGS_ERROR_STALE_SESSION;
+    }
     if (requestId <= 0) {
         return LI_RUNTIME_SETTINGS_ERROR_CONFLICT;
     }
-    return LiQuerySunshineRuntimeSettingsCapabilities((uint32_t)requestId);
+    return LiQuerySunshineRuntimeSettingsCapabilities((uint64_t)expectedSessionEpoch, (uint32_t)requestId);
 }
 
 JNIEXPORT jint JNICALL
 Java_com_limelight_nvstream_jni_MoonBridge_setSunshineRuntimeBitrate(JNIEnv *env, jclass clazz,
-                                                                     jint requestId, jint bitrateKbps) {
+                                                                     jlong expectedSessionEpoch, jint requestId, jint bitrateKbps) {
+    if (expectedSessionEpoch <= 0) {
+        return LI_RUNTIME_SETTINGS_ERROR_STALE_SESSION;
+    }
     if (requestId <= 0) {
         return LI_RUNTIME_SETTINGS_ERROR_CONFLICT;
     }
     if (bitrateKbps <= 0) {
         return LI_RUNTIME_SETTINGS_ERROR_INVALID_BOUNDS;
     }
-    return LiSetSunshineRuntimeBitrate((uint32_t)requestId, (uint32_t)bitrateKbps);
+    return LiSetSunshineRuntimeBitrate((uint64_t)expectedSessionEpoch, (uint32_t)requestId, (uint32_t)bitrateKbps);
 }
 
 JNIEXPORT jint JNICALL
 Java_com_limelight_nvstream_jni_MoonBridge_setSunshineRuntimeFps(JNIEnv *env, jclass clazz,
-                                                                 jint requestId, jint fps) {
+                                                                 jlong expectedSessionEpoch, jint requestId, jint fps) {
+    if (expectedSessionEpoch <= 0) {
+        return LI_RUNTIME_SETTINGS_ERROR_STALE_SESSION;
+    }
     if (requestId <= 0) {
         return LI_RUNTIME_SETTINGS_ERROR_CONFLICT;
     }
     if (fps <= 0) {
         return LI_RUNTIME_SETTINGS_ERROR_INVALID_BOUNDS;
     }
-    return LiSetSunshineRuntimeFps((uint32_t)requestId, (uint32_t)fps);
+    return LiSetSunshineRuntimeFps((uint64_t)expectedSessionEpoch, (uint32_t)requestId, (uint32_t)fps);
 }
 
 JNIEXPORT jint JNICALL
 Java_com_limelight_nvstream_jni_MoonBridge_setSunshineRuntimeResolution(JNIEnv *env, jclass clazz,
-                                                                        jint requestId, jint width,
+                                                                        jlong expectedSessionEpoch, jint requestId, jint width,
                                                                         jint height) {
+    if (expectedSessionEpoch <= 0) {
+        return LI_RUNTIME_SETTINGS_ERROR_STALE_SESSION;
+    }
     if (requestId <= 0) {
         return LI_RUNTIME_SETTINGS_ERROR_CONFLICT;
     }
     if (width <= 0 || height <= 0) {
         return LI_RUNTIME_SETTINGS_ERROR_INVALID_BOUNDS;
     }
-    return LiSetSunshineRuntimeResolution((uint32_t)requestId, (uint32_t)width, (uint32_t)height);
+    return LiSetSunshineRuntimeResolution((uint64_t)expectedSessionEpoch, (uint32_t)requestId, (uint32_t)width, (uint32_t)height);
 }
 
 JNIEXPORT jlongArray JNICALL

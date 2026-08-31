@@ -119,6 +119,7 @@ public class MoonBridge {
     public static final int LI_RUNTIME_SETTINGS_ERROR_SEND_FAILED = -5606;
     public static final int LI_RUNTIME_SETTINGS_ERROR_MALFORMED_ACK = -5607;
     public static final int LI_RUNTIME_SETTINGS_ERROR_STALE_ACK = -5608;
+    public static final int LI_RUNTIME_SETTINGS_ERROR_STALE_SESSION = -5609;
 
     public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_VERSION = 2;
     public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_LENGTH = 31;
@@ -434,13 +435,13 @@ public class MoonBridge {
 
     public static native void sendEmptyPayload();
 
-    public static native int querySunshineRuntimeSettings(int requestId);
+    public static native int querySunshineRuntimeSettings(long expectedSessionEpoch, int requestId);
 
-    public static native int setSunshineRuntimeBitrate(int requestId, int bitrateKbps);
+    public static native int setSunshineRuntimeBitrate(long expectedSessionEpoch, int requestId, int bitrateKbps);
 
-    public static native int setSunshineRuntimeFps(int requestId, int fps);
+    public static native int setSunshineRuntimeFps(long expectedSessionEpoch, int requestId, int fps);
 
-    public static native int setSunshineRuntimeResolution(int requestId, int width, int height);
+    public static native int setSunshineRuntimeResolution(long expectedSessionEpoch, int requestId, int width, int height);
 
     private static native long[] getSunshineRuntimeSettingsSnapshotRaw();
 

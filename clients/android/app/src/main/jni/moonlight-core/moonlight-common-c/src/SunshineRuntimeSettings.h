@@ -35,6 +35,7 @@ void SsRuntimeSettingsInitialize(SS_RUNTIME_SETTINGS_STATE* state);
 void SsRuntimeSettingsBeginSession(SS_RUNTIME_SETTINGS_STATE* state, uint64_t sessionEpoch);
 void SsRuntimeSettingsSetSessionActive(SS_RUNTIME_SETTINGS_STATE* state, bool active);
 int SsRuntimeSettingsPrepareRequest(SS_RUNTIME_SETTINGS_STATE* state,
+                                    uint64_t expectedSessionEpoch,
                                     uint64_t nowMs,
                                     uint32_t requestId,
                                     uint16_t operation,

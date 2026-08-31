@@ -948,7 +948,8 @@ static bool sendMessageAndForget(short ptype, short paylen, const void* payload,
     return ret;
 }
 
-static int sendRuntimeSettingsRequest(uint32_t requestId,
+static int sendRuntimeSettingsRequest(uint64_t expectedSessionEpoch,
+                                      uint32_t requestId,
                                       uint16_t operation,
                                       uint32_t value,
                                       uint32_t secondaryValue) {
@@ -956,35 +957,36 @@ static int sendRuntimeSettingsRequest(uint32_t requestId,
         return LI_RUNTIME_SETTINGS_ERROR_CONTROL_NOT_READY;
     }
     return SsRuntimeSettingsDispatchRequest(&runtimeSettingsDispatch,
+                                            expectedSessionEpoch,
                                             requestId,
                                             operation,
                                             value,
                                             secondaryValue);
 }
 
-int LiQuerySunshineRuntimeSettingsCapabilities(uint32_t requestId) {
-    return sendRuntimeSettingsRequest(requestId,
+int LiQuerySunshineRuntimeSettingsCapabilities(uint64_t expectedSessionEpoch, uint32_t requestId) {
+    return sendRuntimeSettingsRequest(expectedSessionEpoch, requestId,
                                       SS_RUNTIME_SETTINGS_OPERATION_QUERY_CAPABILITIES,
                                       0,
                                       0);
 }
 
-int LiSetSunshineRuntimeBitrate(uint32_t requestId, uint32_t bitrateKbps) {
-    return sendRuntimeSettingsRequest(requestId,
+int LiSetSunshineRuntimeBitrate(uint64_t expectedSessionEpoch, uint32_t requestId, uint32_t bitrateKbps) {
+    return sendRuntimeSettingsRequest(expectedSessionEpoch, requestId,
                                       SS_RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS,
                                       bitrateKbps,
                                       0);
 }
 
-int LiSetSunshineRuntimeFps(uint32_t requestId, uint32_t fps) {
-    return sendRuntimeSettingsRequest(requestId,
+int LiSetSunshineRuntimeFps(uint64_t expectedSessionEpoch, uint32_t requestId, uint32_t fps) {
+    return sendRuntimeSettingsRequest(expectedSessionEpoch, requestId,
                                       SS_RUNTIME_SETTINGS_OPERATION_SET_FPS,
                                       fps,
                                       0);
 }
 
-int LiSetSunshineRuntimeResolution(uint32_t requestId, uint32_t width, uint32_t height) {
-    return sendRuntimeSettingsRequest(requestId,
+int LiSetSunshineRuntimeResolution(uint64_t expectedSessionEpoch, uint32_t requestId, uint32_t width, uint32_t height) {
+    return sendRuntimeSettingsRequest(expectedSessionEpoch, requestId,
                                       SS_RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION,
                                       width,
                                       height);

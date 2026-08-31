@@ -3,12 +3,22 @@ package com.limelight.korri.moonlight;
 import com.simonwjackson.korri.korrid.KorridServer;
 
 import java.security.SecureRandom;
+import java.util.function.Supplier;
 
 /** Process-local exact-launch owner for the current live Artemis executor. */
 public final class KorriMoonlightActionCoordinator {
     public interface Publication {
         boolean publish(String stateJson);
         boolean clear(String launchId, String generation);
+    }
+
+    /** Final-install lease supplied by the exact repair lifetime. */
+    public interface RegistrationAuthorization {
+        boolean isCurrent();
+        default <T> T commit(Supplier<T> action, T staleResult) {
+            if (!isCurrent()) return staleResult;
+            return action.get();
+        }
     }
 
     private static final KorriMoonlightActionCoordinator PROCESS =
@@ -26,10 +36,23 @@ public final class KorriMoonlightActionCoordinator {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
+    private static final class Ownership {
+        final String launchId;
+        final String generation;
+        final KorriMoonlightActionExecutor executor;
+
+        Ownership(
+                String launchId,
+                String generation,
+                KorriMoonlightActionExecutor executor) {
+            this.launchId = launchId;
+            this.generation = generation;
+            this.executor = executor;
+        }
+    }
+
     private final Publication publication;
-    private String launchId;
-    private String generation;
-    private KorriMoonlightActionExecutor executor;
+    private Ownership owner;
 
     public KorriMoonlightActionCoordinator(Publication publication) {
         this.publication = publication;
@@ -40,104 +63,244 @@ public final class KorriMoonlightActionCoordinator {
     }
 
     /** A replacement object gets a fresh process-local identity even for the same launch. */
-    public synchronized String register(
+    public String register(
             String nextLaunchId, KorriMoonlightActionExecutor nextExecutor) {
         if (nextLaunchId == null || nextLaunchId.isEmpty() || nextExecutor == null) return null;
+
+        final Ownership observed;
+        synchronized (this) {
+            observed = owner;
+        }
         String nextGeneration = generation();
+        // stateJson() may wait for the UI thread. Never hold the ownership monitor here.
         String state = nextExecutor.stateJson(nextLaunchId, nextGeneration);
-        if (state.isEmpty() || !publication.publish(state)) {
-            invalidateCurrent();
+        if (state.isEmpty()) {
+            clear(invalidateExact(observed));
             return null;
         }
-        launchId = nextLaunchId;
-        generation = nextGeneration;
-        executor = nextExecutor;
-        return nextGeneration;
+
+        Ownership invalidated = null;
+        boolean installed = false;
+        synchronized (this) {
+            // A delayed registration attempt cannot replace a newer concurrent owner.
+            if (owner != observed) return null;
+            if (!publication.publish(state)) {
+                invalidated = owner;
+                owner = null;
+            } else {
+                owner = new Ownership(nextLaunchId, nextGeneration, nextExecutor);
+                installed = true;
+            }
+        }
+        clear(invalidated);
+        return installed ? nextGeneration : null;
+    }
+
+    /**
+     * Repair registration is compare-and-set. It may recover this exact executor, but it
+     * never replaces or invalidates a different current owner.
+     */
+    public String registerIfAbsent(
+            String expectedLaunchId, KorriMoonlightActionExecutor expectedExecutor) {
+        return registerIfAbsent(expectedLaunchId, expectedExecutor, () -> true);
+    }
+
+    public String registerIfAbsent(
+            String expectedLaunchId,
+            KorriMoonlightActionExecutor expectedExecutor,
+            RegistrationAuthorization authorization) {
+        if (expectedLaunchId == null || expectedLaunchId.isEmpty()
+                || expectedExecutor == null || authorization == null) {
+            return null;
+        }
+        synchronized (this) {
+            if (owner != null) return sameExecutor(owner, expectedLaunchId, expectedExecutor)
+                    ? owner.generation : null;
+        }
+        if (!authorization.isCurrent()) return null;
+
+        String nextGeneration = generation();
+        // The absence observed above is only a candidate. State materialization may wait
+        // for UI, so it remains outside both the coordinator monitor and repair lease.
+        String state = expectedExecutor.stateJson(expectedLaunchId, nextGeneration);
+        if (state.isEmpty()) return null;
+        return authorization.commit(() -> {
+            synchronized (KorriMoonlightActionCoordinator.this) {
+                if (owner != null) {
+                    return sameExecutor(owner, expectedLaunchId, expectedExecutor)
+                            ? owner.generation : null;
+                }
+                if (!publication.publish(state)) return null;
+                owner = new Ownership(expectedLaunchId, nextGeneration, expectedExecutor);
+                return nextGeneration;
+            }
+        }, null);
     }
 
     /** Late teardown clears only the exact object and opaque generation currently registered. */
-    public synchronized boolean unregister(
+    public boolean unregister(
             String expectedLaunchId,
             String expectedGeneration,
             KorriMoonlightActionExecutor expectedExecutor) {
-        if (executor != expectedExecutor || !sameIdentity(
-                expectedLaunchId, expectedGeneration)) return false;
-        executor = null;
-        launchId = null;
-        generation = null;
-        publication.clear(expectedLaunchId, expectedGeneration);
+        Ownership removed;
+        synchronized (this) {
+            if (!matches(owner, expectedLaunchId, expectedGeneration, expectedExecutor)) {
+                return false;
+            }
+            removed = owner;
+            owner = null;
+        }
+        clear(removed);
+        return true;
+    }
+
+    /** Removes only the current owner for this exact launch and executor object. */
+    public boolean unregisterExactExecutor(
+            String expectedLaunchId,
+            KorriMoonlightActionExecutor expectedExecutor) {
+        Ownership removed;
+        synchronized (this) {
+            if (owner == null || !sameExecutor(owner, expectedLaunchId, expectedExecutor)) {
+                return false;
+            }
+            removed = owner;
+            owner = null;
+        }
+        clear(removed);
         return true;
     }
 
     /** Refresh live values immediately before exposing controls to an overlay opening. */
-    public synchronized boolean republish(String expectedLaunchId) {
-        if (executor == null || !sameLaunch(expectedLaunchId)) return false;
-        String state = executor.stateJson(launchId, generation);
-        if (!state.isEmpty() && publication.publish(state)) return true;
-        invalidateCurrent();
-        return false;
+    public boolean republish(String expectedLaunchId) {
+        final Ownership expected;
+        synchronized (this) {
+            if (owner == null || !owner.launchId.equals(expectedLaunchId)) return false;
+            expected = owner;
+        }
+        return republishCurrent(expected);
+    }
+
+    /** Repair refresh is exact and cannot touch a newer same-launch executor. */
+    public boolean republishExact(
+            String expectedLaunchId,
+            String expectedGeneration,
+            KorriMoonlightActionExecutor expectedExecutor) {
+        final Ownership expected;
+        synchronized (this) {
+            if (!matches(owner, expectedLaunchId, expectedGeneration, expectedExecutor)) {
+                return false;
+            }
+            expected = owner;
+        }
+        return republishCurrent(expected);
+    }
+
+    private boolean republishCurrent(Ownership expected) {
+        // Materialize outside the ownership monitor so queued UI effects can commit.
+        String state = expected.executor.stateJson(expected.launchId, expected.generation);
+        Ownership invalidated = null;
+        boolean published = false;
+        synchronized (this) {
+            if (owner != expected) return false;
+            if (!state.isEmpty() && publication.publish(state)) {
+                published = true;
+            } else {
+                invalidated = owner;
+                owner = null;
+            }
+        }
+        clear(invalidated);
+        return published;
     }
 
     public KorriMoonlightActionExecutor.Outcome execute(
             KorriMoonlightActionExecutor.Request request) {
-        final KorriMoonlightActionExecutor selected;
-        final String selectedLaunch;
-        final String selectedGeneration;
+        return execute(request, () -> true);
+    }
+
+    public KorriMoonlightActionExecutor.Outcome execute(
+            KorriMoonlightActionExecutor.Request request,
+            KorriMoonlightActionExecutor.Authorization callerAuthorization) {
+        if (callerAuthorization == null) return KorriMoonlightActionExecutor.Outcome.STALE;
+        final Ownership selected;
         synchronized (this) {
-            if (executor == null) return KorriMoonlightActionExecutor.Outcome.UNAVAILABLE;
+            if (owner == null) return KorriMoonlightActionExecutor.Outcome.UNAVAILABLE;
             if (request == null || !"android-moonlight".equals(request.executorId())
-                    || !sameIdentity(request.launchId(), request.generation())) {
+                    || !matchesIdentity(owner, request.launchId(), request.generation())) {
                 return KorriMoonlightActionExecutor.Outcome.STALE;
             }
-            selected = executor;
-            selectedLaunch = launchId;
-            selectedGeneration = generation;
+            selected = owner;
         }
 
-        KorriMoonlightActionExecutor.Outcome outcome = selected.execute(
-                request,
-                () -> isCurrent(selected, selectedLaunch, selectedGeneration));
+        KorriMoonlightActionExecutor.Authorization exactAuthorization =
+                new KorriMoonlightActionExecutor.Authorization() {
+                    @Override
+                    public boolean isCurrent() {
+                        return callerAuthorization.isCurrent()
+                                && KorriMoonlightActionCoordinator.this.isCurrent(selected);
+                    }
+
+                    @Override
+                    public <T> T commit(java.util.function.Supplier<T> action, T staleResult) {
+                        return callerAuthorization.commit(() -> {
+                            // This short gate covers only the final effect/native dispatch.
+                            // No stateJson()/UI wait occurs while it is held.
+                            synchronized (KorriMoonlightActionCoordinator.this) {
+                                if (owner != selected) return staleResult;
+                                return action.get();
+                            }
+                        }, staleResult);
+                    }
+                };
+        KorriMoonlightActionExecutor.Outcome outcome = selected.executor.execute(
+                request, exactAuthorization);
         if (outcome == KorriMoonlightActionExecutor.Outcome.EXECUTED
                 && request.needsStatePublication()) {
-            synchronized (this) {
-                if (isCurrent(selected, selectedLaunch, selectedGeneration)) {
-                    if (!publication.publish(selected.stateJson(
-                            selectedLaunch, selectedGeneration))) {
-                        invalidateCurrent();
-                    }
-                }
-            }
+            republishCurrent(selected);
         }
         return outcome;
     }
 
-    private void invalidateCurrent() {
-        String invalidatedLaunch = launchId;
-        String invalidatedGeneration = generation;
-        executor = null;
-        launchId = null;
-        generation = null;
-        if (invalidatedLaunch != null && invalidatedGeneration != null) {
-            publication.clear(invalidatedLaunch, invalidatedGeneration);
+    private Ownership invalidateExact(Ownership expected) {
+        if (expected == null) return null;
+        synchronized (this) {
+            if (owner != expected) return null;
+            owner = null;
+            return expected;
         }
     }
 
-    private synchronized boolean isCurrent(
-            KorriMoonlightActionExecutor expectedExecutor,
+    private void clear(Ownership invalidated) {
+        if (invalidated != null) {
+            publication.clear(invalidated.launchId, invalidated.generation);
+        }
+    }
+
+    private synchronized boolean isCurrent(Ownership expected) {
+        return owner == expected;
+    }
+
+    private static boolean sameExecutor(
+            Ownership value,
             String expectedLaunch,
-            String expectedGeneration) {
-        return executor == expectedExecutor
-                && sameIdentity(expectedLaunch, expectedGeneration);
+            KorriMoonlightActionExecutor expectedExecutor) {
+        return value.executor == expectedExecutor && value.launchId.equals(expectedLaunch);
     }
 
-    private boolean sameIdentity(String value, String generationValue) {
-        return sameLaunch(value)
-                && generation != null
-                && generation.equals(generationValue);
+    private static boolean matches(
+            Ownership value,
+            String expectedLaunch,
+            String expectedGeneration,
+            KorriMoonlightActionExecutor expectedExecutor) {
+        return value != null
+                && value.executor == expectedExecutor
+                && matchesIdentity(value, expectedLaunch, expectedGeneration);
     }
 
-    private boolean sameLaunch(String value) {
-        return launchId != null && launchId.equals(value);
+    private static boolean matchesIdentity(
+            Ownership value, String expectedLaunch, String expectedGeneration) {
+        return value.launchId.equals(expectedLaunch)
+                && value.generation.equals(expectedGeneration);
     }
 
     private static String generation() {

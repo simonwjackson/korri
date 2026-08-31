@@ -40,6 +40,7 @@ void SsRuntimeSettingsDispatchSetActive(SS_RUNTIME_SETTINGS_DISPATCH* dispatch, 
 }
 
 int SsRuntimeSettingsDispatchRequest(SS_RUNTIME_SETTINGS_DISPATCH* dispatch,
+                                     uint64_t expectedSessionEpoch,
                                      uint32_t requestId,
                                      uint16_t operation,
                                      uint32_t value,
@@ -54,6 +55,11 @@ int SsRuntimeSettingsDispatchRequest(SS_RUNTIME_SETTINGS_DISPATCH* dispatch,
         dispatch->unlock(dispatch->context);
         return result;
     }
+    if (expectedSessionEpoch == 0 ||
+            expectedSessionEpoch != dispatch->state->snapshot.sessionEpoch) {
+        dispatch->unlock(dispatch->context);
+        return LI_RUNTIME_SETTINGS_ERROR_STALE_SESSION;
+    }
     if (dispatch->ready != NULL) {
         result = dispatch->ready(dispatch->context);
         if (result != 0) {
@@ -62,6 +68,7 @@ int SsRuntimeSettingsDispatchRequest(SS_RUNTIME_SETTINGS_DISPATCH* dispatch,
         }
     }
     result = SsRuntimeSettingsPrepareRequest(dispatch->state,
+                                             expectedSessionEpoch,
                                              dispatch->clock(dispatch->context),
                                              requestId,
                                              operation,

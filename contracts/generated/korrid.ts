@@ -431,6 +431,12 @@ export enum AndroidMoonlightEffect {
 	SetFaceButtonFlip = "set-face-button-flip",
 	SetRumble = "set-rumble",
 	SetPictureInPicture = "set-picture-in-picture",
+	SetStreamBitrateKbps = "set-stream-bitrate-kbps",
+	RestoreStreamBitrate = "restore-stream-bitrate",
+	SetStreamFps = "set-stream-fps",
+	RestoreStreamFps = "restore-stream-fps",
+	SetStreamWidth = "set-stream-width",
+	RestoreStreamResolution = "restore-stream-resolution",
 }
 
 export type CatalogSnapshotOutcome =

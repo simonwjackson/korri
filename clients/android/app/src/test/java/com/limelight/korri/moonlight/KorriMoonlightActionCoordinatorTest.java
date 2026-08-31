@@ -7,6 +7,10 @@ import org.robolectric.RobolectricTestRunner;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -112,6 +116,29 @@ public class KorriMoonlightActionCoordinatorTest {
     }
 
     @Test
+    public void callerCommitAndExactGenerationOwnTheFinalSideEffectTogether() {
+        KorriMoonlightActionCoordinator coordinator =
+                new KorriMoonlightActionCoordinator(new RecordingPublication());
+        RecordingActions actions = new RecordingActions();
+        String generation = coordinator.register(LAUNCH, executor(actions));
+        KorriMoonlightActionExecutor.Authorization revokedAtCommit =
+                new KorriMoonlightActionExecutor.Authorization() {
+                    @Override public boolean isCurrent() { return true; }
+                    @Override public <T> T commit(
+                            java.util.function.Supplier<T> action, T staleResult) {
+                        return staleResult;
+                    }
+                };
+
+        assertEquals(KorriMoonlightActionExecutor.Outcome.STALE,
+                coordinator.execute(KorriMoonlightActionExecutor.Request.command(
+                        LAUNCH, generation,
+                        KorriMoonlightActionExecutor.Effect.DISCONNECT),
+                        revokedAtCommit));
+        assertTrue(actions.calls.isEmpty());
+    }
+
+    @Test
     public void stateRepublishFailureClearsExactGenerationAndInvalidatesExecutor() {
         RecordingPublication publication = new RecordingPublication();
         KorriMoonlightActionCoordinator coordinator =
@@ -170,6 +197,26 @@ public class KorriMoonlightActionCoordinatorTest {
     }
 
     @Test
+    public void transientRepublishFailureRepairsWithFreshGenerationAndRejectsOld() {
+        RecordingPublication publication = new RecordingPublication();
+        KorriMoonlightActionCoordinator coordinator = new KorriMoonlightActionCoordinator(publication);
+        KorriMoonlightActionExecutor executor = executor(new RecordingActions());
+        String oldGeneration = coordinator.register(LAUNCH, executor);
+        publication.failPublish = true;
+        assertFalse(coordinator.republish(LAUNCH));
+        publication.failPublish = false;
+        String repairedGeneration = coordinator.register(LAUNCH, executor);
+        assertTrue(repairedGeneration != null);
+        assertFalse(oldGeneration.equals(repairedGeneration));
+        assertEquals(KorriMoonlightActionExecutor.Outcome.STALE,
+                coordinator.execute(KorriMoonlightActionExecutor.Request.command(
+                        LAUNCH, oldGeneration, KorriMoonlightActionExecutor.Effect.DISCONNECT)));
+        assertEquals(KorriMoonlightActionExecutor.Outcome.EXECUTED,
+                coordinator.execute(KorriMoonlightActionExecutor.Request.command(
+                        LAUNCH, repairedGeneration, KorriMoonlightActionExecutor.Effect.TOGGLE_KEYBOARD)));
+    }
+
+    @Test
     public void overlayOpeningRepublishesExternallyMutatedLiveValues() throws Exception {
         RecordingPublication publication = new RecordingPublication();
         KorriMoonlightActionCoordinator coordinator =
@@ -184,6 +231,136 @@ public class KorriMoonlightActionCoordinatorTest {
         JSONObject fill = state.getJSONArray("effects").getJSONObject(4);
         assertEquals("set-fill-mode", fill.getString("effect"));
         assertTrue(fill.getJSONObject("value").getBoolean("value"));
+    }
+
+    @Test
+    public void queuedUiCommitCompletesWhileBackgroundRepublishWaitsForUi() throws Exception {
+        RecordingPublication publication = new RecordingPublication();
+        KorriMoonlightActionCoordinator coordinator =
+                new KorriMoonlightActionCoordinator(publication);
+        RecordingActions actions = new RecordingActions();
+        ControlledUiDispatcher ui = new ControlledUiDispatcher();
+        KorriMoonlightActionExecutor executor = new KorriMoonlightActionExecutor(actions, ui);
+        String generation = coordinator.register(LAUNCH, executor);
+        ui.transferToPausedWorker();
+
+        final KorriMoonlightActionExecutor.Outcome[] actionOutcome = { null };
+        final boolean[] republished = { false };
+        Thread action = new Thread(() -> actionOutcome[0] = coordinator.execute(
+                KorriMoonlightActionExecutor.Request.command(
+                        LAUNCH, generation,
+                        KorriMoonlightActionExecutor.Effect.TOGGLE_KEYBOARD)));
+        action.start();
+        ui.awaitQueued(1);
+        Thread republish = new Thread(() -> republished[0] = coordinator.republishExact(
+                LAUNCH, generation, executor));
+        republish.start();
+        ui.awaitQueued(2);
+
+        ui.release();
+        action.join(1000);
+        republish.join(1000);
+        ui.close();
+
+        assertFalse("queued exact action deadlocked on coordinator", action.isAlive());
+        assertFalse("republish did not complete after UI state materialization", republish.isAlive());
+        assertEquals(KorriMoonlightActionExecutor.Outcome.EXECUTED, actionOutcome[0]);
+        assertTrue(republished[0]);
+        assertEquals(java.util.Collections.singletonList("keyboard"), actions.calls);
+        assertEquals(2, publication.states.size());
+        assertTrue(publication.cleared.isEmpty());
+    }
+
+    @Test
+    public void staleReplacementMaterializationCannotReplaceOrClearNewerOwner() throws Exception {
+        RecordingPublication publication = new RecordingPublication();
+        KorriMoonlightActionCoordinator coordinator =
+                new KorriMoonlightActionCoordinator(publication);
+        String originalGeneration = coordinator.register(
+                LAUNCH, executor(new RecordingActions()));
+        RecordingActions delayedActions = new RecordingActions();
+        delayedActions.blockNextStateRead();
+        KorriMoonlightActionExecutor delayed = executor(delayedActions);
+        final String[] delayedGeneration = { "not-finished" };
+        Thread delayedRegistration = new Thread(() -> delayedGeneration[0] =
+                coordinator.register(LAUNCH, delayed));
+        delayedRegistration.start();
+        delayedActions.awaitStateRead();
+
+        RecordingActions replacementActions = new RecordingActions();
+        KorriMoonlightActionExecutor replacement = executor(replacementActions);
+        String replacementGeneration = coordinator.register(LAUNCH, replacement);
+        delayedActions.releaseStateRead();
+        delayedRegistration.join(1000);
+
+        assertFalse(delayedRegistration.isAlive());
+        assertNull(delayedGeneration[0]);
+        assertFalse(originalGeneration.equals(replacementGeneration));
+        assertEquals(2, publication.states.size());
+        assertTrue(publication.cleared.isEmpty());
+        assertEquals(KorriMoonlightActionExecutor.Outcome.EXECUTED,
+                coordinator.execute(KorriMoonlightActionExecutor.Request.command(
+                        LAUNCH, replacementGeneration,
+                        KorriMoonlightActionExecutor.Effect.TOGGLE_KEYBOARD)));
+        assertEquals(java.util.Collections.singletonList("keyboard"), replacementActions.calls);
+    }
+
+    @Test
+    public void staleRegisterIfAbsentMaterializationCannotReplaceAnotherOwner() throws Exception {
+        RecordingPublication publication = new RecordingPublication();
+        KorriMoonlightActionCoordinator coordinator =
+                new KorriMoonlightActionCoordinator(publication);
+        RecordingActions delayedActions = new RecordingActions();
+        delayedActions.blockNextStateRead();
+        KorriMoonlightActionExecutor delayed = executor(delayedActions);
+        final String[] delayedGeneration = { "not-finished" };
+        Thread delayedRegistration = new Thread(() -> delayedGeneration[0] =
+                coordinator.registerIfAbsent(LAUNCH, delayed));
+        delayedRegistration.start();
+        delayedActions.awaitStateRead();
+
+        KorriMoonlightActionExecutor replacement = executor(new RecordingActions());
+        String replacementGeneration = coordinator.registerIfAbsent(LAUNCH, replacement);
+        delayedActions.releaseStateRead();
+        delayedRegistration.join(1000);
+
+        assertFalse(delayedRegistration.isAlive());
+        assertNull(delayedGeneration[0]);
+        assertTrue(replacementGeneration != null);
+        assertEquals(1, publication.states.size());
+        assertTrue(publication.cleared.isEmpty());
+    }
+
+    @Test
+    public void staleRepublishMaterializationCannotPublishOrInvalidateReplacement() throws Exception {
+        RecordingPublication publication = new RecordingPublication();
+        KorriMoonlightActionCoordinator coordinator =
+                new KorriMoonlightActionCoordinator(publication);
+        RecordingActions originalActions = new RecordingActions();
+        KorriMoonlightActionExecutor original = executor(originalActions);
+        String originalGeneration = coordinator.register(LAUNCH, original);
+        originalActions.blockNextStateRead();
+        final boolean[] republished = { true };
+        Thread delayedRepublish = new Thread(() -> republished[0] = coordinator.republishExact(
+                LAUNCH, originalGeneration, original));
+        delayedRepublish.start();
+        originalActions.awaitStateRead();
+
+        RecordingActions replacementActions = new RecordingActions();
+        KorriMoonlightActionExecutor replacement = executor(replacementActions);
+        String replacementGeneration = coordinator.register(LAUNCH, replacement);
+        originalActions.releaseStateRead();
+        delayedRepublish.join(1000);
+
+        assertFalse(delayedRepublish.isAlive());
+        assertFalse(republished[0]);
+        assertEquals(2, publication.states.size());
+        assertTrue(publication.cleared.isEmpty());
+        assertEquals(KorriMoonlightActionExecutor.Outcome.EXECUTED,
+                coordinator.execute(KorriMoonlightActionExecutor.Request.command(
+                        LAUNCH, replacementGeneration,
+                        KorriMoonlightActionExecutor.Effect.TOGGLE_KEYBOARD)));
+        assertEquals(java.util.Collections.singletonList("keyboard"), replacementActions.calls);
     }
 
     @Test
@@ -223,6 +400,55 @@ public class KorriMoonlightActionCoordinatorTest {
         }
     }
 
+    static final class ControlledUiDispatcher
+            implements KorriMoonlightActionExecutor.UiDispatcher, AutoCloseable {
+        private static final Runnable STOP = () -> { };
+        private final BlockingQueue<Runnable> queued = new LinkedBlockingQueue<>();
+        private final CountDownLatch workerStarted = new CountDownLatch(1);
+        private final CountDownLatch release = new CountDownLatch(1);
+        private volatile Thread uiThread = Thread.currentThread();
+        private Thread worker;
+
+        @Override public boolean isUiThread() { return Thread.currentThread() == uiThread; }
+        @Override public void dispatch(Runnable action) { queued.add(action); }
+
+        void transferToPausedWorker() throws InterruptedException {
+            worker = new Thread(() -> {
+                uiThread = Thread.currentThread();
+                workerStarted.countDown();
+                try {
+                    release.await();
+                    while (true) {
+                        Runnable action = queued.take();
+                        if (action == STOP) return;
+                        action.run();
+                    }
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            worker.start();
+            assertTrue(workerStarted.await(1, TimeUnit.SECONDS));
+        }
+
+        void awaitQueued(int count) throws InterruptedException {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+            while (queued.size() < count && System.nanoTime() < deadline) {
+                Thread.sleep(5);
+            }
+            assertTrue("expected " + count + " queued UI actions, got " + queued.size(),
+                    queued.size() >= count);
+        }
+
+        void release() { release.countDown(); }
+
+        @Override public void close() throws InterruptedException {
+            release.countDown();
+            queued.add(STOP);
+            if (worker != null) worker.join(1000);
+        }
+    }
+
     static final class ImmediateUiDispatcher
             implements KorriMoonlightActionExecutor.UiDispatcher {
         @Override
@@ -249,8 +475,43 @@ public class KorriMoonlightActionCoordinatorTest {
         boolean pip;
         final java.util.Set<KorriMoonlightActionExecutor.Effect> unavailable =
                 new java.util.HashSet<>();
+        private CountDownLatch stateReadEntered;
+        private CountDownLatch stateReadRelease;
+        private boolean blockNextStateRead;
+
+        synchronized void blockNextStateRead() {
+            stateReadEntered = new CountDownLatch(1);
+            stateReadRelease = new CountDownLatch(1);
+            blockNextStateRead = true;
+        }
+
+        void awaitStateRead() throws InterruptedException {
+            assertTrue("state materialization did not start",
+                    stateReadEntered.await(1, TimeUnit.SECONDS));
+        }
+
+        void releaseStateRead() {
+            stateReadRelease.countDown();
+        }
 
         @Override public boolean available(KorriMoonlightActionExecutor.Effect effect) {
+            CountDownLatch release = null;
+            synchronized (this) {
+                if (blockNextStateRead) {
+                    blockNextStateRead = false;
+                    stateReadEntered.countDown();
+                    release = stateReadRelease;
+                }
+            }
+            if (release != null) {
+                try {
+                    if (!release.await(1, TimeUnit.SECONDS)) {
+                        throw new AssertionError("state materialization was not released");
+                    }
+                } catch (InterruptedException error) {
+                    throw new AssertionError(error);
+                }
+            }
             return !unavailable.contains(effect);
         }
         @Override public boolean fillMode() { return fill; }
@@ -280,5 +541,18 @@ public class KorriMoonlightActionCoordinatorTest {
         @Override public void toggleFloatingMenu() { calls.add("floating"); }
         @Override public void toggleKeyboardController() { calls.add("keyboard-controller"); }
         @Override public void switchTouchSensitivity() { calls.add("touch-sensitivity"); }
+        @Override public int streamBitrateKbps() { return 20000; }
+        @Override public int streamBitrateMinKbps() { return 500; }
+        @Override public int streamBitrateMaxKbps() { return 150000; }
+        @Override public KorriSunshineRuntimeSettings.MutationResult setStreamBitrateKbps(int value, KorriMoonlightActionExecutor.Authorization authorization) { calls.add("bitrate:" + value); return authorization.isCurrent() ? KorriSunshineRuntimeSettings.MutationResult.APPLIED : KorriSunshineRuntimeSettings.MutationResult.STALE; }
+        @Override public KorriSunshineRuntimeSettings.MutationResult restoreStreamBitrate(KorriMoonlightActionExecutor.Authorization authorization) { calls.add("restore-bitrate"); return authorization.isCurrent() ? KorriSunshineRuntimeSettings.MutationResult.APPLIED : KorriSunshineRuntimeSettings.MutationResult.STALE; }
+        @Override public int streamFps() { return 60; }
+        @Override public int streamFpsMax() { return 120; }
+        @Override public KorriSunshineRuntimeSettings.MutationResult setStreamFps(int value, KorriMoonlightActionExecutor.Authorization authorization) { calls.add("fps:" + value); return authorization.isCurrent() ? KorriSunshineRuntimeSettings.MutationResult.APPLIED : KorriSunshineRuntimeSettings.MutationResult.STALE; }
+        @Override public KorriSunshineRuntimeSettings.MutationResult restoreStreamFps(KorriMoonlightActionExecutor.Authorization authorization) { calls.add("restore-fps"); return authorization.isCurrent() ? KorriSunshineRuntimeSettings.MutationResult.APPLIED : KorriSunshineRuntimeSettings.MutationResult.STALE; }
+        @Override public int streamWidth() { return 1920; }
+        @Override public int streamWidthMax() { return 1920; }
+        @Override public KorriSunshineRuntimeSettings.MutationResult setStreamWidth(int value, KorriMoonlightActionExecutor.Authorization authorization) { calls.add("width:" + value); return authorization.isCurrent() ? KorriSunshineRuntimeSettings.MutationResult.APPLIED : KorriSunshineRuntimeSettings.MutationResult.STALE; }
+        @Override public KorriSunshineRuntimeSettings.MutationResult restoreStreamResolution(KorriMoonlightActionExecutor.Authorization authorization) { calls.add("restore-resolution"); return authorization.isCurrent() ? KorriSunshineRuntimeSettings.MutationResult.APPLIED : KorriSunshineRuntimeSettings.MutationResult.STALE; }
     }
 }

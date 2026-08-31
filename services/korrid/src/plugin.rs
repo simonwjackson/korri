@@ -240,6 +240,18 @@ pub enum SessionControlEffect {
     MoonlightSetRumble,
     #[serde(rename = "@korri:moonlight/set-picture-in-picture")]
     MoonlightSetPictureInPicture,
+    #[serde(rename = "@korri:moonlight/set-stream-bitrate-kbps")]
+    MoonlightSetStreamBitrateKbps,
+    #[serde(rename = "@korri:moonlight/restore-stream-bitrate")]
+    MoonlightRestoreStreamBitrate,
+    #[serde(rename = "@korri:moonlight/set-stream-fps")]
+    MoonlightSetStreamFps,
+    #[serde(rename = "@korri:moonlight/restore-stream-fps")]
+    MoonlightRestoreStreamFps,
+    #[serde(rename = "@korri:moonlight/set-stream-width")]
+    MoonlightSetStreamWidth,
+    #[serde(rename = "@korri:moonlight/restore-stream-resolution")]
+    MoonlightRestoreStreamResolution,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -280,7 +292,13 @@ impl SessionControlEffect {
             | Self::MoonlightSetSgsrSharpness
             | Self::MoonlightSetFaceButtonFlip
             | Self::MoonlightSetRumble
-            | Self::MoonlightSetPictureInPicture => SessionControlIntegration::Moonlight,
+            | Self::MoonlightSetPictureInPicture
+            | Self::MoonlightSetStreamBitrateKbps
+            | Self::MoonlightRestoreStreamBitrate
+            | Self::MoonlightSetStreamFps
+            | Self::MoonlightRestoreStreamFps
+            | Self::MoonlightSetStreamWidth
+            | Self::MoonlightRestoreStreamResolution => SessionControlIntegration::Moonlight,
         }
     }
 
@@ -324,6 +342,12 @@ impl SessionControlEffect {
             Self::MoonlightSetFaceButtonFlip => Effect::SetFaceButtonFlip,
             Self::MoonlightSetRumble => Effect::SetRumble,
             Self::MoonlightSetPictureInPicture => Effect::SetPictureInPicture,
+            Self::MoonlightSetStreamBitrateKbps => Effect::SetStreamBitrateKbps,
+            Self::MoonlightRestoreStreamBitrate => Effect::RestoreStreamBitrate,
+            Self::MoonlightSetStreamFps => Effect::SetStreamFps,
+            Self::MoonlightRestoreStreamFps => Effect::RestoreStreamFps,
+            Self::MoonlightSetStreamWidth => Effect::SetStreamWidth,
+            Self::MoonlightRestoreStreamResolution => Effect::RestoreStreamResolution,
         })
     }
 
@@ -1092,9 +1116,11 @@ impl SessionControlEffect {
             | Self::MoonlightSetRumble
             | Self::MoonlightSetPictureInPicture => SessionControlKind::Toggle,
             Self::MoonlightSetMouseMode => SessionControlKind::Choice,
-            Self::MoonlightSetSgsrEdgeThreshold | Self::MoonlightSetSgsrSharpness => {
-                SessionControlKind::Range
-            }
+            Self::MoonlightSetSgsrEdgeThreshold
+            | Self::MoonlightSetSgsrSharpness
+            | Self::MoonlightSetStreamBitrateKbps
+            | Self::MoonlightSetStreamFps
+            | Self::MoonlightSetStreamWidth => SessionControlKind::Range,
             Self::RetroarchOpenMenu
             | Self::RetroarchQuit
             | Self::MoonlightDisconnect
@@ -1106,7 +1132,10 @@ impl SessionControlEffect {
             | Self::MoonlightToggleFloatingMenu
             | Self::MoonlightToggleKeyboardController
             | Self::MoonlightSwitchTouchSensitivity
-            | Self::MoonlightSetLocalCursor => SessionControlKind::Command,
+            | Self::MoonlightSetLocalCursor
+            | Self::MoonlightRestoreStreamBitrate
+            | Self::MoonlightRestoreStreamFps
+            | Self::MoonlightRestoreStreamResolution => SessionControlKind::Command,
         }
     }
 }

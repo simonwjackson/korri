@@ -160,10 +160,16 @@ fn enabled_moonlight_plugin_declares_artemis_streaming_and_the_full_control_inve
             "@korri:moonlight/pan-zoom",
             "@korri:moonlight/picture-in-picture",
             "@korri:moonlight/quit-host",
+            "@korri:moonlight/restore-stream-bitrate",
+            "@korri:moonlight/restore-stream-fps",
+            "@korri:moonlight/restore-stream-resolution",
             "@korri:moonlight/rotate-screen",
             "@korri:moonlight/rumble",
             "@korri:moonlight/sgsr-edge-threshold",
             "@korri:moonlight/sgsr-sharpness",
+            "@korri:moonlight/stream-bitrate",
+            "@korri:moonlight/stream-fps",
+            "@korri:moonlight/stream-width",
             "@korri:moonlight/touch-sensitivity",
         ]
     );

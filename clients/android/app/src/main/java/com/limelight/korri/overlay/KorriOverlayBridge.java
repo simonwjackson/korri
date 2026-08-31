@@ -15,6 +15,10 @@ import org.json.JSONObject;
 import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Supplier;
 
 /**
  * Purpose-built gameplay-overlay treaty mirror.
@@ -23,7 +27,7 @@ import java.util.Map;
  * exactly one origin-allowlisted postMessage object; this class deliberately
  * has no JavascriptInterface surface.
  */
-public final class KorriOverlayBridge {
+public final class KorriOverlayBridge implements AutoCloseable {
     public static final String ASSET_ORIGIN = "https://appassets.androidplatform.net";
     public static final String OVERLAY_URL = ASSET_ORIGIN
             + "/assets/portal/index.html?screen=gameplay-overlay";
@@ -51,6 +55,16 @@ public final class KorriOverlayBridge {
 
     public interface Sender {
         void send(String messageJson);
+    }
+
+    public interface UiDispatcher {
+        void dispatch(Runnable action);
+    }
+
+    interface InstructionProcessor {
+        KorriMoonlightActionExecutor.Outcome execute(
+                KorriMoonlightActionExecutor.Request request,
+                KorriMoonlightActionExecutor.Authorization authorization);
     }
 
     public static final class Authority {
@@ -84,14 +98,49 @@ public final class KorriOverlayBridge {
     private final AuthorityProvider authorityProvider;
     private final Commands commands;
     private final Sender sender;
+    private final Executor instructionExecutor;
+    private final UiDispatcher uiDispatcher;
+    private final InstructionProcessor instructionProcessor;
+    private final Object instructionLock = new Object();
+    private final ReentrantReadWriteLock dispatchGate = new ReentrantReadWriteLock(true);
+    private long lifetime = 1;
+    private long nextInstructionToken;
+    private long activeInstructionToken;
+    private boolean closed;
 
     public KorriOverlayBridge(
             AuthorityProvider authorityProvider,
             Commands commands,
             Sender sender) {
+        this(authorityProvider, commands, sender, Runnable::run, Runnable::run,
+                (request, authorization) -> KorriMoonlightActionCoordinator.process()
+                        .execute(request, authorization));
+    }
+
+    public KorriOverlayBridge(
+            AuthorityProvider authorityProvider,
+            Commands commands,
+            Sender sender,
+            Executor instructionExecutor,
+            UiDispatcher uiDispatcher) {
+        this(authorityProvider, commands, sender, instructionExecutor, uiDispatcher,
+                (request, authorization) -> KorriMoonlightActionCoordinator.process()
+                        .execute(request, authorization));
+    }
+
+    KorriOverlayBridge(
+            AuthorityProvider authorityProvider,
+            Commands commands,
+            Sender sender,
+            Executor instructionExecutor,
+            UiDispatcher uiDispatcher,
+            InstructionProcessor instructionProcessor) {
         this.authorityProvider = authorityProvider;
         this.commands = commands;
         this.sender = sender;
+        this.instructionExecutor = instructionExecutor;
+        this.uiDispatcher = uiDispatcher;
+        this.instructionProcessor = instructionProcessor;
     }
 
     public boolean attachTo(WebView webView) {
@@ -116,6 +165,7 @@ public final class KorriOverlayBridge {
     }
 
     public void onMessage(String messageJson, String sourceOrigin, boolean isMainFrame) {
+        synchronized (instructionLock) { if (closed) return; }
         if (!isMainFrame || !ASSET_ORIGIN.equals(normalizeOrigin(sourceOrigin))) return;
         try {
             JSONObject message = new JSONObject(messageJson);
@@ -148,6 +198,7 @@ public final class KorriOverlayBridge {
     }
 
     public void sendInput(String inputJson) {
+        synchronized (instructionLock) { if (closed) return; }
         try {
             JSONObject input = new JSONObject(inputJson);
             sender.send(new JSONObject()
@@ -160,6 +211,7 @@ public final class KorriOverlayBridge {
     }
 
     public void sendAuthority() {
+        synchronized (instructionLock) { if (closed) return; }
         Authority authority = authorityProvider.current();
         if (authority == null || !commands.prepareAuthority(authority.launchId())) {
             commands.dismiss();
@@ -181,50 +233,186 @@ public final class KorriOverlayBridge {
 
     private void execute(String requestId, JSONObject instruction) throws Exception {
         boolean preDismiss = instruction.getBoolean("dismissOnSuccess");
-        if (preDismiss && !commands.preDismiss()) {
+        final long expectedLifetime;
+        final long instructionToken;
+        synchronized (instructionLock) {
+            if (closed) return;
+            expectedLifetime = lifetime;
+            if (activeInstructionToken != 0) {
+                sendBusyResultLocked(expectedLifetime, requestId);
+                return;
+            }
+            instructionToken = ++nextInstructionToken;
+            activeInstructionToken = instructionToken;
+        }
+
+        if (preDismiss && !preDismissIfCurrent(expectedLifetime, instructionToken)) {
+            sendInstructionResult(expectedLifetime, instructionToken, requestId, false,
+                    new JSONObject().put("_tag", "Unavailable")
+                            .put("message", "The overlay could not safely yield focus."));
+            return;
+        }
+        String encodedInstruction = instruction.toString();
+        try {
+            instructionExecutor.execute(() -> executeProtectedInstruction(
+                    expectedLifetime, instructionToken, requestId,
+                    encodedInstruction, preDismiss));
+        } catch (RejectedExecutionException error) {
+            sendInstructionResult(expectedLifetime, instructionToken, requestId,
+                    preDismiss, unavailableOutcome());
+        }
+    }
+
+    private boolean preDismissIfCurrent(long expectedLifetime, long instructionToken) {
+        synchronized (instructionLock) {
+            return ownsInstructionLocked(expectedLifetime, instructionToken)
+                    && commands.preDismiss();
+        }
+    }
+
+    private void executeProtectedInstruction(
+            long expectedLifetime,
+            long instructionToken,
+            String requestId,
+            String encodedInstruction,
+            boolean preDismiss) {
+        JSONObject outcome;
+        try {
+            final String authorization;
+            synchronized (instructionLock) {
+                if (!ownsInstructionLocked(expectedLifetime, instructionToken)) return;
+                authorization = commands.authorizeInstruction(encodedInstruction);
+            }
+            KorriMoonlightActionExecutor.Request request = authorizedRequest(authorization);
+            if (request == null) {
+                outcome = new JSONObject().put("_tag", "Rejected")
+                        .put("message", "That gameplay action is no longer authorized.");
+            } else {
+                KorriMoonlightActionExecutor.Outcome result =
+                        instructionProcessor.execute(request,
+                                bridgeAuthorization(expectedLifetime, instructionToken));
+                outcome = new JSONObject();
+                switch (result) {
+                    case EXECUTED:
+                        outcome.put("_tag", "Executed");
+                        break;
+                    case UNAVAILABLE:
+                    case FAILED:
+                        outcome = unavailableOutcome();
+                        break;
+                    case STALE:
+                    case INVALID_VALUE:
+                    default:
+                        outcome.put("_tag", "Rejected")
+                                .put("message", "That gameplay action is no longer authorized.");
+                        break;
+                }
+            }
+        } catch (Exception error) {
+            outcome = unavailableOutcome();
+        }
+        sendInstructionResult(expectedLifetime, instructionToken, requestId,
+                preDismiss, outcome);
+    }
+
+    private KorriMoonlightActionExecutor.Authorization bridgeAuthorization(
+            long expectedLifetime, long instructionToken) {
+        return new KorriMoonlightActionExecutor.Authorization() {
+            @Override
+            public boolean isCurrent() {
+                synchronized (instructionLock) {
+                    return ownsInstructionLocked(expectedLifetime, instructionToken);
+                }
+            }
+
+            @Override
+            public <T> T commit(Supplier<T> action, T staleResult) {
+                dispatchGate.readLock().lock();
+                try {
+                    synchronized (instructionLock) {
+                        if (!ownsInstructionLocked(expectedLifetime, instructionToken)) {
+                            return staleResult;
+                        }
+                    }
+                    return action.get();
+                } finally {
+                    dispatchGate.readLock().unlock();
+                }
+            }
+        };
+    }
+
+    private static JSONObject unavailableOutcome() {
+        try {
+            return new JSONObject().put("_tag", "Unavailable")
+                    .put("message", "The current stream cannot apply that action.");
+        } catch (Exception impossible) {
+            throw new IllegalStateException(impossible);
+        }
+    }
+
+    private void sendBusyResultLocked(long expectedLifetime, String requestId) {
+        JSONObject outcome = unavailableOutcome();
+        uiDispatcher.dispatch(() -> {
+            synchronized (instructionLock) {
+                if (closed || lifetime != expectedLifetime) return;
+                sendResultLocked(requestId, outcome);
+            }
+        });
+    }
+
+    private void sendInstructionResult(
+            long expectedLifetime,
+            long instructionToken,
+            String requestId,
+            boolean restoreAfterFailure,
+            JSONObject outcome) {
+        uiDispatcher.dispatch(() -> {
+            synchronized (instructionLock) {
+                if (!ownsInstructionLocked(expectedLifetime, instructionToken)) return;
+                boolean restore = restoreAfterFailure;
+                try {
+                    restore = restore && !"Executed".equals(outcome.getString("_tag"));
+                } catch (Exception ignored) {
+                    restore = true;
+                }
+                if (restore) commands.restoreAfterFailure();
+                sendResultLocked(requestId, outcome);
+                activeInstructionToken = 0;
+            }
+        });
+    }
+
+    private void sendResultLocked(String requestId, JSONObject outcome) {
+        try {
             sender.send(new JSONObject()
                     .put("type", "instruction-result")
                     .put("requestId", requestId)
-                    .put("outcome", new JSONObject()
-                            .put("_tag", "Unavailable")
-                            .put("message", "The overlay could not safely yield focus."))
+                    .put("outcome", outcome)
                     .toString());
-            return;
+        } catch (Exception ignored) {
+            // Focus is already correct when required. Drop a broken reply.
         }
-        KorriMoonlightActionExecutor.Request request = authorizedRequest(
-                commands.authorizeInstruction(instruction.toString()));
-        JSONObject outcome = new JSONObject();
-        if (request == null) {
-            outcome.put("_tag", "Rejected")
-                    .put("message", "That gameplay action is no longer authorized.");
-        } else {
-            KorriMoonlightActionExecutor.Outcome result =
-                    KorriMoonlightActionCoordinator.process().execute(request);
-            switch (result) {
-                case EXECUTED:
-                    outcome.put("_tag", "Executed");
-                    break;
-                case UNAVAILABLE:
-                case FAILED:
-                    outcome.put("_tag", "Unavailable")
-                            .put("message", "The current stream cannot apply that action.");
-                    break;
-                case STALE:
-                case INVALID_VALUE:
-                default:
-                    outcome.put("_tag", "Rejected")
-                            .put("message", "That gameplay action is no longer authorized.");
-                    break;
+    }
+
+    private boolean ownsInstructionLocked(long expectedLifetime, long instructionToken) {
+        return !closed && lifetime == expectedLifetime
+                && activeInstructionToken == instructionToken;
+    }
+
+    @Override
+    public void close() {
+        dispatchGate.writeLock().lock();
+        try {
+            synchronized (instructionLock) {
+                if (closed) return;
+                closed = true;
+                lifetime++;
+                activeInstructionToken = 0;
             }
+        } finally {
+            dispatchGate.writeLock().unlock();
         }
-        if (preDismiss && !"Executed".equals(outcome.getString("_tag"))) {
-            commands.restoreAfterFailure();
-        }
-        sender.send(new JSONObject()
-                .put("type", "instruction-result")
-                .put("requestId", requestId)
-                .put("outcome", outcome)
-                .toString());
     }
 
     static KorriMoonlightActionExecutor.Request authorizedRequest(String authorizationJson) {

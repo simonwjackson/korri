@@ -13,6 +13,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayDeque;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -168,6 +171,249 @@ public class KorriOverlayBridgeTest {
     }
 
     @Test
+    public void pendingRuntimeInstructionDoesNotBlockWebViewAndDeliversLaterOnUi() throws Exception {
+        RecordingSender sender = new RecordingSender();
+        RecordingCommands commands = new RecordingCommands();
+        ArrayDeque<Runnable> worker = new ArrayDeque<>();
+        ArrayDeque<Runnable> ui = new ArrayDeque<>();
+        CountDownLatch processing = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        KorriOverlayBridge bridge = new KorriOverlayBridge(
+                KorriOverlayBridgeTest::authority,
+                commands,
+                sender,
+                worker::add,
+                ui::add,
+                (request, authorization) -> {
+                    processing.countDown();
+                    try {
+                        if (!release.await(1, TimeUnit.SECONDS)) {
+                            return com.limelight.korri.moonlight.KorriMoonlightActionExecutor.Outcome.FAILED;
+                        }
+                    } catch (InterruptedException error) {
+                        Thread.currentThread().interrupt();
+                        return com.limelight.korri.moonlight.KorriMoonlightActionExecutor.Outcome.FAILED;
+                    }
+                    return com.limelight.korri.moonlight.KorriMoonlightActionExecutor.Outcome.EXECUTED;
+                });
+        String instruction = "{"
+                + "\"launchId\":\"" + LAUNCH + "\","
+                + "\"executorId\":\"android-moonlight\","
+                + "\"generation\":\"executor-generation\","
+                + "\"actionId\":\"runtime-fps\","
+                + "\"dismissOnSuccess\":true,"
+                + "\"nonce\":\"nonce\","
+                + "\"value\":{\"kind\":\"range\",\"value\":30},"
+                + "\"effect\":{\"kind\":\"android-moonlight\","
+                + "\"payload\":\"set-stream-fps\"},"
+                + "\"integrity\":\"opaque\"}";
+
+        bridge.onMessage("{\"type\":\"execute-protected-instruction\","
+                        + "\"requestId\":\"runtime-request\",\"instruction\":"
+                        + instruction + "}",
+                KorriOverlayBridge.ASSET_ORIGIN, true);
+        assertEquals(1, worker.size());
+        assertTrue(sender.messages.isEmpty());
+
+        Thread background = new Thread(worker.remove());
+        background.start();
+        assertTrue(processing.await(1, TimeUnit.SECONDS));
+        assertTrue("pending host ACK must not block WebView delivery", sender.messages.isEmpty());
+        assertTrue(ui.isEmpty());
+        release.countDown();
+        background.join(1000);
+        assertEquals(1, ui.size());
+        assertTrue(sender.messages.isEmpty());
+
+        ui.remove().run();
+        assertEquals(1, sender.messages.size());
+        JSONObject result = new JSONObject(sender.messages.get(0));
+        assertEquals("Executed", result.getJSONObject("outcome").getString("_tag"));
+        assertEquals(java.util.Arrays.asList("pre-dismiss", "authorize"),
+                commands.executionOrder);
+    }
+
+    @Test
+    public void busyInstructionCannotPreDismissOrRestoreActiveInstruction() throws Exception {
+        RecordingSender sender = new RecordingSender();
+        RecordingCommands commands = new RecordingCommands();
+        ArrayDeque<Runnable> worker = new ArrayDeque<>();
+        KorriOverlayBridge bridge = new KorriOverlayBridge(
+                KorriOverlayBridgeTest::authority, commands, sender,
+                worker::add, Runnable::run,
+                (request, authorization) -> com.limelight.korri.moonlight.KorriMoonlightActionExecutor.Outcome.EXECUTED);
+        String instruction = protectedInstruction("set-stream-fps", 30);
+
+        bridge.onMessage(protectedMessage("first", instruction),
+                KorriOverlayBridge.ASSET_ORIGIN, true);
+        bridge.onMessage(protectedMessage("busy", instruction),
+                KorriOverlayBridge.ASSET_ORIGIN, true);
+
+        assertEquals(Collections.singletonList("pre-dismiss"), commands.executionOrder);
+        assertEquals(1, worker.size());
+        assertEquals(1, sender.messages.size());
+        JSONObject busy = new JSONObject(sender.messages.get(0));
+        assertEquals("busy", busy.getString("requestId"));
+        assertEquals("Unavailable", busy.getJSONObject("outcome").getString("_tag"));
+        assertFalse(commands.executionOrder.contains("restore"));
+
+        worker.remove().run();
+        assertEquals(2, sender.messages.size());
+        assertEquals(java.util.Arrays.asList("pre-dismiss", "authorize"),
+                commands.executionOrder);
+    }
+
+    @Test
+    public void closeAfterAuthorizationBeforeDispatchPreventsOldWindowEffect() throws Exception {
+        RecordingSender sender = new RecordingSender();
+        RecordingCommands commands = new RecordingCommands();
+        ArrayDeque<Runnable> worker = new ArrayDeque<>();
+        CountDownLatch processorEntered = new CountDownLatch(1);
+        CountDownLatch releaseProcessor = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicInteger effects =
+                new java.util.concurrent.atomic.AtomicInteger();
+        KorriOverlayBridge bridge = new KorriOverlayBridge(
+                KorriOverlayBridgeTest::authority, commands, sender,
+                worker::add, Runnable::run,
+                (request, authorization) -> {
+                    processorEntered.countDown();
+                    try {
+                        releaseProcessor.await();
+                    } catch (InterruptedException error) {
+                        Thread.currentThread().interrupt();
+                        return com.limelight.korri.moonlight.KorriMoonlightActionExecutor.Outcome.FAILED;
+                    }
+                    return authorization.commit(() -> {
+                        effects.incrementAndGet();
+                        return com.limelight.korri.moonlight.KorriMoonlightActionExecutor.Outcome.EXECUTED;
+                    }, com.limelight.korri.moonlight.KorriMoonlightActionExecutor.Outcome.STALE);
+                });
+        bridge.onMessage(protectedMessage("old", protectedInstruction("set-stream-fps", 30)),
+                KorriOverlayBridge.ASSET_ORIGIN, true);
+
+        Thread background = new Thread(worker.remove());
+        background.start();
+        assertTrue(processorEntered.await(1, TimeUnit.SECONDS));
+        assertTrue(commands.executionOrder.contains("authorize"));
+        bridge.close();
+        releaseProcessor.countDown();
+        background.join(1000);
+
+        assertEquals(0, effects.get());
+        assertTrue(sender.messages.isEmpty());
+    }
+
+    @Test
+    public void closeWaitsForEnteredDispatchButNotHostAcknowledgement() throws Exception {
+        RecordingSender sender = new RecordingSender();
+        RecordingCommands commands = new RecordingCommands();
+        ArrayDeque<Runnable> worker = new ArrayDeque<>();
+        CountDownLatch dispatchEntered = new CountDownLatch(1);
+        CountDownLatch releaseDispatch = new CountDownLatch(1);
+        CountDownLatch awaitingAck = new CountDownLatch(1);
+        CountDownLatch releaseAck = new CountDownLatch(1);
+        CountDownLatch closeReturned = new CountDownLatch(1);
+        KorriOverlayBridge bridge = new KorriOverlayBridge(
+                KorriOverlayBridgeTest::authority, commands, sender,
+                worker::add, Runnable::run,
+                (request, authorization) -> {
+                    boolean accepted = authorization.commit(() -> {
+                        dispatchEntered.countDown();
+                        try {
+                            releaseDispatch.await();
+                        } catch (InterruptedException error) {
+                            Thread.currentThread().interrupt();
+                            return false;
+                        }
+                        return true;
+                    }, false);
+                    if (!accepted) {
+                        return com.limelight.korri.moonlight.KorriMoonlightActionExecutor.Outcome.STALE;
+                    }
+                    awaitingAck.countDown();
+                    try {
+                        releaseAck.await();
+                    } catch (InterruptedException error) {
+                        Thread.currentThread().interrupt();
+                        return com.limelight.korri.moonlight.KorriMoonlightActionExecutor.Outcome.FAILED;
+                    }
+                    return com.limelight.korri.moonlight.KorriMoonlightActionExecutor.Outcome.EXECUTED;
+                });
+        bridge.onMessage(protectedMessage("old", protectedInstruction("set-stream-fps", 30)),
+                KorriOverlayBridge.ASSET_ORIGIN, true);
+
+        Thread background = new Thread(worker.remove());
+        background.start();
+        assertTrue(dispatchEntered.await(1, TimeUnit.SECONDS));
+        Thread closing = new Thread(() -> {
+            bridge.close();
+            closeReturned.countDown();
+        });
+        closing.start();
+        assertFalse(closeReturned.await(50, TimeUnit.MILLISECONDS));
+        releaseDispatch.countDown();
+        assertTrue(awaitingAck.await(1, TimeUnit.SECONDS));
+        assertTrue("close must not wait for host ACK", closeReturned.await(1, TimeUnit.SECONDS));
+        releaseAck.countDown();
+        background.join(1000);
+        closing.join(1000);
+        assertTrue(sender.messages.isEmpty());
+    }
+
+    @Test
+    public void closedOldWindowCannotRestoreOrReplyIntoReplacementLifetime() throws Exception {
+        RecordingSender oldSender = new RecordingSender();
+        RecordingSender newSender = new RecordingSender();
+        RecordingCommands commands = new RecordingCommands();
+        ArrayDeque<Runnable> oldWorker = new ArrayDeque<>();
+        ArrayDeque<Runnable> newWorker = new ArrayDeque<>();
+        String instruction = protectedInstruction("set-stream-fps", 30);
+        KorriOverlayBridge oldBridge = new KorriOverlayBridge(
+                KorriOverlayBridgeTest::authority, commands, oldSender,
+                oldWorker::add, Runnable::run,
+                (request, authorization) -> com.limelight.korri.moonlight.KorriMoonlightActionExecutor.Outcome.FAILED);
+        oldBridge.onMessage(protectedMessage("old", instruction),
+                KorriOverlayBridge.ASSET_ORIGIN, true);
+        oldBridge.close();
+
+        KorriOverlayBridge replacement = new KorriOverlayBridge(
+                KorriOverlayBridgeTest::authority, commands, newSender,
+                newWorker::add, Runnable::run,
+                (request, authorization) -> com.limelight.korri.moonlight.KorriMoonlightActionExecutor.Outcome.FAILED);
+        replacement.onMessage(protectedMessage("new", instruction),
+                KorriOverlayBridge.ASSET_ORIGIN, true);
+        oldWorker.remove().run();
+        assertTrue(oldSender.messages.isEmpty());
+        assertFalse(commands.executionOrder.contains("restore"));
+
+        newWorker.remove().run();
+        assertEquals(1, newSender.messages.size());
+        assertEquals(java.util.Arrays.asList(
+                "pre-dismiss", "pre-dismiss", "authorize", "restore"),
+                commands.executionOrder);
+    }
+
+    private static String protectedInstruction(String effect, int value) {
+        return "{"
+                + "\"launchId\":\"" + LAUNCH + "\","
+                + "\"executorId\":\"android-moonlight\","
+                + "\"generation\":\"executor-generation\","
+                + "\"actionId\":\"runtime\","
+                + "\"dismissOnSuccess\":true,"
+                + "\"nonce\":\"nonce\","
+                + "\"value\":{\"kind\":\"range\",\"value\":" + value + "},"
+                + "\"effect\":{\"kind\":\"android-moonlight\","
+                + "\"payload\":\"" + effect + "\"},"
+                + "\"integrity\":\"opaque\"}";
+    }
+
+    private static String protectedMessage(String requestId, String instruction) {
+        return "{\"type\":\"execute-protected-instruction\","
+                + "\"requestId\":\"" + requestId + "\",\"instruction\":"
+                + instruction + "}";
+    }
+
+    @Test
     public void authorizationResultIsStrictTypedEffectAndValue() {
         String authorized = "{\"_tag\":\"Authorized\",\"payload\":{"
                 + "\"launchId\":\"" + LAUNCH + "\","
@@ -218,6 +464,12 @@ public class KorriOverlayBridgeTest {
         assertTrue(source.contains("setJavaScriptCanOpenWindowsAutomatically(false)"));
         assertTrue(source.contains("setSupportMultipleWindows(false)"));
         assertTrue(source.contains("setWebContentsDebuggingEnabled(BuildConfig.DEBUG)"));
+        assertTrue(source.contains("new ThreadPoolExecutor("));
+        assertTrue(source.contains("new ArrayBlockingQueue<>(1)"));
+        assertTrue(source.contains("resources.add(bridge::close)"));
+        assertTrue(source.contains("resources.add(instructionExecutor::shutdownNow)"));
+        assertTrue(source.contains("action -> handler.post(action)"));
+        assertTrue(source.contains("messageJson -> handler.post(() -> web.evaluateJavascript("));
         assertTrue(source.contains(
                 "WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,"));
         assertTrue(source.contains("params.flags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE"));

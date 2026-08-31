@@ -5,6 +5,7 @@ import org.json.JSONObject;
 
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 /** Closed, UI-thread Artemis effect executor with no Activity-bearing contract. */
 public final class KorriMoonlightActionExecutor {
@@ -36,7 +37,13 @@ public final class KorriMoonlightActionExecutor {
         SET_SGSR_SHARPNESS("set-sgsr-sharpness", Form.RANGE),
         SET_FACE_BUTTON_FLIP("set-face-button-flip", Form.TOGGLE),
         SET_RUMBLE("set-rumble", Form.TOGGLE),
-        SET_PICTURE_IN_PICTURE("set-picture-in-picture", Form.TOGGLE);
+        SET_PICTURE_IN_PICTURE("set-picture-in-picture", Form.TOGGLE),
+        SET_STREAM_BITRATE_KBPS("set-stream-bitrate-kbps", Form.RANGE),
+        RESTORE_STREAM_BITRATE("restore-stream-bitrate", Form.COMMAND),
+        SET_STREAM_FPS("set-stream-fps", Form.RANGE),
+        RESTORE_STREAM_FPS("restore-stream-fps", Form.COMMAND),
+        SET_STREAM_WIDTH("set-stream-width", Form.RANGE),
+        RESTORE_STREAM_RESOLUTION("restore-stream-resolution", Form.COMMAND);
 
         private final String wire;
         private final Form form;
@@ -128,7 +135,8 @@ public final class KorriMoonlightActionExecutor {
         }
 
         public boolean needsStatePublication() {
-            return effect != null && effect.form != Form.COMMAND;
+            return effect != null && effect.form != Form.COMMAND
+                    && !isRuntimeEffect(effect);
         }
     }
 
@@ -139,6 +147,12 @@ public final class KorriMoonlightActionExecutor {
 
     public interface Authorization {
         boolean isCurrent();
+
+        /** Runs the short final side effect only while this authority is exact. */
+        default <T> T commit(Supplier<T> action, T staleResult) {
+            if (!isCurrent()) return staleResult;
+            return action.get();
+        }
     }
 
     /** Live Game operations and current values. Production's implementation is Game itself. */
@@ -171,6 +185,15 @@ public final class KorriMoonlightActionExecutor {
         void toggleFloatingMenu();
         void toggleKeyboardController();
         void switchTouchSensitivity();
+        int streamBitrateKbps(); int streamBitrateMinKbps(); int streamBitrateMaxKbps();
+        KorriSunshineRuntimeSettings.MutationResult setStreamBitrateKbps(int value, Authorization authorization);
+        KorriSunshineRuntimeSettings.MutationResult restoreStreamBitrate(Authorization authorization);
+        int streamFps(); int streamFpsMax();
+        KorriSunshineRuntimeSettings.MutationResult setStreamFps(int value, Authorization authorization);
+        KorriSunshineRuntimeSettings.MutationResult restoreStreamFps(Authorization authorization);
+        int streamWidth(); int streamWidthMax();
+        KorriSunshineRuntimeSettings.MutationResult setStreamWidth(int value, Authorization authorization);
+        KorriSunshineRuntimeSettings.MutationResult restoreStreamResolution(Authorization authorization);
     }
 
     private final Actions actions;
@@ -190,9 +213,12 @@ public final class KorriMoonlightActionExecutor {
                 || !valid(request)) {
             return Outcome.INVALID_VALUE;
         }
-        return onUiThread(() -> authorization.isCurrent()
-                ? apply(request)
-                : Outcome.STALE);
+        if (isRuntimeEffect(request.effect)) {
+            if (!authorization.isCurrent()) return Outcome.STALE;
+            return applyRuntime(request, authorization);
+        }
+        return onUiThread(() -> authorization.commit(
+                () -> apply(request), Outcome.STALE));
     }
 
     public String stateJson(String launchId, String generation) {
@@ -212,9 +238,14 @@ public final class KorriMoonlightActionExecutor {
             case RANGE:
                 if (request.kind != ValueKind.RANGE || !(request.value instanceof Integer)) return false;
                 int value = (Integer) request.value;
-                return request.effect == Effect.SET_SGSR_SHARPNESS
-                        ? value >= 0 && value <= 50
-                        : value >= 1 && value <= 32;
+                switch (request.effect) {
+                    case SET_SGSR_SHARPNESS: return value >= 0 && value <= 50;
+                    case SET_SGSR_EDGE_THRESHOLD: return value >= 1 && value <= 32;
+                    case SET_STREAM_BITRATE_KBPS: return value >= 500 && value <= 150000;
+                    case SET_STREAM_FPS: return value >= 1 && value <= 240;
+                    case SET_STREAM_WIDTH: return value >= 2 && value <= 8192 && value % 2 == 0;
+                    default: return false;
+                }
             default:
                 return false;
         }
@@ -266,8 +297,37 @@ public final class KorriMoonlightActionExecutor {
                     boolean pip = (Boolean) request.value;
                     if (actions.pictureInPicture() != pip) actions.setPictureInPicture(pip);
                     break;
+
             }
             return Outcome.EXECUTED;
+        } catch (RuntimeException error) {
+            return Outcome.FAILED;
+        }
+    }
+
+
+    private static boolean isRuntimeEffect(Effect effect) {
+        return effect == Effect.SET_STREAM_BITRATE_KBPS || effect == Effect.RESTORE_STREAM_BITRATE
+                || effect == Effect.SET_STREAM_FPS || effect == Effect.RESTORE_STREAM_FPS
+                || effect == Effect.SET_STREAM_WIDTH || effect == Effect.RESTORE_STREAM_RESOLUTION;
+    }
+
+    private Outcome applyRuntime(Request request, Authorization authorization) {
+        try {
+            if (!actions.available(request.effect)) return Outcome.UNAVAILABLE;
+            KorriSunshineRuntimeSettings.MutationResult result;
+            switch (request.effect) {
+                case SET_STREAM_BITRATE_KBPS: result = actions.setStreamBitrateKbps((Integer) request.value, authorization); break;
+                case RESTORE_STREAM_BITRATE: result = actions.restoreStreamBitrate(authorization); break;
+                case SET_STREAM_FPS: result = actions.setStreamFps((Integer) request.value, authorization); break;
+                case RESTORE_STREAM_FPS: result = actions.restoreStreamFps(authorization); break;
+                case SET_STREAM_WIDTH: result = actions.setStreamWidth((Integer) request.value, authorization); break;
+                case RESTORE_STREAM_RESOLUTION: result = actions.restoreStreamResolution(authorization); break;
+                default: return Outcome.INVALID_VALUE;
+            }
+            if (result == KorriSunshineRuntimeSettings.MutationResult.APPLIED) return Outcome.EXECUTED;
+            if (result == KorriSunshineRuntimeSettings.MutationResult.STALE) return Outcome.STALE;
+            return Outcome.FAILED;
         } catch (RuntimeException error) {
             return Outcome.FAILED;
         }
@@ -283,6 +343,8 @@ public final class KorriMoonlightActionExecutor {
                 if (fulfillable) {
                     JSONObject value = currentValue(effect);
                     if (value != null) entry.put("value", value);
+                    JSONObject range = liveRange(effect);
+                    if (range != null) entry.put("range", range);
                 }
             } catch (RuntimeException error) {
                 entry.put("fulfillable", false);
@@ -307,8 +369,25 @@ public final class KorriMoonlightActionExecutor {
             case SET_FACE_BUTTON_FLIP: return typed("toggle", actions.faceButtonFlip());
             case SET_RUMBLE: return typed("toggle", actions.rumble());
             case SET_PICTURE_IN_PICTURE: return typed("toggle", actions.pictureInPicture());
+            case SET_STREAM_BITRATE_KBPS: return typed("range", actions.streamBitrateKbps());
+            case SET_STREAM_FPS: return typed("range", actions.streamFps());
+            case SET_STREAM_WIDTH: return typed("range", actions.streamWidth());
             default: return null;
         }
+    }
+
+
+    private JSONObject liveRange(Effect effect) throws Exception {
+        switch (effect) {
+            case SET_STREAM_BITRATE_KBPS: return range(actions.streamBitrateMinKbps(), actions.streamBitrateMaxKbps(), 1);
+            case SET_STREAM_FPS: return range(1, actions.streamFpsMax(), 1);
+            case SET_STREAM_WIDTH: return range(2, actions.streamWidthMax(), 2);
+            default: return null;
+        }
+    }
+
+    private static JSONObject range(int min, int max, int step) throws Exception {
+        return new JSONObject().put("min", min).put("max", max).put("step", step);
     }
 
     private static JSONObject typed(String kind, Object value) throws Exception {
