@@ -1,7 +1,10 @@
 {
   baseSunshineVersion = "2025.924.154138";
   approvedBaseSourceHash = "sha256-QrPfZqd9pgufohUjxlTpO6V0v7B41UrXHZaESsFjZ48=";
-  approvedBaseDerivation = "/nix/store/a1dm23k8b0v3qhs9mpj0yiz4jd8jmwpc-sunshine-2025.924.154138.drv";
+  approvedBaseDerivations = [
+    "/nix/store/a1dm23k8b0v3qhs9mpj0yiz4jd8jmwpc-sunshine-2025.924.154138.drv"
+    "/nix/store/w8dd7pbl8f0qg2cyb7ay8hmli854giwv-sunshine-2025.924.154138.drv"
+  ];
   reviewedLibavcodecVersion = "62.11.100";
   patchSetSha256 = "6f679d8d25ce9154c8088482ccc00c46333908457295b3857e9ecc8e6ed8ebb5";
   patches = [

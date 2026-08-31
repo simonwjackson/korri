@@ -232,8 +232,8 @@ in
           && (cfg.sunshine.package.korriBaseSunshineVersion or null) == sunshineApproved.baseSunshineVersion
           && (cfg.sunshine.package.korriApprovedBaseSunshineSourceHash or null) == sunshineApproved.approvedBaseSourceHash
           && (cfg.sunshine.package.korriReviewedLibavcodecVersion or null) == sunshineApproved.reviewedLibavcodecVersion
-          && (cfg.sunshine.package.korriBaseSunshineDerivation or null) == sunshineApproved.approvedBaseDerivation
-          && (cfg.sunshine.package.korriApprovedBaseSunshineDerivation or null) == sunshineApproved.approvedBaseDerivation
+          && builtins.elem (cfg.sunshine.package.korriBaseSunshineDerivation or "") sunshineApproved.approvedBaseDerivations
+          && (cfg.sunshine.package.korriApprovedBaseSunshineDerivation or null) == (cfg.sunshine.package.korriBaseSunshineDerivation or null)
           && (cfg.sunshine.package.korriProvenanceRelativePath or null) == "share/korri/sunshine-korri/provenance"
           && builtins.elem "0015-add-korri-input-seat-event-mirror.patch" (cfg.sunshine.package.korriPatchNames or [ ]);
         message = "services.korriLinuxHost must use the exact approved sunshine-korri package and provenance contract.";

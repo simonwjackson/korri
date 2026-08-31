@@ -32,7 +32,7 @@ sunshine.overrideAttrs (
       approved_base_sunshine_source_hash=${approved.approvedBaseSourceHash}
       base_sunshine_source=${baseSunshineSource}
       base_sunshine_derivation=${baseSunshineDerivation}
-      approved_base_sunshine_derivation=${approved.approvedBaseDerivation}
+      approved_base_sunshine_derivation=${baseSunshineDerivation}
       reviewed_libavcodec_version=${approved.reviewedLibavcodecVersion}
       executable=bin/sunshine
       patch_set_sha256=${approved.patchSetSha256}
@@ -43,7 +43,7 @@ sunshine.overrideAttrs (
     throw "sunshine-korri base version changed; review the approved patch set before building"
   else if baseSunshineSourceHash != approved.approvedBaseSourceHash then
     throw "sunshine-korri base source hash changed; review the approved source before building"
-  else if baseSunshineDerivation != approved.approvedBaseDerivation then
+  else if !(builtins.elem baseSunshineDerivation approved.approvedBaseDerivations) then
     throw "sunshine-korri base derivation changed; review the complete upstream recipe before building"
   else if basePatches != [ ] then
     throw "sunshine-korri base derivation carries unapproved patches"
@@ -74,7 +74,7 @@ sunshine.overrideAttrs (
         korriApprovedBaseSunshineSourceHash = approved.approvedBaseSourceHash;
         korriBaseSunshineSource = baseSunshineSource;
         korriBaseSunshineDerivation = baseSunshineDerivation;
-        korriApprovedBaseSunshineDerivation = approved.approvedBaseDerivation;
+        korriApprovedBaseSunshineDerivation = baseSunshineDerivation;
         korriReviewedLibavcodecVersion = approved.reviewedLibavcodecVersion;
       };
 

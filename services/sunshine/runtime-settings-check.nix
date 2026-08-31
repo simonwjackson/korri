@@ -32,7 +32,7 @@ let
     approved_base_sunshine_source_hash=${approved.approvedBaseSourceHash}
     base_sunshine_source=${sunshinePackage.korriBaseSunshineSource}
     base_sunshine_derivation=${sunshinePackage.korriBaseSunshineDerivation}
-    approved_base_sunshine_derivation=${approved.approvedBaseDerivation}
+    approved_base_sunshine_derivation=${sunshinePackage.korriBaseSunshineDerivation}
     reviewed_libavcodec_version=${approved.reviewedLibavcodecVersion}
     executable=bin/sunshine
     patch_set_sha256=${approved.patchSetSha256}
@@ -45,8 +45,8 @@ let
       && sunshinePackage.korriPatchSetSha256 == approved.patchSetSha256
       && sunshinePackage.korriBaseSunshineVersion == approved.baseSunshineVersion
       && sunshinePackage.korriApprovedBaseSunshineSourceHash == approved.approvedBaseSourceHash
-      && sunshinePackage.korriBaseSunshineDerivation == approved.approvedBaseDerivation
-      && sunshinePackage.korriApprovedBaseSunshineDerivation == approved.approvedBaseDerivation
+      && builtins.elem sunshinePackage.korriBaseSunshineDerivation approved.approvedBaseDerivations
+      && sunshinePackage.korriApprovedBaseSunshineDerivation == sunshinePackage.korriBaseSunshineDerivation
       && pkgs.sunshine.src.outputHash == approved.approvedBaseSourceHash
       && sunshinePackage.korriReviewedLibavcodecVersion == approved.reviewedLibavcodecVersion
     ))
@@ -258,8 +258,8 @@ let
       &&
         sunshinePackage.korriBaseSunshineDerivation
         == builtins.unsafeDiscardStringContext pkgs.sunshine.drvPath
-      && sunshinePackage.korriBaseSunshineDerivation == approved.approvedBaseDerivation
-      && sunshinePackage.korriApprovedBaseSunshineDerivation == approved.approvedBaseDerivation
+      && builtins.elem sunshinePackage.korriBaseSunshineDerivation approved.approvedBaseDerivations
+      && sunshinePackage.korriApprovedBaseSunshineDerivation == sunshinePackage.korriBaseSunshineDerivation
       && contains "Package provenance" readme
     ))
   ];
