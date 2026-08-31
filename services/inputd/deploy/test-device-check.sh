@@ -1964,7 +1964,7 @@ grep -E 'wrapper=deadline .*action=predicates' "$HARNESS_LOG" >/dev/null
 
 flow_ledger="$TMP/flow-ledger"
 mapfile -d '' -t flow_args < <(common_for "$flow_ledger")
-export HARNESS_LEDGER="$flow_ledger" HARNESS_PAIRING_MODES=755:644
+export HARNESS_LEDGER="$flow_ledger" HARNESS_PAIRING_MODES=700:600
 : >"$HARNESS_LOG"
 run_interactive candidate-test pending-mutation "$flow_ledger" "$TMP/candidate.tty" \
   "${flow_args[@]}" --confirm "$confirm"
@@ -1976,8 +1976,8 @@ grep -Fx 'old-user.x11-headless.active=true' "$flow_ledger/baseline.predicates" 
 grep -Fx 'old-user.x11-headless.enabled=true' "$flow_ledger/baseline.predicates" >/dev/null
 grep -Fx 'system.sunshine.active=inactive' "$flow_ledger/baseline.predicates" >/dev/null
 grep -Fx 'system.x11-headless.active=inactive' "$flow_ledger/baseline.predicates" >/dev/null
-grep -Fx 'sunshine.pairing-state-modes=755:644' "$flow_ledger/baseline.predicates" >/dev/null
-grep -F 'pairing-modes=755:644' "$HARNESS_LOG" >/dev/null
+grep -Fx 'sunshine.pairing-state-modes=700:600' "$flow_ledger/baseline.predicates" >/dev/null
+grep -F 'pairing-modes=700:600' "$HARNESS_LOG" >/dev/null
 grep -Fx 'sunshine.pairing-state-present=true' "$flow_ledger/baseline.predicates" >/dev/null
 grep -F 'predicates-user=gameplay wrapper=attempt-command' "$HARNESS_LOG" >/dev/null
 if grep -F 'predicates-user=root' "$HARNESS_LOG" >/dev/null; then

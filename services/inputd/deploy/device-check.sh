@@ -1625,7 +1625,7 @@ save_accepted_private_digest() {
 
 verify_accepted_private_digest() {
   local evidence="$1" accepted current
-  [[ -f "$LEDGER/sunshine-private-state.accepted"     && ! -L "$LEDGER/sunshine-private-state.accepted"     && "$(stat -c %a "$LEDGER/sunshine-private-state.accepted")" == 600 ]]     || fail 'accepted Sunshine private-state proof is absent'
+  [[ -f "$LEDGER/sunshine-private-state.accepted"     && ! -L "$LEDGER/sunshine-private-state.accepted"     && "$(stat -c '%u:%a' "$LEDGER/sunshine-private-state.accepted")" == "$(id -u):600" ]]     || fail 'accepted Sunshine private-state proof is absent'
   accepted="$(cat "$LEDGER/sunshine-private-state.accepted")"
   [[ "$accepted" =~ ^[0-9a-f]{64}$ ]]     || fail 'accepted Sunshine private-state proof is invalid'
   current="$(extract_automated_private_digest "$evidence")"
@@ -1648,7 +1648,7 @@ fi
 validate_private_state_predicates "$LEDGER/baseline.predicates"
 case "$state" in
   candidate-accepted-pending-boot|candidate-await-reboot|candidate-reboot-verifying|candidate-reboot-verifying-starting|complete)
-    [[ -f "$LEDGER/sunshine-private-state.accepted" ]]       || fail 'accepted Sunshine private-state proof is absent'
+    [[ -f "$LEDGER/sunshine-private-state.accepted"       && ! -L "$LEDGER/sunshine-private-state.accepted"       && "$(stat -c '%u:%a' "$LEDGER/sunshine-private-state.accepted")" == "$(id -u):600" ]]       || fail 'accepted Sunshine private-state proof is absent'
     accepted_private_state="$(cat "$LEDGER/sunshine-private-state.accepted" 2>/dev/null || true)"
     [[ "$accepted_private_state" =~ ^[0-9a-f]{64}$ ]]       || fail 'accepted Sunshine private-state proof is invalid'
     ;;
