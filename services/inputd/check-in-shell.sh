@@ -28,4 +28,6 @@ nix build --no-link \
   .#checks."$(nix eval --raw --impure --expr builtins.currentSystem)".korrid-linux-device-module \
   .#checks."$(nix eval --raw --impure --expr builtins.currentSystem)".korri-linux-host-module \
   .#checks."$(nix eval --raw --impure --expr builtins.currentSystem)".sunshine-korri-package \
+  .#checks."$(nix eval --raw --impure --expr builtins.currentSystem)".sunshine-korri-runtime-settings \
+  .#checks."$(nix eval --raw --impure --expr builtins.currentSystem)".sunshine-korri-input-seat-patch \
   .#checks."$(nix eval --raw --impure --expr builtins.currentSystem)".korri-inputd-package

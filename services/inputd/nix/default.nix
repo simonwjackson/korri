@@ -19,6 +19,8 @@ let
   inputplumberData = import ./inputplumber-data.nix { inherit pkgs; };
   inputplumberKorri = inputplumberData.compose { inherit inputplumberRuntime; };
   retroarchInputplumberAutoconfig = pkgs.callPackage ./retroarch-inputplumber-autoconfig.nix { };
+  sunshineApprovedPatches = import ../../sunshine/approved-patches.nix;
+  sunshinePatchPaths = map (record: record.path) sunshineApprovedPatches.patches;
   inputdPackage = import ../package.nix { inherit pkgs crane; };
   devApp = import ./dev-app.nix {
     inherit pkgs inputdPackage korridPackage;
@@ -56,8 +58,37 @@ in
       test -x ${sunshinePackage}/bin/sunshine
       test "${sunshinePackage.pname}" = sunshine-korri
       test "${sunshinePackage.version}" = "${pkgs.sunshine.version}-korri"
+      test "${toString (builtins.length sunshinePackage.korriPatchNames)}" = 10
+      test "${sunshinePackage.korriBaseSunshineVersion}" = "${sunshineApprovedPatches.baseSunshineVersion}"
+      test "${sunshinePackage.korriApprovedBaseSunshineSourceHash}" = "${sunshineApprovedPatches.approvedBaseSourceHash}"
+      test "${pkgs.sunshine.src.outputHash}" = "${sunshineApprovedPatches.approvedBaseSourceHash}"
+      test "${sunshinePackage.korriBaseSunshineSource}" = "${builtins.unsafeDiscardStringContext (toString pkgs.sunshine.src)}"
+      test "${sunshinePackage.korriBaseSunshineDerivation}" = "${builtins.unsafeDiscardStringContext pkgs.sunshine.drvPath}"
+      test "${sunshinePackage.korriReviewedLibavcodecVersion}" = "${sunshineApprovedPatches.reviewedLibavcodecVersion}"
+      test "${sunshinePackage.korriPatchSetSha256}" = "${sunshineApprovedPatches.patchSetSha256}"
+      provenance=${sunshinePackage}/${sunshinePackage.korriProvenanceRelativePath}
+      test -f "$provenance"
+      grep -Fx 'package=sunshine-korri' "$provenance" >/dev/null
+      grep -Fx 'approved_base_sunshine_source_hash=${sunshineApprovedPatches.approvedBaseSourceHash}' "$provenance" >/dev/null
+      grep -Fx 'executable=bin/sunshine' "$provenance" >/dev/null
+      grep -Fx 'patch_set_sha256=${sunshinePackage.korriPatchSetSha256}' "$provenance" >/dev/null
       touch "$out"
     '';
+    sunshine-korri-runtime-settings = import ../../sunshine/runtime-settings-check.nix {
+      inherit pkgs sunshinePackage;
+      approvedPatchesPath = ../../sunshine/approved-patches.nix;
+      patchPaths = sunshinePatchPaths;
+      packagePath = ../../sunshine/package.nix;
+      readmePath = ../../sunshine/README.md;
+    };
+    sunshine-korri-input-seat-patch = import ../../sunshine/input-seat-patch-check.nix {
+      inherit pkgs sunshinePackage;
+      approvedPatchesPath = ../../sunshine/approved-patches.nix;
+      nonblockingTestPath = ../../sunshine/test-nonblocking-mirror.py;
+      patchPath = ../../sunshine/patches/0015-add-korri-input-seat-event-mirror.patch;
+      packagePath = ../../sunshine/package.nix;
+      readmePath = ../../sunshine/README.md;
+    };
     inputplumber-korri-package = import ./inputplumber-package-check.nix {
       inherit
         pkgs

@@ -1,0 +1,324 @@
+--- a/src/input.cpp
++++ b/src/input.cpp
+@@ -5,0 +6,2 @@
++#include <cstdlib>
++#include <cstring>
+@@ -11,0 +14,2 @@
++#include <array>
++#include <atomic>
+@@ -12,0 +17 @@
++#include <cerrno>
+@@ -15,0 +21,2 @@
++#include <sstream>
++#include <string>
+@@ -20,0 +28,9 @@
++#include <nlohmann/json.hpp>
++
++#ifdef __linux__
++  #include <fcntl.h>
++  #include <sys/socket.h>
++  #include <sys/stat.h>
++  #include <sys/un.h>
++  #include <unistd.h>
++#endif
+@@ -59,0 +76,285 @@
++  constexpr std::size_t KORRI_INPUT_SEAT_MAX_FRAME_BYTES = 2048;
++  constexpr std::size_t KORRI_INPUT_SEAT_MAX_SIDECAR_BYTES = 4096;
++  constexpr std::size_t KORRI_INPUT_SEAT_MAX_LAUNCH_ID_BYTES = 128;
++  constexpr std::size_t KORRI_INPUT_SEAT_MAX_MIRROR_TOKEN_BYTES = 512;
++  constexpr auto KORRI_INPUT_SEAT_SIDECAR_NAME = "sunshine-active-launch.json"sv;
++
++#ifdef __linux__
++  struct korri_input_seat_active_launch_t {
++    bool ready {false};
++    std::string launch_id;
++    std::string mirror_token;
++    std::uint64_t generation {0};
++  };
++
++  static std::atomic_bool korri_input_seat_logged_disabled {false};
++  static std::atomic_bool korri_input_seat_logged_bad_socket_path {false};
++  static std::atomic_bool korri_input_seat_logged_bad_runtime_dir {false};
++  static std::atomic_bool korri_input_seat_logged_bad_sidecar {false};
++  static std::atomic_bool korri_input_seat_logged_oversized_frame {false};
++  static std::atomic_bool korri_input_seat_logged_socket_failure {false};
++  static std::atomic_bool korri_input_seat_logged_write_failure {false};
++
++  std::string korri_input_seat_json_escape(std::string_view value) {
++    std::string escaped;
++    escaped.reserve(value.size());
++    for (auto ch : value) {
++      switch (ch) {
++        case '\\':
++          escaped += "\\\\";
++          break;
++        case '"':
++          escaped += "\\\"";
++          break;
++        case '\n':
++          escaped += "\\n";
++          break;
++        case '\r':
++          escaped += "\\r";
++          break;
++        case '\t':
++          escaped += "\\t";
++          break;
++        default:
++          escaped += ch;
++          break;
++      }
++    }
++    return escaped;
++  }
++
++  bool korri_input_seat_authority_string_valid(std::string_view value, std::size_t max_bytes) {
++    if (value.empty() || value.size() > max_bytes) {
++      return false;
++    }
++    for (auto ch : value) {
++      if (static_cast<unsigned char>(ch) < 0x20) {
++        return false;
++      }
++    }
++    return true;
++  }
++
++  const char *korri_input_seat_socket_path() {
++    auto socket_path = std::getenv("KORRI_INPUT_SEAT_MIRROR_SOCKET");
++    if (socket_path == nullptr || socket_path[0] == '\0') {
++      return nullptr;
++    }
++    return socket_path;
++  }
++
++  const char *korri_input_seat_runtime_dir() {
++    auto runtime_dir = std::getenv("KORRI_INPUT_SEAT_RUNTIME_DIR");
++    if (runtime_dir == nullptr || runtime_dir[0] == '\0') {
++      return nullptr;
++    }
++    return runtime_dir;
++  }
++
++  korri_input_seat_active_launch_t korri_input_seat_active_launch() {
++    auto runtime_dir = korri_input_seat_runtime_dir();
++    if (runtime_dir == nullptr || runtime_dir[0] != '/' || std::strchr(runtime_dir, '%') != nullptr) {
++      if (!korri_input_seat_logged_bad_runtime_dir.exchange(true)) {
++        BOOST_LOG(warning) << "invalid input seat mirror runtime directory"sv;
++      }
++      return {};
++    }
++
++    auto dir_fd = ::open(runtime_dir, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
++    if (dir_fd < 0) {
++      return {};
++    }
++    auto sidecar_fd = ::openat(dir_fd, KORRI_INPUT_SEAT_SIDECAR_NAME.data(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
++    ::close(dir_fd);
++    if (sidecar_fd < 0) {
++      return {};
++    }
++
++    struct stat sidecar_stat {};
++    auto stat_ok = ::fstat(sidecar_fd, &sidecar_stat) == 0;
++    auto authority_ok = stat_ok && sidecar_stat.st_uid == 0 && sidecar_stat.st_gid == ::getegid();
++    auto mode_ok = stat_ok && (sidecar_stat.st_mode & S_IRGRP) != 0 && (sidecar_stat.st_mode & (S_IWGRP | S_IXGRP | S_IRWXO)) == 0;
++    auto size_ok = stat_ok && sidecar_stat.st_size > 0 &&
++                   static_cast<std::uint64_t>(sidecar_stat.st_size) <= KORRI_INPUT_SEAT_MAX_SIDECAR_BYTES;
++    if (!stat_ok || !S_ISREG(sidecar_stat.st_mode) || !authority_ok || !mode_ok || !size_ok) {
++      ::close(sidecar_fd);
++      if (!korri_input_seat_logged_bad_sidecar.exchange(true)) {
++        BOOST_LOG(warning) << "invalid input seat mirror active-launch sidecar metadata"sv;
++      }
++      return {};
++    }
++
++    std::array<char, KORRI_INPUT_SEAT_MAX_SIDECAR_BYTES + 1> buffer {};
++    std::size_t used = 0;
++    while (used < buffer.size()) {
++      auto result = ::read(sidecar_fd, buffer.data() + used, buffer.size() - used);
++      if (result < 0 && errno == EINTR) {
++        continue;
++      }
++      if (result <= 0) {
++        break;
++      }
++      used += static_cast<std::size_t>(result);
++    }
++    ::close(sidecar_fd);
++    if (used == 0 || used > KORRI_INPUT_SEAT_MAX_SIDECAR_BYTES) {
++      if (!korri_input_seat_logged_bad_sidecar.exchange(true)) {
++        BOOST_LOG(warning) << "invalid input seat mirror active-launch sidecar size"sv;
++      }
++      return {};
++    }
++
++    auto document = nlohmann::json::parse(buffer.data(), buffer.data() + used, nullptr, false);
++    if (document.is_discarded() || !document.is_object() || document.size() != 3 ||
++        !document.contains("launchId") || !document["launchId"].is_string() ||
++        !document.contains("generation") || !document["generation"].is_number_integer() ||
++        !document.contains("mirrorToken") || !document["mirrorToken"].is_string()) {
++      if (!korri_input_seat_logged_bad_sidecar.exchange(true)) {
++        BOOST_LOG(warning) << "invalid input seat mirror active-launch sidecar schema"sv;
++      }
++      return {};
++    }
++
++    std::uint64_t generation = 0;
++    if (document["generation"].is_number_unsigned()) {
++      generation = document["generation"].get<std::uint64_t>();
++    } else {
++      auto signed_generation = document["generation"].get<std::int64_t>();
++      if (signed_generation < 0) {
++        if (!korri_input_seat_logged_bad_sidecar.exchange(true)) {
++          BOOST_LOG(warning) << "invalid input seat mirror active-launch generation"sv;
++        }
++        return {};
++      }
++      generation = static_cast<std::uint64_t>(signed_generation);
++    }
++
++    korri_input_seat_active_launch_t active;
++    active.launch_id = document["launchId"].get<std::string>();
++    active.mirror_token = document["mirrorToken"].get<std::string>();
++    active.generation = generation;
++    active.ready = korri_input_seat_authority_string_valid(active.launch_id, KORRI_INPUT_SEAT_MAX_LAUNCH_ID_BYTES) &&
++                   korri_input_seat_authority_string_valid(active.mirror_token, KORRI_INPUT_SEAT_MAX_MIRROR_TOKEN_BYTES);
++    if (!active.ready && !korri_input_seat_logged_bad_sidecar.exchange(true)) {
++      BOOST_LOG(warning) << "invalid input seat mirror active-launch authority values"sv;
++    }
++    return active;
++  }
++
++  bool korri_input_seat_mirror_ready(const char *socket_path, const korri_input_seat_active_launch_t &active) {
++    if (socket_path == nullptr || !active.ready) {
++      if (!korri_input_seat_logged_disabled.exchange(true)) {
++        BOOST_LOG(debug) << "input seat mirror disabled: missing stable service values or active launch sidecar"sv;
++      }
++      return false;
++    }
++
++    if (socket_path[0] != '/' || std::strlen(socket_path) >= sizeof(sockaddr_un::sun_path)) {
++      if (!korri_input_seat_logged_bad_socket_path.exchange(true)) {
++        BOOST_LOG(warning) << "invalid input seat mirror socket path"sv;
++      }
++      return false;
++    }
++
++    return true;
++  }
++
++  void korri_input_seat_emit_json(std::string_view json, const korri_input_seat_active_launch_t &active) {
++    auto socket_path = korri_input_seat_socket_path();
++    if (!korri_input_seat_mirror_ready(socket_path, active)) {
++      return;
++    }
++
++    std::string frame;
++    frame.reserve(json.size() + active.mirror_token.size() + 65);
++    frame += "{\"mirrorToken\":\"";
++    frame += korri_input_seat_json_escape(active.mirror_token);
++    frame += "\",\"frame\":";
++    frame += json;
++    frame += "}\n";
++
++    if (frame.size() > KORRI_INPUT_SEAT_MAX_FRAME_BYTES) {
++      if (!korri_input_seat_logged_oversized_frame.exchange(true)) {
++        BOOST_LOG(warning) << "input seat mirror frame exceeded maximum size"sv;
++      }
++      return;
++    }
++
++    auto fd = ::socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
++    if (fd < 0) {
++      if (!korri_input_seat_logged_socket_failure.exchange(true)) {
++        BOOST_LOG(warning) << "failed to create input seat mirror socket"sv;
++      }
++      return;
++    }
++
++    sockaddr_un addr {};
++    addr.sun_family = AF_UNIX;
++    std::strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
++
++    if (::connect(fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) < 0) {
++      auto connect_error = errno;
++      ::close(fd);
++      if (connect_error != EINPROGRESS && connect_error != EAGAIN && connect_error != EWOULDBLOCK &&
++          !korri_input_seat_logged_socket_failure.exchange(true)) {
++        BOOST_LOG(warning) << "failed to connect input seat mirror socket"sv;
++      }
++      return;
++    }
++
++#ifdef MSG_NOSIGNAL
++    constexpr auto send_flags = MSG_NOSIGNAL | MSG_DONTWAIT;
++#else
++    constexpr auto send_flags = MSG_DONTWAIT;
++#endif
++    auto result = ::send(fd, frame.data(), frame.size(), send_flags);
++    auto incomplete_send = result != static_cast<ssize_t>(frame.size());
++    ::close(fd);
++    if (incomplete_send && !korri_input_seat_logged_write_failure.exchange(true)) {
++      BOOST_LOG(warning) << "failed to write complete input seat mirror message"sv;
++    }
++  }
++
++  std::ostringstream korri_input_seat_frame_prefix(std::string_view kind, std::int32_t controller_number, std::string_view launch_id) {
++    std::ostringstream out;
++    out << "{\"kind\":\"" << kind << "\",\"launchId\":\""
++        << korri_input_seat_json_escape(launch_id)
++        << "\",\"controllerNumber\":" << controller_number;
++    return out;
++  }
++
++  void korri_input_seat_emit_source_connected(std::int32_t controller_number) {
++    auto active = korri_input_seat_active_launch();
++    auto out = korri_input_seat_frame_prefix("source-connected"sv, controller_number, active.launch_id);
++    out << '}';
++    korri_input_seat_emit_json(out.str(), active);
++  }
++
++  void korri_input_seat_emit_source_disconnected(std::int32_t controller_number, std::string_view reason) {
++    auto active = korri_input_seat_active_launch();
++    auto out = korri_input_seat_frame_prefix("source-disconnected"sv, controller_number, active.launch_id);
++    out << ",\"reason\":\"" << korri_input_seat_json_escape(reason) << "\"}";
++    korri_input_seat_emit_json(out.str(), active);
++  }
++
++  void korri_input_seat_emit_source_state(PNV_MULTI_CONTROLLER_PACKET packet) {
++    auto active = korri_input_seat_active_launch();
++    const auto buttons = static_cast<std::uint32_t>(static_cast<std::uint16_t>(packet->buttonFlags)) |
++                         (static_cast<std::uint32_t>(static_cast<std::uint16_t>(packet->buttonFlags2)) << 16);
++    auto out = korri_input_seat_frame_prefix("source-state"sv, packet->controllerNumber, active.launch_id);
++    out << ",\"buttons\":" << buttons
++        << ",\"leftTrigger\":" << static_cast<std::uint32_t>(packet->leftTrigger)
++        << ",\"rightTrigger\":" << static_cast<std::uint32_t>(packet->rightTrigger)
++        << ",\"leftStickX\":" << static_cast<std::int32_t>(packet->leftStickX)
++        << ",\"leftStickY\":" << static_cast<std::int32_t>(packet->leftStickY)
++        << ",\"rightStickX\":" << static_cast<std::int32_t>(packet->rightStickX)
++        << ",\"rightStickY\":" << static_cast<std::int32_t>(packet->rightStickY)
++        << '}';
++    korri_input_seat_emit_json(out.str(), active);
++  }
++#else
++  void korri_input_seat_emit_source_connected(std::int32_t) {}
++  void korri_input_seat_emit_source_disconnected(std::int32_t, std::string_view) {}
++  void korri_input_seat_emit_source_state(PNV_MULTI_CONTROLLER_PACKET) {}
++#endif
++
+@@ -851,0 +1153,2 @@
++    korri_input_seat_emit_source_connected(packet->controllerNumber);
++
+@@ -1096,0 +1400,2 @@
++      korri_input_seat_emit_source_connected(packet->controllerNumber);
++
+@@ -1109,0 +1415 @@
++      korri_input_seat_emit_source_disconnected(packet->controllerNumber, "active-gamepad-mask-cleared"sv);
+@@ -1112,0 +1419,3 @@
++    } else if (!(packet->activeGamepadMask & (1 << packet->controllerNumber))) {
++      korri_input_seat_emit_source_disconnected(packet->controllerNumber, "active-gamepad-mask-cleared"sv);
++      return;
+@@ -1113,0 +1423,2 @@
++
++    korri_input_seat_emit_source_state(packet);

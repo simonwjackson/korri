@@ -76,16 +76,51 @@ Reason codes:
 - `stale-ack`
 - `stream-ended`
 
-Current review gates:
+Current automated gates:
 
-- `nix build .#checks.$(nix eval --raw --impure --expr builtins.currentSystem).korri-sunshine-runtime-bitrate-patch --no-link` is the source invariant/build check for packet IDs, operation IDs, capability query, reason fields, timeout/conflict markers, baseline tracking, and supported runtime-resolution markers.
-- Existing FPS live evidence proves the `h264_vaapi` applied path. SM8550/v4l2m2m evidence now proves seamless `h264_vaapi` bitrate changes with moving video and bandwidth deltas, and runtime-resolution evidence proves operation `3` for the validated Korri profile. Disabled, invalid, unsupported, timeout, conflict, command-not-advertised, and stale-ack outcomes are covered by source invariants and/or documented smoke evidence.
+- `nix build --no-link .#checks.$(nix eval --raw --impure --expr builtins.currentSystem).sunshine-korri-runtime-settings` checks the approved patch hashes, protocol constants, runtime safety rules, provenance, and the patched Sunshine build.
+- `nix build --no-link .#checks.$(nix eval --raw --impure --expr builtins.currentSystem).sunshine-korri-input-seat-patch` checks the input-seat source boundary, the approved patch hash, the patched Sunshine build, and a nonblocking transport model/source-invariant check under receiver backpressure. The model does not execute compiled Sunshine behavior.
 
-Evidence is recorded in:
+The historical physical records from the legacy branch are not present in this branch. Import them only with a clear legacy provenance label. Current physical bitrate, FPS, resolution, and input-seat evidence is pending the final device validation stage.
 
-- `docs/acceptance/sunshine-korri-runtime-bitrate-restart-2026-05-25.md`
-- `docs/acceptance/sunshine-korri-seamless-vaapi-runtime-bitrate-sm8550-2026-05-31.md`
-- `docs/acceptance/sunshine-korri-runtime-resolution-2026-05-26.md`
+### Input-seat event mirror patch
+
+`0015-add-korri-input-seat-event-mirror.patch` adds a native Sunshine event-source seam for Korri input seats. Sunshine remains an event source. It mirrors sanitized controller packets to a local Korri socket. A protected receiver must own emulator-visible virtual seats.
+
+This patch is hardened from the legacy patch. It keeps the legacy wire schema. It does not keep the legacy blocking socket or loose sidecar parser.
+
+The mirror needs these stable service values:
+
+- `KORRI_INPUT_SEAT_MIRROR_SOCKET`: an absolute Unix socket path that the protected receiver owns.
+- `KORRI_INPUT_SEAT_RUNTIME_DIR`: an absolute runtime directory that contains `sunshine-active-launch.json`.
+- `sunshine-active-launch.json`: a root-owned sidecar with exactly `launchId`, `generation`, and `mirrorToken`. Its group must equal Sunshine's dedicated effective group. Group read is required. Group write, group execute, and every permission for other users are rejected. Mode `0640` is the intended producer mode.
+
+The host service must keep the runtime directory and receiver socket root-owned. Sunshine receives only dedicated-group access. Sunshine opens the fixed sidecar with `openat`, `O_CLOEXEC`, and `O_NOFOLLOW`. It accepts only a root-owned regular file whose group equals Sunshine's effective GID and whose size is 4096 bytes or less. `launchId` and `mirrorToken` must be bounded strings. `generation` must be a nonnegative integer. Extra JSON fields are rejected.
+
+Frames use bounded token-envelope NDJSON. A frame is 2048 bytes or less. The envelope contains `mirrorToken` and one `SunshineInputSeatFrame`. The frame can report `source-connected`, `source-state`, or `source-disconnected`. It does not contain keyboard, mouse, text, touch, pen, motion, battery, or raw device-path data.
+
+Controller submission uses nonblocking AF_UNIX `SOCK_SEQPACKET` with `SOCK_CLOEXEC`. Each connection submits one bounded token-envelope NDJSON message. An incomplete send is a failure. The receiver must discard any message that does not contain exact JSON followed by exactly one terminal newline. Receiver backpressure cannot wait in the controller packet path.
+
+The automated backpressure fixture is a transport model/source-invariant check. It does not execute the compiled Sunshine helper. The full Sunshine package build proves that patch `0015` compiles. Runtime behavior remains a final manual device validation item.
+
+The mirror remains inert when the protected receiver or either stable environment value is absent. A missing sidecar also disables the mirror. Socket connection and write failures do not stop Sunshine controller handling. The mirror token is private local authority. It must not appear in public status, network RPC, logs, or committed evidence.
+
+## Package provenance
+
+The installed package contains `share/korri/sunshine-korri/provenance`. This mode-`0444` file records:
+
+- the provenance format,
+- the package name,
+- the base Sunshine version,
+- the independently approved base Sunshine source hash,
+- the exact observed base Sunshine source store path,
+- the exact observed base Sunshine derivation path,
+- the reviewed libavcodec version,
+- the Sunshine executable path,
+- each ordered Korri patch name and SHA-256 value,
+- one SHA-256 value for the complete ordered patch set.
+
+Nix also exposes the provenance path, approved base source hash, observed base source and derivation paths, ordered patch names, and patch-set digest through package passthru values. `approved-patches.nix` is the independent approval record. Package evaluation fails when the base version, base source hash, one patch hash, or the ordered patch-set digest changes. Deployment checks must use these values to attest the exact package. The manifest contains no secret or device-specific value.
 
 ## Removal/upstream policy
 
