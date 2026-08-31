@@ -7,11 +7,11 @@ This record contains automated evidence only. It is not physical VAAPI, controll
 ## Source identity
 
 - Korri branch: `feat/restore-linux-inputplumber`
-- Korri revision: `2010ec37bd55faecc582d6158637f485a9fecc4e`
+- Korri revision: `fe9172d50c10aeb702fed9cee2ccf2c73b09a097`
 - Mountainous branch: `unified`
-- Mountainous revision: `62ed578`
-- Zao candidate: `/nix/store/q92c2g8qq04ji56r6alryf2zcww1a05g-nixos-system-zao-26.05.20260313.c06b4ae`
-- Candidate gate SHA-256: `579943b95737f7d1e081460880f9ab338e78ab7a45920a303ddf42d0e8a5254d`
+- Mountainous revision: `55cabff`
+- Zao candidate: `/nix/store/1a55gb8hilg0vw40252m2kjcxx0qny8l-nixos-system-zao-26.05.20260313.c06b4ae`
+- Candidate gate SHA-256: `60292056518d49782a25659ea9e69397ae4fd92920ced346120f5a4687ed9333`
 - Candidate Sunshine: `/nix/store/iaxhcnwzc9hqrdiangphcdrg64zyfhdg-sunshine-korri-2025.924.154138-korri/bin/sunshine`
 - Approved patch-set SHA-256: `30121b5d935b435482814b2c2801c6c3c456bc42c6019123f77018cb0294a62a`
 
@@ -26,9 +26,9 @@ The following checks passed on the recorded source:
 - `nix build --no-link .#checks.x86_64-linux.zao-korri-consumer`
 - `nix build --no-link .#nixosConfigurations.zao.config.system.build.toplevel`
 - the focused Android JVM, native runtime-settings, korrid, portal, Shift, Sunshine package, Sunshine protocol, and APK checks recorded by commit `01992fb7`
-- device-gate shell tests for stock Sunshine rejection, running-executable replacement, duplicate/reordered/wrong patch records, wrong base and FFmpeg ABI provenance, unsafe or absent baselines, post-HITL private-tree replacement, and cross-reboot private-state loss
+- device-gate shell tests for stock Sunshine rejection, running-executable replacement, duplicate/reordered/wrong patch records, wrong base and FFmpeg ABI provenance, unsafe or absent baselines, descriptor-bound baseline and accepted-proof symlink/hard-link/mode rejection, post-HITL private-tree replacement, and cross-reboot private-state loss
 
-The candidate is copied to Zao and rooted at `/nix/var/nix/gcroots/korri-candidate-unified-62ed578`. Read-only verification found the rollback generation still current and default, no attempt marker, an inactive lease, and zero live `korri-game-*.service` units.
+The candidate is copied to Zao and rooted at `/nix/var/nix/gcroots/korri-candidate-unified-55cabff`. Read-only verification found the rollback generation still current and default, no attempt marker, an inactive lease, and zero live `korri-game-*.service` units.
 
 The current debug APK was built and installed on `usu` through its live adb mDNS identity. The device check reached the installed application, but its catalog smoke stopped because Android denied `/storage/emulated/0/korri/upstreams.json`. No permission was changed automatically. This requires the final device interaction before the Sunshine journey can run.
 
@@ -36,8 +36,8 @@ The current debug APK was built and installed on `usu` through its live adb mDNS
 
 - The running Sunshine executable must equal the exact immutable executable in `sunshine.service`.
 - Installed provenance must be root-owned, mode `0444`, and match the independently approved ten-patch digest.
-- The protected Sunshine tree is represented only by one combined digest. A shipped Rust helper traverses from canonical directory descriptors with `O_NOFOLLOW`, rejects unsafe types, links, owners, modes, empty required files, and traversal races, and reads file content only through validated descriptors. File names, contents, per-file hashes, certificates, PIN data, pairing records, application definitions, and settings are not logged.
-- Baseline creation and every mutation require an exact present pairing predicate and a valid private-tree digest. Persistent acceptance stores the private digest in the mode-`0600` ledger, and reboot verification compares it before HITL.
+- The protected Sunshine tree is represented only by one combined digest. A shipped Rust helper traverses from canonical directory descriptors with `O_NOFOLLOW`, rejects unsafe types, links, owners, modes, empty required files, and traversal races, reads file content only through validated descriptors, then reopens the canonical home, `.config`, and `sunshine` entries and compares exact device and inode identity before it emits the digest. File names, contents, per-file hashes, certificates, PIN data, pairing records, application definitions, and settings are not logged.
+- Baseline creation and every mutation require an exact present pairing predicate and a valid private-tree digest. The shipped ledger-proof helper opens the mode-`0700` ledger without following links, reads proof files through validated descriptors, writes unique `O_EXCL` temporary files, fsyncs file and directory state, and installs with no-replace rename. Persistent acceptance stores the private digest as one mode-`0600`, single-link proof, and reboot verification compares the securely retained value before HITL.
 - Acceptance rechecks Sunshine executable and patch provenance after the physical Sunshine restart.
 - Live settings remain gated only by `services.korriLinuxHost.sunshine.runtimeSettings.enable`, which controls `SUNSHINE_LIVE_SETTINGS_MVP=1`.
 - Patch `0015` is shipped and source-checked but remains inert because the full legacy input-seat receiver, launch sidecar producer, token authority, and virtual-seat backend are separate work. No incomplete receiver is enabled.

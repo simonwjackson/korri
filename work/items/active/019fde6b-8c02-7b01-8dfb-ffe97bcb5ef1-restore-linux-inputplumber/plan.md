@@ -19,6 +19,8 @@ The implementation now also restores `sunshine-korri` as a supported Korri packa
 
 Patch `0015` remains shipped, hardened, and inert by default. Full legacy input-seat equivalence still requires a separate Rust receiver, root-owned launch sidecar and token authority, virtual-seat backend, frame validation, and privilege-boundary proof. That receiver is not silently approximated in this rollout.
 
+Private Sunshine preservation is descriptor-bound. The digest helper must rebind canonical home, `.config`, and `sunshine` parent entries before acceptance. The rollout ledger must read and atomically create baseline and accepted private-state proofs through a no-follow directory descriptor; path-based test-then-open and fixed `.next` redirection are not accepted evidence.
+
 ## Architecture Revision — Portable by Default
 
 Device retries proved that full NixOS activation also reloads Home Manager and unrelated user services. The implementation therefore uses two modes only:
