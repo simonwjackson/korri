@@ -338,10 +338,7 @@ in
         group = controlGroup;
         isSystemUser = true;
       };
-      environment.systemPackages = [
-        cfg.inputd.package
-        virtualTargetAcl
-      ];
+      environment.systemPackages = [ cfg.inputd.package ];
       # The helper repeats this complete match before changing an ACL. The udev
       # match limits hotplug invocation and sets a closed base mode first.
       services.udev.extraRules = ''
