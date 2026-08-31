@@ -23,6 +23,7 @@ SUPPORTED_PRODUCTION_PROFILE='korri-60-xbox_one_gamepad.yaml'
 OLD_USER_UNITS=(korrid.service sunshine.service x11-headless.service)
 CANDIDATE_SYSTEM_UNITS=(korrid.service sunshine.service x11-headless.service)
 SUNSHINE_UINPUT_GROUP='korri-sunshine-uinput'
+EXPECTED_SUNSHINE_PATCH_SET_SHA256='30121b5d935b435482814b2c2801c6c3c456bc42c6019123f77018cb0294a62a'
 KORRID_CONTROL_GROUP='korri-control'
 KORRID_CONTROL_SOCKET='/run/korrid-control/control.sock'
 # This path comes from HostSessionControl's existing private-state producer.
@@ -522,6 +523,39 @@ remote_pairing_state_present() {
   (( (8#$config_mode & 8#077) == 0 && (8#$state_mode & 8#077) == 0 ))
 }
 
+remote_sunshine_private_state_digest() {
+  local gameplay_user="$1" uid home home_real config_tree root root_real entry rel stat_record
+  local file_type owner mode content_hash
+  uid="$(id -u "$gameplay_user")" || return 1
+  home="$(getent passwd "$gameplay_user" | cut -d: -f6)" || return 1
+  home_real="$(realpath -e -- "$home" 2>/dev/null)" || return 1
+  config_tree="$home_real/.config"
+  [[ "$(realpath -e -- "$home/.config" 2>/dev/null)" == "$config_tree" ]] || return 1
+  root="$home/.config/sunshine"
+  root_real="$(realpath -e -- "$root" 2>/dev/null)" || return 1
+  [[ "$root_real" == "$config_tree/sunshine" && -d "$root" && ! -L "$root" ]] || return 1
+  [[ -s "$root/sunshine.conf" && -f "$root/sunshine.conf" && ! -L "$root/sunshine.conf" ]] || return 1
+  [[ -s "$root/sunshine_state.json" && -f "$root/sunshine_state.json" && ! -L "$root/sunshine_state.json" ]] || return 1
+
+  {
+    while IFS= read -r -d '' entry; do
+      [[ "$entry" == "$root_real" || "$entry" == "$root_real/"* ]] || return 1
+      rel="${entry#"$root_real"}"
+      rel="${rel#/}"
+      stat_record="$(stat -c '%F|%u|%a|%s' -- "$entry" 2>/dev/null)" || return 1
+      IFS='|' read -r file_type owner mode _ <<<"$stat_record"
+      [[ "$owner" == "$uid" && "$mode" =~ ^[0-7]{3,4}$ ]] || return 1
+      (( (8#$mode & 8#022) == 0 )) || return 1
+      case "$file_type" in
+        directory) content_hash='-' ;;
+        'regular file') content_hash="$(sha256sum -- "$entry" | cut -d' ' -f1)" || return 1 ;;
+        *) return 1 ;;
+      esac
+      printf '%q|%s|%s|%s\n' "$rel" "$stat_record" "$content_hash" "$owner"
+    done < <(find -P "$root_real" -print0 | LC_ALL=C sort -z)
+  } | sha256sum | cut -d' ' -f1
+}
+
 remote_set_pairing_state_modes() {
   local gameplay_user="$1" config_mode="$2" state_mode="$3" before after home
   [[ "$config_mode" =~ ^[0-7]{3,4}$ && "$state_mode" =~ ^[0-7]{3,4}$ ]] || return 1
@@ -605,6 +639,54 @@ remote_process_group_policy() {
     [[ "$primary_gid" != "$sunshine_gid" ]] || fail "dedicated Sunshine uinput primary group leaked to $unit"
     remote_pid_reject_supplementary_gid "$unit" "$pid" "$sunshine_gid" 'dedicated Sunshine uinput'
   fi
+}
+
+remote_sunshine_package_provenance() {
+  local pid running expected execstart package_root provenance package_name patch_set
+  local patch_count=0 line
+  local -a sunshine_execs=()
+  pid="$(systemctl show sunshine.service -p MainPID --value 2>/dev/null || true)"
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || fail 'Sunshine MainPID is unavailable'
+  running="$(readlink -f -- "/proc/$pid/exe" 2>/dev/null || true)"
+  [[ "$running" == /nix/store/*/bin/sunshine ]] \
+    || fail 'running Sunshine executable is not an immutable Nix store binary'
+
+  execstart="$(systemctl show sunshine.service -p ExecStart --value 2>/dev/null || true)"
+  mapfile -t sunshine_execs < <(grep -oE '/nix/store/[^ ;{}"]+/bin/sunshine' <<<"$execstart" | sort -u)
+  [[ "${#sunshine_execs[@]}" -eq 1 ]] \
+    || fail 'Sunshine unit does not declare one exact store executable'
+  expected="${sunshine_execs[0]}"
+  [[ "$running" == "$expected" ]] \
+    || fail 'running Sunshine executable differs from the candidate unit'
+
+  package_root="${running%/bin/sunshine}"
+  [[ "${package_root##*/}" == *sunshine-korri* ]] \
+    || fail 'candidate Sunshine package is not sunshine-korri'
+  provenance="$package_root/share/korri/sunshine-korri/provenance"
+  [[ -f "$provenance" && ! -L "$provenance" \
+    && "$(stat -c '%u:%g:%a' -- "$provenance" 2>/dev/null)" == 0:0:444 ]] \
+    || fail 'sunshine-korri provenance is absent or mutable'
+
+  package_name="$(sed -n 's/^package=//p' "$provenance")"
+  patch_set="$(sed -n 's/^patch_set_sha256=//p' "$provenance")"
+  [[ "$package_name" == sunshine-korri ]] \
+    || fail 'sunshine-korri provenance has the wrong package identity'
+  [[ "$patch_set" == "$EXPECTED_SUNSHINE_PATCH_SET_SHA256" ]] \
+    || fail 'sunshine-korri provenance does not match the approved patch-set digest'
+  [[ "$(grep -c '^package=' "$provenance")" -eq 1 \
+    && "$(grep -c '^patch_set_sha256=' "$provenance")" -eq 1 \
+    && "$(grep -c '^executable=bin/sunshine$' "$provenance")" -eq 1 ]] \
+    || fail 'sunshine-korri provenance has duplicate or incomplete identity fields'
+  while IFS= read -r line; do
+    [[ "$line" =~ ^patch=[^[:space:]]+\.patch[[:space:]]sha256=[0-9a-f]{64}$ ]] \
+      || fail 'sunshine-korri provenance has a malformed patch record'
+    patch_count=$((patch_count + 1))
+  done < <(grep '^patch=' "$provenance")
+  [[ "$patch_count" -eq 10 ]] \
+    || fail 'sunshine-korri provenance does not contain the complete approved patch set'
+
+  printf 'sunshine-executable=%s patch-set-sha256=%s patches=%s\n' \
+    "$running" "$patch_set" "$patch_count"
 }
 
 remote_candidate_credentials() {
@@ -830,6 +912,7 @@ remote_predicates() {
   printf 'inputplumber.enabled=%s\n' "$(remote_unit_value system '' inputplumber.service UnitFileState)"
   printf 'sunshine.pairing-state-modes=%s\n' "$(remote_pairing_state_modes "$gameplay_user" 2>/dev/null || printf invalid)"
   printf 'sunshine.pairing-state-present=%s\n' "$(remote_pairing_state_present "$gameplay_user" && printf true || printf false)"
+  printf 'sunshine.private-state-digest=%s\n' "$(remote_sunshine_private_state_digest "$gameplay_user" 2>/dev/null || printf invalid)"
   printf 'catalog.health=%s\n' "$(remote_catalog_health)"
 }
 
@@ -1017,7 +1100,15 @@ remote_automated_gates() {
     [[ "$enabled" == false ]] || fail "old user service is enabled beside its system replacement: $unit"
   done
   remote_candidate_credentials "$gameplay_user"
+  local sunshine_provenance
+  sunshine_provenance="$(remote_sunshine_package_provenance)" \
+    || fail 'running sunshine-korri provenance validation failed'
   remote_pairing_state_present "$gameplay_user" || fail 'Sunshine pairing-state file is absent'
+  local sunshine_private_state
+  sunshine_private_state="$(remote_sunshine_private_state_digest "$gameplay_user")" \
+    || fail 'Sunshine private configuration tree is unsafe or incomplete'
+  [[ "$sunshine_private_state" =~ ^[0-9a-f]{64}$ ]] \
+    || fail 'Sunshine private configuration tree digest is invalid'
   fingerprint="$(remote_normalized_fingerprint)" || fail 'normalized target does not match the InputPlumber 0.75.2 xb360 fingerprint exactly'
   if [[ "$require_physical" == true ]]; then
     controller_evidence="$(remote_physical_controller_evidence "$expected_identity" "$profile")" \
@@ -1051,7 +1142,9 @@ remote_automated_gates() {
   [[ "$(remote_catalog_health)" == Ok ]] || fail 'korrid catalog is unhealthy'
   acceptance="$(remote_acceptance_fingerprint "$expected_identity" "$profile" "$require_physical")" \
     || fail 'acceptance fingerprint could not be captured'
-  printf 'automated-gates=pass raw-readable=0 inputd-status=Ready system-korrid=active system-x11-headless=active system-sunshine=active pairing-state=present credentials=service-specific catalog=Ok delegate=yes controllers=pids\n'
+  printf 'automated-gates=pass raw-readable=0 inputd-status=Ready system-korrid=active system-x11-headless=active system-sunshine=active pairing-state=present credentials=service-specific sunshine-package=attested catalog=Ok delegate=yes controllers=pids\n'
+  printf '%s\n' "$sunshine_provenance"
+  printf 'sunshine-private-state=protected digest=%s\n' "$sunshine_private_state"
   printf 'normalized-fingerprint=%s\n' "$fingerprint"
   [[ "$require_physical" != true ]] || printf 'controller-evidence=%s\n' "$controller_evidence"
   printf 'acceptance-fingerprint=%s\n' "$acceptance"

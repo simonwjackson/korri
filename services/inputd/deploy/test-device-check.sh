@@ -318,6 +318,7 @@ case "$(basename "$0")" in
           printf 'inputplumber.enabled=%s\n' "${HARNESS_IP_ENABLED:-enabled}"
           printf 'sunshine.pairing-state-modes=%s\n' "${HARNESS_PAIRING_MODES:-700:600}"
           printf 'sunshine.pairing-state-present=%s\n' "${HARNESS_PAIRING_PRESENT:-true}"
+          printf 'sunshine.private-state-digest=%s\n' "${HARNESS_PRIVATE_STATE_DIGEST:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
           printf 'catalog.health=%s\n' "${HARNESS_CATALOG:-Ok}"
           ;;
         preflight)
@@ -371,9 +372,29 @@ case "$(basename "$0")" in
             printf 'device gate: modeled /proc Groups credential rejection: %s\n' "$HARNESS_CREDENTIAL_FAILURE" >&2
             exit 85
           }
+          case "${HARNESS_SUNSHINE_PACKAGE:-valid}" in
+            valid) ;;
+            stock)
+              printf 'device gate: candidate Sunshine package is not sunshine-korri\n' >&2
+              exit 87
+              ;;
+            wrong-executable)
+              printf 'device gate: running Sunshine executable differs from the candidate unit\n' >&2
+              exit 87
+              ;;
+            bad-provenance)
+              printf 'device gate: sunshine-korri provenance does not match the approved patch-set digest\n' >&2
+              exit 87
+              ;;
+            *) exit 87 ;;
+          esac
           [[ "${HARNESS_PAIRING_PRESENT:-true}" == true ]] || {
             printf 'device gate: Sunshine pairing-state file is absent\n' >&2
             exit 81
+          }
+          [[ "${HARNESS_PRIVATE_STATE_MODEL:-valid}" == valid ]] || {
+            printf 'device gate: Sunshine private configuration tree is unsafe or incomplete\n' >&2
+            exit 88
           }
           [[ "${HARNESS_TOPOLOGY_MODEL:-one}" == one ]] || {
             printf 'modeled topology has %s normalized targets\n' "$HARNESS_TOPOLOGY_MODEL" >&2
@@ -427,7 +448,9 @@ case "$(basename "$0")" in
           [[ "${HARNESS_CATALOG:-Ok}" == Ok ]] || exit 64
           normalized="${HARNESS_FINGERPRINT:-node=/dev/input/event9 sysfs=/sys/devices/virtual/input/input9/event9 dev=13:73 inode=1:9 inputplumber=/nix/store/provider/bin/inputplumber version=0.75.2 keys=exact abs=exact ff=yes}"
           physical="identity=$expected_identity event=event8 sysfs=/sys/devices/pci0000:00/input/input8/event8 profile=$profile"
-          printf 'automated-gates=pass raw-readable=0 inputd-status=Ready system-korrid=active system-x11-headless=active system-sunshine=active pairing-state=present credentials=service-specific catalog=Ok delegate=yes controllers=pids\n'
+          printf 'automated-gates=pass raw-readable=0 inputd-status=Ready system-korrid=active system-x11-headless=active system-sunshine=active pairing-state=present credentials=service-specific sunshine-package=attested catalog=Ok delegate=yes controllers=pids\n'
+          printf 'sunshine-executable=/nix/store/sunshine-korri/bin/sunshine patch-set-sha256=%064d patches=10\n' 0
+          printf 'sunshine-private-state=protected digest=%064d\n' 0
           printf 'normalized-fingerprint=%s\n' "$normalized"
           [[ "$require_physical" != true ]] || printf 'controller-evidence=%s\n' "$physical"
           printf 'acceptance-fingerprint=normalized=%s' "$normalized"
@@ -594,8 +617,10 @@ export HARNESS_GAMEPLAY_UID HARNESS_USER_SCOPE_LOG="$TMP/user-scope.log"
 export HARNESS_ATTEMPT_MARKER="$TMP/remote-attempt" HARNESS_ATTEMPT_LEASE="$TMP/remote-attempt.lease"
 export HARNESS_GAMEPLAY_USER=gameplay HARNESS_GAMEPLAY_HOME="$TMP/gameplay-home"
 mkdir -p "$HARNESS_GAMEPLAY_HOME/.config/sunshine"
+printf '%s\n' 'sunshine-config' >"$HARNESS_GAMEPLAY_HOME/.config/sunshine/sunshine.conf"
 : >"$HARNESS_GAMEPLAY_HOME/.config/sunshine/sunshine_state.json"
 chmod 0700 "$HARNESS_GAMEPLAY_HOME/.config/sunshine"
+chmod 0600 "$HARNESS_GAMEPLAY_HOME/.config/sunshine/sunshine.conf"
 chmod 0600 "$HARNESS_GAMEPLAY_HOME/.config/sunshine/sunshine_state.json"
 export HARNESS_OLD_SUNSHINE_ACTIVE=true HARNESS_OLD_SUNSHINE_ENABLED=true
 export HARNESS_OLD_X11_ACTIVE=true HARNESS_OLD_X11_ENABLED=true
@@ -1367,12 +1392,25 @@ done
 assert_fails_with 'old user unit enablement query failed' \
   run_production_predicates HARNESS_USER_LOAD_STATE=not-found HARNESS_USER_ENABLED_STATE=disabled
 
-# Pairing proof records only a boolean. It rejects permissions and links, and
-# never exposes the state file contents.
+# Sunshine private-state proof rejects permissions and links. It records only
+# a combined digest and never exposes pairing or configuration contents.
 pairing_secret='PAIRING-CONTENTS-MUST-STAY-PRIVATE'
 printf '%s\n' "$pairing_secret" >"$HARNESS_GAMEPLAY_HOME/.config/sunshine/sunshine_state.json"
 predicates="$(run_production_predicates)"
 grep -Fx 'sunshine.pairing-state-modes=700:600' <<<"$predicates" >/dev/null
+grep -E '^sunshine.private-state-digest=[0-9a-f]{64}$' <<<"$predicates" >/dev/null
+private_digest_before="$(sed -n 's/^sunshine.private-state-digest=//p' <<<"$predicates")"
+printf '%s\n' 'PRIVATE-CONFIG-CONTENTS-MUST-STAY-PRIVATE' >>"$HARNESS_GAMEPLAY_HOME/.config/sunshine/sunshine.conf"
+changed_predicates="$(run_production_predicates)"
+private_digest_after="$(sed -n 's/^sunshine.private-state-digest=//p' <<<"$changed_predicates")"
+[[ "$private_digest_before" != "$private_digest_after" ]]
+sed -i '$d' "$HARNESS_GAMEPLAY_HOME/.config/sunshine/sunshine.conf"
+predicates="$(run_production_predicates)"
+grep -Fx "sunshine.private-state-digest=$private_digest_before" <<<"$predicates" >/dev/null
+if grep -F "PRIVATE-CONFIG-CONTENTS-MUST-STAY-PRIVATE" <<<"$changed_predicates" >/dev/null; then
+  printf 'Sunshine private configuration leaked into predicates\n' >&2
+  exit 1
+fi
 grep -Fx 'sunshine.pairing-state-present=true' <<<"$predicates" >/dev/null
 if grep -F "$pairing_secret" <<<"$predicates" >/dev/null; then
   printf 'pairing-state contents leaked into predicates\n' >&2
@@ -1488,7 +1526,11 @@ for credential_failure in korrid-input x11-headless-uinput sunshine-control inpu
   run_failure_model "credentials-$credential_failure" HARNESS_CREDENTIAL_FAILURE "$credential_failure" \
     'modeled /proc Groups credential rejection'
 done
+run_failure_model sunshine-stock HARNESS_SUNSHINE_PACKAGE stock 'candidate Sunshine package is not sunshine-korri'
+run_failure_model sunshine-executable HARNESS_SUNSHINE_PACKAGE wrong-executable 'running Sunshine executable differs from the candidate unit'
+run_failure_model sunshine-provenance HARNESS_SUNSHINE_PACKAGE bad-provenance 'sunshine-korri provenance does not match the approved patch-set digest'
 run_failure_model pairing-absent HARNESS_PAIRING_PRESENT false 'Sunshine pairing-state file is absent'
+run_failure_model sunshine-private-state HARNESS_PRIVATE_STATE_MODEL unsafe 'Sunshine private configuration tree is unsafe or incomplete'
 run_failure_model post-stop-query-error HARNESS_POST_STOP_QUERY_ERROR yes 'old user unit active state query failed after stop'
 
 # Candidate activation refuses every observed active-game signal before it

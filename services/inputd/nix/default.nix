@@ -119,6 +119,8 @@ in
       test -x ${inputdPackage}/bin/korri-device-gate
       test "$(sha256sum ${inputdPackage}/bin/korri-device-gate | cut -d' ' -f1)" = \
         "$(sha256sum ${../deploy/device-check.sh} | cut -d' ' -f1)"
+      grep -Fx "EXPECTED_SUNSHINE_PATCH_SET_SHA256='${sunshineApprovedPatches.patchSetSha256}'" \
+        ${inputdPackage}/bin/korri-device-gate >/dev/null
       test -x ${devApp}/bin/korri-dev
       grep -F 'KORRI_INPUTD_PROFILE=development' ${devApp}/bin/korri-dev >/dev/null
       grep -F 'KORRI_INPUTD_SOURCE="$physical_input"' ${devApp}/bin/korri-dev >/dev/null
