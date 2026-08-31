@@ -1441,7 +1441,8 @@ actual_hostname="$(ssh_exec_deadlined hostname | tr -d '\r\n')" || fail 'could n
 [[ "$actual_hostname" == "$EXPECTED_HOSTNAME" ]] || fail "remote hostname mismatch for $HOST"
 
 local_temp_ledger=''
-mutation_active=false verification_active=false reconcile_active=false attempt_remote_active=false rollback_persistent=false state_file=''
+mutation_active=false verification_active=false reconcile_active=false attempt_remote_active=false rollback_persistent=false
+ledger_identity='' state_content='' baseline_predicates='' accepted_private_state=''
 attempt_nonce='' attempt_boot_id=''
 old_korrid_active=false old_korrid_enabled=false
 old_sunshine_active=false old_sunshine_enabled=false
@@ -1449,13 +1450,13 @@ old_x11_active=false old_x11_enabled=false
 old_pairing_config_mode='' old_pairing_state_mode=''
 failure_resume_boot_id='' verification_resume_state=''
 write_state() {
-  local next="$1" boot_id="${2:-}" resume_state="${3:-}" attempt_nonce="${4:-}"
+  local next="$1" boot_id="${2:-}" resume_state="${3:-}" attempt_nonce="${4:-}" next_content
   case "$next" in
     pending-mutation|pending-mutation-starting|rollback-reboot-verifying|rollback-reboot-verifying-starting|candidate-reboot-verifying|candidate-reboot-verifying-starting)
       [[ "$attempt_nonce" =~ ^[0-9a-f]{64}$ ]] || fail "in-progress state $next requires an exact private attempt nonce"
       ;;
   esac
-  {
+  next_content="$(
     printf 'state=%s\n' "$next"
     printf 'machine_id=%s\n' "$actual_machine_id"
     printf 'hostname=%s\n' "$actual_hostname"
@@ -1466,10 +1467,10 @@ write_state() {
     printf 'boot_id=%s\n' "$boot_id"
     printf 'resume_state=%s\n' "$resume_state"
     printf 'attempt_nonce=%s\n' "$attempt_nonce"
-  } >"$state_file.next"
-  chmod 0600 "$state_file.next"
-  mv -f "$state_file.next" "$state_file"
-  sync -f "$state_file"
+  )"
+  printf '%s\n' "$next_content" | write_replace_ledger_proof state \
+    || fail 'ledger state could not be replaced safely'
+  state_content="$next_content"
 }
 
 run_remote_deadlined() {
@@ -1500,11 +1501,11 @@ cleanup() {
       run_remote_control attempt-finish-root "$attempt_nonce" "$CANDIDATE" >/dev/null 2>&1 || true
       attempt_remote_active=false
     fi
-    if [[ -n "$state_file" ]]; then
+    if [[ -n "$ledger_identity" ]]; then
       write_state failed-needs-inspection "${failure_resume_boot_id:-}" "${resume_after_failure:-}" "$attempt_nonce"
       printf 'device gate: mutation failed; fresh reconcile is required before retry (rollback=%s)\n' "$rollback_ok" >&2
     fi
-  elif [[ "$verification_active" == true && -n "$state_file" ]]; then
+  elif [[ "$verification_active" == true && -n "$ledger_identity" ]]; then
     [[ "$attempt_remote_active" != true ]] \
       || run_remote_control attempt-finish-root "$attempt_nonce" "$CANDIDATE" >/dev/null 2>&1 || true
     write_state failed-needs-inspection "${failure_resume_boot_id:-}" "$verification_resume_state" "$attempt_nonce"
@@ -1513,7 +1514,7 @@ cleanup() {
     else
       printf 'device gate: rollback reboot verification failed; fresh reconcile is required before retry\n' >&2
     fi
-  elif [[ "$reconcile_active" == true && -n "$state_file" ]]; then
+  elif [[ "$reconcile_active" == true && -n "$ledger_identity" ]]; then
     write_state failed-needs-inspection "${failure_resume_boot_id:-}" "$verification_resume_state" "$attempt_nonce"
     printf 'device gate: stale attempt reconciliation failed; inspection is required before retry\n' >&2
   fi
@@ -1536,6 +1537,63 @@ if [[ "$MODE" == inspect ]]; then
   exit 0
 fi
 
+select_ledger_proof_helper() {
+  local gate_real="$1" override="$2"
+  if [[ -n "$override" ]]; then
+    [[ "$gate_real" != /nix/store/* ]] \
+      || fail 'immutable device gate refuses a ledger proof helper override'
+    printf '%s\n' "$override"
+  else
+    [[ -n "$gate_real" ]] || fail 'device gate path is unavailable'
+    printf '%s/korri-ledger-proof\n' "$(dirname "$gate_real")"
+  fi
+}
+
+ledger_proof_helper() {
+  local gate_real
+  if [[ -z "$LEDGER_PROOF_HELPER" ]]; then
+    gate_real="$(realpath -e -- "$0" 2>/dev/null || true)"
+    LEDGER_PROOF_HELPER="$(select_ledger_proof_helper "$gate_real" "${KORRI_LEDGER_PROOF_HELPER:-}")"
+  fi
+  [[ -x "$LEDGER_PROOF_HELPER" ]] || fail 'ledger proof helper is unavailable'
+  printf '%s\n' "$LEDGER_PROOF_HELPER"
+}
+
+test_gate_hook() {
+  local name="$1" gate_real ready release
+  [[ "${KORRI_DEVICE_GATE_TEST_HOOK:-}" == "$name" ]] || return 0
+  gate_real="$(realpath -e -- "$0" 2>/dev/null || true)"
+  [[ "$gate_real" != /nix/store/* ]] || fail 'immutable device gate refuses test hooks'
+  ready="${KORRI_DEVICE_GATE_TEST_HOOK_READY:?}"
+  release="${KORRI_DEVICE_GATE_TEST_HOOK_RELEASE:?}"
+  : >"$ready"
+  while [[ ! -e "$release" ]]; do sleep 0.01; done
+}
+
+read_ledger_proof() {
+  local name="$1" helper
+  helper="$(ledger_proof_helper)"
+  "$helper" read "$LEDGER" "$ledger_identity" "$name"
+}
+
+read_optional_ledger_proof() {
+  local name="$1" helper
+  helper="$(ledger_proof_helper)"
+  "$helper" read-optional "$LEDGER" "$ledger_identity" "$name"
+}
+
+write_new_ledger_proof() {
+  local name="$1" helper
+  helper="$(ledger_proof_helper)"
+  "$helper" write-new "$LEDGER" "$ledger_identity" "$name"
+}
+
+write_replace_ledger_proof() {
+  local name="$1" helper
+  helper="$(ledger_proof_helper)"
+  "$helper" write-replace "$LEDGER" "$ledger_identity" "$name"
+}
+
 root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ledger_parent="$(dirname "$LEDGER")"
 mkdir -p "$ledger_parent"
@@ -1548,21 +1606,31 @@ else
   mkdir -m 0700 "$LEDGER"
 fi
 umask 077
-state_file="$LEDGER/state"
-state="$(awk -F= '$1 == "state" {print $2}' "$state_file" 2>/dev/null || true)"
-if [[ -n "$state" ]]; then
-  grep -Fx "machine_id=$actual_machine_id" "$state_file" >/dev/null || fail 'ledger machine identity differs from target'
-  grep -Fx "hostname=$actual_hostname" "$state_file" >/dev/null || fail 'ledger hostname differs from target'
-  grep -Fx "candidate=$CANDIDATE" "$state_file" >/dev/null || fail 'ledger candidate differs from request'
-  grep -Fx "rollback=$ROLLBACK" "$state_file" >/dev/null || fail 'ledger rollback differs from request'
-  ledger_controller="$(awk -F= '$1 == "expected_controller_id" {print $2}' "$state_file")"
-  ledger_profile="$(awk -F= '$1 == "production_profile" {print $2}' "$state_file")"
-  [[ -z "$ledger_controller" || "$ledger_controller" == "$EXPECTED_CONTROLLER_ID" ]] || fail 'ledger controller identity differs from request'
-  [[ -z "$ledger_profile" || "$ledger_profile" == "$PRODUCTION_PROFILE" ]] || fail 'ledger production profile differs from request'
+helper="$(ledger_proof_helper)"
+ledger_identity="$("$helper" identity "$LEDGER")" \
+  || fail 'ledger directory identity could not be captured safely'
+[[ "$ledger_identity" =~ ^[0-9]+:[0-9]+$ ]] || fail 'ledger directory identity is invalid'
+state_content="$(read_optional_ledger_proof state)" \
+  || fail 'ledger state is unsafe or unreadable'
+test_gate_hook after-state-read
+state="$(awk -F= '$1 == "state" {print $2}' <<<"$state_content")"
+if [[ -n "$state_content" ]]; then
+  for state_key in state machine_id hostname candidate rollback expected_controller_id production_profile boot_id resume_state attempt_nonce; do
+    [[ "$(grep -c "^$state_key=" <<<"$state_content")" -eq 1 ]] \
+      || fail 'ledger state has duplicate or incomplete fields'
+  done
+  grep -Fx "machine_id=$actual_machine_id" <<<"$state_content" >/dev/null || fail 'ledger machine identity differs from target'
+  grep -Fx "hostname=$actual_hostname" <<<"$state_content" >/dev/null || fail 'ledger hostname differs from target'
+  grep -Fx "candidate=$CANDIDATE" <<<"$state_content" >/dev/null || fail 'ledger candidate differs from request'
+  grep -Fx "rollback=$ROLLBACK" <<<"$state_content" >/dev/null || fail 'ledger rollback differs from request'
+  ledger_controller="$(awk -F= '$1 == "expected_controller_id" {print $2}' <<<"$state_content")"
+  ledger_profile="$(awk -F= '$1 == "production_profile" {print $2}' <<<"$state_content")"
+  [[ -z "$ledger_controller" || "$ledger_controller" == "$EXPECTED_CONTROLLER_ID" ]] || fail 'ledger controller identity differs from target'
+  [[ -z "$ledger_profile" || "$ledger_profile" == "$PRODUCTION_PROFILE" ]] || fail 'ledger production profile differs from target'
 fi
 
 if [[ "$MODE" == candidate-reboot-verify && "$state" == candidate-await-reboot ]]; then
-  prior_boot="$(awk -F= '$1 == "boot_id" {print $2}' "$state_file")"
+  prior_boot="$(awk -F= '$1 == "boot_id" {print $2}' <<<"$state_content")"
   failure_resume_boot_id="$prior_boot"
   verification_resume_state='candidate-await-reboot'
 fi
@@ -1587,30 +1655,6 @@ if [[ "$MODE" != reconcile && "$CONFIRM" != "$expected_confirm" ]]; then
   fail 'mutation confirmation token is missing or does not match the captured host and candidate generation'
 fi
 
-ledger_proof_helper() {
-  if [[ -z "$LEDGER_PROOF_HELPER" ]]; then
-    if [[ -n "${KORRI_LEDGER_PROOF_HELPER:-}" ]]; then
-      LEDGER_PROOF_HELPER="$KORRI_LEDGER_PROOF_HELPER"
-    else
-      LEDGER_PROOF_HELPER="$(dirname "$(realpath -e -- "$0")")/korri-ledger-proof"
-    fi
-  fi
-  [[ -x "$LEDGER_PROOF_HELPER" ]] || fail 'ledger proof helper is unavailable'
-  printf '%s\n' "$LEDGER_PROOF_HELPER"
-}
-
-read_ledger_proof() {
-  local name="$1" helper
-  helper="$(ledger_proof_helper)"
-  "$helper" read "$LEDGER" "$name"
-}
-
-write_new_ledger_proof() {
-  local name="$1" helper
-  helper="$(ledger_proof_helper)"
-  "$helper" write-new "$LEDGER" "$name"
-}
-
 validate_private_state_predicates() {
   local predicates="$1" present digest
   [[ "$(grep -c '^sunshine.pairing-state-present=' <<<"$predicates")" -eq 1
@@ -1622,16 +1666,6 @@ validate_private_state_predicates() {
   [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || fail 'Sunshine baseline private-state digest is invalid'
 }
 
-verify_private_state_before_mutation() {
-  local current baseline_digest current_digest
-  validate_private_state_predicates "$baseline_predicates"
-  current="$(run_remote_deadlined predicates "$GAMEPLAY_USER")"
-  validate_private_state_predicates "$current"
-  baseline_digest="$(awk -F= '$1 == "sunshine.private-state-digest" {print $2}' <<<"$baseline_predicates")"
-  current_digest="$(awk -F= '$1 == "sunshine.private-state-digest" {print $2}' <<<"$current")"
-  [[ "$current_digest" == "$baseline_digest" ]] \
-    || fail 'Sunshine private state changed before mutation'
-}
 
 extract_automated_private_digest() {
   local evidence="$1" digest
@@ -1647,6 +1681,10 @@ save_accepted_private_digest() {
   digest="$(extract_automated_private_digest "$evidence")"
   printf '%s\n' "$digest" | write_new_ledger_proof sunshine-private-state.accepted \
     || fail 'accepted Sunshine private-state proof could not be stored safely'
+  if [[ "${KORRI_DEVICE_GATE_TEST_FAIL_AFTER_ACCEPTED_PROOF:-}" == true ]]; then
+    [[ "$(realpath -e -- "$0")" != /nix/store/* ]] || fail 'immutable device gate refuses test failure injection'
+    fail 'modeled failure after accepted Sunshine proof commit'
+  fi
 }
 
 verify_accepted_private_digest() {
@@ -1665,7 +1703,7 @@ verify_accepted_private_digest() {
 if baseline_predicates="$(read_ledger_proof baseline.predicates 2>/dev/null)"; then
   :
 else
-  [[ -z "$state" ]] || fail 'ledger state exists without a safe baseline proof'
+  [[ -z "$state_content" ]] || fail 'ledger state exists without a safe baseline proof'
   baseline_predicates="$(run_remote_deadlined predicates "$GAMEPLAY_USER")"
   grep -Fx "generation.current=$ROLLBACK" <<<"$baseline_predicates" >/dev/null \
     || fail 'baseline current generation is not the rollback generation'
@@ -1681,6 +1719,11 @@ else
   sync -f "$LEDGER/baseline.txt"
 fi
 validate_private_state_predicates "$baseline_predicates"
+grep -Fx "generation.current=$ROLLBACK" <<<"$baseline_predicates" >/dev/null \
+  || fail 'retained baseline current generation differs from requested rollback'
+grep -Fx "generation.default=$ROLLBACK" <<<"$baseline_predicates" >/dev/null \
+  || fail 'retained baseline default generation differs from requested rollback'
+test_gate_hook before-accepted-proof-read
 case "$state" in
   candidate-accepted-pending-boot|candidate-await-reboot|candidate-reboot-verifying|candidate-reboot-verifying-starting|complete)
     accepted_private_state="$(read_ledger_proof sunshine-private-state.accepted 2>/dev/null)" \
@@ -1736,12 +1779,8 @@ compare_baseline() {
   else
     current="$(run_remote_deadlined predicates "$GAMEPLAY_USER")"
   fi
-  if [[ "$baseline_predicates" != "$current" ]]; then
-    printf '%s\n' "$current" >"$LEDGER/current.predicates"
-    chmod 0600 "$LEDGER/current.predicates"
-    fail 'rollback predicates differ from the sanitized baseline; inspection is required'
-  fi
-  rm -f "$LEDGER/current.predicates"
+  [[ "$baseline_predicates" == "$current" ]] \
+    || fail 'rollback predicates differ from the sanitized baseline; inspection is required'
 }
 
 if [[ "$MODE" == reconcile ]]; then
@@ -1749,10 +1788,10 @@ if [[ "$MODE" == reconcile ]]; then
     failed-needs-inspection|pending-mutation|pending-mutation-starting|rollback-reboot-verifying|rollback-reboot-verifying-starting|candidate-reboot-verifying|candidate-reboot-verifying-starting) ;;
     *) fail 'reconcile requires a failed or in-progress ledger state' ;;
   esac
-  grep -q '^resume_state=' "$state_file" || fail 'reconcile requires an explicit ledger resume state'
-  stale_nonce="$(awk -F= '$1 == "attempt_nonce" {print $2}' "$state_file")"
-  resume="$(awk -F= '$1 == "resume_state" {print $2}' "$state_file")"
-  resume_boot="$(awk -F= '$1 == "boot_id" {print $2}' "$state_file")"
+  grep -q '^resume_state=' <<<"$state_content" || fail 'reconcile requires an explicit ledger resume state'
+  stale_nonce="$(awk -F= '$1 == "attempt_nonce" {print $2}' <<<"$state_content")"
+  resume="$(awk -F= '$1 == "resume_state" {print $2}' <<<"$state_content")"
+  resume_boot="$(awk -F= '$1 == "boot_id" {print $2}' <<<"$state_content")"
   case "$state" in
     pending-mutation|pending-mutation-starting)
       case "$resume" in
@@ -1767,8 +1806,8 @@ if [[ "$MODE" == reconcile ]]; then
     candidate-reboot-verifying|candidate-reboot-verifying-starting)
       [[ "$resume" == candidate-await-reboot ]] \
         || fail 'candidate reboot verification ledger has an invalid resume state'
-      if ! grep -Fx "expected_controller_id=$EXPECTED_CONTROLLER_ID" "$state_file" >/dev/null \
-        || ! grep -Fx "production_profile=$PRODUCTION_PROFILE" "$state_file" >/dev/null; then
+      if ! grep -Fx "expected_controller_id=$EXPECTED_CONTROLLER_ID" <<<"$state_content" >/dev/null \
+        || ! grep -Fx "production_profile=$PRODUCTION_PROFILE" <<<"$state_content" >/dev/null; then
         fail 'candidate reboot verification ledger lacks the exact controller and profile'
       fi
       ;;
@@ -1891,7 +1930,7 @@ require_hitl() {
 
 begin_mutation() {
   rollback_persistent="$1"
-  verify_private_state_before_mutation
+  compare_baseline
   attempt_boot_id="$(run_remote_deadlined boot-id)"
   mutation_active=true
   start_attempt pending-mutation
@@ -1937,7 +1976,7 @@ case "$MODE" in
     ;;
   rollback-reboot-verify)
     [[ "$state" == rollback-await-reboot ]] || fail 'rollback reboot verification requires rollback-await-reboot ledger state'
-    prior_boot="$(awk -F= '$1 == "boot_id" {print $2}' "$state_file")"
+    prior_boot="$(awk -F= '$1 == "boot_id" {print $2}' <<<"$state_content")"
     current_boot="$(run_remote_deadlined boot-id)"
     [[ "$current_boot" != "$prior_boot" ]] || fail 'rollback reboot verification requires a new boot ID'
     [[ "$(run_remote_deadlined current-generation)" == "$ROLLBACK" ]] || fail 'rebooted system is not the rollback generation'
@@ -1995,4 +2034,4 @@ case "$MODE" in
     ;;
 esac
 
-printf 'device-gate mode=%s state=%s host=%s mutation=confirmed\n' "$MODE" "$(awk -F= '$1 == "state" {print $2}' "$state_file")" "$actual_hostname"
+printf 'device-gate mode=%s state=%s host=%s mutation=confirmed\n' "$MODE" "$(awk -F= '$1 == "state" {print $2}' <<<"$state_content")" "$actual_hostname"

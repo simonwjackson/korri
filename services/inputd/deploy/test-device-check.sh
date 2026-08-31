@@ -618,9 +618,10 @@ proof_outside="$TMP/proof-outside"
 mkdir -m 0700 "$proof_ledger"
 printf '%s\n' outside >"$proof_outside"
 ln -s "$proof_outside" "$proof_ledger/baseline.predicates.next"
-printf '%s\n' proof | "$KORRI_LEDGER_PROOF_HELPER" write-new "$proof_ledger" baseline.predicates
+proof_identity="$("$KORRI_LEDGER_PROOF_HELPER" identity "$proof_ledger")"
+printf '%s\n' proof | "$KORRI_LEDGER_PROOF_HELPER" write-new "$proof_ledger" "$proof_identity" baseline.predicates
 [[ "$(cat "$proof_outside")" == outside ]]
-[[ "$("$KORRI_LEDGER_PROOF_HELPER" read "$proof_ledger" baseline.predicates)" == proof ]]
+[[ "$("$KORRI_LEDGER_PROOF_HELPER" read "$proof_ledger" "$proof_identity" baseline.predicates)" == proof ]]
 # The test extracts the exact gate function under test.
 # shellcheck disable=SC1090
 source <(awk '
@@ -711,6 +712,21 @@ assert_no_mutation() {
     exit 1
   fi
 }
+
+SELECT_LEDGER_HELPER_SOURCE="$(awk '
+  /^select_ledger_proof_helper\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+run_helper_selection() (
+  # shellcheck disable=SC2329 # Invoked by the production selector loaded with eval.
+  fail() { printf 'device gate: %s\n' "$*" >&2; exit 1; }
+  eval "$SELECT_LEDGER_HELPER_SOURCE"
+  select_ledger_proof_helper "$1" "$2"
+)
+assert_fails_with 'immutable device gate refuses a ledger proof helper override' \
+  run_helper_selection /nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-korri-inputd/bin/korri-device-gate /tmp/forged-helper
+[[ "$(run_helper_selection "$GATE" "$KORRI_LEDGER_PROOF_HELPER")" == "$KORRI_LEDGER_PROOF_HELPER" ]]
 
 common_for() {
   local ledger="$1"
@@ -2002,6 +2018,67 @@ fi
 [[ "$(stat -c %a "$flow_ledger/baseline.predicates")" == 600 ]]
 [[ "$(wc -l <"$flow_ledger/consumed-gates")" -eq 7 ]]
 
+# Retained baselines must still name the requested rollback and exactly match
+# every current rollback predicate before any mutation is armed.
+for stale_kind in generation service; do
+  stale_ledger="$TMP/stale-$stale_kind-ledger"
+  cp -a "$flow_ledger" "$stale_ledger"
+  case "$stale_kind" in
+    generation)
+      sed "s|^generation.current=.*|generation.current=$CANDIDATE|" \
+        "$stale_ledger/baseline.predicates" >"$stale_ledger/baseline.next"
+      expected_stale='retained baseline current generation differs from requested rollback'
+      ;;
+    service)
+      sed 's/^old-user.sunshine.active=true$/old-user.sunshine.active=false/' \
+        "$stale_ledger/baseline.predicates" >"$stale_ledger/baseline.next"
+      expected_stale='rollback predicates differ from the sanitized baseline'
+      ;;
+  esac
+  chmod 0600 "$stale_ledger/baseline.next"
+  mv "$stale_ledger/baseline.next" "$stale_ledger/baseline.predicates"
+  mapfile -d '' -t stale_args < <(common_for "$stale_ledger")
+  export HARNESS_LEDGER="$stale_ledger"
+  : >"$HARNESS_LOG"
+  assert_fails_with "$expected_stale" run_gate --mode inject-health-failure \
+    "${stale_args[@]}" --confirm "$confirm"
+  assert_no_mutation
+done
+
+# One session identity binds state to every later baseline proof operation.
+identity_race_ledger="$TMP/identity-race-ledger"
+identity_race_old="$TMP/identity-race-ledger-old"
+cp -a "$flow_ledger" "$identity_race_ledger"
+mapfile -d '' -t identity_race_args < <(common_for "$identity_race_ledger")
+export HARNESS_LEDGER="$identity_race_ledger"
+export KORRI_DEVICE_GATE_TEST_HOOK=after-state-read
+export KORRI_DEVICE_GATE_TEST_HOOK_READY="$TMP/identity-race.ready"
+export KORRI_DEVICE_GATE_TEST_HOOK_RELEASE="$TMP/identity-race.release"
+: >"$HARNESS_LOG"
+run_gate --mode inject-health-failure "${identity_race_args[@]}" --confirm "$confirm" \
+  >"$TMP/identity-race.stdout" 2>"$TMP/identity-race.stderr" &
+identity_race_pid=$!
+for _ in $(seq 1 300); do
+  [[ -e "$KORRI_DEVICE_GATE_TEST_HOOK_READY" ]] && break
+  kill -0 "$identity_race_pid" 2>/dev/null || break
+  sleep 0.01
+done
+[[ -e "$KORRI_DEVICE_GATE_TEST_HOOK_READY" ]]
+mv "$identity_race_ledger" "$identity_race_old"
+mkdir -m 0700 "$identity_race_ledger"
+cp -a "$identity_race_old/state" "$identity_race_old/baseline.predicates" "$identity_race_ledger/"
+printf '%s\n' outside >"$TMP/identity-race-outside"
+ln -s "$TMP/identity-race-outside" "$identity_race_ledger/sunshine-private-state.accepted"
+touch "$KORRI_DEVICE_GATE_TEST_HOOK_RELEASE"
+if wait "$identity_race_pid"; then
+  printf 'ledger directory replacement unexpectedly passed\n' >&2
+  exit 1
+fi
+grep -E 'safe baseline proof|ledger proof' "$TMP/identity-race.stderr" >/dev/null
+[[ "$(cat "$TMP/identity-race-outside")" == outside ]]
+assert_no_mutation
+unset KORRI_DEVICE_GATE_TEST_HOOK KORRI_DEVICE_GATE_TEST_HOOK_READY KORRI_DEVICE_GATE_TEST_HOOK_RELEASE
+
 # Resume always reads the baseline proof through the descriptor-bound helper.
 for proof_model in symlink hardlink wrong-mode; do
   proof_ledger="$TMP/baseline-proof-$proof_model-ledger"
@@ -2080,10 +2157,65 @@ run_gate --mode rollback-reboot-verify "${flow_args[@]}" --confirm "$confirm" >/
 grep -Fx 'state=rollback-reboot-green' "$flow_ledger/state" >/dev/null
 grep -E 'wrapper=attempt-command .*action=rollback-gates' "$HARNESS_LOG" >/dev/null
 
+# A failure after the accepted digest rename rolls back, reconciles, and retries
+# through the idempotent exact-content write without deleting the proof.
+accepted_retry_ledger="$TMP/accepted-retry-ledger"
+cp -a "$flow_ledger" "$accepted_retry_ledger"
+mapfile -d '' -t accepted_retry_args < <(common_for "$accepted_retry_ledger")
+export HARNESS_LEDGER="$accepted_retry_ledger"
+export KORRI_DEVICE_GATE_TEST_FAIL_AFTER_ACCEPTED_PROOF=true
+if run_interactive persistent-switch pending-mutation "$accepted_retry_ledger" "$TMP/accepted-retry-fail.tty" \
+  "${accepted_retry_args[@]}" --confirm "$confirm"; then
+  printf 'post-accepted-proof failure unexpectedly passed\n' >&2
+  exit 1
+fi
+grep -F 'modeled failure after accepted Sunshine proof commit' "$TMP/accepted-retry-fail.tty" >/dev/null
+grep -Fx 'state=failed-needs-inspection' "$accepted_retry_ledger/state" >/dev/null
+[[ -s "$accepted_retry_ledger/sunshine-private-state.accepted" ]]
+unset KORRI_DEVICE_GATE_TEST_FAIL_AFTER_ACCEPTED_PROOF
+run_gate --mode reconcile "${accepted_retry_args[@]}" >/dev/null
+grep -Fx 'state=rollback-reboot-green' "$accepted_retry_ledger/state" >/dev/null
+run_interactive persistent-switch pending-mutation "$accepted_retry_ledger" "$TMP/accepted-retry-pass.tty" \
+  "${accepted_retry_args[@]}" --confirm "$confirm"
+grep -Fx 'state=candidate-await-reboot' "$accepted_retry_ledger/state" >/dev/null
+
+export HARNESS_LEDGER="$flow_ledger"
 run_interactive persistent-switch pending-mutation "$flow_ledger" "$TMP/persistent.tty" \
   "${flow_args[@]}" --confirm "$confirm"
 grep -Fx 'state=candidate-await-reboot' "$flow_ledger/state" >/dev/null
 export HARNESS_BOOT_ID=boot-three HARNESS_CURRENT_GENERATION="$CANDIDATE"
+
+# The accepted proof cannot be read from a replacement ledger directory after
+# state was bound to the original directory identity.
+accepted_identity_ledger="$TMP/accepted-identity-ledger"
+accepted_identity_old="$TMP/accepted-identity-ledger-old"
+cp -a "$flow_ledger" "$accepted_identity_ledger"
+mapfile -d '' -t accepted_identity_args < <(common_for "$accepted_identity_ledger")
+export HARNESS_LEDGER="$accepted_identity_ledger"
+export KORRI_DEVICE_GATE_TEST_HOOK=before-accepted-proof-read
+export KORRI_DEVICE_GATE_TEST_HOOK_READY="$TMP/accepted-identity.ready"
+export KORRI_DEVICE_GATE_TEST_HOOK_RELEASE="$TMP/accepted-identity.release"
+run_gate --mode candidate-reboot-verify "${accepted_identity_args[@]}" --confirm "$confirm" \
+  >"$TMP/accepted-identity.stdout" 2>"$TMP/accepted-identity.stderr" &
+accepted_identity_pid=$!
+for _ in $(seq 1 300); do
+  [[ -e "$KORRI_DEVICE_GATE_TEST_HOOK_READY" ]] && break
+  kill -0 "$accepted_identity_pid" 2>/dev/null || break
+  sleep 0.01
+done
+[[ -e "$KORRI_DEVICE_GATE_TEST_HOOK_READY" ]]
+mv "$accepted_identity_ledger" "$accepted_identity_old"
+mkdir -m 0700 "$accepted_identity_ledger"
+cp -a "$accepted_identity_old/state" "$accepted_identity_old/baseline.predicates" \
+  "$accepted_identity_old/sunshine-private-state.accepted" "$accepted_identity_ledger/"
+touch "$KORRI_DEVICE_GATE_TEST_HOOK_RELEASE"
+if wait "$accepted_identity_pid"; then
+  printf 'accepted proof ledger replacement unexpectedly passed\n' >&2
+  exit 1
+fi
+grep -F 'accepted Sunshine private-state proof is absent or unsafe' "$TMP/accepted-identity.stderr" >/dev/null
+unset KORRI_DEVICE_GATE_TEST_HOOK KORRI_DEVICE_GATE_TEST_HOOK_READY KORRI_DEVICE_GATE_TEST_HOOK_RELEASE
+export HARNESS_LEDGER="$flow_ledger"
 
 # Candidate reboot proof rejects swapped or unsafe accepted-digest artifacts.
 for proof_model in symlink hardlink wrong-mode; do
@@ -2264,6 +2396,7 @@ export HARNESS_LEDGER="$resume_ledger"
 awk 'BEGIN{done=0} /^state=/{print "state=rollback-reboot-green"; done=1; next} {print} END{if(!done) print "state=rollback-reboot-green"}' \
   "$resume_ledger/state" >"$resume_ledger/state.next"
 mv "$resume_ledger/state.next" "$resume_ledger/state"
+chmod 0600 "$resume_ledger/state"
 rm -f "$resume_ledger/sunshine-private-state.accepted"
 export HARNESS_BOOT_COUNT_FILE="$TMP/boot-count" HARNESS_FAIL_BOOT_ID_AT=2
 : >"$HARNESS_BOOT_COUNT_FILE"
