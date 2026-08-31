@@ -25,6 +25,7 @@ Restore Korri's Linux normalized-input boundary using a pinned upstream InputPlu
 - The final debug APK builds successfully. An earlier compatible debug APK remains installed on `usu`, but the device was reported unavailable before this final build could be installed. The prior automated smoke stopped because Android denied `/storage/emulated/0/korri/upstreams.json`; no permission was changed automatically.
 - Read-only Zao inspection at the new candidate found the rollback generation still current/default, the exact controller on USB `3-4`, no marker, an inactive lease, and zero game units.
 - `nix run .#inputd-check`, `nix run .#korrid-check`, Android JVM/APK/native checks, portal/Shift checks, and all Sunshine package/protocol checks pass at Korri commit `6f34f1fddee0d5b0eb75e819ed218a4b694b566e`.
+- The final repository review found no remaining P0-P1 findings after the ACL, private-state isolation, evidence, bundle-health, Sunshine protocol-lifetime, package-identity, and Android replacement-owner fixes. Physical acceptance remains separate and incomplete.
 - Mountainous branch `unified` has the Korri lock committed at `e3f988e`. A concurrent unrelated modification exists in `features/disk-array/nixos.nix`; this rollout did not modify or stage it. Zao still imports only `nixosModules.korri-linux-host` and pins the exact local Korri revision above. Nothing is pushed and no PR exists.
 - The current candidate is `/nix/store/2fbh1np1anck1y26b04v134rl0chk9m2-nixos-system-zao-26.05.20260313.c06b4ae`. Its gate digest is `02e35bea4b68d9aa044a935a8e8715adc9e3a3410e685e5515107ae4d427dfef`. It is rooted on Zao at `/nix/var/nix/gcroots/korri-candidate-unified-e3f988e`.
 - The rollback generation remains `/nix/store/ac46r72fh00p9g81z5hv45pw8zdsbpy4-nixos-system-zao-26.05.20260313.c06b4ae`.
@@ -69,4 +70,4 @@ Restore Korri's Linux normalized-input boundary using a pinned upstream InputPlu
 - [x] U5: NixOS modules, service isolation, and project checks
 - [x] U6: Linux RetroArch normalized-input policy
 - [ ] U7: Reversible Zao rollout, rollback, and reboot proof
-- [ ] Repository-wide verification and review
+- [x] Repository-wide verification and review
