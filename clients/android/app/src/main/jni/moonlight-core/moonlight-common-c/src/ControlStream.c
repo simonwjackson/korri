@@ -1,7 +1,9 @@
 #include "Limelight-internal.h"
+#include "SunshineRuntimeSettingsDispatch.h"
 
 // This is a private header, but it just contains some time macros
 #include <enet/time.h>
+#include <stdatomic.h>
 
 #ifndef MIN
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
@@ -90,6 +92,11 @@ static SOCKET ctlSock = INVALID_SOCKET;
 static ENetHost* client;
 static ENetPeer* peer;
 static PLT_MUTEX enetMutex;
+static PLT_MUTEX runtimeSettingsMutex;
+static SS_RUNTIME_SETTINGS_STATE runtimeSettingsState;
+static SS_RUNTIME_SETTINGS_DISPATCH runtimeSettingsDispatch;
+static atomic_bool runtimeSettingsPublished = ATOMIC_VAR_INIT(false);
+static uint64_t runtimeSettingsSessionEpoch;
 static bool usePeriodicPing;
 
 static PLT_THREAD lossStatsThread;
@@ -318,6 +325,89 @@ static bool supportsIdrFrameRequest;
 #define LOSS_REPORT_INTERVAL_MS 50
 #define PERIODIC_PING_INTERVAL_MS 100
 
+static bool sendMessageAndForget(short ptype, short paylen, const void* payload,
+                                 uint8_t channelId, uint32_t flags, bool moreData);
+
+static void runtimeSettingsLock(void* context) {
+    (void)context;
+    PltLockMutex(&runtimeSettingsMutex);
+}
+
+static void runtimeSettingsUnlock(void* context) {
+    (void)context;
+    PltUnlockMutex(&runtimeSettingsMutex);
+}
+
+static uint64_t runtimeSettingsClock(void* context) {
+    (void)context;
+    return PltGetMillis();
+}
+
+static int runtimeSettingsReady(void* context) {
+    int result;
+    (void)context;
+    PltLockMutex(&enetMutex);
+    if (!IS_SUNSHINE()) {
+        result = LI_RUNTIME_SETTINGS_ERROR_NOT_SUNSHINE;
+    }
+    else if (AppVersionQuad[0] < 5 || !encryptedControlStream || client == NULL ||
+             peer == NULL || peer->state != ENET_PEER_STATE_CONNECTED || stopping) {
+        result = LI_RUNTIME_SETTINGS_ERROR_CONTROL_NOT_READY;
+    }
+    else {
+        result = 0;
+    }
+    PltUnlockMutex(&enetMutex);
+    return result;
+}
+
+static bool runtimeSettingsSend(void* context, const uint8_t* payload, size_t payloadLength) {
+    (void)context;
+    return sendMessageAndForget(SS_RUNTIME_SETTINGS_REQUEST_PACKET,
+                                (short)payloadLength,
+                                payload,
+                                CTRL_CHANNEL_GENERIC,
+                                ENET_PACKET_FLAG_RELIABLE,
+                                false);
+}
+
+static void initializeRuntimeSettingsSupport(void) {
+    if (!atomic_load_explicit(&runtimeSettingsPublished, memory_order_acquire)) {
+        PltCreateMutex(&runtimeSettingsMutex);
+        SsRuntimeSettingsInitialize(&runtimeSettingsState);
+        SsRuntimeSettingsDispatchInitialize(&runtimeSettingsDispatch,
+                                            &runtimeSettingsState,
+                                            NULL,
+                                            runtimeSettingsLock,
+                                            runtimeSettingsUnlock,
+                                            runtimeSettingsReady,
+                                            runtimeSettingsSend,
+                                            runtimeSettingsClock);
+        atomic_store_explicit(&runtimeSettingsPublished, true, memory_order_release);
+    }
+}
+
+static void beginRuntimeSettingsSession(void) {
+    initializeRuntimeSettingsSupport();
+    SsRuntimeSettingsDispatchBeginSession(&runtimeSettingsDispatch,
+                                          ++runtimeSettingsSessionEpoch);
+}
+
+static void endRuntimeSettingsSession(void) {
+    if (atomic_load_explicit(&runtimeSettingsPublished, memory_order_acquire)) {
+        SsRuntimeSettingsDispatchEndSession(&runtimeSettingsDispatch);
+    }
+}
+
+void connectionRuntimeSettingsStreamEnded(void) {
+    endRuntimeSettingsSession();
+}
+
+static void terminateControlConnection(int errorCode) {
+    connectionRuntimeSettingsStreamEnded();
+    ListenerCallbacks.connectionTerminated(errorCode);
+}
+
 // Initializes the control stream
 int initializeControlStream(void) {
     stopping = false;
@@ -326,6 +416,7 @@ int initializeControlStream(void) {
     LbqInitializeLinkedBlockingQueue(&frameFecStatusQueue, 8); // Limits number of frame status reports per periodic ping interval
     LbqInitializeLinkedBlockingQueue(&asyncCallbackQueue, 30);
     PltCreateMutex(&enetMutex);
+    beginRuntimeSettingsSession();
 
     encryptedControlStream = APP_VERSION_AT_LEAST(7, 1, 431);
 
@@ -401,6 +492,7 @@ void destroyControlStream(void) {
     freeBasicLbqList(LbqDestroyLinkedBlockingQueue(&frameFecStatusQueue));
     freeBasicLbqList(LbqDestroyLinkedBlockingQueue(&asyncCallbackQueue));
 
+    endRuntimeSettingsSession();
     PltDeleteMutex(&enetMutex);
 }
 
@@ -856,6 +948,60 @@ static bool sendMessageAndForget(short ptype, short paylen, const void* payload,
     return ret;
 }
 
+static int sendRuntimeSettingsRequest(uint32_t requestId,
+                                      uint16_t operation,
+                                      uint32_t value,
+                                      uint32_t secondaryValue) {
+    if (!atomic_load_explicit(&runtimeSettingsPublished, memory_order_acquire)) {
+        return LI_RUNTIME_SETTINGS_ERROR_CONTROL_NOT_READY;
+    }
+    return SsRuntimeSettingsDispatchRequest(&runtimeSettingsDispatch,
+                                            requestId,
+                                            operation,
+                                            value,
+                                            secondaryValue);
+}
+
+int LiQuerySunshineRuntimeSettingsCapabilities(uint32_t requestId) {
+    return sendRuntimeSettingsRequest(requestId,
+                                      SS_RUNTIME_SETTINGS_OPERATION_QUERY_CAPABILITIES,
+                                      0,
+                                      0);
+}
+
+int LiSetSunshineRuntimeBitrate(uint32_t requestId, uint32_t bitrateKbps) {
+    return sendRuntimeSettingsRequest(requestId,
+                                      SS_RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS,
+                                      bitrateKbps,
+                                      0);
+}
+
+int LiSetSunshineRuntimeFps(uint32_t requestId, uint32_t fps) {
+    return sendRuntimeSettingsRequest(requestId,
+                                      SS_RUNTIME_SETTINGS_OPERATION_SET_FPS,
+                                      fps,
+                                      0);
+}
+
+int LiSetSunshineRuntimeResolution(uint32_t requestId, uint32_t width, uint32_t height) {
+    return sendRuntimeSettingsRequest(requestId,
+                                      SS_RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION,
+                                      width,
+                                      height);
+}
+
+void LiGetSunshineRuntimeSettingsSnapshot(PSS_RUNTIME_SETTINGS_SNAPSHOT snapshot) {
+    if (snapshot == NULL) {
+        return;
+    }
+    if (!atomic_load_explicit(&runtimeSettingsPublished, memory_order_acquire)) {
+        memset(snapshot, 0, sizeof(*snapshot));
+        snapshot->version = SS_RUNTIME_SETTINGS_SNAPSHOT_VERSION;
+        return;
+    }
+    SsRuntimeSettingsDispatchGetSnapshot(&runtimeSettingsDispatch, snapshot);
+}
+
 static bool sendMessageAndDiscardReply(short ptype, short paylen, const void* payload, uint8_t channelId, uint32_t flags, bool moreData) {
     if (AppVersionQuad[0] >= 5) {
         if (!sendMessageEnet(ptype, paylen, payload, channelId, flags, moreData)) {
@@ -1112,6 +1258,15 @@ static void controlReceiveThreadFunc(void* context) {
     while (!PltIsThreadInterrupted(&controlReceiveThread)) {
         ENetEvent event;
         enet_uint32 waitTimeMs;
+        uint32_t runtimeSettingsWaitMs;
+        uint64_t nowMs = PltGetMillis();
+
+        PltLockMutex(&runtimeSettingsMutex);
+        SsRuntimeSettingsCheckTimeouts(&runtimeSettingsState, nowMs);
+        runtimeSettingsWaitMs = SsRuntimeSettingsNextTimeoutMs(&runtimeSettingsState,
+                                                               nowMs,
+                                                               SS_RUNTIME_SETTINGS_TIMEOUT_MS);
+        PltUnlockMutex(&runtimeSettingsMutex);
 
         PltLockMutex(&enetMutex);
 
@@ -1130,6 +1285,9 @@ static void controlReceiveThreadFunc(void* context) {
                 // do a tiny sleep for another iteration before the timeout is ready to be serviced.
                 waitTimeMs = ENET_TIME_DIFFERENCE(peer->nextTimeout, client->serviceTime) + 1;
             }
+
+            // Do not sleep through the earliest active runtime-settings deadline.
+            waitTimeMs = MIN(waitTimeMs, runtimeSettingsWaitMs);
 
             // Ensure we don't sleep through a ping
             if (peer->lastReceiveTime && peer->lastSendTime) {
@@ -1177,7 +1335,7 @@ static void controlReceiveThreadFunc(void* context) {
                         // assume the server died tragically, so go ahead and tear down.
                         PltUnlockMutex(&enetMutex);
                         Limelog("Disconnect event timeout expired\n");
-                        ListenerCallbacks.connectionTerminated(-1);
+                        terminateControlConnection(-1);
                         return;
                     }
                 }
@@ -1199,7 +1357,7 @@ static void controlReceiveThreadFunc(void* context) {
 
             err = LastSocketFail();
             Limelog("Control stream connection failed: %d\n", err);
-            ListenerCallbacks.connectionTerminated(err);
+            terminateControlConnection(err);
             return;
         }
 
@@ -1261,6 +1419,20 @@ static void controlReceiveThreadFunc(void* context) {
             enet_packet_destroy(event.packet);
 
             // All below codepaths must free ctlHdr!!!
+
+            if (ctlHdr->type == SS_RUNTIME_SETTINGS_ACK_PACKET) {
+                int result;
+                PltLockMutex(&runtimeSettingsMutex);
+                result = SsRuntimeSettingsProcessAck(&runtimeSettingsState,
+                                                     (const uint8_t*)(ctlHdr + 1),
+                                                     packetLength - sizeof(*ctlHdr));
+                PltUnlockMutex(&runtimeSettingsMutex);
+                if (result == LI_RUNTIME_SETTINGS_ERROR_MALFORMED_ACK) {
+                    Limelog("Discarding malformed Sunshine runtime-settings acknowledgement\n");
+                }
+                free(ctlHdr);
+                continue;
+            }
 
             // Process HDR data immediately to update global HDR enabled state and HDR metadata.
             // The actual client callback will be invoked in the async callback thread.
@@ -1370,7 +1542,7 @@ static void controlReceiveThreadFunc(void* context) {
                 PltLockMutex(&enetMutex);
                 enet_peer_disconnect_now(peer, 0);
                 PltUnlockMutex(&enetMutex);
-                ListenerCallbacks.connectionTerminated((int)terminationErrorCode);
+                terminateControlConnection((int)terminationErrorCode);
                 free(ctlHdr);
                 return;
             }
@@ -1379,7 +1551,7 @@ static void controlReceiveThreadFunc(void* context) {
         }
         else if (event.type == ENET_EVENT_TYPE_DISCONNECT) {
             Limelog("Control stream received unexpected disconnect event\n");
-            ListenerCallbacks.connectionTerminated(-1);
+            terminateControlConnection(-1);
             return;
         }
     }
@@ -1412,7 +1584,7 @@ static void lossStatsThreadFunc(void* context) {
                                          ENET_PACKET_FLAG_UNSEQUENCED,
                                          LbqGetItemCount(&frameFecStatusQueue) > 0)) {
                         Limelog("Loss Stats: Sending frame FEC status message failed: %d\n", (int)LastSocketError());
-                        ListenerCallbacks.connectionTerminated(LastSocketFail());
+                        terminateControlConnection(LastSocketFail());
                         free(queuedFrameStatus);
                         return;
                     }
@@ -1434,7 +1606,7 @@ static void lossStatsThreadFunc(void* context) {
                                       ENET_PACKET_FLAG_RELIABLE,
                                       false)) {
                 Limelog("Loss Stats: Transaction failed: %d\n", (int)LastSocketError());
-                ListenerCallbacks.connectionTerminated(LastSocketFail());
+                terminateControlConnection(LastSocketFail());
                 return;
             }
 
@@ -1451,7 +1623,7 @@ static void lossStatsThreadFunc(void* context) {
         lossStatsPayload = malloc(payloadLengths[IDX_LOSS_STATS]);
         if (lossStatsPayload == NULL) {
             Limelog("Loss Stats: malloc() failed\n");
-            ListenerCallbacks.connectionTerminated(-1);
+            terminateControlConnection(-1);
             return;
         }
 
@@ -1475,7 +1647,7 @@ static void lossStatsThreadFunc(void* context) {
                                       false)) {
                 free(lossStatsPayload);
                 Limelog("Loss Stats: Transaction failed: %d\n", (int)LastSocketError());
-                ListenerCallbacks.connectionTerminated(LastSocketFail());
+                terminateControlConnection(LastSocketFail());
                 return;
             }
 
@@ -1514,7 +1686,7 @@ static void requestIdrFrame(void) {
                                         ENET_PACKET_FLAG_RELIABLE,
                                         false)) {
             Limelog("Request IDR Frame: Transaction failed: %d\n", (int)LastSocketError());
-            ListenerCallbacks.connectionTerminated(LastSocketFail());
+            terminateControlConnection(LastSocketFail());
             return;
         }
     }
@@ -1527,7 +1699,7 @@ static void requestIdrFrame(void) {
                                         ENET_PACKET_FLAG_RELIABLE,
                                         false)) {
             Limelog("Request IDR Frame: Transaction failed: %d\n", (int)LastSocketError());
-            ListenerCallbacks.connectionTerminated(LastSocketFail());
+            terminateControlConnection(LastSocketFail());
             return;
         }
     }
@@ -1552,7 +1724,7 @@ static void requestInvalidateReferenceFrames(uint32_t startFrame, uint32_t endFr
                                     ENET_PACKET_FLAG_RELIABLE,
                                     false)) {
         Limelog("Request Invaldiate Reference Frames: Transaction failed: %d\n", (int)LastSocketError());
-        ListenerCallbacks.connectionTerminated(LastSocketFail());
+        terminateControlConnection(LastSocketFail());
         return;
     }
 
@@ -1608,6 +1780,7 @@ static void requestIdrFrameFunc(void* context) {
 
 // Stops the control stream
 int stopControlStream(void) {
+    endRuntimeSettingsSession();
     stopping = true;
     LbqSignalQueueShutdown(&invalidReferenceFrameTuples);
     LbqSignalQueueShutdown(&frameFecStatusQueue);
@@ -2034,6 +2207,7 @@ int startControlStream(void) {
         }
     }
 
+    SsRuntimeSettingsDispatchSetActive(&runtimeSettingsDispatch, true);
     return 0;
 }
 

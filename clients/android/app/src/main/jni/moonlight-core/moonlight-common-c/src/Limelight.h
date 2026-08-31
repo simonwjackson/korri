@@ -967,6 +967,96 @@ bool LiGetHdrMetadata(PSS_HDR_METADATA metadata);
 // frame, just that an IDR frame will arrive soon.
 void LiRequestIdrFrame(void);
 
+// Sunshine runtime-settings protocol constants. These values are a private
+// Sunshine extension and must stay equal to the host protocol.
+#define SS_RUNTIME_SETTINGS_OPERATION_QUERY_CAPABILITIES 0
+#define SS_RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS 1
+#define SS_RUNTIME_SETTINGS_OPERATION_SET_FPS 2
+#define SS_RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION 3
+
+#define SS_RUNTIME_SETTINGS_STATUS_APPLIED 0
+#define SS_RUNTIME_SETTINGS_STATUS_FAILED 1
+#define SS_RUNTIME_SETTINGS_STATUS_INVALID 2
+#define SS_RUNTIME_SETTINGS_STATUS_DISABLED 3
+
+#define SS_RUNTIME_SETTINGS_REASON_NONE 0
+#define SS_RUNTIME_SETTINGS_REASON_GATE_DISABLED 1
+#define SS_RUNTIME_SETTINGS_REASON_INVALID_BOUNDS 2
+#define SS_RUNTIME_SETTINGS_REASON_INVALID_PAYLOAD 3
+#define SS_RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER 4
+#define SS_RUNTIME_SETTINGS_REASON_UNSUPPORTED_BACKEND 5
+#define SS_RUNTIME_SETTINGS_REASON_UNSUPPORTED_OPERATION 6
+#define SS_RUNTIME_SETTINGS_REASON_APPLY_FAILED 7
+#define SS_RUNTIME_SETTINGS_REASON_CONTROL_NOT_READY 8
+#define SS_RUNTIME_SETTINGS_REASON_NO_ACK 9
+#define SS_RUNTIME_SETTINGS_REASON_CONFLICT 10
+#define SS_RUNTIME_SETTINGS_REASON_STALE_ACK 11
+#define SS_RUNTIME_SETTINGS_REASON_STREAM_ENDED 12
+#define SS_RUNTIME_SETTINGS_REASON_PROOF_GATED 13
+
+#define SS_RUNTIME_SETTINGS_OUTCOME_IDLE 0
+#define SS_RUNTIME_SETTINGS_OUTCOME_IN_FLIGHT 1
+#define SS_RUNTIME_SETTINGS_OUTCOME_APPLIED 2
+#define SS_RUNTIME_SETTINGS_OUTCOME_REJECTED 3
+#define SS_RUNTIME_SETTINGS_OUTCOME_TIMED_OUT 4
+#define SS_RUNTIME_SETTINGS_OUTCOME_SEND_FAILED 5
+#define SS_RUNTIME_SETTINGS_OUTCOME_STREAM_ENDED 6
+
+#define LI_RUNTIME_SETTINGS_ERROR_NOT_SUNSHINE -5601
+#define LI_RUNTIME_SETTINGS_ERROR_CONTROL_NOT_READY -5602
+#define LI_RUNTIME_SETTINGS_ERROR_UNSUPPORTED_OPERATION -5603
+#define LI_RUNTIME_SETTINGS_ERROR_INVALID_BOUNDS -5604
+#define LI_RUNTIME_SETTINGS_ERROR_CONFLICT -5605
+#define LI_RUNTIME_SETTINGS_ERROR_SEND_FAILED -5606
+#define LI_RUNTIME_SETTINGS_ERROR_MALFORMED_ACK -5607
+#define LI_RUNTIME_SETTINGS_ERROR_STALE_ACK -5608
+
+#define SS_RUNTIME_SETTINGS_SNAPSHOT_VERSION 2
+#define SS_RUNTIME_SETTINGS_SNAPSHOT_WIRE_LENGTH 31
+
+typedef struct _SS_RUNTIME_SETTINGS_SNAPSHOT {
+    uint32_t version;
+    uint64_t generation;
+    uint64_t sessionEpoch;
+    uint32_t sessionActive;
+    uint32_t capabilityReceived;
+    uint32_t capabilityStatus;
+    uint32_t capabilityReason;
+    uint32_t supportedOperations;
+    uint32_t proofGatedOperations;
+    uint32_t minBitrateKbps;
+    uint32_t maxBitrateKbps;
+    uint32_t maxFps;
+    uint32_t launchBitrateKbps;
+    uint32_t launchFps;
+    uint32_t launchWidth;
+    uint32_t launchHeight;
+    uint32_t currentBitrateKbps;
+    uint32_t currentFps;
+    uint32_t currentWidth;
+    uint32_t currentHeight;
+    uint32_t queryRequestId;
+    uint32_t queryOutcome;
+    uint32_t queryStatus;
+    uint32_t queryReason;
+    uint32_t mutationRequestId;
+    uint32_t mutationOperation;
+    uint32_t mutationOutcome;
+    uint32_t mutationStatus;
+    uint32_t mutationReason;
+    uint32_t staleAckCount;
+    uint32_t reconciliationRequired;
+} SS_RUNTIME_SETTINGS_SNAPSHOT, *PSS_RUNTIME_SETTINGS_SNAPSHOT;
+
+// Request IDs must increase strictly within one sessionEpoch. A capability query
+// can run with one mutation. Mutations serialize across bitrate, FPS, and
+// resolution changes.
+int LiQuerySunshineRuntimeSettingsCapabilities(uint32_t requestId);
+int LiSetSunshineRuntimeBitrate(uint32_t requestId, uint32_t bitrateKbps);
+int LiSetSunshineRuntimeFps(uint32_t requestId, uint32_t fps);
+int LiSetSunshineRuntimeResolution(uint32_t requestId, uint32_t width, uint32_t height);
+void LiGetSunshineRuntimeSettingsSnapshot(PSS_RUNTIME_SETTINGS_SNAPSHOT snapshot);
+
 // This function returns any extended feature flags supported by the host.
 #define LI_FF_PEN_TOUCH_EVENTS        0x01 // LiSendTouchEvent()/LiSendPenEvent() supported
 #define LI_FF_CONTROLLER_TOUCH_EVENTS 0x02 // LiSendControllerTouchEvent() supported

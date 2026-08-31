@@ -1,5 +1,5 @@
 #!/usr/bin/env nix-shell
-#! nix-shell -i bash -p bash curl coreutils
+#! nix-shell -i bash -p bash curl coreutils gcc
 # shellcheck shell=bash
 # THROWAWAY PROTOTYPE implementation; invoked by run-spike.sh in its devshell.
 set -euo pipefail
@@ -117,6 +117,9 @@ test -f "$ROOT/clients/android/app/src/main/assets/portal/index.html"
 
 cd "$CRATE"
 cargo ndk -t arm64-v8a -o "$ANDROID_LIBS" build --release --lib
+
+cd "$ROOT"
+clients/android/test-sunshine-runtime-settings.sh
 
 cd "$ROOT/clients/android"
 ./gradlew testDebugUnitTest

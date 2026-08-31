@@ -1,4 +1,5 @@
 #include <Limelight.h>
+#include <SunshineRuntimeSettings.h>
 
 #include <jni.h>
 #include <android/log.h>
@@ -24,6 +25,73 @@ Java_com_limelight_nvstream_jni_MoonBridge_sendExecServerCmd(JNIEnv *env, jclass
 JNIEXPORT void JNICALL
 Java_com_limelight_nvstream_jni_MoonBridge_sendEmptyPayload(JNIEnv *env, jclass clazz) {
     LiSendEmptyPayload();
+}
+
+JNIEXPORT jint JNICALL
+Java_com_limelight_nvstream_jni_MoonBridge_querySunshineRuntimeSettings(JNIEnv *env, jclass clazz,
+                                                                        jint requestId) {
+    if (requestId <= 0) {
+        return LI_RUNTIME_SETTINGS_ERROR_CONFLICT;
+    }
+    return LiQuerySunshineRuntimeSettingsCapabilities((uint32_t)requestId);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_limelight_nvstream_jni_MoonBridge_setSunshineRuntimeBitrate(JNIEnv *env, jclass clazz,
+                                                                     jint requestId, jint bitrateKbps) {
+    if (requestId <= 0) {
+        return LI_RUNTIME_SETTINGS_ERROR_CONFLICT;
+    }
+    if (bitrateKbps <= 0) {
+        return LI_RUNTIME_SETTINGS_ERROR_INVALID_BOUNDS;
+    }
+    return LiSetSunshineRuntimeBitrate((uint32_t)requestId, (uint32_t)bitrateKbps);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_limelight_nvstream_jni_MoonBridge_setSunshineRuntimeFps(JNIEnv *env, jclass clazz,
+                                                                 jint requestId, jint fps) {
+    if (requestId <= 0) {
+        return LI_RUNTIME_SETTINGS_ERROR_CONFLICT;
+    }
+    if (fps <= 0) {
+        return LI_RUNTIME_SETTINGS_ERROR_INVALID_BOUNDS;
+    }
+    return LiSetSunshineRuntimeFps((uint32_t)requestId, (uint32_t)fps);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_limelight_nvstream_jni_MoonBridge_setSunshineRuntimeResolution(JNIEnv *env, jclass clazz,
+                                                                        jint requestId, jint width,
+                                                                        jint height) {
+    if (requestId <= 0) {
+        return LI_RUNTIME_SETTINGS_ERROR_CONFLICT;
+    }
+    if (width <= 0 || height <= 0) {
+        return LI_RUNTIME_SETTINGS_ERROR_INVALID_BOUNDS;
+    }
+    return LiSetSunshineRuntimeResolution((uint32_t)requestId, (uint32_t)width, (uint32_t)height);
+}
+
+JNIEXPORT jlongArray JNICALL
+Java_com_limelight_nvstream_jni_MoonBridge_getSunshineRuntimeSettingsSnapshotRaw(JNIEnv *env, jclass clazz) {
+    SS_RUNTIME_SETTINGS_SNAPSHOT snapshot;
+    uint64_t wire[SS_RUNTIME_SETTINGS_SNAPSHOT_WIRE_LENGTH];
+    jlong values[SS_RUNTIME_SETTINGS_SNAPSHOT_WIRE_LENGTH];
+    jlongArray output;
+
+    LiGetSunshineRuntimeSettingsSnapshot(&snapshot);
+    SsRuntimeSettingsSnapshotToWire(&snapshot, wire);
+    for (size_t index = 0; index < SS_RUNTIME_SETTINGS_SNAPSHOT_WIRE_LENGTH; index++) {
+        values[index] = (jlong)wire[index];
+    }
+
+    output = (*env)->NewLongArray(env, SS_RUNTIME_SETTINGS_SNAPSHOT_WIRE_LENGTH);
+    if (output != NULL) {
+        (*env)->SetLongArrayRegion(env, output, 0,
+                                   SS_RUNTIME_SETTINGS_SNAPSHOT_WIRE_LENGTH, values);
+    }
+    return output;
 }
 
 JNIEXPORT void JNICALL

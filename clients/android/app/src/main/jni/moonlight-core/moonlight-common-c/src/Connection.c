@@ -164,6 +164,7 @@ static void ClInternalConnectionTerminated(int errorCode)
         return;
     }
 
+    connectionRuntimeSettingsStreamEnded();
     terminationCallbackErrorCode = errorCode;
     alreadyTerminated = true;
 

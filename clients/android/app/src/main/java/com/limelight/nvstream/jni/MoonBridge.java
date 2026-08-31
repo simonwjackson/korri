@@ -78,6 +78,82 @@ public class MoonBridge {
 
     public static final int LI_ERR_UNSUPPORTED = -5501;
 
+    public static final int SS_RUNTIME_SETTINGS_OPERATION_QUERY_CAPABILITIES = 0;
+    public static final int SS_RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS = 1;
+    public static final int SS_RUNTIME_SETTINGS_OPERATION_SET_FPS = 2;
+    public static final int SS_RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION = 3;
+
+    public static final int SS_RUNTIME_SETTINGS_STATUS_APPLIED = 0;
+    public static final int SS_RUNTIME_SETTINGS_STATUS_FAILED = 1;
+    public static final int SS_RUNTIME_SETTINGS_STATUS_INVALID = 2;
+    public static final int SS_RUNTIME_SETTINGS_STATUS_DISABLED = 3;
+
+    public static final int SS_RUNTIME_SETTINGS_REASON_NONE = 0;
+    public static final int SS_RUNTIME_SETTINGS_REASON_GATE_DISABLED = 1;
+    public static final int SS_RUNTIME_SETTINGS_REASON_INVALID_BOUNDS = 2;
+    public static final int SS_RUNTIME_SETTINGS_REASON_INVALID_PAYLOAD = 3;
+    public static final int SS_RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER = 4;
+    public static final int SS_RUNTIME_SETTINGS_REASON_UNSUPPORTED_BACKEND = 5;
+    public static final int SS_RUNTIME_SETTINGS_REASON_UNSUPPORTED_OPERATION = 6;
+    public static final int SS_RUNTIME_SETTINGS_REASON_APPLY_FAILED = 7;
+    public static final int SS_RUNTIME_SETTINGS_REASON_CONTROL_NOT_READY = 8;
+    public static final int SS_RUNTIME_SETTINGS_REASON_NO_ACK = 9;
+    public static final int SS_RUNTIME_SETTINGS_REASON_CONFLICT = 10;
+    public static final int SS_RUNTIME_SETTINGS_REASON_STALE_ACK = 11;
+    public static final int SS_RUNTIME_SETTINGS_REASON_STREAM_ENDED = 12;
+    public static final int SS_RUNTIME_SETTINGS_REASON_PROOF_GATED = 13;
+
+    public static final int SS_RUNTIME_SETTINGS_OUTCOME_IDLE = 0;
+    public static final int SS_RUNTIME_SETTINGS_OUTCOME_IN_FLIGHT = 1;
+    public static final int SS_RUNTIME_SETTINGS_OUTCOME_APPLIED = 2;
+    public static final int SS_RUNTIME_SETTINGS_OUTCOME_REJECTED = 3;
+    public static final int SS_RUNTIME_SETTINGS_OUTCOME_TIMED_OUT = 4;
+    public static final int SS_RUNTIME_SETTINGS_OUTCOME_SEND_FAILED = 5;
+    public static final int SS_RUNTIME_SETTINGS_OUTCOME_STREAM_ENDED = 6;
+
+    public static final int LI_RUNTIME_SETTINGS_ERROR_NOT_SUNSHINE = -5601;
+    public static final int LI_RUNTIME_SETTINGS_ERROR_CONTROL_NOT_READY = -5602;
+    public static final int LI_RUNTIME_SETTINGS_ERROR_UNSUPPORTED_OPERATION = -5603;
+    public static final int LI_RUNTIME_SETTINGS_ERROR_INVALID_BOUNDS = -5604;
+    public static final int LI_RUNTIME_SETTINGS_ERROR_CONFLICT = -5605;
+    public static final int LI_RUNTIME_SETTINGS_ERROR_SEND_FAILED = -5606;
+    public static final int LI_RUNTIME_SETTINGS_ERROR_MALFORMED_ACK = -5607;
+    public static final int LI_RUNTIME_SETTINGS_ERROR_STALE_ACK = -5608;
+
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_VERSION = 2;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_LENGTH = 31;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_VERSION_INDEX = 0;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_GENERATION_INDEX = 1;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_SESSION_EPOCH_INDEX = 2;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_SESSION_ACTIVE_INDEX = 3;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_CAPABILITY_RECEIVED_INDEX = 4;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_CAPABILITY_STATUS_INDEX = 5;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_CAPABILITY_REASON_INDEX = 6;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_SUPPORTED_OPERATIONS_INDEX = 7;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_PROOF_GATED_OPERATIONS_INDEX = 8;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_MIN_BITRATE_INDEX = 9;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_MAX_BITRATE_INDEX = 10;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_MAX_FPS_INDEX = 11;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_LAUNCH_BITRATE_INDEX = 12;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_LAUNCH_FPS_INDEX = 13;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_LAUNCH_WIDTH_INDEX = 14;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_LAUNCH_HEIGHT_INDEX = 15;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_CURRENT_BITRATE_INDEX = 16;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_CURRENT_FPS_INDEX = 17;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_CURRENT_WIDTH_INDEX = 18;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_CURRENT_HEIGHT_INDEX = 19;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_QUERY_REQUEST_ID_INDEX = 20;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_QUERY_OUTCOME_INDEX = 21;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_QUERY_STATUS_INDEX = 22;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_QUERY_REASON_INDEX = 23;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_MUTATION_REQUEST_ID_INDEX = 24;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_MUTATION_OPERATION_INDEX = 25;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_MUTATION_OUTCOME_INDEX = 26;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_MUTATION_STATUS_INDEX = 27;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_MUTATION_REASON_INDEX = 28;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_STALE_ACK_COUNT_INDEX = 29;
+    public static final int SS_RUNTIME_SETTINGS_SNAPSHOT_RECONCILIATION_REQUIRED_INDEX = 30;
+
     public static final byte LI_TOUCH_EVENT_HOVER       = 0x00;
     public static final byte LI_TOUCH_EVENT_DOWN        = 0x01;
     public static final byte LI_TOUCH_EVENT_UP          = 0x02;
@@ -357,6 +433,20 @@ public class MoonBridge {
     public static native void sendExecServerCmd(int cmdId);
 
     public static native void sendEmptyPayload();
+
+    public static native int querySunshineRuntimeSettings(int requestId);
+
+    public static native int setSunshineRuntimeBitrate(int requestId, int bitrateKbps);
+
+    public static native int setSunshineRuntimeFps(int requestId, int fps);
+
+    public static native int setSunshineRuntimeResolution(int requestId, int width, int height);
+
+    private static native long[] getSunshineRuntimeSettingsSnapshotRaw();
+
+    public static SunshineRuntimeSettingsSnapshot getSunshineRuntimeSettingsSnapshot() {
+        return SunshineRuntimeSettingsSnapshot.fromWire(getSunshineRuntimeSettingsSnapshotRaw());
+    }
 
     public static native void sendMouseMove(short deltaX, short deltaY);
 
