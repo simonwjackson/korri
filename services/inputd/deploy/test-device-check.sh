@@ -466,11 +466,11 @@ case "$(basename "$0")" in
           normalized="${HARNESS_FINGERPRINT:-node=/dev/input/event9 sysfs=/sys/devices/virtual/input/input9/event9 dev=13:73 inode=1:9 inputplumber=/nix/store/provider/bin/inputplumber version=0.75.2 keys=exact abs=exact ff=yes}"
           physical="identity=$expected_identity event=event8 sysfs=/sys/devices/pci0000:00/input/input8/event8 profile=$profile"
           printf 'automated-gates=pass raw-readable=0 inputd-status=Ready system-korrid=active system-x11-headless=active system-sunshine=active pairing-state=present credentials=service-specific sunshine-package=attested catalog=Ok delegate=yes controllers=pids\n'
-          printf 'sunshine-executable=/nix/store/sunshine-korri/bin/sunshine patch-set-sha256=%064d patches=10 base-version=2025.924.154138 libavcodec=62.11.100\n' 0
+          printf 'sunshine-executable=/nix/store/sunshine-korri/bin/sunshine-2025.924.154138-korri patch-set-sha256=%064d patches=10 base-version=2025.924.154138 libavcodec=62.11.100\n' 0
           printf 'sunshine-private-state=protected digest=%s\n' "${HARNESS_PRIVATE_STATE_DIGEST:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
           printf 'normalized-fingerprint=%s\n' "$normalized"
           [[ "$require_physical" != true ]] || printf 'controller-evidence=%s\n' "$physical"
-          sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=10 base-version=2025.924.154138 libavcodec=62.11.100'
+          sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine-2025.924.154138-korri patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=10 base-version=2025.924.154138 libavcodec=62.11.100'
           printf 'acceptance-fingerprint=normalized=%s sunshine=%q private-state=%s' "$normalized" "$sunshine" "${HARNESS_PRIVATE_STATE_DIGEST:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
           [[ "$require_physical" != true ]] || printf ' physical=%s' "$physical"
           printf '\n'
@@ -488,7 +488,7 @@ case "$(basename "$0")" in
           if [[ "${HARNESS_REPLACE_SUNSHINE:-no}" == yes ]]; then
             sunshine='sunshine-executable=/nix/store/replaced-sunshine/bin/sunshine patch-set-sha256=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff patches=10 base-version=2025.924.154138 libavcodec=62.11.100'
           else
-            sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=10 base-version=2025.924.154138 libavcodec=62.11.100'
+            sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine-2025.924.154138-korri patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=10 base-version=2025.924.154138 libavcodec=62.11.100'
           fi
           if [[ "${HARNESS_REPLACE_PRIVATE_STATE:-no}" == yes ]]; then
             private_state=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
@@ -747,6 +747,14 @@ grep -Fx 'UNHEALTHY_OBSERVE_SECONDS=60' "$GATE" >/dev/null
 grep -F 'expected="$(readlink -f -- "$declared"' "$GATE" >/dev/null
 # shellcheck disable=SC2016 # Literal production source invariants.
 grep -F 'package_root="${declared%/bin/sunshine}"' "$GATE" >/dev/null
+# The process executable is a resolved regular file and may use Sunshine's
+# versioned target name. The declared unit path remains bin/sunshine.
+# shellcheck disable=SC2016 # Literal rejected production source.
+if grep -F '[[ "$running" == /nix/store/*/bin/sunshine ]]' "$GATE" >/dev/null; then
+  exit 1
+fi
+# shellcheck disable=SC2016 # Literal production source invariant.
+grep -F 'remote_resolve_sunshine_executable "$running" "$declared"' "$GATE" >/dev/null
 # stat(1) canonicalizes 0700/0600 to 700/600; candidate calls must use the
 # canonical forms so post-chmod verification compares equal.
 # shellcheck disable=SC2016

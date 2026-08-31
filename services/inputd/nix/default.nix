@@ -131,6 +131,23 @@ in
       grep -Fx "EXPECTED_SUNSHINE_PATCH_SET_SHA256='${sunshineApprovedPatches.patchSetSha256}'" "$gate" >/dev/null
       grep '^patch=' "$gate" > actual-patch-manifest
       cmp actual-patch-manifest ${sunshinePatchManifestFile}
+
+      # Linux resolves /proc/PID/exe through the bin/sunshine symlink. Exercise
+      # the gate's exact resolver against the shipped versioned target.
+      declared=${sunshinePackage}/bin/sunshine
+      test -L "$declared"
+      running="$(readlink -f -- "$declared")"
+      test "$running" != "$declared"
+      case "$running" in
+        ${sunshinePackage}/bin/sunshine-*) ;;
+        *) echo "Sunshine did not resolve to its versioned package target" >&2; exit 1 ;;
+      esac
+      sed -n '/^REMOTE_SUNSHINE_PACKAGE_ROOT=/,/^}/p' "$gate" > sunshine-executable-resolver.sh
+      # shellcheck disable=SC1091
+      source ./sunshine-executable-resolver.sh
+      remote_resolve_sunshine_executable "$running" "$declared"
+      test "$REMOTE_SUNSHINE_PACKAGE_ROOT" = ${sunshinePackage}
+
       test -x ${inputdPackage}/bin/korri-sunshine-state-digest
       test -x ${inputdPackage}/bin/korri-ledger-proof
       test -x ${devApp}/bin/korri-dev

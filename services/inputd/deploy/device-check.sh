@@ -646,25 +646,37 @@ remote_process_group_policy() {
   fi
 }
 
+REMOTE_SUNSHINE_PACKAGE_ROOT=''
+remote_resolve_sunshine_executable() {
+  local running="$1" declared="$2" package_root expected
+  REMOTE_SUNSHINE_PACKAGE_ROOT=''
+  [[ "$running" == /nix/store/*/* && "$running" == "$(readlink -f -- "$running" 2>/dev/null || true)" \
+    && -f "$running" && -x "$running" && ! -L "$running" ]] || return 1
+  [[ "$declared" == /nix/store/*/bin/sunshine ]] || return 1
+  package_root="${declared%/bin/sunshine}"
+  [[ "$package_root" == "$(readlink -f -- "$package_root" 2>/dev/null || true)" ]] || return 1
+  expected="$(readlink -f -- "$declared" 2>/dev/null || true)"
+  [[ "$expected" == "$package_root"/* && "$running" == "$expected" \
+    && -f "$expected" && -x "$expected" && ! -L "$expected" ]] || return 1
+  REMOTE_SUNSHINE_PACKAGE_ROOT="$package_root"
+}
+
 remote_sunshine_package_provenance() {
-  local pid running expected execstart package_root provenance patch_set computed_patch_set
+  local pid running declared execstart package_root provenance patch_set computed_patch_set
   local field expected_value
   local -a sunshine_execs=()
   pid="$(systemctl show sunshine.service -p MainPID --value 2>/dev/null || true)"
   [[ "$pid" =~ ^[1-9][0-9]*$ ]] || fail 'Sunshine MainPID is unavailable'
   running="$(readlink -f -- "/proc/$pid/exe" 2>/dev/null || true)"
-  [[ "$running" == /nix/store/*/bin/sunshine ]] \
-    || fail 'running Sunshine executable is not an immutable Nix store binary'
 
   execstart="$(systemctl show sunshine.service -p ExecStart --value 2>/dev/null || true)"
   mapfile -t sunshine_execs < <(grep -oE '/nix/store/[^ ;{}"]+/bin/sunshine' <<<"$execstart" | sort -u)
   [[ "${#sunshine_execs[@]}" -eq 1 ]] \
     || fail 'Sunshine unit does not declare one exact store executable'
   declared="${sunshine_execs[0]}"
-  package_root="${declared%/bin/sunshine}"
-  expected="$(readlink -f -- "$declared" 2>/dev/null || true)"
-  [[ "$expected" == "$package_root"/bin/sunshine* && "$running" == "$expected" ]] \
+  remote_resolve_sunshine_executable "$running" "$declared" \
     || fail 'running Sunshine executable differs from the candidate unit'
+  package_root="$REMOTE_SUNSHINE_PACKAGE_ROOT"
 
   [[ "${package_root##*/}" == *sunshine-korri* ]] \
     || fail 'candidate Sunshine package is not sunshine-korri'
