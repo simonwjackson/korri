@@ -1073,9 +1073,10 @@ remote_restore() {
 }
 
 remote_acceptance_fingerprint() {
-  local expected_identity="$1" profile="$2" require_physical="$3" normalized physical
+  local expected_identity="$1" profile="$2" require_physical="$3" normalized physical sunshine
   normalized="$(remote_normalized_fingerprint)" || return 1
-  printf 'normalized=%s' "$normalized"
+  sunshine="$(remote_sunshine_package_provenance)" || return 1
+  printf 'normalized=%s sunshine=%q' "$normalized" "$sunshine"
   if [[ "$require_physical" == true ]]; then
     physical="$(remote_physical_controller_evidence "$expected_identity" "$profile")" || return 1
     printf ' physical=%s' "$physical"
@@ -1619,7 +1620,7 @@ verify_fingerprint_unchanged() {
   run_remote_attempt acceptance-fingerprint "$EXPECTED_CONTROLLER_ID" "$PRODUCTION_PROFILE" "$require_physical" \
     >"$LEDGER/fingerprint.current"
   cmp -s "$LEDGER/fingerprint.expected" "$LEDGER/fingerprint.current" \
-    || fail 'normalized target or expected physical controller proof changed before acceptance'
+    || fail 'normalized target, Sunshine provenance, or expected physical controller proof changed before acceptance'
   chmod 0600 "$LEDGER/fingerprint.expected" "$LEDGER/fingerprint.current"
 }
 

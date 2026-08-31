@@ -453,7 +453,8 @@ case "$(basename "$0")" in
           printf 'sunshine-private-state=protected digest=%064d\n' 0
           printf 'normalized-fingerprint=%s\n' "$normalized"
           [[ "$require_physical" != true ]] || printf 'controller-evidence=%s\n' "$physical"
-          printf 'acceptance-fingerprint=normalized=%s' "$normalized"
+          sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=10'
+          printf 'acceptance-fingerprint=normalized=%s sunshine=%q' "$normalized" "$sunshine"
           [[ "$require_physical" != true ]] || printf ' physical=%s' "$physical"
           printf '\n'
           ;;
@@ -466,7 +467,12 @@ case "$(basename "$0")" in
           else
             normalized="${HARNESS_FINGERPRINT:-node=/dev/input/event9 sysfs=/sys/devices/virtual/input/input9/event9 dev=13:73 inode=1:9 inputplumber=/nix/store/provider/bin/inputplumber version=0.75.2 keys=exact abs=exact ff=yes}"
           fi
-          printf 'normalized=%s' "$normalized"
+          if [[ "${HARNESS_REPLACE_SUNSHINE:-no}" == yes ]]; then
+            sunshine='sunshine-executable=/nix/store/replaced-sunshine/bin/sunshine patch-set-sha256=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff patches=10'
+          else
+            sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=10'
+          fi
+          printf 'normalized=%s sunshine=%q' "$normalized" "$sunshine"
           if [[ "$require_physical" == true ]]; then
             [[ "${HARNESS_CONTROLLER_MODEL:-valid}" == valid ]] || exit 68
             printf ' physical=identity=%s event=event8 sysfs=/sys/devices/pci0000:00/input/input8/event8 profile=%s' "$expected_identity" "$profile"
@@ -2095,9 +2101,24 @@ if run_interactive candidate-test pending-mutation "$replacement_ledger" "$TMP/r
   printf 'replacement acceptance unexpectedly passed\n' >&2
   exit 1
 fi
-grep -F 'normalized target or expected physical controller proof changed before acceptance' "$TMP/replacement.tty" >/dev/null
+grep -F 'normalized target, Sunshine provenance, or expected physical controller proof changed before acceptance' "$TMP/replacement.tty" >/dev/null
 grep -Fx 'state=failed-needs-inspection' "$replacement_ledger/state" >/dev/null
 unset HARNESS_REPLACE_TARGET
+
+# Sunshine replacement after the initial automated proof also fails before acceptance.
+sunshine_replacement_ledger="$TMP/sunshine-replacement-ledger"
+mapfile -d '' -t sunshine_replacement_args < <(common_for "$sunshine_replacement_ledger")
+export HARNESS_LEDGER="$sunshine_replacement_ledger" HARNESS_REPLACE_SUNSHINE=yes
+if run_interactive candidate-test pending-mutation "$sunshine_replacement_ledger" "$TMP/sunshine-replacement.tty" \
+  "${sunshine_replacement_args[@]}" --confirm "$confirm"; then
+  printf 'Sunshine replacement acceptance unexpectedly passed
+' >&2
+  exit 1
+fi
+grep -F 'normalized target, Sunshine provenance, or expected physical controller proof changed before acceptance' \
+  "$TMP/sunshine-replacement.tty" >/dev/null
+grep -Fx 'state=failed-needs-inspection' "$sunshine_replacement_ledger/state" >/dev/null
+unset HARNESS_REPLACE_SUNSHINE
 
 # A failed boot-ID fetch after persistent acceptance does not roll back. The
 # accepted pending state resumes without repeating the switch or HITL gates.
