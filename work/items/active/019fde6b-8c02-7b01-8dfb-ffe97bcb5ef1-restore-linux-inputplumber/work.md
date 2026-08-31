@@ -17,6 +17,8 @@ Restore Korri's Linux normalized-input boundary using a pinned upstream InputPlu
 - The Android Moonlight client implements the custom `0x5504`/`0x5505` protocol and exact-launch bitrate, FPS, and resolution controls with native epoch checks, host-applied completion, bounded repair, and teardown-safe publication.
 - The device gate now requires the exact running `sunshine-korri` executable, independently approved patch-set digest, protected private-tree digest, and unchanged Sunshine provenance after the HITL restart.
 - Patch `0015` is shipped and checked but remains inert. The legacy input-seat receiver, launch sidecar/token authority, and virtual-seat backend remain separate work under the explicit legacy-equivalence decision.
+- The current debug APK is installed on `usu`. The automated device smoke reached the app but stopped because Android denied `/storage/emulated/0/korri/upstreams.json`; no permission was changed automatically.
+- Read-only Zao inspection at the new candidate found the rollback generation still current/default, the exact controller on USB `3-4`, no marker, an inactive lease, and zero game units.
 - `nix run .#inputd-check` and `nix run .#android-apk` pass at Korri commit `378658a786f4c6712c814d1005aece2ac5501803`.
 - Mountainous branch `unified` is clean at `9219f02`. It imports only `nixosModules.korri-linux-host` and pins the exact local Korri revision above. Nothing is pushed and no PR exists.
 - The current candidate is `/nix/store/9dygll4cg26dsd5gsya1vxj8v40yn0gx-nixos-system-zao-26.05.20260313.c06b4ae`. Its gate digest is `7d82dc2b5be1126b418c478e57391cfc9765e5e11e49c68957e8cca3a5bcab25`. It is rooted on Zao at `/nix/var/nix/gcroots/korri-candidate-unified-9219f02`.
@@ -40,7 +42,7 @@ Restore Korri's Linux normalized-input boundary using a pinned upstream InputPlu
 5. Create a new ledger after v25. Start with `zao-20260830-inputplumber-unified-v26` or a later unused suffix.
 6. Do not overlap physical `ask_user` prompts. Wait for each answer before posting the next prompt. For hotplug, use one prompt: unplug, wait 15 seconds, reconnect to port `3-4`.
 7. Run the full temporary candidate gate. The first four stages have prior evidence but tokens must bind the new nonce. At `direct-action-isolation`, trigger Guide plus RB, verify `action-isolation=verified`, wait for timeout, then verify `action-cleanup=verified`.
-8. Install the current debug APK on `usu`. Complete `sunshine-video-controller-recovery`, including live bitrate, FPS, resolution downshift/restore, disabled/unsupported outcomes, pairing preservation, and post-restart executable provenance. Then complete `catalog-and-session`.
+8. Restore the already installed debug app's Android storage access on `usu`. Complete `sunshine-video-controller-recovery`, including live bitrate, FPS, resolution downshift/restore, disabled/unsupported outcomes, pairing preservation, and post-restart executable provenance. Then complete `catalog-and-session`.
 9. After `candidate-green`, decide whether to keep the current repeated-HITL policy or implement the separate backlog item that reduces repeated stages. Do not silently weaken the gate.
 10. If the current policy remains, run `inject-health-failure`, explicit `rollback`, reboot and `rollback-reboot-verify`, `persistent-switch` with all seven HITL stages, reboot, then `candidate-reboot-verify` with all seven stages.
 11. Publish the local Korri revision only after explicit push approval. Replace the final `git+file` consumer pin with an exact portable Git revision before completion.

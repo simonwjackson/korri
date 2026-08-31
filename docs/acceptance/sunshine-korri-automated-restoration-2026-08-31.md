@@ -30,6 +30,8 @@ The following checks passed on the recorded source:
 
 The candidate is copied to Zao and rooted at `/nix/var/nix/gcroots/korri-candidate-unified-9219f02`. Read-only verification found the rollback generation still current and default, no attempt marker, an inactive lease, and zero live `korri-game-*.service` units.
 
+The current debug APK was built and installed on `usu` through its live adb mDNS identity. The device check reached the installed application, but its catalog smoke stopped because Android denied `/storage/emulated/0/korri/upstreams.json`. No permission was changed automatically. This requires the final device interaction before the Sunshine journey can run.
+
 ## Preserved boundaries
 
 - The running Sunshine executable must equal the exact immutable executable in `sunshine.service`.
@@ -43,7 +45,7 @@ The candidate is copied to Zao and rooted at `/nix/var/nix/gcroots/korri-candida
 
 The final device stage must still prove:
 
-- the Android client on `usu` connects with the custom `0x5504`/`0x5505` protocol;
+- Android storage access is restored for the installed debug client, then the client on `usu` connects with the custom `0x5504`/`0x5505` protocol;
 - live bitrate and FPS apply and restore without reconnect;
 - same-ratio resolution downshift and restore work with fresh video and input mapping;
 - disabled and unsupported outcomes fail closed;
