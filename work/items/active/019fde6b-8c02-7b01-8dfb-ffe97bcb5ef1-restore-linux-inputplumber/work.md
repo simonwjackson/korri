@@ -13,9 +13,13 @@ Restore Korri's Linux normalized-input boundary using a pinned upstream InputPlu
 ## Current status
 
 - Portable development, the pinned InputPlumber 0.75.2 package, Rust inputd, exact local session control, immutable bundles, NixOS modules, and RetroArch normalization are complete.
-- `nix run .#inputd-check` passes at Korri commit `de99db20b1a5bfe36d859096d1ce2e3f83e84d62`.
-- Mountainous branch `unified` is clean at `acdce624e1979c485069abc6c5d5e80e171f1f69`. It imports only `nixosModules.korri-linux-host` and pins the exact local Korri revision above. Nothing is pushed and no PR exists.
-- The current candidate is `/nix/store/vfmwdpa7ng62gklfxgqi06q835w0vlax-nixos-system-zao-26.05.20260313.c06b4ae`. Its gate digest is `aa98c40488b3af0fee4cd3dde16225c2e21794fc2981d15dcd58e8bfe16a840e`.
+- `sunshine-korri` is now a first-class ten-patch package with exact source, patch, Sunshine, FFmpeg ABI, installed-provenance, and full-build checks. Live settings use an explicit Nix option and exact `SUNSHINE_LIVE_SETTINGS_MVP=1` gate.
+- The Android Moonlight client implements the custom `0x5504`/`0x5505` protocol and exact-launch bitrate, FPS, and resolution controls with native epoch checks, host-applied completion, bounded repair, and teardown-safe publication.
+- The device gate now requires the exact running `sunshine-korri` executable, independently approved patch-set digest, protected private-tree digest, and unchanged Sunshine provenance after the HITL restart.
+- Patch `0015` is shipped and checked but remains inert. The legacy input-seat receiver, launch sidecar/token authority, and virtual-seat backend remain separate work under the explicit legacy-equivalence decision.
+- `nix run .#inputd-check` and `nix run .#android-apk` pass at Korri commit `378658a786f4c6712c814d1005aece2ac5501803`.
+- Mountainous branch `unified` is clean at `9219f02`. It imports only `nixosModules.korri-linux-host` and pins the exact local Korri revision above. Nothing is pushed and no PR exists.
+- The current candidate is `/nix/store/9dygll4cg26dsd5gsya1vxj8v40yn0gx-nixos-system-zao-26.05.20260313.c06b4ae`. Its gate digest is `7d82dc2b5be1126b418c478e57391cfc9765e5e11e49c68957e8cca3a5bcab25`. It is rooted on Zao at `/nix/var/nix/gcroots/korri-candidate-unified-9219f02`.
 - The rollback generation remains `/nix/store/ac46r72fh00p9g81z5hv45pw8zdsbpy4-nixos-system-zao-26.05.20260313.c06b4ae`.
 - Zao is at the exact rollback baseline. The controller is connected to USB port `3-4`. No Korri game unit is active. The attempt marker is absent and the attempt lease is inactive.
 - `user@1000` remains PID `363588`, invocation `31dfefc905ea49fd8ec0b05a4a0e53fd`. No rollout test restarted it.
@@ -29,14 +33,14 @@ Restore Korri's Linux normalized-input boundary using a pinned upstream InputPlu
 
 ## Resume checkpoint
 
-1. Verify the Korri worktree is clean and contains candidate code commit `de99db20b1a5bfe36d859096d1ce2e3f83e84d62`; later commits can be documentation-only pause records. Verify Mountainous is clean at `acdce624e1979c485069abc6c5d5e80e171f1f69` and still pins `de99db20b1a5bfe36d859096d1ce2e3f83e84d62`.
+1. Verify the Korri worktree is clean at `378658a786f4c6712c814d1005aece2ac5501803` plus the final documentation commit. Verify Mountainous is clean at `9219f02` and still pins that exact local Korri revision.
 2. Verify Zao current and default generations equal the rollback generation. Verify the marker is absent, the lease is inactive, and active `korri-game-*.service` count is zero.
 3. Keep the controller in USB port `3-4`. Verify identity `0003:045e:0b12:0501`, `ID_SERIAL=Microsoft_Controller_3039373138353136313636313332`, and `ID_PATH=pci-0000:00:14.0-usb-0:4:1.0`.
-4. Use candidate `/nix/store/vfmwdpa7ng62gklfxgqi06q835w0vlax-nixos-system-zao-26.05.20260313.c06b4ae` and confirmation `CONFIRM-0b474377bf7f3327`.
+4. Use candidate `/nix/store/9dygll4cg26dsd5gsya1vxj8v40yn0gx-nixos-system-zao-26.05.20260313.c06b4ae`. Generate and use the confirmation token printed by the fresh preflight; do not reuse the old v25 token.
 5. Create a new ledger after v25. Start with `zao-20260830-inputplumber-unified-v26` or a later unused suffix.
 6. Do not overlap physical `ask_user` prompts. Wait for each answer before posting the next prompt. For hotplug, use one prompt: unplug, wait 15 seconds, reconnect to port `3-4`.
 7. Run the full temporary candidate gate. The first four stages have prior evidence but tokens must bind the new nonce. At `direct-action-isolation`, trigger Guide plus RB, verify `action-isolation=verified`, wait for timeout, then verify `action-cleanup=verified`.
-8. Complete `sunshine-video-controller-recovery` with Android device `usu`, then complete `catalog-and-session`.
+8. Install the current debug APK on `usu`. Complete `sunshine-video-controller-recovery`, including live bitrate, FPS, resolution downshift/restore, disabled/unsupported outcomes, pairing preservation, and post-restart executable provenance. Then complete `catalog-and-session`.
 9. After `candidate-green`, decide whether to keep the current repeated-HITL policy or implement the separate backlog item that reduces repeated stages. Do not silently weaken the gate.
 10. If the current policy remains, run `inject-health-failure`, explicit `rollback`, reboot and `rollback-reboot-verify`, `persistent-switch` with all seven HITL stages, reboot, then `candidate-reboot-verify` with all seven stages.
 11. Publish the local Korri revision only after explicit push approval. Replace the final `git+file` consumer pin with an exact portable Git revision before completion.

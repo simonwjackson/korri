@@ -90,6 +90,8 @@ One process-lifetime lifecycle lock serializes readiness, request acceptance, EN
 
 The historical physical records from the legacy branch are not present in this branch. Import them only with a clear legacy provenance label. Current physical bitrate, FPS, resolution, and input-seat evidence is pending the final device validation stage.
 
+Current automated package, protocol, candidate-provenance, and private-state evidence is recorded in [`docs/acceptance/sunshine-korri-automated-restoration-2026-08-31.md`](../../docs/acceptance/sunshine-korri-automated-restoration-2026-08-31.md). That record does not replace physical acceptance.
+
 ### Input-seat event mirror patch
 
 `0015-add-korri-input-seat-event-mirror.patch` adds a native Sunshine event-source seam for Korri input seats. Sunshine remains an event source. It mirrors sanitized controller packets to a local Korri socket. A protected receiver must own emulator-visible virtual seats.
