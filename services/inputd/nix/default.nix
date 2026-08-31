@@ -132,6 +132,7 @@ in
       grep '^patch=' "$gate" > actual-patch-manifest
       cmp actual-patch-manifest ${sunshinePatchManifestFile}
       test -x ${inputdPackage}/bin/korri-sunshine-state-digest
+      test -x ${inputdPackage}/bin/korri-ledger-proof
       test -x ${devApp}/bin/korri-dev
       grep -F 'KORRI_INPUTD_PROFILE=development' ${devApp}/bin/korri-dev >/dev/null
       grep -F 'KORRI_INPUTD_SOURCE="$physical_input"' ${devApp}/bin/korri-dev >/dev/null

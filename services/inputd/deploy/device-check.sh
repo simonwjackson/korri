@@ -35,6 +35,7 @@ KORRID_HOST_SESSION_ROOT='/var/lib/korrid/host-session'
 BUNDLE_SELECTOR_ROOT='/nix/var/nix/gcroots/korri-bundle'
 EXPECTED_KEYS='304,305,307,308,310,311,314,315,316,317,318,704,705,706,707'
 EXPECTED_ABS='0,1,2,3,4,5,16,17'
+LEDGER_PROOF_HELPER=''
 
 
 expected_sunshine_patch_manifest() {
@@ -1586,80 +1587,115 @@ if [[ "$MODE" != reconcile && "$CONFIRM" != "$expected_confirm" ]]; then
   fail 'mutation confirmation token is missing or does not match the captured host and candidate generation'
 fi
 
+ledger_proof_helper() {
+  if [[ -z "$LEDGER_PROOF_HELPER" ]]; then
+    if [[ -n "${KORRI_LEDGER_PROOF_HELPER:-}" ]]; then
+      LEDGER_PROOF_HELPER="$KORRI_LEDGER_PROOF_HELPER"
+    else
+      LEDGER_PROOF_HELPER="$(dirname "$(realpath -e -- "$0")")/korri-ledger-proof"
+    fi
+  fi
+  [[ -x "$LEDGER_PROOF_HELPER" ]] || fail 'ledger proof helper is unavailable'
+  printf '%s\n' "$LEDGER_PROOF_HELPER"
+}
+
+read_ledger_proof() {
+  local name="$1" helper
+  helper="$(ledger_proof_helper)"
+  "$helper" read "$LEDGER" "$name"
+}
+
+write_new_ledger_proof() {
+  local name="$1" helper
+  helper="$(ledger_proof_helper)"
+  "$helper" write-new "$LEDGER" "$name"
+}
+
 validate_private_state_predicates() {
   local predicates="$1" present digest
-  [[ "$(grep -c '^sunshine.pairing-state-present=' "$predicates")" -eq 1     && "$(grep -c '^sunshine.private-state-digest=' "$predicates")" -eq 1 ]]     || fail 'Sunshine baseline has duplicate or incomplete private-state predicates'
-  present="$(awk -F= '$1 == "sunshine.pairing-state-present" {print $2}' "$predicates")"
-  digest="$(awk -F= '$1 == "sunshine.private-state-digest" {print $2}' "$predicates")"
+  [[ "$(grep -c '^sunshine.pairing-state-present=' <<<"$predicates")" -eq 1
+    && "$(grep -c '^sunshine.private-state-digest=' <<<"$predicates")" -eq 1 ]] \
+    || fail 'Sunshine baseline has duplicate or incomplete private-state predicates'
+  present="$(awk -F= '$1 == "sunshine.pairing-state-present" {print $2}' <<<"$predicates")"
+  digest="$(awk -F= '$1 == "sunshine.private-state-digest" {print $2}' <<<"$predicates")"
   [[ "$present" == true ]] || fail 'Sunshine baseline pairing state is absent'
   [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || fail 'Sunshine baseline private-state digest is invalid'
 }
 
 verify_private_state_before_mutation() {
-  local current="$LEDGER/private-state.current" baseline_digest current_digest
-  validate_private_state_predicates "$LEDGER/baseline.predicates"
-  run_remote_deadlined predicates "$GAMEPLAY_USER" >"$current"
-  chmod 0600 "$current"
+  local current baseline_digest current_digest
+  validate_private_state_predicates "$baseline_predicates"
+  current="$(run_remote_deadlined predicates "$GAMEPLAY_USER")"
   validate_private_state_predicates "$current"
-  baseline_digest="$(awk -F= '$1 == "sunshine.private-state-digest" {print $2}' "$LEDGER/baseline.predicates")"
-  current_digest="$(awk -F= '$1 == "sunshine.private-state-digest" {print $2}' "$current")"
-  rm -f "$current"
-  [[ "$current_digest" == "$baseline_digest" ]]     || fail 'Sunshine private state changed before mutation'
+  baseline_digest="$(awk -F= '$1 == "sunshine.private-state-digest" {print $2}' <<<"$baseline_predicates")"
+  current_digest="$(awk -F= '$1 == "sunshine.private-state-digest" {print $2}' <<<"$current")"
+  [[ "$current_digest" == "$baseline_digest" ]] \
+    || fail 'Sunshine private state changed before mutation'
 }
 
 extract_automated_private_digest() {
   local evidence="$1" digest
   digest="$(sed -n 's/^sunshine-private-state=protected digest=//p' "$evidence")"
-  [[ "$(grep -c '^sunshine-private-state=protected digest=' "$evidence")" -eq 1     && "$digest" =~ ^[0-9a-f]{64}$ ]]     || fail 'automated Sunshine private-state proof is invalid'
+  [[ "$(grep -c '^sunshine-private-state=protected digest=' "$evidence")" -eq 1
+    && "$digest" =~ ^[0-9a-f]{64}$ ]] \
+    || fail 'automated Sunshine private-state proof is invalid'
   printf '%s\n' "$digest"
 }
 
 save_accepted_private_digest() {
-  local evidence="$1" digest next="$LEDGER/sunshine-private-state.accepted.next"
+  local evidence="$1" digest
   digest="$(extract_automated_private_digest "$evidence")"
-  printf '%s\n' "$digest" >"$next"
-  chmod 0600 "$next"
-  mv -f "$next" "$LEDGER/sunshine-private-state.accepted"
-  sync -f "$LEDGER/sunshine-private-state.accepted"
+  printf '%s\n' "$digest" | write_new_ledger_proof sunshine-private-state.accepted \
+    || fail 'accepted Sunshine private-state proof could not be stored safely'
 }
 
 verify_accepted_private_digest() {
-  local evidence="$1" accepted current
-  [[ -f "$LEDGER/sunshine-private-state.accepted"     && ! -L "$LEDGER/sunshine-private-state.accepted"     && "$(stat -c '%u:%a' "$LEDGER/sunshine-private-state.accepted")" == "$(id -u):600" ]]     || fail 'accepted Sunshine private-state proof is absent'
-  accepted="$(cat "$LEDGER/sunshine-private-state.accepted")"
-  [[ "$accepted" =~ ^[0-9a-f]{64}$ ]]     || fail 'accepted Sunshine private-state proof is invalid'
+  local evidence="$1" current
+  if [[ ! "${accepted_private_state:-}" =~ ^[0-9a-f]{64}$ ]]; then
+    accepted_private_state="$(read_ledger_proof sunshine-private-state.accepted 2>/dev/null)" \
+      || fail 'accepted Sunshine private-state proof is absent or unsafe'
+  fi
+  [[ "$accepted_private_state" =~ ^[0-9a-f]{64}$ ]] \
+    || fail 'accepted Sunshine private-state proof is invalid'
   current="$(extract_automated_private_digest "$evidence")"
-  [[ "$current" == "$accepted" ]]     || fail 'Sunshine private state changed across candidate reboot'
+  [[ "$current" == "$accepted_private_state" ]] \
+    || fail 'Sunshine private state changed across candidate reboot'
 }
 
-if [[ ! -f "$LEDGER/baseline.predicates" ]]; then
-  [[ -z "$state" ]] || fail 'ledger state exists without baseline predicates'
-  run_remote_deadlined predicates "$GAMEPLAY_USER" >"$LEDGER/baseline.predicates.next"
-  chmod 0600 "$LEDGER/baseline.predicates.next"
-  grep -Fx "generation.current=$ROLLBACK" "$LEDGER/baseline.predicates.next" >/dev/null || fail 'baseline current generation is not the rollback generation'
-  grep -Fx "generation.default=$ROLLBACK" "$LEDGER/baseline.predicates.next" >/dev/null || fail 'baseline default generation is not the rollback generation'
-  validate_private_state_predicates "$LEDGER/baseline.predicates.next"
-  mv -f "$LEDGER/baseline.predicates.next" "$LEDGER/baseline.predicates"
+if baseline_predicates="$(read_ledger_proof baseline.predicates 2>/dev/null)"; then
+  :
+else
+  [[ -z "$state" ]] || fail 'ledger state exists without a safe baseline proof'
+  baseline_predicates="$(run_remote_deadlined predicates "$GAMEPLAY_USER")"
+  grep -Fx "generation.current=$ROLLBACK" <<<"$baseline_predicates" >/dev/null \
+    || fail 'baseline current generation is not the rollback generation'
+  grep -Fx "generation.default=$ROLLBACK" <<<"$baseline_predicates" >/dev/null \
+    || fail 'baseline default generation is not the rollback generation'
+  validate_private_state_predicates "$baseline_predicates"
+  printf '%s\n' "$baseline_predicates" | write_new_ledger_proof baseline.predicates \
+    || fail 'Sunshine baseline proof could not be stored safely'
+  baseline_predicates="$(read_ledger_proof baseline.predicates 2>/dev/null)" \
+    || fail 'Sunshine baseline proof could not be read safely'
   run_remote_deadlined inspect "$GAMEPLAY_USER" >"$LEDGER/baseline.txt"
   chmod 0600 "$LEDGER/baseline.txt"
-  sync -f "$LEDGER/baseline.predicates"
   sync -f "$LEDGER/baseline.txt"
 fi
-validate_private_state_predicates "$LEDGER/baseline.predicates"
+validate_private_state_predicates "$baseline_predicates"
 case "$state" in
   candidate-accepted-pending-boot|candidate-await-reboot|candidate-reboot-verifying|candidate-reboot-verifying-starting|complete)
-    [[ -f "$LEDGER/sunshine-private-state.accepted"       && ! -L "$LEDGER/sunshine-private-state.accepted"       && "$(stat -c '%u:%a' "$LEDGER/sunshine-private-state.accepted")" == "$(id -u):600" ]]       || fail 'accepted Sunshine private-state proof is absent'
-    accepted_private_state="$(cat "$LEDGER/sunshine-private-state.accepted" 2>/dev/null || true)"
-    [[ "$accepted_private_state" =~ ^[0-9a-f]{64}$ ]]       || fail 'accepted Sunshine private-state proof is invalid'
+    accepted_private_state="$(read_ledger_proof sunshine-private-state.accepted 2>/dev/null)" \
+      || fail 'accepted Sunshine private-state proof is absent or unsafe'
+    [[ "$accepted_private_state" =~ ^[0-9a-f]{64}$ ]] \
+      || fail 'accepted Sunshine private-state proof is invalid'
     ;;
 esac
-old_korrid_active="$(awk -F= '$1 == "old-user.korrid.active" {print $2}' "$LEDGER/baseline.predicates")"
-old_korrid_enabled="$(awk -F= '$1 == "old-user.korrid.enabled" {print $2}' "$LEDGER/baseline.predicates")"
-old_sunshine_active="$(awk -F= '$1 == "old-user.sunshine.active" {print $2}' "$LEDGER/baseline.predicates")"
-old_sunshine_enabled="$(awk -F= '$1 == "old-user.sunshine.enabled" {print $2}' "$LEDGER/baseline.predicates")"
-old_x11_active="$(awk -F= '$1 == "old-user.x11-headless.active" {print $2}' "$LEDGER/baseline.predicates")"
-old_x11_enabled="$(awk -F= '$1 == "old-user.x11-headless.enabled" {print $2}' "$LEDGER/baseline.predicates")"
-old_pairing_modes="$(awk -F= '$1 == "sunshine.pairing-state-modes" {print $2}' "$LEDGER/baseline.predicates")"
+old_korrid_active="$(awk -F= '$1 == "old-user.korrid.active" {print $2}' <<<"$baseline_predicates")"
+old_korrid_enabled="$(awk -F= '$1 == "old-user.korrid.enabled" {print $2}' <<<"$baseline_predicates")"
+old_sunshine_active="$(awk -F= '$1 == "old-user.sunshine.active" {print $2}' <<<"$baseline_predicates")"
+old_sunshine_enabled="$(awk -F= '$1 == "old-user.sunshine.enabled" {print $2}' <<<"$baseline_predicates")"
+old_x11_active="$(awk -F= '$1 == "old-user.x11-headless.active" {print $2}' <<<"$baseline_predicates")"
+old_x11_enabled="$(awk -F= '$1 == "old-user.x11-headless.enabled" {print $2}' <<<"$baseline_predicates")"
+old_pairing_modes="$(awk -F= '$1 == "sunshine.pairing-state-modes" {print $2}' <<<"$baseline_predicates")"
 old_pairing_config_mode="${old_pairing_modes%%:*}"
 old_pairing_state_mode="${old_pairing_modes#*:}"
 [[ "$old_pairing_config_mode" =~ ^[0-7]{3,4}$ && "$old_pairing_state_mode" =~ ^[0-7]{3,4}$ ]] \
@@ -1694,17 +1730,18 @@ verify_fingerprint_unchanged() {
 }
 
 compare_baseline() {
+  local current
   if [[ "$attempt_remote_active" == true ]]; then
-    run_remote_attempt predicates "$GAMEPLAY_USER" >"$LEDGER/current.predicates.next"
+    current="$(run_remote_attempt predicates "$GAMEPLAY_USER")"
   else
-    run_remote_deadlined predicates "$GAMEPLAY_USER" >"$LEDGER/current.predicates.next"
+    current="$(run_remote_deadlined predicates "$GAMEPLAY_USER")"
   fi
-  chmod 0600 "$LEDGER/current.predicates.next"
-  if ! cmp -s "$LEDGER/baseline.predicates" "$LEDGER/current.predicates.next"; then
-    mv -f "$LEDGER/current.predicates.next" "$LEDGER/current.predicates"
+  if [[ "$baseline_predicates" != "$current" ]]; then
+    printf '%s\n' "$current" >"$LEDGER/current.predicates"
+    chmod 0600 "$LEDGER/current.predicates"
     fail 'rollback predicates differ from the sanitized baseline; inspection is required'
   fi
-  rm -f "$LEDGER/current.predicates.next" "$LEDGER/current.predicates"
+  rm -f "$LEDGER/current.predicates"
 }
 
 if [[ "$MODE" == reconcile ]]; then

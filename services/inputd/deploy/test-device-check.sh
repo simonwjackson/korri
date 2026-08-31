@@ -605,8 +605,22 @@ esac
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GATE="$HERE/device-check.sh"
+KORRI_LEDGER_PROOF_HELPER="${KORRI_LEDGER_PROOF_HELPER:-${CARGO_TARGET_DIR:-$HERE/../target}/debug/korri-ledger-proof}"
+export KORRI_LEDGER_PROOF_HELPER
+[[ -x "$KORRI_LEDGER_PROOF_HELPER" ]] || {
+  printf 'ledger proof helper is unavailable for tests\n' >&2
+  exit 1
+}
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+proof_ledger="$TMP/proof-ledger"
+proof_outside="$TMP/proof-outside"
+mkdir -m 0700 "$proof_ledger"
+printf '%s\n' outside >"$proof_outside"
+ln -s "$proof_outside" "$proof_ledger/baseline.predicates.next"
+printf '%s\n' proof | "$KORRI_LEDGER_PROOF_HELPER" write-new "$proof_ledger" baseline.predicates
+[[ "$(cat "$proof_outside")" == outside ]]
+[[ "$("$KORRI_LEDGER_PROOF_HELPER" read "$proof_ledger" baseline.predicates)" == proof ]]
 # The test extracts the exact gate function under test.
 # shellcheck disable=SC1090
 source <(awk '
@@ -1988,6 +2002,31 @@ fi
 [[ "$(stat -c %a "$flow_ledger/baseline.predicates")" == 600 ]]
 [[ "$(wc -l <"$flow_ledger/consumed-gates")" -eq 7 ]]
 
+# Resume always reads the baseline proof through the descriptor-bound helper.
+for proof_model in symlink hardlink wrong-mode; do
+  proof_ledger="$TMP/baseline-proof-$proof_model-ledger"
+  cp -a "$flow_ledger" "$proof_ledger"
+  proof_outside="$TMP/baseline-proof-$proof_model-outside"
+  cp "$proof_ledger/baseline.predicates" "$proof_outside"
+  case "$proof_model" in
+    symlink)
+      rm "$proof_ledger/baseline.predicates"
+      ln -s "$proof_outside" "$proof_ledger/baseline.predicates"
+      ;;
+    hardlink)
+      rm "$proof_ledger/baseline.predicates"
+      ln "$proof_outside" "$proof_ledger/baseline.predicates"
+      ;;
+    wrong-mode) chmod 0640 "$proof_ledger/baseline.predicates" ;;
+  esac
+  mapfile -d '' -t proof_args < <(common_for "$proof_ledger")
+  export HARNESS_LEDGER="$proof_ledger"
+  assert_fails_with 'ledger state exists without a safe baseline proof' run_gate \
+    --mode inject-health-failure "${proof_args[@]}" --confirm "$confirm"
+  cmp -s "$proof_outside" "$flow_ledger/baseline.predicates"
+done
+export HARNESS_LEDGER="$flow_ledger"
+
 run_gate --mode inject-health-failure "${flow_args[@]}" --confirm "$confirm" >/dev/null
 grep -Fx 'state=automatic-rollback-green' "$flow_ledger/state" >/dev/null
 run_gate --mode rollback "${flow_args[@]}" --confirm "$confirm" >/dev/null
@@ -2045,6 +2084,31 @@ run_interactive persistent-switch pending-mutation "$flow_ledger" "$TMP/persiste
   "${flow_args[@]}" --confirm "$confirm"
 grep -Fx 'state=candidate-await-reboot' "$flow_ledger/state" >/dev/null
 export HARNESS_BOOT_ID=boot-three HARNESS_CURRENT_GENERATION="$CANDIDATE"
+
+# Candidate reboot proof rejects swapped or unsafe accepted-digest artifacts.
+for proof_model in symlink hardlink wrong-mode; do
+  proof_ledger="$TMP/accepted-proof-$proof_model-ledger"
+  cp -a "$flow_ledger" "$proof_ledger"
+  proof_outside="$TMP/accepted-proof-$proof_model-outside"
+  cp "$proof_ledger/sunshine-private-state.accepted" "$proof_outside"
+  case "$proof_model" in
+    symlink)
+      rm "$proof_ledger/sunshine-private-state.accepted"
+      ln -s "$proof_outside" "$proof_ledger/sunshine-private-state.accepted"
+      ;;
+    hardlink)
+      rm "$proof_ledger/sunshine-private-state.accepted"
+      ln "$proof_outside" "$proof_ledger/sunshine-private-state.accepted"
+      ;;
+    wrong-mode) chmod 0640 "$proof_ledger/sunshine-private-state.accepted" ;;
+  esac
+  mapfile -d '' -t proof_args < <(common_for "$proof_ledger")
+  export HARNESS_LEDGER="$proof_ledger"
+  assert_fails_with 'accepted Sunshine private-state proof is absent or unsafe' run_gate \
+    --mode candidate-reboot-verify "${proof_args[@]}" --confirm "$confirm"
+  cmp -s "$proof_outside" "$flow_ledger/sunshine-private-state.accepted"
+done
+export HARNESS_LEDGER="$flow_ledger"
 
 # The private Sunshine tree accepted after persistent HITL must survive reboot.
 cross_reboot_private_ledger="$TMP/cross-reboot-private-ledger"
@@ -2200,6 +2264,7 @@ export HARNESS_LEDGER="$resume_ledger"
 awk 'BEGIN{done=0} /^state=/{print "state=rollback-reboot-green"; done=1; next} {print} END{if(!done) print "state=rollback-reboot-green"}' \
   "$resume_ledger/state" >"$resume_ledger/state.next"
 mv "$resume_ledger/state.next" "$resume_ledger/state"
+rm -f "$resume_ledger/sunshine-private-state.accepted"
 export HARNESS_BOOT_COUNT_FILE="$TMP/boot-count" HARNESS_FAIL_BOOT_ID_AT=2
 : >"$HARNESS_BOOT_COUNT_FILE"
 printf '0\n' >"$HARNESS_BOOT_COUNT_FILE"

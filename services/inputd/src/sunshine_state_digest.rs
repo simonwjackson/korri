@@ -85,9 +85,31 @@ fn open_at(parent: RawFd, name: &[u8], flags: i32) -> io::Result<OwnedFd> {
     }
 }
 
-fn open_absolute(path: &Path, flags: i32) -> io::Result<OwnedFd> {
+#[repr(C)]
+struct OpenHow {
+    flags: u64,
+    mode: u64,
+    resolve: u64,
+}
+
+const RESOLVE_NO_SYMLINKS: u64 = 0x04;
+
+fn open_absolute_no_symlinks(path: &Path, flags: i32) -> io::Result<OwnedFd> {
     let path = c_name(path.as_os_str().as_bytes())?;
-    let fd = unsafe { libc::open(path.as_ptr(), flags | libc::O_CLOEXEC, 0) };
+    let how = OpenHow {
+        flags: (flags | libc::O_CLOEXEC) as u64,
+        mode: 0,
+        resolve: RESOLVE_NO_SYMLINKS,
+    };
+    let fd = unsafe {
+        libc::syscall(
+            libc::SYS_openat2,
+            libc::AT_FDCWD,
+            path.as_ptr(),
+            &how,
+            std::mem::size_of::<OpenHow>(),
+        ) as i32
+    };
     if fd < 0 {
         Err(io::Error::last_os_error())
     } else {
@@ -301,17 +323,17 @@ where
     if !canonical.is_absolute() {
         return Err(io::Error::from_raw_os_error(libc::EINVAL));
     }
-    let home_fd = open_absolute(
+    let home_fd = open_absolute_no_symlinks(
         &canonical,
         libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW,
     )?;
-    validate_directory(home_fd.as_raw_fd(), expected_uid)?;
+    let home_snapshot = validate_directory(home_fd.as_raw_fd(), expected_uid)?;
     let config_fd = open_at(
         home_fd.as_raw_fd(),
         b".config",
         libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW,
     )?;
-    validate_directory(config_fd.as_raw_fd(), expected_uid)?;
+    let config_snapshot = validate_directory(config_fd.as_raw_fd(), expected_uid)?;
     let root = load_node(config_fd.as_raw_fd(), b"sunshine".to_vec(), expected_uid)?;
 
     for required in [REQUIRED_CONFIG, REQUIRED_STATE] {
@@ -324,6 +346,50 @@ where
     }
 
     hook();
+
+    let rebound_home = open_absolute_no_symlinks(
+        &canonical,
+        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW,
+    )?;
+    if validate_directory(rebound_home.as_raw_fd(), expected_uid)? != home_snapshot
+        || Snapshot::from_fd(home_fd.as_raw_fd())? != home_snapshot
+    {
+        return Err(io::Error::from_raw_os_error(libc::ESTALE));
+    }
+    let rebound_config = open_at(
+        rebound_home.as_raw_fd(),
+        b".config",
+        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW,
+    )?;
+    if validate_directory(rebound_config.as_raw_fd(), expected_uid)? != config_snapshot
+        || Snapshot::from_fd(config_fd.as_raw_fd())? != config_snapshot
+    {
+        return Err(io::Error::from_raw_os_error(libc::ESTALE));
+    }
+    let retained_config_entry = open_at(
+        home_fd.as_raw_fd(),
+        b".config",
+        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW,
+    )?;
+    if validate_directory(retained_config_entry.as_raw_fd(), expected_uid)? != config_snapshot {
+        return Err(io::Error::from_raw_os_error(libc::ESTALE));
+    }
+    let rebound_root = open_at(
+        rebound_config.as_raw_fd(),
+        b"sunshine",
+        libc::O_PATH | libc::O_NOFOLLOW,
+    )?;
+    let retained_root_entry = open_at(
+        config_fd.as_raw_fd(),
+        b"sunshine",
+        libc::O_PATH | libc::O_NOFOLLOW,
+    )?;
+    if Snapshot::from_fd(rebound_root.as_raw_fd())? != root.snapshot
+        || Snapshot::from_fd(retained_root_entry.as_raw_fd())? != root.snapshot
+        || root.snapshot.kind() != libc::S_IFDIR
+    {
+        return Err(io::Error::from_raw_os_error(libc::ESTALE));
+    }
     verify_node(&root, expected_uid)?;
     let mut hasher = Sha256::new();
     hash_node(&mut hasher, b"", &root);
@@ -420,6 +486,31 @@ mod tests {
         let (_temp, home, uid) = fixture();
         fs::write(home.join(".config/sunshine/sunshine.conf"), b"").unwrap();
         assert!(digest_home(&home, uid).is_err());
+    }
+
+    #[test]
+    fn rejects_replaced_sunshine_root_and_config_parent() {
+        let (_temp, home, uid) = fixture();
+        let config = home.join(".config");
+        let root = config.join("sunshine");
+        assert!(digest_home_with_hook(&home, uid, || {
+            fs::rename(&root, config.join("sunshine.old")).unwrap();
+            fs::create_dir(&root).unwrap();
+            fs::write(root.join("sunshine.conf"), b"replacement\n").unwrap();
+            fs::write(root.join("sunshine_state.json"), b"{}\n").unwrap();
+        })
+        .is_err());
+
+        let (_temp, home, uid) = fixture();
+        let config = home.join(".config");
+        assert!(digest_home_with_hook(&home, uid, || {
+            fs::rename(&config, home.join(".config.old")).unwrap();
+            let root = config.join("sunshine");
+            fs::create_dir_all(&root).unwrap();
+            fs::write(root.join("sunshine.conf"), b"replacement\n").unwrap();
+            fs::write(root.join("sunshine_state.json"), b"{}\n").unwrap();
+        })
+        .is_err());
     }
 
     #[test]

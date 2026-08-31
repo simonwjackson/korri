@@ -24,6 +24,10 @@ path = "src/bundle_select.rs"
 name = "korri-sunshine-state-digest"
 path = "src/sunshine_state_digest.rs"
 
+[[bin]]
+name = "korri-ledger-proof"
+path = "src/ledger_proof.rs"
+
 [dependencies]
 evdev = { version = "0.13.2", features = ["stream-trait"] }
 futures-util = "0.3"
