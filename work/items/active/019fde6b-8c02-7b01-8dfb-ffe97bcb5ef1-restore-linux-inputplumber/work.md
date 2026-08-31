@@ -23,7 +23,7 @@ Restore Korri's Linux normalized-input boundary using a pinned upstream InputPlu
 - The current debug APK is installed on `usu`. The automated device smoke reached the app but stopped because Android denied `/storage/emulated/0/korri/upstreams.json`; no permission was changed automatically.
 - Read-only Zao inspection at the new candidate found the rollback generation still current/default, the exact controller on USB `3-4`, no marker, an inactive lease, and zero game units.
 - `nix run .#inputd-check`, `nix run .#korrid-check`, Android JVM/APK/native checks, portal/Shift checks, and all Sunshine package/protocol checks pass at Korri commit `cc138440792525ead0cf8fdf78a74fbca8acd97f`.
-- Mountainous branch `unified` is clean at `d35fba5`. It imports only `nixosModules.korri-linux-host` and pins the exact local Korri revision above. Nothing is pushed and no PR exists.
+- Mountainous branch `unified` has the Korri lock committed at `d35fba5`. A concurrent unrelated modification exists in `features/disk-array/nixos.nix`; this rollout did not modify or stage it. Zao still imports only `nixosModules.korri-linux-host` and pins the exact local Korri revision above. Nothing is pushed and no PR exists.
 - The current candidate is `/nix/store/2j9jrmi8p0xyygx9ahsdr2s8f65adcn2-nixos-system-zao-26.05.20260313.c06b4ae`. Its gate digest is `f24f17cb497fce2150a2d47c304ebc718da79984e385a56907e09156a9e0d3e5`. It is rooted on Zao at `/nix/var/nix/gcroots/korri-candidate-unified-d35fba5`.
 - The rollback generation remains `/nix/store/ac46r72fh00p9g81z5hv45pw8zdsbpy4-nixos-system-zao-26.05.20260313.c06b4ae`.
 - Zao is at the exact rollback baseline. The controller is connected to USB port `3-4`. No Korri game unit is active. The attempt marker is absent and the attempt lease is inactive.
@@ -38,7 +38,7 @@ Restore Korri's Linux normalized-input boundary using a pinned upstream InputPlu
 
 ## Resume checkpoint
 
-1. Verify the Korri worktree is clean at the final documentation commit above code revision `cc138440792525ead0cf8fdf78a74fbca8acd97f`. Verify Mountainous is clean at `d35fba5` and still pins that exact local Korri revision.
+1. Verify the Korri worktree is clean at the final documentation commit above code revision `cc138440792525ead0cf8fdf78a74fbca8acd97f`. Verify Mountainous still pins the exact local Korri revision at `d35fba5`. Preserve and reconcile the unrelated `features/disk-array/nixos.nix` work separately; do not include it in this rollout.
 2. Verify Zao current and default generations equal the rollback generation. Verify the marker is absent, the lease is inactive, and active `korri-game-*.service` count is zero.
 3. Keep the controller in USB port `3-4`. Verify identity `0003:045e:0b12:0501`, `ID_SERIAL=Microsoft_Controller_3039373138353136313636313332`, and `ID_PATH=pci-0000:00:14.0-usb-0:4:1.0`.
 4. Use candidate `/nix/store/2j9jrmi8p0xyygx9ahsdr2s8f65adcn2-nixos-system-zao-26.05.20260313.c06b4ae`. Use confirmation `CONFIRM-a34a3a4784b3bcc1`; do not reuse any older candidate token.
