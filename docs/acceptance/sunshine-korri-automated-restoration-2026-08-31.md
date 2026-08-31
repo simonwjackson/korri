@@ -7,11 +7,11 @@ This record contains automated evidence only. It is not physical VAAPI, controll
 ## Source identity
 
 - Korri branch: `feat/restore-linux-inputplumber`
-- Korri revision: `69251d9d6d990ae6d599676940ca7c7a28e5a0d5`
+- Korri revision: `2010ec37bd55faecc582d6158637f485a9fecc4e`
 - Mountainous branch: `unified`
-- Mountainous revision: `92e2501`
-- Zao candidate: `/nix/store/gky6svmyycxji6vxqig1z3v4cy4z3d6x-nixos-system-zao-26.05.20260313.c06b4ae`
-- Candidate gate SHA-256: `d7bf1678c4ce8eff3e0641106a804f5984b2ca1fae862385ff27befe6fbd04b7`
+- Mountainous revision: `62ed578`
+- Zao candidate: `/nix/store/q92c2g8qq04ji56r6alryf2zcww1a05g-nixos-system-zao-26.05.20260313.c06b4ae`
+- Candidate gate SHA-256: `579943b95737f7d1e081460880f9ab338e78ab7a45920a303ddf42d0e8a5254d`
 - Candidate Sunshine: `/nix/store/iaxhcnwzc9hqrdiangphcdrg64zyfhdg-sunshine-korri-2025.924.154138-korri/bin/sunshine`
 - Approved patch-set SHA-256: `30121b5d935b435482814b2c2801c6c3c456bc42c6019123f77018cb0294a62a`
 
@@ -28,7 +28,7 @@ The following checks passed on the recorded source:
 - the focused Android JVM, native runtime-settings, korrid, portal, Shift, Sunshine package, Sunshine protocol, and APK checks recorded by commit `01992fb7`
 - device-gate shell tests for stock Sunshine rejection, running-executable replacement, duplicate/reordered/wrong patch records, wrong base and FFmpeg ABI provenance, unsafe or absent baselines, post-HITL private-tree replacement, and cross-reboot private-state loss
 
-The candidate is copied to Zao and rooted at `/nix/var/nix/gcroots/korri-candidate-unified-92e2501`. Read-only verification found the rollback generation still current and default, no attempt marker, an inactive lease, and zero live `korri-game-*.service` units.
+The candidate is copied to Zao and rooted at `/nix/var/nix/gcroots/korri-candidate-unified-62ed578`. Read-only verification found the rollback generation still current and default, no attempt marker, an inactive lease, and zero live `korri-game-*.service` units.
 
 The current debug APK was built and installed on `usu` through its live adb mDNS identity. The device check reached the installed application, but its catalog smoke stopped because Android denied `/storage/emulated/0/korri/upstreams.json`. No permission was changed automatically. This requires the final device interaction before the Sunshine journey can run.
 

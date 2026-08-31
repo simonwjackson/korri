@@ -21,9 +21,9 @@ Restore Korri's Linux normalized-input boundary using a pinned upstream InputPlu
 - Patch `0015` is shipped and checked but remains inert. The legacy input-seat receiver, launch sidecar/token authority, and virtual-seat backend remain separate work under the explicit legacy-equivalence decision.
 - The current debug APK is installed on `usu`. The automated device smoke reached the app but stopped because Android denied `/storage/emulated/0/korri/upstreams.json`; no permission was changed automatically.
 - Read-only Zao inspection at the new candidate found the rollback generation still current/default, the exact controller on USB `3-4`, no marker, an inactive lease, and zero game units.
-- `nix run .#inputd-check`, `nix run .#korrid-check`, Android JVM/APK/native checks, portal/Shift checks, and all Sunshine package/protocol checks pass at Korri commit `69251d9d6d990ae6d599676940ca7c7a28e5a0d5`.
-- Mountainous branch `unified` is clean at `92e2501`. It imports only `nixosModules.korri-linux-host` and pins the exact local Korri revision above. Nothing is pushed and no PR exists.
-- The current candidate is `/nix/store/gky6svmyycxji6vxqig1z3v4cy4z3d6x-nixos-system-zao-26.05.20260313.c06b4ae`. Its gate digest is `d7bf1678c4ce8eff3e0641106a804f5984b2ca1fae862385ff27befe6fbd04b7`. It is rooted on Zao at `/nix/var/nix/gcroots/korri-candidate-unified-92e2501`.
+- `nix run .#inputd-check`, `nix run .#korrid-check`, Android JVM/APK/native checks, portal/Shift checks, and all Sunshine package/protocol checks pass at Korri commit `2010ec37bd55faecc582d6158637f485a9fecc4e`.
+- Mountainous branch `unified` is clean at `62ed578`. It imports only `nixosModules.korri-linux-host` and pins the exact local Korri revision above. Nothing is pushed and no PR exists.
+- The current candidate is `/nix/store/q92c2g8qq04ji56r6alryf2zcww1a05g-nixos-system-zao-26.05.20260313.c06b4ae`. Its gate digest is `579943b95737f7d1e081460880f9ab338e78ab7a45920a303ddf42d0e8a5254d`. It is rooted on Zao at `/nix/var/nix/gcroots/korri-candidate-unified-62ed578`.
 - The rollback generation remains `/nix/store/ac46r72fh00p9g81z5hv45pw8zdsbpy4-nixos-system-zao-26.05.20260313.c06b4ae`.
 - Zao is at the exact rollback baseline. The controller is connected to USB port `3-4`. No Korri game unit is active. The attempt marker is absent and the attempt lease is inactive.
 - `user@1000` remains PID `363588`, invocation `31dfefc905ea49fd8ec0b05a4a0e53fd`. No rollout test restarted it.
@@ -40,7 +40,7 @@ Restore Korri's Linux normalized-input boundary using a pinned upstream InputPlu
 1. Verify the Korri worktree is clean at `378658a786f4c6712c814d1005aece2ac5501803` plus the final documentation commit. Verify Mountainous is clean at `9219f02` and still pins that exact local Korri revision.
 2. Verify Zao current and default generations equal the rollback generation. Verify the marker is absent, the lease is inactive, and active `korri-game-*.service` count is zero.
 3. Keep the controller in USB port `3-4`. Verify identity `0003:045e:0b12:0501`, `ID_SERIAL=Microsoft_Controller_3039373138353136313636313332`, and `ID_PATH=pci-0000:00:14.0-usb-0:4:1.0`.
-4. Use candidate `/nix/store/gky6svmyycxji6vxqig1z3v4cy4z3d6x-nixos-system-zao-26.05.20260313.c06b4ae`. Generate and use the confirmation token printed by the fresh preflight; do not reuse the old v25 token.
+4. Use candidate `/nix/store/q92c2g8qq04ji56r6alryf2zcww1a05g-nixos-system-zao-26.05.20260313.c06b4ae`. Generate and use the confirmation token printed by the fresh preflight; do not reuse the old v25 token.
 5. Create a new ledger after v25. Start with `zao-20260830-inputplumber-unified-v26` or a later unused suffix.
 6. Do not overlap physical `ask_user` prompts. Wait for each answer before posting the next prompt. For hotplug, use one prompt: unplug, wait 15 seconds, reconnect to port `3-4`.
 7. Run the full temporary candidate gate. The first four stages have prior evidence but tokens must bind the new nonce. At `direct-action-isolation`, trigger Guide plus RB, verify `action-isolation=verified`, wait for timeout, then verify `action-cleanup=verified`.
