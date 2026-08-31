@@ -660,11 +660,12 @@ remote_sunshine_package_provenance() {
   mapfile -t sunshine_execs < <(grep -oE '/nix/store/[^ ;{}"]+/bin/sunshine' <<<"$execstart" | sort -u)
   [[ "${#sunshine_execs[@]}" -eq 1 ]] \
     || fail 'Sunshine unit does not declare one exact store executable'
-  expected="${sunshine_execs[0]}"
-  [[ "$running" == "$expected" ]] \
+  declared="${sunshine_execs[0]}"
+  package_root="${declared%/bin/sunshine}"
+  expected="$(readlink -f -- "$declared" 2>/dev/null || true)"
+  [[ "$expected" == "$package_root"/bin/sunshine* && "$running" == "$expected" ]] \
     || fail 'running Sunshine executable differs from the candidate unit'
 
-  package_root="${running%/bin/sunshine}"
   [[ "${package_root##*/}" == *sunshine-korri* ]] \
     || fail 'candidate Sunshine package is not sunshine-korri'
   provenance="$package_root/share/korri/sunshine-korri/provenance"

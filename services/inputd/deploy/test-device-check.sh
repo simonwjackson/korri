@@ -743,6 +743,10 @@ confirm="CONFIRM-$(printf '%s' "$MACHINE_ID|$HOSTNAME|$CANDIDATE" | sha256sum | 
 # shellcheck disable=SC2016
 grep -F -- '--setenv="PATH=$candidate/sw/bin"' "$GATE" >/dev/null
 grep -Fx 'UNHEALTHY_OBSERVE_SECONDS=60' "$GATE" >/dev/null
+# shellcheck disable=SC2016 # Literal production source invariants.
+grep -F 'expected="$(readlink -f -- "$declared"' "$GATE" >/dev/null
+# shellcheck disable=SC2016 # Literal production source invariants.
+grep -F 'package_root="${declared%/bin/sunshine}"' "$GATE" >/dev/null
 # stat(1) canonicalizes 0700/0600 to 700/600; candidate calls must use the
 # canonical forms so post-chmod verification compares equal.
 # shellcheck disable=SC2016
