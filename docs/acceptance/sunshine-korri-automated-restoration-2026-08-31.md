@@ -7,14 +7,14 @@ This record contains automated evidence only. It is not physical VAAPI, controll
 ## Source identity
 
 - Korri branch: `feat/restore-linux-inputplumber`
-- Korri revision: `cc138440792525ead0cf8fdf78a74fbca8acd97f`
+- Korri revision: `6f34f1fddee0d5b0eb75e819ed218a4b694b566e`
 - Mountainous branch: `unified`
-- Mountainous revision: `d35fba5`
-- Zao candidate: `/nix/store/2j9jrmi8p0xyygx9ahsdr2s8f65adcn2-nixos-system-zao-26.05.20260313.c06b4ae`
-- Candidate gate SHA-256: `f24f17cb497fce2150a2d47c304ebc718da79984e385a56907e09156a9e0d3e5`
-- Candidate Sunshine declaration: `/nix/store/ximhf2xx0a86ppklxkdvfz193y7jsq78-sunshine-korri-2025.924.154138-korri/bin/sunshine`
-- Candidate Sunshine process target: `/nix/store/ximhf2xx0a86ppklxkdvfz193y7jsq78-sunshine-korri-2025.924.154138-korri/bin/sunshine-2025.924.154138-korri`
-- Approved patch-set SHA-256: `6f679d8d25ce9154c8088482ccc00c46333908457295b3857e9ecc8e6ed8ebb5`
+- Mountainous revision: `e3f988e`
+- Zao candidate: `/nix/store/2fbh1np1anck1y26b04v134rl0chk9m2-nixos-system-zao-26.05.20260313.c06b4ae`
+- Candidate gate SHA-256: `02e35bea4b68d9aa044a935a8e8715adc9e3a3410e685e5515107ae4d427dfef`
+- Candidate Sunshine declaration: `/nix/store/prhz4f9fapm7z7p2lhigzkvw8ai3s590-sunshine-korri-2025.924.154138-korri/bin/sunshine`
+- Candidate Sunshine process target: `/nix/store/prhz4f9fapm7z7p2lhigzkvw8ai3s590-sunshine-korri-2025.924.154138-korri/bin/sunshine-2025.924.154138-korri`
+- Approved patch-set SHA-256: `4b96bab218af1e4c7fa5961fbbd95592be9d8bdd234eedc77585b48371a24522`
 
 Mountainous imports only `nixosModules.korri-linux-host` for Zao and provides host identity and network values. The `korri-input-host` lock remains a local exact `git+file` revision. It is not the final portable publication pin.
 
@@ -28,11 +28,11 @@ The following checks passed on the recorded source:
 - `nix build --no-link .#nixosConfigurations.zao.config.system.build.toplevel`
 - the focused Android JVM, native runtime-settings, korrid, portal, Shift, Sunshine package, Sunshine protocol, and APK checks recorded by commit `01992fb7`
 - device-gate shell tests for stock Sunshine rejection, running-executable replacement, the shipped `bin/sunshine` symlink to its versioned process target, duplicate/reordered/wrong patch records, wrong base and FFmpeg ABI provenance, unsafe or absent baselines, descriptor-bound baseline and accepted-proof symlink/hard-link/mode rejection, post-HITL private-tree replacement, and cross-reboot private-state loss
-- final review checks for descriptor-bound virtual-target ACL mutation, physical lookalike and replacement rejection, game-unit Sunshine private-state denial, ledger-bound automated evidence, `Ready` bundle health, exact host payload framing, weak-owned coalesced capability ACK delivery, repeated-owner query reuse, and exact stream-ended mutation classification
+- final review checks for descriptor-bound virtual-target ACL mutation, physical lookalike and replacement rejection, game-unit Sunshine private-state denial, ledger-bound automated evidence, `Ready` bundle health, exact host payload framing, serialized control-thread capability ACK coalescing and disconnect-before-due drop, quiescent-only repeated-owner snapshot reuse, and exact stream-ended mutation classification
 
-The candidate is copied to Zao and rooted at `/nix/var/nix/gcroots/korri-candidate-unified-d35fba5`. Read-only verification found the rollback generation still current and default, no attempt marker, an inactive lease, and zero live `korri-game-*.service` units.
+The candidate is copied to Zao and rooted at `/nix/var/nix/gcroots/korri-candidate-unified-e3f988e`. The host module also rejects an `overrideAttrs` derivative that retains trusted passthru/provenance while removing the approved patches; only the exact approved final derivation and output are accepted. Read-only verification found the rollback generation still current and default, no attempt marker, an inactive lease, and zero live `korri-game-*.service` units.
 
-The current debug APK was built and installed on `usu` through its live adb mDNS identity. The device check reached the installed application, but its catalog smoke stopped because Android denied `/storage/emulated/0/korri/upstreams.json`. No permission was changed automatically. This requires the final device interaction before the Sunshine journey can run.
+The final debug APK builds successfully. An earlier compatible debug APK remains installed on `usu`, but the device was reported unavailable before this final build could be installed. Its prior catalog smoke stopped because Android denied `/storage/emulated/0/korri/upstreams.json`. No permission was changed automatically. Current APK installation and storage permission require the final device interaction before the Sunshine journey can run.
 
 ## Preserved boundaries
 

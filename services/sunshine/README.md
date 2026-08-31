@@ -31,6 +31,7 @@ Runtime settings mechanism contract:
 - Existing packet IDs remain stable: request `0x5504` and ack `0x5505`.
 - Operation `0` is a non-mutating capability query for the active Sunshine session.
 - Operation `0` returns a `0x5505` capability ack with gate status, reason, active-session supported operations, conservative bounds, launch baseline values, and current applied bitrate/FPS/resolution facts.
+- Capability queries are coalesced to one pending record on the serialized control thread. The first query starts one 100 ms encoder-capability settling window, later queries replace only the pending request identity, and session removal drops the record. No detached thread, asynchronous timer, or cross-thread control-server send is used.
 - Launch baseline bitrate, FPS, and resolution are tracked separately from current applied values for the lifetime of the stream.
 - Restore is explicit: callers send normal set commands back to the launch baseline values; Sunshine does not auto-restore from network or command outcomes.
 - Operations `1`, `2`, and `3` remain bitrate, FPS, and resolution mutation requests.
@@ -129,7 +130,7 @@ The installed package contains `share/korri/sunshine-korri/provenance`. This mod
 - each ordered Korri patch name and SHA-256 value,
 - one SHA-256 value for the complete ordered patch set.
 
-Nix also exposes the provenance path, approved base source hash, observed base source and derivation paths, ordered patch names, and patch-set digest through package passthru values. `approved-patches.nix` is the independent approval record. Package evaluation fails when the base version, base source hash, one patch hash, or the ordered patch-set digest changes. Deployment checks must use these values to attest the exact package. The manifest contains no secret or device-specific value.
+Nix also exposes the provenance path, approved base source hash, observed base source and derivation paths, ordered patch names, and patch-set digest through package passthru values. `approved-patches.nix` is the independent approval record. Package evaluation fails when the base version, base source hash, one patch hash, or the ordered patch-set digest changes. The host module also requires the exact approved final derivation and output, so an `overrideAttrs` derivative cannot preserve trusted metadata while replacing the executable or patches. Deployment checks must use these values to attest the exact package. The manifest contains no secret or device-specific value.
 
 ## Removal/upstream policy
 

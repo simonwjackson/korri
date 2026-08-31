@@ -21,6 +21,8 @@ Patch `0015` remains shipped, hardened, and inert by default. Full legacy input-
 
 Private Sunshine preservation is descriptor-bound. The digest helper must rebind canonical home, `.config`, and `sunshine` parent entries before acceptance. The rollout ledger must read and atomically create baseline and accepted private-state proofs through a no-follow directory descriptor; path-based test-then-open and fixed `.next` redirection are not accepted evidence.
 
+Capability acknowledgements remain on Sunshine's serialized control thread. One per-session pending record preserves a 100 ms encoder-capability settling window and coalesces query floods without detached threads, asynchronous timers, or cross-thread control-server access. Android can reuse a same-epoch final capability snapshot only when mutation and reconciliation state are quiescent. Host policy accepts only the exact approved final `sunshine-korri` derivation and output, not a metadata-preserving derivative.
+
 ## Architecture Revision — Portable by Default
 
 Device retries proved that full NixOS activation also reloads Home Manager and unrelated user services. The implementation therefore uses two modes only:
