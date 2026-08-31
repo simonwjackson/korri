@@ -1,10 +1,9 @@
-#include <boost/asio.hpp>
 #include <array>
 #include <cassert>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
-#include <memory>
+#include <optional>
 #include <vector>
 
 using namespace std::chrono_literals;
@@ -31,26 +30,27 @@ template<class T> static std::vector<std::uint8_t> bytes(T value, std::size_t ex
   return result;
 }
 
-struct Session : std::enable_shared_from_this<Session> {
-  explicit Session(boost::asio::io_context& io, int& delivered)
-      : timer(io), delivered(delivered) {}
-  boost::asio::steady_timer timer;
-  std::uint32_t pending{};
-  bool armed{};
-  int& delivered;
-  void query(std::uint32_t id) {
-    pending = id;
-    if (armed) return;
-    armed = true;
-    timer.expires_after(5ms);
-    std::weak_ptr<Session> weak = shared_from_this();
-    timer.async_wait([weak](const boost::system::error_code& error) {
-      if (error) return;
-      if (auto owner = weak.lock()) {
-        owner->armed = false;
-        owner->delivered = static_cast<int>(owner->pending);
-      }
-    });
+struct SerializedCapabilityAck {
+  bool pending{};
+  bool enabled{};
+  std::uint32_t newest_request_id{};
+  std::chrono::steady_clock::time_point due{};
+  int delivered{};
+
+  void query(std::uint32_t request_id, bool next_enabled,
+             std::chrono::steady_clock::time_point now) {
+    newest_request_id = request_id;
+    enabled = next_enabled;
+    if (!pending) {
+      pending = true;
+      due = now + 100ms;
+    }
+  }
+
+  void process(std::chrono::steady_clock::time_point now, bool connected) {
+    if (!pending || now < due) return;
+    pending = false;
+    if (connected) delivered = static_cast<int>(newest_request_id);
   }
 };
 
@@ -69,19 +69,25 @@ int main() {
   assert(!valid(bytes(ValueRequest{{1, 3, 0}, 1})));
   assert(!valid(bytes(ValueRequest{{1, 99, 0}, 1})));
 
-  boost::asio::io_context io;
-  int delivered = 0;
-  {
-    auto session = std::make_shared<Session>(io, delivered);
-    for (std::uint32_t id = 1; id <= 1000; ++id) session->query(id);
-    assert(session->armed);
-  }
-  io.run_for(20ms);
-  assert(delivered == 0); // destruction cancels safe weak delivery
+  const auto now = std::chrono::steady_clock::now();
+  SerializedCapabilityAck disconnected;
+  disconnected.query(7, true, now);
+  disconnected.process(now + 99ms, false);
+  assert(disconnected.pending);
+  disconnected.process(now + 100ms, false);
+  assert(!disconnected.pending);
+  assert(disconnected.delivered == 0); // removal/disconnect before due drops the ACK
 
-  io.restart();
-  auto session = std::make_shared<Session>(io, delivered);
-  for (std::uint32_t id = 1; id <= 1000; ++id) session->query(id);
-  io.run_for(20ms);
-  assert(delivered == 1000); // one bounded task coalesces the flood
+  SerializedCapabilityAck coalesced;
+  for (std::uint32_t id = 1; id <= 1000; ++id) {
+    coalesced.query(id, true, now);
+  }
+  assert(coalesced.pending);
+  assert(coalesced.newest_request_id == 1000);
+  assert(coalesced.due == now + 100ms); // flood does not extend or multiply work
+  coalesced.process(now + 99ms, true);
+  assert(coalesced.delivered == 0);
+  coalesced.process(now + 100ms, true);
+  assert(coalesced.delivered == 1000);
+  assert(!coalesced.pending);
 }

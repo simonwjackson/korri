@@ -444,6 +444,42 @@ public class KorriSunshineRuntimeSettingsTest {
     }
 
     @Test
+    public void replacementOwnerPollsFinalCapabilityWithMutationInFlight() {
+        FakeNative nativeApi = FakeNative.ready(131, 12345, 60, 60);
+        nativeApi.markMutationInFlight(9, MoonBridge.SS_RUNTIME_SETTINGS_OPERATION_SET_FPS);
+        FakeScheduler scheduler = new FakeScheduler();
+        KorriSunshineRuntimeSettings replacement = owner(
+                nativeApi, scheduler, ignored -> {}, new ControlledWaiter(),
+                new KorriSunshineRuntimeSettings.ProcessEpochQueryBudget());
+
+        assertTrue(replacement.start());
+        assertEquals(1, scheduler.pending.size());
+        assertEquals(0, nativeApi.queryIds.size());
+        nativeApi.completeMutation(
+                MoonBridge.SS_RUNTIME_SETTINGS_OUTCOME_APPLIED,
+                MoonBridge.SS_RUNTIME_SETTINGS_STATUS_APPLIED,
+                MoonBridge.SS_RUNTIME_SETTINGS_REASON_NONE);
+        scheduler.runOne();
+        assertTrue(replacement.available(MoonBridge.SS_RUNTIME_SETTINGS_OPERATION_SET_FPS));
+    }
+
+    @Test
+    public void replacementOwnerReconcilesFinalCapabilitySnapshot() {
+        FakeNative nativeApi = FakeNative.ready(132, 12345, 60, 60);
+        nativeApi.markReconciliationRequired();
+        FakeScheduler scheduler = new FakeScheduler();
+        KorriSunshineRuntimeSettings replacement = owner(
+                nativeApi, scheduler, ignored -> {}, new ControlledWaiter(),
+                new KorriSunshineRuntimeSettings.ProcessEpochQueryBudget());
+
+        assertTrue(replacement.start());
+        assertEquals(1, scheduler.pending.size());
+        assertEquals(0, nativeApi.queryIds.size());
+        scheduler.runOne();
+        assertEquals(1, nativeApi.queryIds.size());
+    }
+
+    @Test
     public void validatesRestoreAndMultipleAspects() throws Exception {
         assertEquals(480, KorriSunshineRuntimeSettings.safeHeight(854, 1920, 1080));
         assertEquals(720, KorriSunshineRuntimeSettings.safeHeight(1280, 1920, 1080));
@@ -589,6 +625,19 @@ public class KorriSunshineRuntimeSettingsTest {
                 mutationSent.countDown();
                 return 0;
             }
+        }
+
+        synchronized void markMutationInFlight(int requestId, int operation) {
+            wire = wire.clone();
+            pendingMutationId = requestId;
+            wire[24] = requestId;
+            wire[25] = operation;
+            wire[26] = MoonBridge.SS_RUNTIME_SETTINGS_OUTCOME_IN_FLIGHT;
+        }
+
+        synchronized void markReconciliationRequired() {
+            wire = wire.clone();
+            wire[30] = 1;
         }
 
         synchronized void markStrictFinalCapability(int requestId) {

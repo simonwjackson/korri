@@ -79,6 +79,11 @@ let
       pname = "sunshine-korri";
     }));
   };
+  strippedApprovedSunshine = evaluate {
+    services.korriLinuxHost.sunshine.package = lib.mkForce (sunshinePackage.overrideAttrs (_: {
+      patches = [ ];
+    }));
+  };
   collidingIdentity = evaluate {
     services.korriLinuxHost.serviceIdentities.inputdUid = lib.mkForce 1001;
   };
@@ -158,6 +163,8 @@ assert hasFailedAssertion "exact approved sunshine-korri" stockSunshine;
 assert evaluationRejected stockSunshine;
 assert hasFailedAssertion "exact approved sunshine-korri" lookalikeSunshine;
 assert evaluationRejected lookalikeSunshine;
+assert hasFailedAssertion "exact approved sunshine-korri" strippedApprovedSunshine;
+assert evaluationRejected strippedApprovedSunshine;
 assert hasFailedAssertion "differ from the gameplay identity" collidingIdentity;
 assert evaluationRejected invalidLabel;
 pkgs.runCommand "korri-linux-host-module-check" { } ''

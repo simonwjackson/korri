@@ -6,7 +6,7 @@
     "/nix/store/w8dd7pbl8f0qg2cyb7ay8hmli854giwv-sunshine-2025.924.154138.drv"
   ];
   reviewedLibavcodecVersion = "62.11.100";
-  patchSetSha256 = "6f679d8d25ce9154c8088482ccc00c46333908457295b3857e9ecc8e6ed8ebb5";
+  patchSetSha256 = "4b96bab218af1e4c7fa5961fbbd95592be9d8bdd234eedc77585b48371a24522";
   patches = [
     {
       name = "0001-add-runtime-settings-protocol-surface.patch";
@@ -16,7 +16,7 @@
     {
       name = "0002-wire-runtime-settings-control-plane.patch";
       path = ./patches/0002-wire-runtime-settings-control-plane.patch;
-      sha256 = "6c008405d640a665acf7706c07c09c26455ba4a01b6b01b897ceb59fb6bf43e4";
+      sha256 = "dd9b7283dd2cbcb2476571bfcf61702b00dba428422d309e31e7b4c839db41be";
     }
     {
       name = "0003-apply-runtime-bitrate-and-fps-changes.patch";

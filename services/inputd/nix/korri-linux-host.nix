@@ -228,6 +228,8 @@ in
       {
         assertion =
           lib.getName cfg.sunshine.package == "sunshine-korri"
+          && (cfg.sunshine.package.drvPath or null) == korri.packages.${system}.sunshine-korri.drvPath
+          && (cfg.sunshine.package.outPath or null) == korri.packages.${system}.sunshine-korri.outPath
           && (cfg.sunshine.package.korriPatchSetSha256 or null) == sunshineApproved.patchSetSha256
           && (cfg.sunshine.package.korriBaseSunshineVersion or null) == sunshineApproved.baseSunshineVersion
           && (cfg.sunshine.package.korriApprovedBaseSunshineSourceHash or null) == sunshineApproved.approvedBaseSourceHash

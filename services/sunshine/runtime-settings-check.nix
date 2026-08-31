@@ -194,9 +194,12 @@ let
       && contains "expected_payload_size = sizeof(control_runtime_settings_request_prefix_t)" patch
       && contains "expected_payload_size = sizeof(control_runtime_settings_resolution_request_t)" patch
       && contains "expected_payload_size = sizeof(control_runtime_settings_request_t)" patch
-      && contains "std::weak_ptr<session_t> weak_self" patch
-      && contains "runtime_settings_capability_timer_armed" patch
-      && contains "timer->async_wait([weak_session]" patch
+      && contains "runtime_settings_capability_pending" patch
+      && contains "runtime_settings_capability_due = std::chrono::steady_clock::now() + 100ms" patch
+      && contains "now >= session->control.runtime_settings_capability_due" patch
+      && contains "send_runtime_settings_capability_ack(session, request_id, enabled)" patch
+      && !(contains "steady_timer" patch)
+      && !(contains "async_wait" patch)
       && !(contains ").detach()" patch)
     ))
     (check "runtime resolution uses explicit width and height fields" (

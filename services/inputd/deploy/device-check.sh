@@ -28,7 +28,7 @@ EXPECTED_SUNSHINE_BASE_VERSION='2025.924.154138'
 EXPECTED_SUNSHINE_BASE_SOURCE_HASH='sha256-QrPfZqd9pgufohUjxlTpO6V0v7B41UrXHZaESsFjZ48='
 EXPECTED_SUNSHINE_BASE_DERIVATION='/nix/store/w8dd7pbl8f0qg2cyb7ay8hmli854giwv-sunshine-2025.924.154138.drv'
 EXPECTED_SUNSHINE_LIBAVCODEC_VERSION='62.11.100'
-EXPECTED_SUNSHINE_PATCH_SET_SHA256='6f679d8d25ce9154c8088482ccc00c46333908457295b3857e9ecc8e6ed8ebb5'
+EXPECTED_SUNSHINE_PATCH_SET_SHA256='4b96bab218af1e4c7fa5961fbbd95592be9d8bdd234eedc77585b48371a24522'
 KORRID_CONTROL_GROUP='korri-control'
 KORRID_CONTROL_SOCKET='/run/korrid-control/control.sock'
 # This path comes from HostSessionControl's existing private-state producer.
@@ -42,7 +42,7 @@ LEDGER_PROOF_HELPER=''
 expected_sunshine_patch_manifest() {
   cat <<'EOF'
 patch=0001-add-runtime-settings-protocol-surface.patch sha256=8a9522e39de85cb4ea7c0558a806780ae39d588555c7a84c600a56b9fdbe3bd4
-patch=0002-wire-runtime-settings-control-plane.patch sha256=6c008405d640a665acf7706c07c09c26455ba4a01b6b01b897ceb59fb6bf43e4
+patch=0002-wire-runtime-settings-control-plane.patch sha256=dd9b7283dd2cbcb2476571bfcf61702b00dba428422d309e31e7b4c839db41be
 patch=0003-apply-runtime-bitrate-and-fps-changes.patch sha256=d7d89d4a8b4b06d2c473f4c2156a17ecfe369f805132e90a2d05197e69e7e01d
 patch=0004-add-proof-gated-runtime-resolution-apply-path.patch sha256=599d3db14ea57e9712148e83fd7f0404dba96c5c40506c3209c5dbaa7778646e
 patch=0005-add-seamless-vaapi-runtime-bitrate-path.patch sha256=304c98540a731559ec909797dc75edfc0d4bce43e5aab92dbcf74f0c4506509d

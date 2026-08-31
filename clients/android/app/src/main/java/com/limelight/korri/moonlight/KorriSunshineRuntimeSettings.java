@@ -124,7 +124,9 @@ public final class KorriSunshineRuntimeSettings implements AutoCloseable {
                 return false;
             }
             if (finalCapabilitySnapshotLocked(state)) return true;
-            attach = state.queryOutcome == MoonBridge.SS_RUNTIME_SETTINGS_OUTCOME_IN_FLIGHT;
+            attach = state.queryOutcome == MoonBridge.SS_RUNTIME_SETTINGS_OUTCOME_IN_FLIGHT
+                    || state.mutationOutcome == MoonBridge.SS_RUNTIME_SETTINGS_OUTCOME_IN_FLIGHT
+                    || state.reconciliationRequired;
         }
         if (attach) {
             schedule(POLL_MS);
@@ -382,6 +384,8 @@ public final class KorriSunshineRuntimeSettings implements AutoCloseable {
                 && value.capabilityReceived
                 && value.queryRequestId > 0
                 && value.queryOutcome == MoonBridge.SS_RUNTIME_SETTINGS_OUTCOME_APPLIED
+                && value.mutationOutcome != MoonBridge.SS_RUNTIME_SETTINGS_OUTCOME_IN_FLIGHT
+                && !value.reconciliationRequired
                 && factsRepresentable(value);
     }
 
