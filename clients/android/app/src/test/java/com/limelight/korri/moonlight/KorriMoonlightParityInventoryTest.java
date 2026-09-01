@@ -97,6 +97,41 @@ public class KorriMoonlightParityInventoryTest {
         assertTrue(game.contains("httpConn.quitApp();"));
     }
 
+    @Test
+    public void runtimeSettingsMutexIsRetiredBeforePlatformCleanup() throws Exception {
+        String controlStream = read("src/main/jni/moonlight-core/moonlight-common-c/src/ControlStream.c");
+        String destroy = between(controlStream,
+                "static void destroyRuntimeSettingsSupport(void)",
+                "void connectionRuntimeSettingsStreamEnded(void)");
+        int unpublish = destroy.indexOf(
+                "atomic_store_explicit(&runtimeSettingsPublished, false, memory_order_release);");
+        int drain = destroy.indexOf(
+                "while (atomic_load_explicit(&runtimeSettingsReaders, memory_order_acquire) != 0)");
+        int delete = destroy.indexOf("PltDeleteMutex(&runtimeSettingsMutex);");
+
+        assertTrue(controlStream.contains("static atomic_uint runtimeSettingsReaders"));
+        assertTrue(unpublish >= 0);
+        assertTrue(drain > unpublish);
+        assertTrue(delete > drain);
+        assertTrue(controlStream.contains(
+                "result = SsRuntimeSettingsDispatchRequest(&runtimeSettingsDispatch,"));
+        assertTrue(controlStream.contains(
+                "releaseRuntimeSettingsSupport();\n    return result;"));
+        assertTrue(controlStream.contains(
+                "SsRuntimeSettingsDispatchGetSnapshot(&runtimeSettingsDispatch, snapshot);\n"
+                        + "    releaseRuntimeSettingsSupport();"));
+        assertTrue(controlStream.contains(
+                "destroyRuntimeSettingsSupport();\n    PltDeleteMutex(&enetMutex);"));
+    }
+
+    private static String between(String source, String start, String end) {
+        int startIndex = source.indexOf(start);
+        int endIndex = source.indexOf(end, startIndex + start.length());
+        assertTrue(startIndex >= 0);
+        assertTrue(endIndex > startIndex);
+        return source.substring(startIndex, endIndex);
+    }
+
     private static String read(String path) throws Exception {
         return new String(Files.readAllBytes(Path.of(path)), StandardCharsets.UTF_8);
     }
