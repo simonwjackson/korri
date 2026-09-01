@@ -6,7 +6,7 @@
     "/nix/store/w8dd7pbl8f0qg2cyb7ay8hmli854giwv-sunshine-2025.924.154138.drv"
   ];
   reviewedLibavcodecVersion = "62.11.100";
-  patchSetSha256 = "4b96bab218af1e4c7fa5961fbbd95592be9d8bdd234eedc77585b48371a24522";
+  patchSetSha256 = "e96a0fbdfe8441b6bea9207fa2349ab7e80c726ccc022273770bad3d7aa1076a";
   patches = [
     {
       name = "0001-add-runtime-settings-protocol-surface.patch";
@@ -31,7 +31,7 @@
     {
       name = "0005-add-seamless-vaapi-runtime-bitrate-path.patch";
       path = ./patches/0005-add-seamless-vaapi-runtime-bitrate-path.patch;
-      sha256 = "304c98540a731559ec909797dc75edfc0d4bce43e5aab92dbcf74f0c4506509d";
+      sha256 = "a14ca9d556728ca1a4fcb14ae338a6275c9b28c52598a82a4e4f424956154d53";
     }
     {
       name = "0010-extend-runtime-resolution-fresh-idr-window.patch";

@@ -12,7 +12,8 @@ let
   approved = import approvedPatchesPath;
   contains = needle: haystack: lib.hasInfix needle haystack;
   check = message: assertion: { inherit message assertion; };
-  patch = lib.concatStringsSep "\n" (map builtins.readFile patchPaths);
+  patchSources = map builtins.readFile patchPaths;
+  patchContains = needle: builtins.any (source: contains needle source) patchSources;
   packageSource = builtins.readFile packagePath;
   readme = builtins.readFile readmePath;
   actualPatchRecords = map (path: {
@@ -51,36 +52,36 @@ let
       && sunshinePackage.korriReviewedLibavcodecVersion == approved.reviewedLibavcodecVersion
     ))
     (check "runtime settings packet IDs remain stable" (
-      contains "RUNTIME_SETTINGS_REQUEST_PACKET = 0x5504" patch
-      && contains "RUNTIME_SETTINGS_ACK_PACKET = 0x5505" patch
+      patchContains "RUNTIME_SETTINGS_REQUEST_PACKET = 0x5504"
+      && patchContains "RUNTIME_SETTINGS_ACK_PACKET = 0x5505"
     ))
     (check "runtime settings operation IDs remain stable" (
-      contains "RUNTIME_SETTINGS_OPERATION_QUERY_CAPABILITIES = 0" patch
-      && contains "RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS = 1" patch
-      && contains "RUNTIME_SETTINGS_OPERATION_SET_FPS = 2" patch
-      && contains "RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION = 3" patch
+      patchContains "RUNTIME_SETTINGS_OPERATION_QUERY_CAPABILITIES = 0"
+      && patchContains "RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS = 1"
+      && patchContains "RUNTIME_SETTINGS_OPERATION_SET_FPS = 2"
+      && patchContains "RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION = 3"
     ))
     (check "runtime settings status IDs remain stable" (
-      contains "RUNTIME_SETTINGS_STATUS_APPLIED = 0" patch
-      && contains "RUNTIME_SETTINGS_STATUS_FAILED = 1" patch
-      && contains "RUNTIME_SETTINGS_STATUS_INVALID = 2" patch
-      && contains "RUNTIME_SETTINGS_STATUS_DISABLED = 3" patch
+      patchContains "RUNTIME_SETTINGS_STATUS_APPLIED = 0"
+      && patchContains "RUNTIME_SETTINGS_STATUS_FAILED = 1"
+      && patchContains "RUNTIME_SETTINGS_STATUS_INVALID = 2"
+      && patchContains "RUNTIME_SETTINGS_STATUS_DISABLED = 3"
     ))
     (check "runtime settings reason IDs remain stable" (
-      contains "RUNTIME_SETTINGS_REASON_NONE = 0" patch
-      && contains "RUNTIME_SETTINGS_REASON_GATE_DISABLED = 1" patch
-      && contains "RUNTIME_SETTINGS_REASON_INVALID_BOUNDS = 2" patch
-      && contains "RUNTIME_SETTINGS_REASON_INVALID_PAYLOAD = 3" patch
-      && contains "RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER = 4" patch
-      && contains "RUNTIME_SETTINGS_REASON_UNSUPPORTED_BACKEND = 5" patch
-      && contains "RUNTIME_SETTINGS_REASON_UNSUPPORTED_OPERATION = 6" patch
-      && contains "RUNTIME_SETTINGS_REASON_APPLY_FAILED = 7" patch
-      && contains "RUNTIME_SETTINGS_REASON_CONTROL_NOT_READY = 8" patch
-      && contains "RUNTIME_SETTINGS_REASON_NO_ACK = 9" patch
-      && contains "RUNTIME_SETTINGS_REASON_CONFLICT = 10" patch
-      && contains "RUNTIME_SETTINGS_REASON_STALE_ACK = 11" patch
-      && contains "RUNTIME_SETTINGS_REASON_STREAM_ENDED = 12" patch
-      && contains "RUNTIME_SETTINGS_REASON_PROOF_GATED = 13" patch
+      patchContains "RUNTIME_SETTINGS_REASON_NONE = 0"
+      && patchContains "RUNTIME_SETTINGS_REASON_GATE_DISABLED = 1"
+      && patchContains "RUNTIME_SETTINGS_REASON_INVALID_BOUNDS = 2"
+      && patchContains "RUNTIME_SETTINGS_REASON_INVALID_PAYLOAD = 3"
+      && patchContains "RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER = 4"
+      && patchContains "RUNTIME_SETTINGS_REASON_UNSUPPORTED_BACKEND = 5"
+      && patchContains "RUNTIME_SETTINGS_REASON_UNSUPPORTED_OPERATION = 6"
+      && patchContains "RUNTIME_SETTINGS_REASON_APPLY_FAILED = 7"
+      && patchContains "RUNTIME_SETTINGS_REASON_CONTROL_NOT_READY = 8"
+      && patchContains "RUNTIME_SETTINGS_REASON_NO_ACK = 9"
+      && patchContains "RUNTIME_SETTINGS_REASON_CONFLICT = 10"
+      && patchContains "RUNTIME_SETTINGS_REASON_STALE_ACK = 11"
+      && patchContains "RUNTIME_SETTINGS_REASON_STREAM_ENDED = 12"
+      && patchContains "RUNTIME_SETTINGS_REASON_PROOF_GATED = 13"
     ))
     (check "the package does not apply obsolete diagnostic patches" (
       !(contains "0006-diagnose-vaapi-convert-sequence.patch" packageSource)
@@ -89,167 +90,198 @@ let
       && !(contains "0011-force-vaapi-vram-source-copy-before-convert.patch" packageSource)
     ))
     (check "runtime settings do not expose a pending success state" (
-      !(contains "RUNTIME_SETTINGS_STATUS_ACCEPTED_PENDING" patch)
+      !(patchContains "RUNTIME_SETTINGS_STATUS_ACCEPTED_PENDING")
       && !(contains "accepted/pending" readme)
-      && !(contains "accepted=1" patch)
+      && !(patchContains "accepted=1")
     ))
-    (check "queued requests do not imply final success" (contains "queued=1" patch))
+    (check "queued requests do not imply final success" (patchContains "queued=1"))
     (check "the runtime settings gate accepts only the exact value 1" (
-      contains "SUNSHINE_LIVE_SETTINGS_MVP" patch
-      && contains ''std::string_view {enabled_value} == "1"sv'' patch
+      patchContains "SUNSHINE_LIVE_SETTINGS_MVP"
+      && patchContains ''std::string_view {enabled_value} == "1"sv''
     ))
     (check "requests and acknowledgements use typed queues" (
-      contains "queue_t<video::runtime_bitrate_request_t> runtime_bitrate_events" patch
-      && contains "queue_t<video::runtime_bitrate_ack_t> runtime_bitrate_ack_queue" patch
-      && contains "mail->queue<runtime_bitrate_request_t>(mail::runtime_bitrate)" patch
-      && contains "mail->queue<runtime_bitrate_ack_t>(mail::runtime_bitrate_ack)" patch
-      && contains "boost::endian::little_uint16_at reason" patch
+      patchContains "queue_t<video::runtime_bitrate_request_t> runtime_bitrate_events"
+      && patchContains "queue_t<video::runtime_bitrate_ack_t> runtime_bitrate_ack_queue"
+      && patchContains "mail->queue<runtime_bitrate_request_t>(mail::runtime_bitrate)"
+      && patchContains "mail->queue<runtime_bitrate_ack_t>(mail::runtime_bitrate_ack)"
+      && patchContains "boost::endian::little_uint16_at reason"
     ))
     (check "runtime bitrate has no unsafe AVCodec fallback" (
-      !(contains "update_runtime_bitrate" patch)
-      && !(contains "avcodec runtime bitrate update" patch)
-      && !(contains "AV_OPT_SEARCH_CHILDREN" patch)
+      !(patchContains "update_runtime_bitrate")
+      && !(patchContains "avcodec runtime bitrate update")
+      && !(patchContains "AV_OPT_SEARCH_CHILDREN")
     ))
     (check "runtime bitrate uses the seamless VAAPI path without restart fallback" (
-      contains "runtime_update_h264_vaapi_bitrate" patch
-      && contains "VAAPI runtime bitrate params updated without encoder restart" patch
-      && contains "seamless_vaapi=1" patch
-      && contains "request_idr_frame" patch
-      && !(contains "encoder restarted for runtime bitrate" patch)
-      && !(contains "disp->dummy_img(dummy_img.get())" patch)
+      patchContains "runtime_update_h264_vaapi_bitrate"
+      && patchContains "VAAPI runtime bitrate params updated without encoder restart"
+      && patchContains "seamless_vaapi=1"
+      && patchContains "request_idr_frame"
+      && !(patchContains "encoder restarted for runtime bitrate")
+      && !(patchContains "disp->dummy_img(dummy_img.get())")
+    ))
+    (check "live H.264 selects only an advertised bitrate-capable VAAPI entrypoint" (
+      patchContains ''std::getenv("SUNSHINE_LIVE_SETTINGS_MVP")''
+      && patchContains "live_settings[0] == '1'"
+      && patchContains "live_settings[1] == '\\0'"
+      && patchContains "profile == VAProfileH264ConstrainedBaseline"
+      && patchContains "profile == VAProfileH264Main"
+      && patchContains "profile == VAProfileH264High"
+      && patchContains "VAEntrypointEncSlice,"
+      && patchContains "VAEntrypointEncSliceLP"
+      && patchContains "VAConfigAttribRateControl"
+      && patchContains "rc_attr.value != VA_ATTRIB_NOT_SUPPORTED"
+      && patchContains "VA_RC_CBR | VA_RC_VBR | VA_RC_AVBR"
+      && patchContains "Preserve Sunshine's upstream order unless the exact Korri gate found"
     ))
     (check "the private VAAPI mirror fails closed on exact libavcodec drift" (
-      contains "#define KORRI_SUPPORTED_LIBAVCODEC_MAJOR 62" patch
-      && contains "#define KORRI_SUPPORTED_LIBAVCODEC_VERSION AV_VERSION_INT(62, 11, 100)" patch
-      && contains "LIBAVCODEC_VERSION_MAJOR != KORRI_SUPPORTED_LIBAVCODEC_MAJOR" patch
-      && contains "LIBAVCODEC_VERSION_INT != KORRI_SUPPORTED_LIBAVCODEC_VERSION" patch
-      && contains "must be reviewed for this exact FFmpeg libavcodec version" patch
+      patchContains "#define KORRI_SUPPORTED_LIBAVCODEC_MAJOR 62"
+      && patchContains "#define KORRI_SUPPORTED_LIBAVCODEC_VERSION AV_VERSION_INT(62, 11, 100)"
+      && patchContains "LIBAVCODEC_VERSION_MAJOR != KORRI_SUPPORTED_LIBAVCODEC_MAJOR"
+      && patchContains "LIBAVCODEC_VERSION_INT != KORRI_SUPPORTED_LIBAVCODEC_VERSION"
+      && patchContains "must be reviewed for this exact FFmpeg libavcodec version"
     ))
     (check "runtime FPS support is limited to H.264 VAAPI" (
-      contains "runtime_settings_supports_vaapi_h264" patch
-      && contains ''encoder.name == "vaapi"sv'' patch
-      && contains ''encoder.codec_from_config(config).name == "h264_vaapi"'' patch
-      && contains "runtime FPS unsupported" patch
+      patchContains "runtime_settings_supports_vaapi_h264"
+      && patchContains ''encoder.name == "vaapi"sv''
+      && patchContains ''encoder.codec_from_config(config).name == "h264_vaapi"''
+      && patchContains "runtime FPS unsupported"
     ))
     (check "runtime FPS uses experimental frame pacing" (
       contains "supports operation `2`: set effective stream FPS" readme
-      && contains "runtime FPS" patch
-      && contains "applied_fps" patch
-      && contains "runtime_fps_interval" patch
+      && patchContains "runtime FPS"
+      && patchContains "applied_fps"
+      && patchContains "runtime_fps_interval"
     ))
     (check "runtime FPS rejects impossible upshifts before queueing" (
-      contains "operation == video::RUNTIME_SETTINGS_OPERATION_SET_FPS && requested_value >" patch
-      && contains "rejection_status = video::RUNTIME_SETTINGS_STATUS_INVALID" patch
+      patchContains "operation == video::RUNTIME_SETTINGS_OPERATION_SET_FPS && requested_value >"
+      && patchContains "rejection_status = video::RUNTIME_SETTINGS_STATUS_INVALID"
     ))
     (check "runtime FPS failures preserve the current applied value" (
-      contains "live-settings-mvp: runtime FPS unsupported" patch
-      && contains "RUNTIME_SETTINGS_STATUS_FAILED" patch
-      && contains "runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_FPS, status, applied_fps, 0, 0, reason}" patch
+      patchContains "live-settings-mvp: runtime FPS unsupported"
+      && patchContains "RUNTIME_SETTINGS_STATUS_FAILED"
+      && patchContains "runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_FPS, status, applied_fps, 0, 0, reason}"
     ))
     (check "capability acknowledgements expose complete active-session facts" (
-      contains "control_runtime_settings_capability_ack_t" patch
-      && contains "supported_operations" patch
-      && contains "proof_gated_operations" patch
-      && contains "min_bitrate_kbps" patch
-      && contains "max_bitrate_kbps" patch
-      && contains "max_fps" patch
-      && contains "current_bitrate_kbps" patch
-      && contains "current_fps" patch
-      && contains "current_width" patch
-      && contains "current_height" patch
-      && contains "launch_bitrate_kbps" patch
-      && contains "launch_fps" patch
-      && contains "launch_width" patch
-      && contains "launch_height" patch
+      patchContains "control_runtime_settings_capability_ack_t"
+      && patchContains "supported_operations"
+      && patchContains "proof_gated_operations"
+      && patchContains "min_bitrate_kbps"
+      && patchContains "max_bitrate_kbps"
+      && patchContains "max_fps"
+      && patchContains "current_bitrate_kbps"
+      && patchContains "current_fps"
+      && patchContains "current_width"
+      && patchContains "current_height"
+      && patchContains "launch_bitrate_kbps"
+      && patchContains "launch_fps"
+      && patchContains "launch_width"
+      && patchContains "launch_height"
     ))
     (check "capability support uses active per-session encoder facts" (
-      contains "MAIL(runtime_settings_supports_encoder_restart)" patch
-      && contains "session->control.runtime_settings_supports_encoder_restart" patch
-      && contains "session->control.runtime_settings_encoder_restart_supported" patch
-      && contains "runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_vaapi_h264" patch
-      && contains "auto runtime_supported = enabled && session->control.runtime_settings_encoder_restart_supported" patch
+      patchContains "MAIL(runtime_settings_supports_encoder_restart)"
+      && patchContains "MAIL(runtime_settings_supports_bitrate)"
+      && patchContains "session->control.runtime_settings_supports_encoder_restart"
+      && patchContains "session->control.runtime_settings_supports_bitrate"
+      && patchContains "session->control.runtime_settings_encoder_restart_supported"
+      && patchContains "session->control.runtime_settings_bitrate_supported"
+      && patchContains "runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_vaapi_h264"
+      && patchContains "runtime_settings_supports_bitrate->raise(runtime_h264_vaapi_bitrate_supported(session.get()))"
+      && patchContains "ctx->runtime_settings_supports_bitrate->raise(runtime_h264_vaapi_bitrate_supported(pos->session.get()))"
+      && patchContains "runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_vaapi_h264(encoder, updated_config))"
+      && patchContains "ctx->runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_vaapi_h264(encoder, ctx->config))"
+      && patchContains "runtime_settings_supports_encoder_restart->raise(false)"
+      && patchContains "ctx->runtime_settings_supports_encoder_restart->raise(false)"
+      && patchContains "runtime_settings_supports_bitrate->raise(false)"
+      && patchContains "ctx->runtime_settings_supports_bitrate->raise(false)"
+      && patchContains "auto runtime_supported = enabled && session->control.runtime_settings_encoder_restart_supported"
+      && patchContains "auto runtime_bitrate_supported = runtime_supported && session->control.runtime_settings_bitrate_supported"
     ))
-    (check "capability bounds remain conservative" (
-      contains "+    plaintext.min_bitrate_kbps = runtime_supported ? 500 : 0;" patch
-      && contains "+    plaintext.max_bitrate_kbps = runtime_supported ? 150000 : 0;" patch
-      && contains "supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS" patch
-      && contains "supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_FPS" patch
+    (check "capability and mutation bitrate bounds remain conservative" (
+      patchContains "RUNTIME_SETTINGS_MIN_BITRATE_KBPS = 500"
+      && patchContains "RUNTIME_SETTINGS_MAX_BITRATE_KBPS = 150000"
+      && patchContains "plaintext.min_bitrate_kbps = runtime_bitrate_supported ? RUNTIME_SETTINGS_MIN_BITRATE_KBPS : 0"
+      && patchContains "plaintext.max_bitrate_kbps = runtime_bitrate_supported ? RUNTIME_SETTINGS_MAX_BITRATE_KBPS : 0"
+      && patchContains "requested_value < RUNTIME_SETTINGS_MIN_BITRATE_KBPS"
+      && patchContains "requested_value > RUNTIME_SETTINGS_MAX_BITRATE_KBPS"
+      && patchContains "if (runtime_bitrate_supported)"
+      && patchContains "supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS"
+      && patchContains "supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_FPS"
     ))
     (check "validated sessions advertise runtime resolution as operation 3" (
-      contains "proof_gated_operations" patch
-      && contains "supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION" patch
-      && !(contains "proof_gated_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION" patch)
+      patchContains "proof_gated_operations"
+      && patchContains "supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION"
+      && !(patchContains "proof_gated_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION")
       && contains "Runtime resolution is a normal runtime-settings operation for the validated Korri profile" readme
     ))
     (check "runtime resolution rejects unsafe bounds and aspect changes" (
-      contains "requested_width == 0 || requested_height == 0" patch
-      && contains "requested_width > launch_width" patch
-      && contains "requested_height > launch_height" patch
-      && contains "aspect_tolerance" patch
-      && contains "aspect_abs_delta <= aspect_tolerance" patch
-      && contains "!same_aspect" patch
+      patchContains "requested_width == 0 || requested_height == 0"
+      && patchContains "requested_width > launch_width"
+      && patchContains "requested_height > launch_height"
+      && patchContains "aspect_tolerance"
+      && patchContains "aspect_abs_delta <= aspect_tolerance"
+      && patchContains "!same_aspect"
     ))
     (check "host requests are exact before logging, scheduling, or queueing" (
-      contains "request_id == 0 || reserved != 0 || payload.size() != expected_payload_size" patch
-      && contains "expected_payload_size = sizeof(control_runtime_settings_request_prefix_t)" patch
-      && contains "expected_payload_size = sizeof(control_runtime_settings_resolution_request_t)" patch
-      && contains "expected_payload_size = sizeof(control_runtime_settings_request_t)" patch
-      && contains "runtime_settings_capability_pending" patch
-      && contains "runtime_settings_capability_due = std::chrono::steady_clock::now() + 100ms" patch
-      && contains "now >= session->control.runtime_settings_capability_due" patch
-      && contains "send_runtime_settings_capability_ack(session, request_id, enabled)" patch
-      && !(contains "steady_timer" patch)
-      && !(contains "async_wait" patch)
-      && !(contains ").detach()" patch)
+      patchContains "request_id == 0 || reserved != 0 || payload.size() != expected_payload_size"
+      && patchContains "expected_payload_size = sizeof(control_runtime_settings_request_prefix_t)"
+      && patchContains "expected_payload_size = sizeof(control_runtime_settings_resolution_request_t)"
+      && patchContains "expected_payload_size = sizeof(control_runtime_settings_request_t)"
+      && patchContains "runtime_settings_capability_pending"
+      && patchContains "runtime_settings_capability_due = std::chrono::steady_clock::now() + 100ms"
+      && patchContains "now >= session->control.runtime_settings_capability_due"
+      && patchContains "send_runtime_settings_capability_ack(session, request_id, enabled)"
+      && !(patchContains "steady_timer")
+      && !(patchContains "async_wait")
+      && !(patchContains ").detach()")
     ))
     (check "runtime resolution uses explicit width and height fields" (
-      contains "control_runtime_settings_request_prefix_t" patch
-      && contains "boost::endian::little_uint32_at width" patch
-      && contains "boost::endian::little_uint32_at height" patch
-      && contains "applied_width" patch
-      && contains "applied_height" patch
+      patchContains "control_runtime_settings_request_prefix_t"
+      && patchContains "boost::endian::little_uint32_at width"
+      && patchContains "boost::endian::little_uint32_at height"
+      && patchContains "applied_width"
+      && patchContains "applied_height"
     ))
     (check "launch baselines remain separate from current applied values" (
-      contains "runtime_settings_launch_bitrate_kbps" patch
-      && contains "runtime_settings_applied_bitrate_kbps" patch
-      && contains "runtime_settings_launch_fps" patch
-      && contains "runtime_settings_applied_fps" patch
-      && contains "runtime_settings_launch_width" patch
-      && contains "runtime_settings_applied_width" patch
-      && contains "runtime_settings_launch_height" patch
-      && contains "runtime_settings_applied_height" patch
-      && contains "plaintext.launch_bitrate_kbps" patch
-      && contains "plaintext.current_bitrate_kbps" patch
+      patchContains "runtime_settings_launch_bitrate_kbps"
+      && patchContains "runtime_settings_applied_bitrate_kbps"
+      && patchContains "runtime_settings_launch_fps"
+      && patchContains "runtime_settings_applied_fps"
+      && patchContains "runtime_settings_launch_width"
+      && patchContains "runtime_settings_applied_width"
+      && patchContains "runtime_settings_launch_height"
+      && patchContains "runtime_settings_applied_height"
+      && patchContains "plaintext.launch_bitrate_kbps"
+      && patchContains "plaintext.current_bitrate_kbps"
     ))
     (check "successful acknowledgements update applied values only" (
-      contains "session->control.runtime_settings_applied_bitrate_kbps = ack.applied_value" patch
-      && contains "session->control.runtime_settings_applied_fps = ack.applied_value" patch
-      && contains "session->control.runtime_settings_applied_width = ack.applied_width" patch
-      && contains "session->control.runtime_settings_applied_height = ack.applied_height" patch
-      && contains "session->control.runtime_settings_launch_bitrate_kbps = (std::uint32_t) session->config.monitor.bitrate" patch
+      patchContains "session->control.runtime_settings_applied_bitrate_kbps = ack.applied_value"
+      && patchContains "session->control.runtime_settings_applied_fps = ack.applied_value"
+      && patchContains "session->control.runtime_settings_applied_width = ack.applied_width"
+      && patchContains "session->control.runtime_settings_applied_height = ack.applied_height"
+      && patchContains "session->control.runtime_settings_launch_bitrate_kbps = (std::uint32_t) session->config.monitor.bitrate"
     ))
     (check "runtime resolution failures preserve current dimensions" (
-      contains "auto current_applied_width = session->control.runtime_settings_applied_width" patch
-      && contains "auto current_applied_height = session->control.runtime_settings_applied_height" patch
-      && contains "send_runtime_settings_ack(session, video::runtime_bitrate_ack_t {request_id, operation, rejection_status, 0, current_applied_width, current_applied_height, rejection_reason})" patch
-      && contains "runtime resolution unsupported encoder" patch
-      && contains "ack.status == video::RUNTIME_SETTINGS_STATUS_APPLIED" patch
+      patchContains "auto current_applied_width = session->control.runtime_settings_applied_width"
+      && patchContains "auto current_applied_height = session->control.runtime_settings_applied_height"
+      && patchContains "send_runtime_settings_ack(session, video::runtime_bitrate_ack_t {request_id, operation, rejection_status, 0, current_applied_width, current_applied_height, rejection_reason})"
+      && patchContains "runtime resolution unsupported encoder"
+      && patchContains "ack.status == video::RUNTIME_SETTINGS_STATUS_APPLIED"
     ))
     (check "touch mapping refreshes only after resolution apply" (
-      contains "runtime resolution" patch
-      && contains "touch_port" patch
-      && contains "make_port" patch
-      && contains "ack.status == video::RUNTIME_SETTINGS_STATUS_APPLIED" patch
-      && contains "applied_width" patch
-      && contains "applied_height" patch
+      patchContains "runtime resolution"
+      && patchContains "touch_port"
+      && patchContains "make_port"
+      && patchContains "ack.status == video::RUNTIME_SETTINGS_STATUS_APPLIED"
+      && patchContains "applied_width"
+      && patchContains "applied_height"
     ))
     (check "runtime resolution refreshes capture state after apply" (
-      contains "config_t &config" patch && contains "runtime_reinit_event" patch
+      patchContains "config_t &config" && patchContains "runtime_reinit_event"
     ))
     (check "the VAAPI destructor skip is limited to the replacement pair" (
-      contains "disable_destructor_flush_after_runtime_vaapi_replacement" patch
-      && contains "runtime VAAPI replacement: destructor flush disabled for replacement pair" patch
-      && !(contains "disable_flush_on_destroy" patch)
+      patchContains "disable_destructor_flush_after_runtime_vaapi_replacement"
+      && patchContains "runtime VAAPI replacement: destructor flush disabled for replacement pair"
+      && !(patchContains "disable_flush_on_destroy")
     ))
     (check "package provenance is anchored and complete" (
       sunshinePackage.korriProvenanceRelativePath == "share/korri/sunshine-korri/provenance"

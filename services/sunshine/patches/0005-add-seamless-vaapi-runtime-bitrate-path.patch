@@ -1,27 +1,126 @@
+diff --git a/src/globals.h b/src/globals.h
+index eb6f2f4..1d9a674 100644
+--- a/src/globals.h
++++ b/src/globals.h
+@@ -56,6 +56,7 @@ namespace mail {
+   MAIL(runtime_bitrate);
+   MAIL(runtime_bitrate_ack);
+   MAIL(runtime_settings_supports_encoder_restart);
++  MAIL(runtime_settings_supports_bitrate);
+   MAIL(gamepad_feedback);
+   MAIL(hdr);
+ #undef MAIL
+diff --git a/src/platform/linux/vaapi.cpp b/src/platform/linux/vaapi.cpp
+index e0cc793..d7255f7 100644
+--- a/src/platform/linux/vaapi.cpp
++++ b/src/platform/linux/vaapi.cpp
+@@ -3,6 +3,7 @@
+  * @brief Definitions for VA-API hardware accelerated capture.
+  */
+ // standard includes
++#include <cstdlib>
+ #include <fcntl.h>
+ #include <format>
+ #include <sstream>
+@@ -147,7 +148,34 @@ namespace va {
+       }
+       entrypoints.resize(num_eps);
+ 
+-      // Sorted in order of descending preference
++      const char *live_settings = std::getenv("SUNSHINE_LIVE_SETTINGS_MVP");
++      const bool h264_profile = profile == VAProfileH264ConstrainedBaseline ||
++                                profile == VAProfileH264Main ||
++                                profile == VAProfileH264High;
++      const bool prefer_bitrate_capable = live_settings &&
++                                           live_settings[0] == '1' &&
++                                           live_settings[1] == '\0' &&
++                                           h264_profile;
++      if (prefer_bitrate_capable) {
++        VAEntrypoint bitrate_preferences[] = {
++          VAEntrypointEncSlice,
++          VAEntrypointEncSliceLP
++        };
++        for (auto ep_pref : bitrate_preferences) {
++          if (std::find(entrypoints.begin(), entrypoints.end(), ep_pref) == entrypoints.end()) {
++            continue;
++          }
++          VAConfigAttrib rc_attr = {VAConfigAttribRateControl};
++          status = vaGetConfigAttributes(va_display, profile, ep_pref, &rc_attr, 1);
++          if (status == VA_STATUS_SUCCESS && rc_attr.value != VA_ATTRIB_NOT_SUPPORTED &&
++              (rc_attr.value & (VA_RC_CBR | VA_RC_VBR | VA_RC_AVBR))) {
++            return ep_pref;
++          }
++        }
++      }
++
++      // Preserve Sunshine's upstream order unless the exact Korri gate found
++      // a bitrate-capable H.264 entrypoint above.
+       VAEntrypoint ep_preferences[] = {
+         VAEntrypointEncSliceLP,
+         VAEntrypointEncSlice,
 diff --git a/src/stream.cpp b/src/stream.cpp
-index 8c2bcdcc..2d2fadfa 100644
+index 534268c..2d687a8 100644
 --- a/src/stream.cpp
 +++ b/src/stream.cpp
-@@ -1047,6 +1047,7 @@ namespace stream {
+@@ -480,11 +480,13 @@ namespace stream {
+       safe::mail_raw_t::event_t<video::hdr_info_t> hdr_queue;
+       safe::mail_raw_t::queue_t<video::runtime_bitrate_ack_t> runtime_bitrate_ack_queue;
+       safe::mail_raw_t::event_t<bool> runtime_settings_supports_encoder_restart;
++      safe::mail_raw_t::event_t<bool> runtime_settings_supports_bitrate;
+       std::uint32_t runtime_settings_pending_capability_request_id;
+       bool runtime_settings_pending_capability_enabled;
+       bool runtime_settings_capability_pending;
+       std::chrono::steady_clock::time_point runtime_settings_capability_due;
+       bool runtime_settings_encoder_restart_supported;
++      bool runtime_settings_bitrate_supported;
+       std::uint32_t runtime_settings_launch_bitrate_kbps;
+       std::uint32_t runtime_settings_launch_fps;
+       std::uint32_t runtime_settings_launch_width;
+@@ -1030,6 +1032,9 @@ namespace stream {
+     send_runtime_settings_ack_payload(session, plaintext);
+   }
+ 
++  constexpr std::uint32_t RUNTIME_SETTINGS_MIN_BITRATE_KBPS = 500;
++  constexpr std::uint32_t RUNTIME_SETTINGS_MAX_BITRATE_KBPS = 150000;
++
+   void send_runtime_settings_capability_ack(session_t *session, std::uint32_t request_id, bool enabled) {
+     if (!session->control.peer) {
+       BOOST_LOG(warning) << "live-settings-mvp: no control peer for runtime settings capability ack"sv;
+@@ -1039,8 +1044,12 @@ namespace stream {
+     while (session->control.runtime_settings_supports_encoder_restart->peek()) {
+       session->control.runtime_settings_encoder_restart_supported = session->control.runtime_settings_supports_encoder_restart->pop(0ms);
+     }
++    while (session->control.runtime_settings_supports_bitrate->peek()) {
++      session->control.runtime_settings_bitrate_supported = session->control.runtime_settings_supports_bitrate->pop(0ms);
++    }
+ 
+     auto runtime_supported = enabled && session->control.runtime_settings_encoder_restart_supported;
++    auto runtime_bitrate_supported = runtime_supported && session->control.runtime_settings_bitrate_supported;
+     std::uint32_t supported_operations = 0;
+     std::uint32_t proof_gated_operations = 0;
      std::uint16_t status = enabled ? video::RUNTIME_SETTINGS_STATUS_APPLIED : video::RUNTIME_SETTINGS_STATUS_DISABLED;
-     std::uint16_t reason = enabled ? video::RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER : video::RUNTIME_SETTINGS_REASON_GATE_DISABLED;
-     if (runtime_supported) {
-+      supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS;
-       supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_FPS;
+@@ -1050,6 +1059,9 @@ namespace stream {
        supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION;
        reason = video::RUNTIME_SETTINGS_REASON_NONE;
-@@ -1061,8 +1062,8 @@ namespace stream {
+     }
++    if (runtime_bitrate_supported) {
++      supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS;
++    }
+ 
+     control_runtime_settings_capability_ack_t plaintext {};
+     plaintext.header.type = packetTypes[IDX_RUNTIME_SETTINGS_ACK];
+@@ -1060,8 +1072,8 @@ namespace stream {
      plaintext.reason = reason;
      plaintext.supported_operations = supported_operations;
      plaintext.proof_gated_operations = proof_gated_operations;
 -    plaintext.min_bitrate_kbps = 0;
 -    plaintext.max_bitrate_kbps = 0;
-+    plaintext.min_bitrate_kbps = runtime_supported ? 500 : 0;
-+    plaintext.max_bitrate_kbps = runtime_supported ? 150000 : 0;
++    plaintext.min_bitrate_kbps = runtime_bitrate_supported ? RUNTIME_SETTINGS_MIN_BITRATE_KBPS : 0;
++    plaintext.max_bitrate_kbps = runtime_bitrate_supported ? RUNTIME_SETTINGS_MAX_BITRATE_KBPS : 0;
      plaintext.max_fps = session->control.runtime_settings_launch_fps;
      plaintext.launch_bitrate_kbps = session->control.runtime_settings_launch_bitrate_kbps;
      plaintext.launch_fps = session->control.runtime_settings_launch_fps;
-@@ -1226,7 +1227,7 @@ namespace stream {
+@@ -1210,7 +1222,7 @@ namespace stream {
          accepted = false;
          rejection_status = video::RUNTIME_SETTINGS_STATUS_DISABLED;
          rejection_reason = video::RUNTIME_SETTINGS_REASON_GATE_DISABLED;
@@ -30,8 +129,35 @@ index 8c2bcdcc..2d2fadfa 100644
          accepted = false;
          rejection_status = video::RUNTIME_SETTINGS_STATUS_INVALID;
          rejection_reason = video::RUNTIME_SETTINGS_REASON_UNSUPPORTED_OPERATION;
+@@ -1248,6 +1260,12 @@ namespace stream {
+         accepted = false;
+         rejection_status = video::RUNTIME_SETTINGS_STATUS_INVALID;
+         rejection_reason = video::RUNTIME_SETTINGS_REASON_INVALID_BOUNDS;
++      } else if (operation == video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS &&
++                 (requested_value < RUNTIME_SETTINGS_MIN_BITRATE_KBPS ||
++                  requested_value > RUNTIME_SETTINGS_MAX_BITRATE_KBPS)) {
++        accepted = false;
++        rejection_status = video::RUNTIME_SETTINGS_STATUS_INVALID;
++        rejection_reason = video::RUNTIME_SETTINGS_REASON_INVALID_BOUNDS;
+       } else if (operation == video::RUNTIME_SETTINGS_OPERATION_SET_FPS && requested_value > (std::uint32_t) session->config.monitor.framerate) {
+         accepted = false;
+         rejection_status = video::RUNTIME_SETTINGS_STATUS_INVALID;
+@@ -2354,11 +2372,13 @@ namespace stream {
+       session->control.hdr_queue = mail->event<video::hdr_info_t>(mail::hdr);
+       session->control.runtime_bitrate_ack_queue = mail->queue<video::runtime_bitrate_ack_t>(mail::runtime_bitrate_ack);
+       session->control.runtime_settings_supports_encoder_restart = mail->event<bool>(mail::runtime_settings_supports_encoder_restart);
++      session->control.runtime_settings_supports_bitrate = mail->event<bool>(mail::runtime_settings_supports_bitrate);
+       session->control.runtime_settings_pending_capability_request_id = 0;
+       session->control.runtime_settings_pending_capability_enabled = false;
+       session->control.runtime_settings_capability_pending = false;
+       session->control.runtime_settings_capability_due = {};
+       session->control.runtime_settings_encoder_restart_supported = false;
++      session->control.runtime_settings_bitrate_supported = false;
+       session->control.runtime_settings_launch_bitrate_kbps = (std::uint32_t) session->config.monitor.bitrate;
+       session->control.runtime_settings_launch_fps = (std::uint32_t) session->config.monitor.framerate;
+       session->control.runtime_settings_launch_width = (std::uint32_t) session->config.monitor.width;
 diff --git a/src/video.cpp b/src/video.cpp
-index 64f162c6..982a3e99 100644
+index 64f162c..0921f0e 100644
 --- a/src/video.cpp
 +++ b/src/video.cpp
 @@ -11,7 +11,13 @@
@@ -48,7 +174,7 @@ index 64f162c6..982a3e99 100644
  #include <libavutil/imgutils.h>
  #include <libavutil/mastering_display_metadata.h>
  #include <libavutil/opt.h>
-@@ -379,6 +385,220 @@ namespace video {
+@@ -379,6 +385,228 @@ namespace video {
      int inject;
    };
  
@@ -197,7 +323,7 @@ index 64f162c6..982a3e99 100644
 +    int surface_alignment_height;
 +  };
 +
-+  bool runtime_update_h264_vaapi_bitrate(encode_session_t *session, std::uint32_t bitrate_kbps, std::uint32_t fps) {
++  bool runtime_h264_vaapi_bitrate_supported(encode_session_t *session) {
 +    auto avcodec_session = dynamic_cast<avcodec_encode_session_t *>(session);
 +    if (!avcodec_session || !avcodec_session->avcodec_ctx || !avcodec_session->device) {
 +      return false;
@@ -210,22 +336,26 @@ index 64f162c6..982a3e99 100644
 +
 +    auto *vaapi = reinterpret_cast<korri_vaapi_encode_context_t *>(avctx->priv_data);
 +    if (!vaapi->rc_mode || !vaapi->rc_mode->bitrate || vaapi->nb_global_params <= 0 || vaapi->nb_global_params > KORRI_VAAPI_MAX_GLOBAL_PARAMS) {
++      return false;
++    }
++
++    for (int i = 0; i < vaapi->nb_global_params; ++i) {
++      if (vaapi->global_params_type[i] == VAEncMiscParameterTypeRateControl && vaapi->global_params[i] == &vaapi->rc_params) {
++        return true;
++      }
++    }
++    return false;
++  }
++
++  bool runtime_update_h264_vaapi_bitrate(encode_session_t *session, std::uint32_t bitrate_kbps, std::uint32_t fps) {
++    if (!runtime_h264_vaapi_bitrate_supported(session)) {
 +      BOOST_LOG(warning) << "live-settings-mvp: runtime VAAPI bitrate update rejected by private-state guard"sv;
 +      return false;
 +    }
 +
-+    bool has_rate_control_global = false;
-+    for (int i = 0; i < vaapi->nb_global_params; ++i) {
-+      if (vaapi->global_params_type[i] == VAEncMiscParameterTypeRateControl && vaapi->global_params[i] == &vaapi->rc_params) {
-+        has_rate_control_global = true;
-+        break;
-+      }
-+    }
-+    if (!has_rate_control_global) {
-+      BOOST_LOG(warning) << "live-settings-mvp: runtime VAAPI bitrate update rejected missing rate-control global param"sv;
-+      return false;
-+    }
-+
++    auto avcodec_session = dynamic_cast<avcodec_encode_session_t *>(session);
++    auto *avctx = avcodec_session->avcodec_ctx.get();
++    auto *vaapi = reinterpret_cast<korri_vaapi_encode_context_t *>(avctx->priv_data);
 +    std::uint64_t requested_bps = (std::uint64_t) bitrate_kbps * 1000u;
 +    if (requested_bps == 0 || requested_bps > std::numeric_limits<std::uint32_t>::max()) {
 +      return false;
@@ -261,6 +391,10 @@ index 64f162c6..982a3e99 100644
 +    return true;
 +  }
 +#else
++  bool runtime_h264_vaapi_bitrate_supported(encode_session_t *) {
++    return false;
++  }
++
 +  bool runtime_update_h264_vaapi_bitrate(encode_session_t *, std::uint32_t, std::uint32_t) {
 +    return false;
 +  }
@@ -269,7 +403,33 @@ index 64f162c6..982a3e99 100644
    class nvenc_encode_session_t: public encode_session_t {
    public:
      nvenc_encode_session_t(std::unique_ptr<platf::nvenc_encode_device_t> encode_device):
-@@ -1977,19 +2197,29 @@ namespace video {
+@@ -433,6 +661,7 @@ namespace video {
+     safe::mail_raw_t::queue_t<runtime_bitrate_request_t> runtime_bitrate_events;
+     safe::mail_raw_t::queue_t<runtime_bitrate_ack_t> runtime_bitrate_ack_events;
+     safe::mail_raw_t::event_t<bool> runtime_settings_supports_encoder_restart;
++    safe::mail_raw_t::event_t<bool> runtime_settings_supports_bitrate;
+     safe::mail_raw_t::event_t<hdr_info_t> hdr_events;
+     safe::mail_raw_t::event_t<input::touch_port_t> touch_port_events;
+ 
+@@ -1930,11 +2159,17 @@ namespace video {
+     auto runtime_settings_supports_encoder_restart = mail->event<bool>(mail::runtime_settings_supports_encoder_restart);
+     auto touch_port_events = mail->event<input::touch_port_t>(mail::touch_port);
+     auto invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);
++    auto runtime_settings_supports_bitrate = mail->event<bool>(mail::runtime_settings_supports_bitrate);
++    auto clear_runtime_settings_support = util::fail_guard([&]() {
++      runtime_settings_supports_encoder_restart->raise(false);
++      runtime_settings_supports_bitrate->raise(false);
++    });
+     std::uint32_t runtime_fps = config.framerate;
+     auto next_runtime_frame = std::chrono::steady_clock::now();
+     int runtime_resolution_idr_frames = 0;
+     int runtime_resolution_diag_frames = 0;
+     runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_vaapi_h264(encoder, config));
++    runtime_settings_supports_bitrate->raise(runtime_h264_vaapi_bitrate_supported(session.get()));
+ 
+     {
+       // Load a dummy image into the AVFrame to ensure we have something to encode
+@@ -1977,19 +2212,29 @@ namespace video {
            if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS) {
              std::uint32_t applied_bitrate_kbps = config.bitrate;
              std::uint16_t status = RUNTIME_SETTINGS_STATUS_FAILED;
@@ -306,7 +466,45 @@ index 64f162c6..982a3e99 100644
              runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS, status, applied_bitrate_kbps, 0, 0, reason});
            } else if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_FPS) {
              std::uint32_t applied_fps = runtime_fps;
-@@ -2375,19 +2605,28 @@ namespace video {
+@@ -2045,6 +2290,8 @@ namespace video {
+                   replacement_session->request_idr_frame();
+                   if (!replacement_session->convert(*first_img)) {
+                     session = std::move(replacement_session);
++                    runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_vaapi_h264(encoder, updated_config));
++                    runtime_settings_supports_bitrate->raise(runtime_h264_vaapi_bitrate_supported(session.get()));
+                     config = updated_config;
+                     applied_width = request->width;
+                     applied_height = request->height;
+@@ -2316,6 +2563,12 @@ namespace video {
+     }
+ 
+     std::vector<sync_session_t> synced_sessions;
++    auto clear_runtime_settings_support = util::fail_guard([&]() {
++      for (auto &ctx : synced_session_ctxs) {
++        ctx->runtime_settings_supports_encoder_restart->raise(false);
++        ctx->runtime_settings_supports_bitrate->raise(false);
++      }
++    });
+     for (auto &ctx : synced_session_ctxs) {
+       auto synced_session = make_synced_session(disp.get(), encoder, *img, *ctx);
+       if (!synced_session) {
+@@ -2349,6 +2602,8 @@ namespace video {
+           auto ctx = pos->ctx;
+           if (ctx->shutdown_event->peek()) {
+             // Let waiting thread know it can delete shutdown_event
++            ctx->runtime_settings_supports_encoder_restart->raise(false);
++            ctx->runtime_settings_supports_bitrate->raise(false);
+             ctx->join_event->raise(true);
+ 
+             pos = synced_sessions.erase(pos);
+@@ -2369,25 +2624,35 @@ namespace video {
+           }
+ 
+           ctx->runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_vaapi_h264(encoder, ctx->config));
++          ctx->runtime_settings_supports_bitrate->raise(runtime_h264_vaapi_bitrate_supported(pos->session.get()));
+ 
+           while (ctx->runtime_bitrate_events->peek()) {
+             if (auto request = ctx->runtime_bitrate_events->pop(0ms)) {
                if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS) {
                  std::uint32_t applied_bitrate_kbps = ctx->config.bitrate;
                  std::uint16_t status = RUNTIME_SETTINGS_STATUS_FAILED;
@@ -342,3 +540,29 @@ index 64f162c6..982a3e99 100644
                  ctx->runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS, status, applied_bitrate_kbps, 0, 0, reason});
                } else if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_FPS) {
                  if (ctx->runtime_fps == 0) {
+@@ -2433,6 +2698,8 @@ namespace video {
+                   auto replacement_session = make_synced_session(disp.get(), encoder, *img, *ctx, false);
+                   if (replacement_session) {
+                     pos->session = std::move(replacement_session->session);
++                    ctx->runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_vaapi_h264(encoder, ctx->config));
++                    ctx->runtime_settings_supports_bitrate->raise(runtime_h264_vaapi_bitrate_supported(pos->session.get()));
+                     pos->session->request_idr_frame();
+                     ctx->touch_port_events->raise(make_port(disp.get(), ctx->config));
+                     applied_width = request->width;
+@@ -2546,6 +2813,8 @@ namespace video {
+       ctx.stop();
+ 
+       for (auto &ctx : synced_session_ctxs) {
++        ctx->runtime_settings_supports_encoder_restart->raise(false);
++        ctx->runtime_settings_supports_bitrate->raise(false);
+         ctx->shutdown_event->raise(true);
+         ctx->join_event->raise(true);
+       }
+@@ -2669,6 +2938,7 @@ namespace video {
+         mail->queue<runtime_bitrate_request_t>(mail::runtime_bitrate),
+         mail->queue<runtime_bitrate_ack_t>(mail::runtime_bitrate_ack),
+         mail->event<bool>(mail::runtime_settings_supports_encoder_restart),
++        mail->event<bool>(mail::runtime_settings_supports_bitrate),
+         mail->event<hdr_info_t>(mail::hdr),
+         mail->event<input::touch_port_t>(mail::touch_port),
+         config,

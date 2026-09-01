@@ -28,7 +28,7 @@ EXPECTED_SUNSHINE_BASE_VERSION='2025.924.154138'
 EXPECTED_SUNSHINE_BASE_SOURCE_HASH='sha256-QrPfZqd9pgufohUjxlTpO6V0v7B41UrXHZaESsFjZ48='
 EXPECTED_SUNSHINE_BASE_DERIVATION='/nix/store/w8dd7pbl8f0qg2cyb7ay8hmli854giwv-sunshine-2025.924.154138.drv'
 EXPECTED_SUNSHINE_LIBAVCODEC_VERSION='62.11.100'
-EXPECTED_SUNSHINE_PATCH_SET_SHA256='4b96bab218af1e4c7fa5961fbbd95592be9d8bdd234eedc77585b48371a24522'
+EXPECTED_SUNSHINE_PATCH_SET_SHA256='e96a0fbdfe8441b6bea9207fa2349ab7e80c726ccc022273770bad3d7aa1076a'
 KORRID_CONTROL_GROUP='korri-control'
 KORRID_CONTROL_PEER_USER='korri-inputd'
 KORRID_CONTROL_SOCKET='/run/korrid-control/control.sock'
@@ -46,7 +46,7 @@ patch=0001-add-runtime-settings-protocol-surface.patch sha256=8a9522e39de85cb4ea
 patch=0002-wire-runtime-settings-control-plane.patch sha256=dd9b7283dd2cbcb2476571bfcf61702b00dba428422d309e31e7b4c839db41be
 patch=0003-apply-runtime-bitrate-and-fps-changes.patch sha256=d7d89d4a8b4b06d2c473f4c2156a17ecfe369f805132e90a2d05197e69e7e01d
 patch=0004-add-proof-gated-runtime-resolution-apply-path.patch sha256=599d3db14ea57e9712148e83fd7f0404dba96c5c40506c3209c5dbaa7778646e
-patch=0005-add-seamless-vaapi-runtime-bitrate-path.patch sha256=304c98540a731559ec909797dc75edfc0d4bce43e5aab92dbcf74f0c4506509d
+patch=0005-add-seamless-vaapi-runtime-bitrate-path.patch sha256=a14ca9d556728ca1a4fcb14ae338a6275c9b28c52598a82a4e4f424956154d53
 patch=0010-extend-runtime-resolution-fresh-idr-window.patch sha256=86252208da87bff0b61623f7da86e50d9f35c19963910e5e30703b72b86a42eb
 patch=0012-persist-runtime-config-and-reinit-capture-after-resolution.patch sha256=2ac28eb76da2d02aa97812e9708094480cc1b7c4b897cf123772c24f16c493c6
 patch=0013-request-async-capture-reinit-after-runtime-resolution.patch sha256=0831530081f9551173ff1a74a5ca2771942e9c519ec476c27548a1d3cbea3fa2
