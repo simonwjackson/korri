@@ -119,6 +119,7 @@ assert
 assert
   !(builtins.hasAttr "SUNSHINE_LIVE_SETTINGS_MVP" noRuntimeSettings.config.systemd.services.sunshine.environment);
 assert cfg.hardware.graphics.enable;
+assert builtins.elem pkgs.intel-media-driver cfg.hardware.graphics.extraPackages;
 assert builtins.elem "uinput" cfg.boot.kernelModules;
 assert cfg.users.users.korri-inputd.uid == 977;
 assert cfg.users.groups.korri-control.gid == 977;

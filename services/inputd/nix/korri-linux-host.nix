@@ -305,7 +305,10 @@ in
     };
     systemd.user.services.sunshine.enable = lib.mkForce false;
 
-    hardware.graphics.enable = true;
+    hardware.graphics = {
+      enable = true;
+      extraPackages = lib.mkAfter [ pkgs.intel-media-driver ];
+    };
 
     users.users.${cfg.gameplayUser} = {
       uid = lib.mkDefault cfg.gameplayUid;
