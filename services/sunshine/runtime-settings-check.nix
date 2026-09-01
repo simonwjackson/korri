@@ -10,6 +10,23 @@
 let
   lib = pkgs.lib;
   approved = import approvedPatchesPath;
+  ffmpegSource = pkgs.fetchFromGitHub {
+    owner = "FFmpeg";
+    repo = "FFmpeg";
+    rev = approved.reviewedFfmpegCommit;
+    hash = approved.reviewedFfmpegSourceHash;
+  };
+  ffmpegLayoutSource = pkgs.runCommand "ffmpeg-nvenc-layout-source" { } ''
+    cp -R ${ffmpegSource} "$out"
+    chmod u+w "$out/libavcodec/hwconfig.h"
+    substituteInPlace "$out/libavcodec/hwconfig.h" \
+      --replace-fail 'AVCodecHWConfig public;' 'AVCodecHWConfig public_;'
+  '';
+  patchedSunshineSource = pkgs.applyPatches {
+    name = "sunshine-korri-reviewed-source";
+    src = pkgs.sunshine.src;
+    patches = patchPaths;
+  };
   contains = needle: haystack: lib.hasInfix needle haystack;
   check = message: assertion: { inherit message assertion; };
   patchSources = map builtins.readFile patchPaths;
@@ -35,6 +52,9 @@ let
     base_sunshine_derivation=${sunshinePackage.korriBaseSunshineDerivation}
     approved_base_sunshine_derivation=${sunshinePackage.korriBaseSunshineDerivation}
     reviewed_libavcodec_version=${approved.reviewedLibavcodecVersion}
+    reviewed_ffmpeg_commit=${approved.reviewedFfmpegCommit}
+    reviewed_ffmpeg_source_hash=${approved.reviewedFfmpegSourceHash}
+    reviewed_nvenc_api=${toString approved.reviewedNvencApiMajor}.${toString approved.reviewedNvencApiMinor}
     executable=bin/sunshine
     patch_set_sha256=${approved.patchSetSha256}
     ${patchManifestLines}
@@ -50,6 +70,10 @@ let
       && sunshinePackage.korriApprovedBaseSunshineDerivation == sunshinePackage.korriBaseSunshineDerivation
       && pkgs.sunshine.src.outputHash == approved.approvedBaseSourceHash
       && sunshinePackage.korriReviewedLibavcodecVersion == approved.reviewedLibavcodecVersion
+      && sunshinePackage.korriReviewedFfmpegCommit == approved.reviewedFfmpegCommit
+      && sunshinePackage.korriReviewedFfmpegSourceHash == approved.reviewedFfmpegSourceHash
+      && sunshinePackage.korriReviewedNvencApiMajor == approved.reviewedNvencApiMajor
+      && sunshinePackage.korriReviewedNvencApiMinor == approved.reviewedNvencApiMinor
     ))
     (check "runtime settings packet IDs remain stable" (
       patchContains "RUNTIME_SETTINGS_REQUEST_PACKET = 0x5504"
@@ -111,10 +135,12 @@ let
       && !(patchContains "avcodec runtime bitrate update")
       && !(patchContains "AV_OPT_SEARCH_CHILDREN")
     ))
-    (check "runtime bitrate uses the seamless VAAPI path without restart fallback" (
+    (check "runtime bitrate uses seamless VAAPI and NVENC paths without restart fallback" (
       patchContains "runtime_update_h264_vaapi_bitrate"
       && patchContains "VAAPI runtime bitrate params updated without encoder restart"
-      && patchContains "seamless_vaapi=1"
+      && patchContains "runtime_update_h264_nvenc_bitrate"
+      && patchContains "NVENC runtime bitrate reconfigured without encoder restart"
+      && patchContains "seamless_backend="
       && patchContains "request_idr_frame"
       && !(patchContains "encoder restarted for runtime bitrate")
       && !(patchContains "disp->dummy_img(dummy_img.get())")
@@ -133,17 +159,75 @@ let
       && patchContains "VA_RC_CBR | VA_RC_VBR | VA_RC_AVBR"
       && patchContains "Preserve Sunshine's upstream order unless the exact Korri gate found"
     ))
-    (check "the private VAAPI mirror fails closed on exact libavcodec drift" (
+    (check "the private VAAPI and NVENC mirrors fail closed on exact libavcodec drift" (
       patchContains "#define KORRI_SUPPORTED_LIBAVCODEC_MAJOR 62"
       && patchContains "#define KORRI_SUPPORTED_LIBAVCODEC_VERSION AV_VERSION_INT(62, 11, 100)"
       && patchContains "LIBAVCODEC_VERSION_MAJOR != KORRI_SUPPORTED_LIBAVCODEC_MAJOR"
       && patchContains "LIBAVCODEC_VERSION_INT != KORRI_SUPPORTED_LIBAVCODEC_VERSION"
       && patchContains "must be reviewed for this exact FFmpeg libavcodec version"
+      && patchContains "korri_nvenc_runtime_layout.h"
+      && patchContains "korri_nvenc_context_t"
+      && patchContains "KORRI_NVENC_MAX_REGISTERED_FRAMES = 64"
     ))
-    (check "runtime FPS support is limited to H.264 VAAPI" (
-      patchContains "runtime_settings_supports_vaapi_h264"
+    (check "NVENC bitrate capability and completion are driver-backed and fail closed" (
+      patchContains "runtime_h264_nvenc_bitrate_supported"
+      && patchContains ''std::string_view {avctx->codec->name} != "h264_nvenc"sv''
+      && patchContains "avctx->pix_fmt != AV_PIX_FMT_CUDA"
+      && patchContains "support_dyn_bitrate > 0"
+      && patchContains "NV_ENC_PARAMS_RC_CONSTQP"
+      && patchContains "nvEncReconfigureEncoder != nullptr"
+      && patchContains "auto updated_config = nvenc->encode_config"
+      && patchContains "updated_init.encodeConfig = &updated_config"
+      && patchContains "params.resetEncoder = 1"
+      && patchContains "params.forceIDR = 1"
+      && patchContains "result != NV_ENC_SUCCESS"
+      && patchContains "nvenc->encode_config.rcParams = updated_config.rcParams"
+      && patchContains "scaled_buffer"
+      && patchContains "RUNTIME_NVENC_BITRATE_MIN_INTERVAL"
+      && patchContains "nvenc_rate_limited"
+      && patchContains "nvenc_attempt"
+      && patchContains "last_runtime_nvenc_bitrate = bitrate_completed"
+      && patchContains "RUNTIME_NVENC_BITRATE_SLOW_CALL"
+      && patchContains "runtime_nvenc_bitrate_blocked"
+      && patchContains "NVENC runtime bitrate disabled for session after failed or slow driver call"
+      && patchContains "RUNTIME_SETTINGS_REASON_CONFLICT"
+    ))
+    (check "every fresh NVENC encoder resets the circuit before capability publication" (
+      patchContains ''
++                    if (runtime_settings_supports_nvenc_h264(encoder, updated_config)) {
++                      last_runtime_nvenc_bitrate = std::chrono::steady_clock::time_point {};
++                      runtime_nvenc_bitrate_blocked = false;
++                    }
++                    runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_h264_dynamic(encoder, updated_config));
++                    runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(session.get()));
+''
+      && patchContains ''
++    if (raise_runtime_state) {
++      if (runtime_settings_supports_nvenc_h264(encoder, ctx.config)) {
++        ctx.last_runtime_nvenc_bitrate = std::chrono::steady_clock::time_point {};
++        ctx.runtime_nvenc_bitrate_blocked = false;
++      }
++      ctx.runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_h264_dynamic(encoder, ctx.config));
++      ctx.runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(session.get()));
++    }
+''
+      && patchContains ''
++                    if (runtime_settings_supports_nvenc_h264(encoder, ctx->config)) {
++                      ctx->last_runtime_nvenc_bitrate = std::chrono::steady_clock::time_point {};
++                      ctx->runtime_nvenc_bitrate_blocked = false;
++                    }
++                    ctx->runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_h264_dynamic(encoder, ctx->config));
++                    ctx->runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(pos->session.get()));
+''
+    ))
+    (check "runtime FPS and resolution support is limited to H.264 VAAPI or NVENC" (
+      patchContains "runtime_settings_supports_h264_dynamic"
+      && patchContains "runtime_settings_supports_vaapi_h264"
+      && patchContains "runtime_settings_supports_nvenc_h264"
       && patchContains ''encoder.name == "vaapi"sv''
       && patchContains ''encoder.codec_from_config(config).name == "h264_vaapi"''
+      && patchContains ''encoder.name == "nvenc"sv''
+      && patchContains ''encoder.codec_from_config(config).name == "h264_nvenc"''
       && patchContains "runtime FPS unsupported"
     ))
     (check "runtime FPS uses experimental frame pacing" (
@@ -184,11 +268,11 @@ let
       && patchContains "session->control.runtime_settings_supports_bitrate"
       && patchContains "session->control.runtime_settings_encoder_restart_supported"
       && patchContains "session->control.runtime_settings_bitrate_supported"
-      && patchContains "runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_vaapi_h264"
-      && patchContains "runtime_settings_supports_bitrate->raise(runtime_h264_vaapi_bitrate_supported(session.get()))"
-      && patchContains "ctx->runtime_settings_supports_bitrate->raise(runtime_h264_vaapi_bitrate_supported(pos->session.get()))"
-      && patchContains "runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_vaapi_h264(encoder, updated_config))"
-      && patchContains "ctx->runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_vaapi_h264(encoder, ctx->config))"
+      && patchContains "runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_h264_dynamic"
+      && patchContains "runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(session.get()))"
+      && patchContains "ctx->runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(pos->session.get()))"
+      && patchContains "runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_h264_dynamic(encoder, updated_config))"
+      && patchContains "ctx->runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_h264_dynamic(encoder, ctx->config))"
       && patchContains "runtime_settings_supports_encoder_restart->raise(false)"
       && patchContains "ctx->runtime_settings_supports_encoder_restart->raise(false)"
       && patchContains "runtime_settings_supports_bitrate->raise(false)"
@@ -278,9 +362,10 @@ let
     (check "runtime resolution refreshes capture state after apply" (
       patchContains "config_t &config" && patchContains "runtime_reinit_event"
     ))
-    (check "the VAAPI destructor skip is limited to the replacement pair" (
+    (check "the VAAPI destructor skip remains VAAPI-only for the replacement pair" (
       patchContains "disable_destructor_flush_after_runtime_vaapi_replacement"
       && patchContains "runtime VAAPI replacement: destructor flush disabled for replacement pair"
+      && patchContains "if (runtime_settings_supports_vaapi_h264(encoder, config))"
       && !(patchContains "disable_flush_on_destroy")
     ))
     (check "package provenance is anchored and complete" (
@@ -311,6 +396,31 @@ else
     c++ -std=c++20 -O2 -Wall -Wextra -Werror -pthread \
       ${./test-runtime-settings-host.cpp} -o host-runtime-settings-test
     ./host-runtime-settings-test
+
+    bundled=${pkgs.sunshine.src}/third-party/build-deps/dist/Linux-x86_64/include
+    grep -Fx '#define FFMPEG_VERSION "61c5040"' "$bundled/libavutil/ffversion.h" >/dev/null
+    grep -Fx '#define NVENCAPI_MAJOR_VERSION 12' "$bundled/ffnvcodec/nvEncodeAPI.h" >/dev/null
+    grep -Fx '#define NVENCAPI_MINOR_VERSION 0' "$bundled/ffnvcodec/nvEncodeAPI.h" >/dev/null
+    c++ -std=c++20 -O2 -Wall -Wextra -Werror \
+      -I"$bundled" \
+      -I${ffmpegLayoutSource} \
+      -I${ffmpegLayoutSource}/libavcodec \
+      -I${patchedSunshineSource}/src \
+      ${./test-nvenc-layout.cpp} -o nvenc-layout-test
+    ./nvenc-layout-test
+
+    finalVideo=${patchedSunshineSource}/src/video.cpp
+    grep -F 'runtime_settings_supports_h264_dynamic' "$finalVideo" >/dev/null
+    grep -F 'NVENC runtime bitrate reconfigured without encoder restart' "$finalVideo" >/dev/null
+    grep -F 'runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(session.get()))' "$finalVideo" >/dev/null
+    grep -F 'ctx.runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(session.get()))' "$finalVideo" >/dev/null
+    test "$(grep -Fc 'ctx->runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(pos->session.get()))' "$finalVideo")" = 1
+    grep -F 'RUNTIME_NVENC_BITRATE_MIN_INTERVAL' "$finalVideo" >/dev/null
+    grep -F 'if (runtime_settings_supports_vaapi_h264(encoder, config))' "$finalVideo" >/dev/null
+    if grep -F 'seamless_vaapi=1' "$finalVideo" >/dev/null; then
+      echo 'final applied source retained a superseded VAAPI-only success marker' >&2
+      exit 1
+    fi
 
     provenance=${sunshinePackage}/${sunshinePackage.korriProvenanceRelativePath}
     test -f "$provenance"

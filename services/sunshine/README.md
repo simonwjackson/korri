@@ -20,8 +20,9 @@ Experimental live runtime-settings MVP split by review concern:
 - `0003-apply-runtime-bitrate-and-fps-changes.patch` introduced safe rejection for active-stream operation `1` and supports operation `2`: set effective stream FPS at or below launch FPS using runtime frame pacing.
 - `0004-add-proof-gated-runtime-resolution-apply-path.patch` applies operation `3` with same-or-smaller even dimensions whose aspect ratio matches the stream within the sub-pixel tolerance of even-integer rounding (same-ratio scaling, e.g. 854x480 on a 16:9 stream); genuinely different aspect ratios are still rejected so the game is never stretched. Refreshes touch mapping after apply, and is treated as supported for the validated Korri runtime profile. The same-ratio tolerance replaces the former exact same-aspect equality in `0002-wire-runtime-settings-control-plane.patch`.
 - `0005-add-seamless-vaapi-runtime-bitrate-path.patch` enables operation `1` for the supported `h264_vaapi` path by mutating FFmpeg VAAPI rate-control private state, forcing an IDR, and avoiding encoder teardown/reconnect. With the explicit live-settings gate, H.264 queries the normal and low-power VAAPI entrypoints for actual CBR/VBR/AVBR support, preferring the normal entrypoint when both qualify and otherwise preserving Sunshine's upstream order. This avoids Intel's low-power path when it exposes only CQP. Capability publication separately inspects the active encoder session and omits operation `1` and its bitrate bounds when the selected VAAPI rate-control state is not actually mutable.
-- Active-stream bitrate changes are advertised only for the seamless `h264_vaapi` VAAPI path; no reconnect or encoder-restart fallback is considered shippable.
-- Runtime FPS is currently limited to `h264_vaapi` via Sunshine's AVCodec/VAAPI path.
+- `0016-add-seamless-nvenc-runtime-path.patch` extends operations `1`, `2`, and `3` to active Linux `h264_nvenc` sessions. Bitrate changes call the NVIDIA driver's synchronous reconfiguration function on Sunshine's existing encode thread, preserve the established VBV duration, force one IDR through NVENC, and acknowledge success only after the driver returns `NV_ENC_SUCCESS`. FPS continues to use the existing backend-neutral frame pacing. Resolution continues to use the existing fresh-frame replacement and capture-reinitialization path; the VAAPI destructor-flush exception remains VAAPI-only.
+- Active-stream bitrate changes are advertised only for a live `h264_vaapi` or `h264_nvenc` session whose backend-specific mutable-rate-control guard succeeds; no reconnect or encoder-restart fallback is considered shippable.
+- Runtime FPS and resolution are limited to active H.264 VAAPI or NVENC sessions.
 - The series does not use the failed public AVCodec field/AVOption mutation fallback.
 
 Runtime settings mechanism contract:
@@ -37,14 +38,15 @@ Runtime settings mechanism contract:
 - Operations `1`, `2`, and `3` remain bitrate, FPS, and resolution mutation requests.
 - Mutation acks carry the broad numeric status plus an additive reason field; current no-reason consumers must be updated before relying on reason-bearing payloads.
 - Runtime resolution is a normal runtime-settings operation for the validated Korri profile; operation `0` advertises operation `3` only when the active session supports it.
-- Capability support is conservative: active-stream bitrate, FPS, and resolution are advertised only for the explicit live-settings gate on an active H.264 session using the supported VAAPI path; unsupported sessions return a reason without setting support bits.
+- Capability support is conservative: active-stream FPS and resolution are advertised only for the explicit live-settings gate on an active H.264 VAAPI or NVENC session. Bitrate additionally requires the active backend's mutable-rate-control guard. Unsupported sessions return a reason without setting support bits.
 - Operation `1` support requires same-session moving-video and bandwidth proof on the target client before it is treated as product-ready for that client/decoder combination.
 - Operation `3` outcomes distinguish raw Sunshine ack state from caller-visible applied truth: Sunshine may report `server_applied=1`, while local-control must still expose applied width/height state for callers to verify.
 
-VAAPI runtime-bitrate maintenance policy:
+VAAPI and NVENC runtime-bitrate maintenance policy:
 
 - A stable FFmpeg helper/API is the preferred replacement for Sunshine-side private-struct mirroring, but Korri is not carrying that downstream FFmpeg API yet. The current path stays inside `sunshine-korri` because it has SM8550 evidence and avoids forking FFmpeg's encoder internals before an upstreamable helper shape is clear.
-- The private mirror is allowed only for the exact pinned FFmpeg/libavcodec version encoded in the patch. FFmpeg upgrades, including same-major minor/micro updates, must fail at compile/source-check time until the mirrored VAAPI layout is reviewed.
+- The private mirrors are allowed only for the exact pinned FFmpeg/libavcodec version encoded in the patches. FFmpeg upgrades, including same-major minor/micro updates, must fail at compile/source-check time until the mirrored VAAPI and NVENC layouts are reviewed. The NVENC prefix is additionally compiled against exact FFmpeg commit `61c50407fd429a5e2ec616e2e846c3fe3743879a` and Sunshine's bundled NVENC API 12.0 headers, with offset checks for every accessed private field.
+- NVENC reconfiguration copies the active driver configuration before mutation, calls `NvEncReconfigureEncoder` synchronously, and commits FFmpeg/Sunshine applied state only after driver success. It adds no polling thread, detached work, lookahead, multipass, or automatic adaptation policy. Release-capable client range gestures dispatch only the newest value at the release edge, with one bounded fallback if release is lost. The server rate-limits every NVENC attempt from driver-call completion and rejects attempts inside a 500 ms per-session interval as conflicts so alternate clients cannot produce an IDR/reset storm. One failed call or one call exceeding 100 ms disables bitrate mutation for that encoder session while leaving FPS, resolution, and the stream available; a successful encoder replacement may republish support.
 - Rollback remains the Nix-owned live-settings gate: disable `services.korriLinuxHost.sunshine.runtimeSettings.enable` to keep `sunshine-korri` deployed and omit `SUNSHINE_LIVE_SETTINGS_MVP=1`.
 
 Runtime-resolution VAAPI destructor teardown policy:
@@ -89,9 +91,9 @@ The Android Moonlight native layer implements the matching `0x5504` request and 
 
 One process-lifetime lifecycle lock serializes readiness, request acceptance, ENet enqueue, send-failure publication, and stop. The feature becomes active only for Sunshine on an encrypted ENet control stream with a connected peer. TCP, unencrypted, non-Sunshine, disconnected, and inactive calls do not submit a runtime-settings packet. Every terminal connection callback first marks the runtime-settings session inactive. The native state machine validates exact payload sizes, host-only status and reason combinations, capability masks, launch and current bounds, remaining timeout deadlines, clock regression, stale acknowledgements, and query-versus-mutation ordering. Unavailable capability acknowledgements keep zero operation masks and bitrate bounds but carry the nonzero launch FPS in `maxFps`, as the pinned host sends. Rejected mutation acknowledgements update the host-authoritative current value only when it remains inside the negotiated bounds. A pure 31-field serializer is shared by JNI and host-native index tests. The client does not select values or adapt the stream. Korri product policy remains outside the Moonlight transport layer.
 
-The historical physical records from the legacy branch are not present in this branch. Import them only with a clear legacy provenance label. Current physical bitrate, FPS, resolution, and input-seat evidence is pending the final device validation stage.
+The historical physical records from the legacy branch are not present in this branch. Import them only with a clear legacy provenance label. Current Intel VAAPI physical bitrate, FPS, resolution, lifecycle, touch, and soak evidence is recorded in [`docs/acceptance/sunshine-korri-physical-runtime-settings-2026-09-01.md`](../../docs/acceptance/sunshine-korri-physical-runtime-settings-2026-09-01.md). NVENC and input-seat physical evidence remain separate gates until recorded there or in a successor report.
 
-Current automated package, protocol, candidate-provenance, and private-state evidence is recorded in [`docs/acceptance/sunshine-korri-automated-restoration-2026-08-31.md`](../../docs/acceptance/sunshine-korri-automated-restoration-2026-08-31.md). That record does not replace physical acceptance.
+The ten-patch automated restoration record is preserved as historical evidence in [`docs/acceptance/sunshine-korri-automated-restoration-2026-08-31.md`](../../docs/acceptance/sunshine-korri-automated-restoration-2026-08-31.md). Current eleven-patch NVENC package, protocol, provenance, and client evidence is recorded in [`docs/acceptance/sunshine-korri-nvenc-automated-2026-09-01.md`](../../docs/acceptance/sunshine-korri-nvenc-automated-2026-09-01.md). Automated evidence does not replace physical acceptance.
 
 ### Input-seat event mirror patch
 
@@ -126,6 +128,8 @@ The installed package contains `share/korri/sunshine-korri/provenance`. This mod
 - the exact observed base Sunshine source store path,
 - the exact observed base Sunshine derivation path,
 - the reviewed libavcodec version,
+- the exact reviewed FFmpeg commit and source hash,
+- the reviewed NVENC API major and minor version,
 - the Sunshine executable path,
 - each ordered Korri patch name and SHA-256 value,
 - one SHA-256 value for the complete ordered patch set.

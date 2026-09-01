@@ -2,10 +2,22 @@ import type { SurfaceGameplayControl } from "@contracts/surface/korri-surface"
 import { useEffect, useRef, useState } from "react"
 
 const DIRECTION_EVENT = "korri-semantic-direction"
+const DIRECTION_END_EVENT = "korri-semantic-direction-end"
+const RANGE_COMMIT_DELAY_MS = 180
+const RANGE_RELEASE_FALLBACK_MS = 2000
 
 interface SemanticDirectionDetail {
   readonly direction: "left" | "right"
   readonly repeat: boolean
+  readonly releaseExpected: boolean
+  readonly source?: "keyboard" | "gamepad" | "native"
+  readonly gestureId?: number
+}
+
+interface PendingDirectionGesture {
+  readonly direction: "left" | "right"
+  readonly source?: "keyboard" | "gamepad" | "native"
+  readonly gestureId?: number
 }
 
 export interface ShiftSheetRangeProps {
@@ -25,17 +37,62 @@ export interface ShiftSheetRangeProps {
 export function ShiftSheetRange({ control, onChange }: ShiftSheetRangeProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const valueRef = useRef(control.interaction.value)
+  const onChangeRef = useRef(onChange)
+  const pendingValueRef = useRef<number | null>(null)
+  const pendingDirectionRef = useRef<PendingDirectionGesture | null>(null)
+  const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [value, setValue] = useState(control.interaction.value)
   const unavailable = !control.enabled
   const id = `gameplay-control-${control.id}`
   const descriptionId = control.description ? `${id}-description` : undefined
   const reasonId = unavailable && control.disabledReason ? `${id}-reason` : undefined
   const describedBy = [descriptionId, reasonId].filter(Boolean).join(" ") || undefined
+  const cancelPendingCommit = () => {
+    if (commitTimerRef.current !== null) clearTimeout(commitTimerRef.current)
+    commitTimerRef.current = null
+    pendingValueRef.current = null
+    pendingDirectionRef.current = null
+  }
+  const flushPendingCommit = () => {
+    if (commitTimerRef.current !== null) clearTimeout(commitTimerRef.current)
+    commitTimerRef.current = null
+    const pending = pendingValueRef.current
+    pendingValueRef.current = null
+    pendingDirectionRef.current = null
+    if (pending !== null) onChangeRef.current(pending)
+  }
+  const scheduleCommit = (
+    next: number,
+    delayMs = RANGE_COMMIT_DELAY_MS,
+    direction: PendingDirectionGesture | null = null,
+  ) => {
+    if (commitTimerRef.current !== null) clearTimeout(commitTimerRef.current)
+    pendingValueRef.current = next
+    pendingDirectionRef.current = direction
+    commitTimerRef.current = setTimeout(flushPendingCommit, delayMs)
+  }
   useEffect(() => {
+    onChangeRef.current = onChange
+  }, [onChange])
+  useEffect(() => {
+    cancelPendingCommit()
     valueRef.current = control.interaction.value
     setValue(control.interaction.value)
-  }, [control])
-  const adjust = (direction: "left" | "right") => {
+  }, [
+    control.id,
+    control.enabled,
+    control.interaction.value,
+    control.interaction.min,
+    control.interaction.max,
+    control.interaction.step,
+  ])
+  useEffect(() => () => cancelPendingCommit(), [])
+  const adjust = (
+    direction: "left" | "right",
+    releaseExpected: boolean,
+    source: PendingDirectionGesture["source"],
+    gestureId: number | undefined,
+  ) => {
     if (unavailable) return
     const { min, max, step } = control.interaction
     const current = valueRef.current
@@ -46,7 +103,11 @@ export function ShiftSheetRange({ control, onChange }: ShiftSheetRangeProps) {
     if (next !== current) {
       valueRef.current = next
       setValue(next)
-      onChange(next)
+      scheduleCommit(
+        next,
+        releaseExpected ? RANGE_RELEASE_FALLBACK_MS : RANGE_COMMIT_DELAY_MS,
+        { direction, source, gestureId },
+      )
     }
   }
 
@@ -55,10 +116,26 @@ export function ShiftSheetRange({ control, onChange }: ShiftSheetRangeProps) {
     if (!input) return
     const listener = (event: Event) => {
       const detail = (event as CustomEvent<SemanticDirectionDetail>).detail
-      adjust(detail.direction)
+      adjust(
+        detail.direction,
+        detail.releaseExpected,
+        detail.source,
+        detail.gestureId,
+      )
+    }
+    const endListener = (event: Event) => {
+      const detail = (event as CustomEvent<PendingDirectionGesture>).detail
+      const pending = pendingDirectionRef.current
+      if (!pending || pending.direction !== detail.direction || pending.source !== detail.source) return
+      if (pending.gestureId !== detail.gestureId) return
+      flushPendingCommit()
     }
     input.addEventListener(DIRECTION_EVENT, listener)
-    return () => input.removeEventListener(DIRECTION_EVENT, listener)
+    input.addEventListener(DIRECTION_END_EVENT, endListener)
+    return () => {
+      input.removeEventListener(DIRECTION_EVENT, listener)
+      input.removeEventListener(DIRECTION_END_EVENT, endListener)
+    }
   })
 
   const copy = (
@@ -127,8 +204,11 @@ export function ShiftSheetRange({ control, onChange }: ShiftSheetRangeProps) {
           if (unavailable) return
           valueRef.current = event.currentTarget.valueAsNumber
           setValue(event.currentTarget.valueAsNumber)
-          onChange(event.currentTarget.valueAsNumber)
+          scheduleCommit(event.currentTarget.valueAsNumber, RANGE_RELEASE_FALLBACK_MS)
         }}
+        onPointerUp={flushPendingCommit}
+        onPointerCancel={flushPendingCommit}
+        onBlur={flushPendingCommit}
       />
     </label>
   )

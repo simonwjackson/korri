@@ -13,6 +13,8 @@ describe("parseBridgeInputEvent", () => {
           type: "direction",
           direction: "up",
           repeat: true,
+          releaseExpected: true,
+          gestureId: 7,
           source: "gamepad",
         }),
       ),
@@ -20,6 +22,19 @@ describe("parseBridgeInputEvent", () => {
       type: "direction",
       direction: "up",
       repeat: true,
+      releaseExpected: true,
+      gestureId: 7,
+      source: "gamepad",
+    })
+    expect(parseBridgeInputEvent(JSON.stringify({
+      type: "direction-end",
+      direction: "up",
+      gestureId: 7,
+      source: "gamepad",
+    }))).toEqual({
+      type: "direction-end",
+      direction: "up",
+      gestureId: 7,
       source: "gamepad",
     })
   })
@@ -55,6 +70,30 @@ describe("parseBridgeInputEvent", () => {
         JSON.stringify({ type: "direction", direction: "left", repeat: "yes" }),
       ),
     ).toBeNull()
+    expect(parseBridgeInputEvent(JSON.stringify({
+      type: "direction",
+      direction: "left",
+      releaseExpected: "yes",
+      source: "gamepad",
+    }))).toBeNull()
+    expect(parseBridgeInputEvent(JSON.stringify({
+      type: "direction",
+      direction: "left",
+      releaseExpected: true,
+      source: "gamepad",
+    }))).toBeNull()
+    expect(parseBridgeInputEvent(JSON.stringify({
+      type: "direction",
+      direction: "left",
+      releaseExpected: false,
+      gestureId: 1,
+      source: "gamepad",
+    }))).toBeNull()
+    expect(parseBridgeInputEvent(JSON.stringify({
+      type: "direction-end",
+      direction: "left",
+      source: "gamepad",
+    }))).toBeNull()
   })
 })
 
@@ -72,12 +111,32 @@ describe("createKorriNativeAdapter", () => {
     push(JSON.stringify({
       type: "direction",
       direction: "left",
+      releaseExpected: true,
+      gestureId: 9,
+      source: "gamepad",
+    }))
+    push(JSON.stringify({
+      type: "direction-end",
+      direction: "left",
+      gestureId: 9,
       source: "gamepad",
     }))
 
     expect(emitted).toEqual([
       { type: "confirm", source: "gamepad" },
-      { type: "direction", direction: "left", source: "gamepad" },
+      {
+        type: "direction",
+        direction: "left",
+        releaseExpected: true,
+        gestureId: 9,
+        source: "gamepad",
+      },
+      {
+        type: "direction-end",
+        direction: "left",
+        gestureId: 9,
+        source: "gamepad",
+      },
     ])
 
     stop()

@@ -121,6 +121,25 @@ export type BridgeInputEvent =
       readonly direction: BridgeDirection
       /** True after the hardware edge's initial directional press. */
       readonly repeat?: boolean
+      readonly releaseExpected?: never
+      readonly gestureId?: never
+      readonly source: "gamepad"
+    }
+  | {
+      readonly type: "direction"
+      readonly direction: BridgeDirection
+      /** True after the hardware edge's initial directional press. */
+      readonly repeat?: boolean
+      /** Android will publish one matching release edge. */
+      readonly releaseExpected: true
+      /** Opaque process-local gesture identity; never a device or key identity. */
+      readonly gestureId: number
+      readonly source: "gamepad"
+    }
+  | {
+      readonly type: "direction-end"
+      readonly direction: BridgeDirection
+      readonly gestureId: number
       readonly source: "gamepad"
     }
   | { readonly type: "confirm"; readonly source: "gamepad" }

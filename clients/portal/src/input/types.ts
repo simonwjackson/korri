@@ -16,9 +16,9 @@
 export type Direction = "up" | "down" | "left" | "right"
 
 /**
- * Identifies which adapter emitted an action, for diagnostics. Behaviour must
- * not branch on it: an action means the same thing whichever device produced
- * it. Synthetic / test emits may omit it.
+ * Identifies which adapter emitted an action. Action semantics do not vary by
+ * source, but release-capable gestures use it as an opaque identity namespace
+ * so two adapters cannot release one another. Synthetic / test emits may omit it.
  */
 export type InputSource = "keyboard" | "gamepad" | "native"
 
@@ -28,6 +28,25 @@ export type InputAction =
       readonly direction: Direction
       /** Semantic held-direction repeat; no hardware timing or key data leaks. */
       readonly repeat?: boolean
+      readonly releaseExpected?: never
+      readonly gestureId?: never
+      readonly source?: InputSource
+    }
+  | {
+      readonly type: "direction"
+      readonly direction: Direction
+      /** Semantic held-direction repeat; no hardware timing or key data leaks. */
+      readonly repeat?: boolean
+      /** This adapter will emit one matching direction-end edge. */
+      readonly releaseExpected: true
+      /** Opaque process-local gesture identity; never a hardware identifier. */
+      readonly gestureId: number
+      readonly source?: InputSource
+    }
+  | {
+      readonly type: "direction-end"
+      readonly direction: Direction
+      readonly gestureId: number
       readonly source?: InputSource
     }
   | { readonly type: "confirm"; readonly source?: InputSource }

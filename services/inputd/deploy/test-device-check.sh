@@ -403,6 +403,18 @@ case "$(basename "$0")" in
               printf 'device gate: sunshine-korri provenance has an invalid reviewed_libavcodec_version field\n' >&2
               exit 87
               ;;
+            wrong-ffmpeg-commit)
+              printf 'device gate: sunshine-korri provenance has an invalid reviewed_ffmpeg_commit field\n' >&2
+              exit 87
+              ;;
+            wrong-ffmpeg-source)
+              printf 'device gate: sunshine-korri provenance has an invalid reviewed_ffmpeg_source_hash field\n' >&2
+              exit 87
+              ;;
+            wrong-nvenc-api)
+              printf 'device gate: sunshine-korri provenance has an invalid reviewed_nvenc_api field\n' >&2
+              exit 87
+              ;;
             *) exit 87 ;;
           esac
           [[ "${HARNESS_PAIRING_PRESENT:-true}" == true ]] || {
@@ -466,11 +478,11 @@ case "$(basename "$0")" in
           normalized="${HARNESS_FINGERPRINT:-node=/dev/input/event9 sysfs=/sys/devices/virtual/input/input9/event9 dev=13:73 inode=1:9 inputplumber=/nix/store/provider/bin/inputplumber version=0.75.2 keys=exact abs=exact ff=yes}"
           physical="identity=$expected_identity event=event8 sysfs=/sys/devices/pci0000:00/input/input8/event8 profile=$profile"
           printf 'automated-gates=pass raw-readable=0 inputd-status=Ready system-korrid=active system-x11-headless=active system-sunshine=active pairing-state=present credentials=service-specific sunshine-package=attested catalog=Ok delegate=yes controllers=pids\n'
-          printf 'sunshine-executable=/nix/store/sunshine-korri/bin/sunshine-2025.924.154138-korri patch-set-sha256=%064d patches=10 base-version=2025.924.154138 libavcodec=62.11.100\n' 0
+          printf 'sunshine-executable=/nix/store/sunshine-korri/bin/sunshine-2025.924.154138-korri patch-set-sha256=%064d patches=11 base-version=2025.924.154138 libavcodec=62.11.100\n' 0
           printf 'sunshine-private-state=protected digest=%s\n' "${HARNESS_PRIVATE_STATE_DIGEST:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
           printf 'normalized-fingerprint=%s\n' "$normalized"
           [[ "$require_physical" != true ]] || printf 'controller-evidence=%s\n' "$physical"
-          sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine-2025.924.154138-korri patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=10 base-version=2025.924.154138 libavcodec=62.11.100'
+          sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine-2025.924.154138-korri patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=11 base-version=2025.924.154138 libavcodec=62.11.100'
           printf 'acceptance-fingerprint=normalized=%s sunshine=%q private-state=%s' "$normalized" "$sunshine" "${HARNESS_PRIVATE_STATE_DIGEST:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
           [[ "$require_physical" != true ]] || printf ' physical=%s' "$physical"
           printf '\n'
@@ -486,9 +498,9 @@ case "$(basename "$0")" in
             normalized="${HARNESS_FINGERPRINT:-node=/dev/input/event9 sysfs=/sys/devices/virtual/input/input9/event9 dev=13:73 inode=1:9 inputplumber=/nix/store/provider/bin/inputplumber version=0.75.2 keys=exact abs=exact ff=yes}"
           fi
           if [[ "${HARNESS_REPLACE_SUNSHINE:-no}" == yes ]]; then
-            sunshine='sunshine-executable=/nix/store/replaced-sunshine/bin/sunshine patch-set-sha256=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff patches=10 base-version=2025.924.154138 libavcodec=62.11.100'
+            sunshine='sunshine-executable=/nix/store/replaced-sunshine/bin/sunshine patch-set-sha256=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff patches=11 base-version=2025.924.154138 libavcodec=62.11.100'
           else
-            sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine-2025.924.154138-korri patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=10 base-version=2025.924.154138 libavcodec=62.11.100'
+            sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine-2025.924.154138-korri patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=11 base-version=2025.924.154138 libavcodec=62.11.100'
           fi
           if [[ "${HARNESS_REPLACE_PRIVATE_STATE:-no}" == yes ]]; then
             private_state=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
@@ -1631,6 +1643,9 @@ for provenance_model in duplicate-patch reordered-patch wrong-patch-hash; do
 done
 run_failure_model sunshine-wrong-base HARNESS_SUNSHINE_PACKAGE wrong-base   'sunshine-korri provenance has an invalid base_sunshine_version field'
 run_failure_model sunshine-wrong-libavcodec HARNESS_SUNSHINE_PACKAGE wrong-libavcodec   'sunshine-korri provenance has an invalid reviewed_libavcodec_version field'
+run_failure_model sunshine-wrong-ffmpeg-commit HARNESS_SUNSHINE_PACKAGE wrong-ffmpeg-commit   'sunshine-korri provenance has an invalid reviewed_ffmpeg_commit field'
+run_failure_model sunshine-wrong-ffmpeg-source HARNESS_SUNSHINE_PACKAGE wrong-ffmpeg-source   'sunshine-korri provenance has an invalid reviewed_ffmpeg_source_hash field'
+run_failure_model sunshine-wrong-nvenc-api HARNESS_SUNSHINE_PACKAGE wrong-nvenc-api   'sunshine-korri provenance has an invalid reviewed_nvenc_api field'
 run_failure_model sunshine-private-state HARNESS_PRIVATE_STATE_MODEL unsafe 'Sunshine private configuration tree is unsafe or incomplete'
 run_failure_model post-stop-query-error HARNESS_POST_STOP_QUERY_ERROR yes 'old user unit active state query failed after stop'
 

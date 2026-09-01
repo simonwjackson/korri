@@ -555,10 +555,15 @@ public final class KorriOverlayService extends AccessibilityService {
     }
 
     private static String directionInput(String direction) {
+        return directionInput("direction", direction, null);
+    }
+
+    private static String directionInput(String type, String direction, Long gestureId) {
         try {
             return new JSONObject()
-                    .put("type", "direction")
+                    .put("type", type)
                     .put("direction", direction)
+                    .putOpt("gestureId", gestureId)
                     .put("source", "gamepad")
                     .toString();
         } catch (Exception impossible) {
@@ -923,6 +928,8 @@ public final class KorriOverlayService extends AccessibilityService {
         }
 
         private final Set<OwnedKey> owned = new HashSet<>();
+        private final Map<OwnedKey, Long> directionGestures = new HashMap<>();
+        private long nextDirectionGestureId = 1;
         private boolean destroyed;
 
         public Decision route(
@@ -937,9 +944,21 @@ public final class KorriOverlayService extends AccessibilityService {
 
             OwnedKey key = new OwnedKey(deviceId, keyCode);
             boolean isOwned = owned.contains(key);
-            if (canceled || action == KeyEvent.ACTION_UP) {
+            if (canceled) {
                 if (isOwned) owned.remove(key);
+                directionGestures.remove(key);
                 return new Decision(isOwned, null, false);
+            }
+            if (action == KeyEvent.ACTION_UP) {
+                if (isOwned) owned.remove(key);
+                Long gestureId = directionGestures.remove(key);
+                String releasedDirection = directionForKey(keyCode);
+                return new Decision(
+                        isOwned,
+                        isOwned && releasedDirection != null && gestureId != null
+                                ? directionInput("direction-end", releasedDirection, gestureId)
+                                : null,
+                        false);
             }
             if (action != KeyEvent.ACTION_DOWN) {
                 return new Decision(isOwned, null, false);
@@ -950,26 +969,19 @@ public final class KorriOverlayService extends AccessibilityService {
                     return new Decision(false, null, false);
                 }
                 owned.add(key);
+                if (directionForKey(keyCode) != null) {
+                    directionGestures.put(key, nextDirectionGestureId++);
+                }
             }
 
             String type = null;
-            String direction = null;
+            String direction = directionForKey(keyCode);
             switch (keyCode) {
                 case KeyEvent.KEYCODE_DPAD_UP:
-                    type = "direction";
-                    direction = "up";
-                    break;
                 case KeyEvent.KEYCODE_DPAD_DOWN:
-                    type = "direction";
-                    direction = "down";
-                    break;
                 case KeyEvent.KEYCODE_DPAD_LEFT:
-                    type = "direction";
-                    direction = "left";
-                    break;
                 case KeyEvent.KEYCODE_DPAD_RIGHT:
                     type = "direction";
-                    direction = "right";
                     break;
                 case KeyEvent.KEYCODE_DPAD_CENTER:
                 case KeyEvent.KEYCODE_BUTTON_A:
@@ -998,12 +1010,29 @@ public final class KorriOverlayService extends AccessibilityService {
                 JSONObject input = new JSONObject().put("type", type);
                 if (direction != null) {
                     input.put("direction", direction);
+                    input.put("releaseExpected", true);
+                    input.put("gestureId", directionGestures.get(key));
                     if (repeatCount > 0) input.put("repeat", true);
                 }
                 input.put("source", "gamepad");
                 return new Decision(true, input.toString(), dismiss);
             } catch (Exception error) {
                 return new Decision(true, null, dismiss);
+            }
+        }
+
+        private static String directionForKey(int keyCode) {
+            switch (keyCode) {
+                case KeyEvent.KEYCODE_DPAD_UP:
+                    return "up";
+                case KeyEvent.KEYCODE_DPAD_DOWN:
+                    return "down";
+                case KeyEvent.KEYCODE_DPAD_LEFT:
+                    return "left";
+                case KeyEvent.KEYCODE_DPAD_RIGHT:
+                    return "right";
+                default:
+                    return null;
             }
         }
 
@@ -1044,6 +1073,7 @@ public final class KorriOverlayService extends AccessibilityService {
         public void destroy() {
             destroyed = true;
             owned.clear();
+            directionGestures.clear();
         }
     }
 

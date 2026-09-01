@@ -27,9 +27,22 @@ describe("createKeyboardAdapter", () => {
       cancelable: true,
     })
     target.dispatchEvent(event)
+    target.dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowUp" }))
 
     expect(emitted).toEqual([
-      { type: "direction", direction: "up", source: "keyboard" },
+      {
+        type: "direction",
+        direction: "up",
+        releaseExpected: true,
+        gestureId: 1,
+        source: "keyboard",
+      },
+      {
+        type: "direction-end",
+        direction: "up",
+        gestureId: 1,
+        source: "keyboard",
+      },
     ])
     expect(event.defaultPrevented).toBe(true)
 
@@ -43,6 +56,7 @@ describe("createKeyboardAdapter", () => {
       emitted.push(action),
     )
 
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }))
     target.dispatchEvent(
       new KeyboardEvent("keydown", { key: "ArrowRight", repeat: true }),
     )
@@ -51,7 +65,101 @@ describe("createKeyboardAdapter", () => {
       {
         type: "direction",
         direction: "right",
+        releaseExpected: true,
+        gestureId: 1,
+        source: "keyboard",
+      },
+      {
+        type: "direction",
+        direction: "right",
         repeat: true,
+        releaseExpected: true,
+        gestureId: 1,
+        source: "keyboard",
+      },
+    ])
+    stop()
+  })
+
+  it("ignores a directional release that has no accepted press", () => {
+    const target = new EventTarget()
+    const emitted: InputAction[] = []
+    const stop = createKeyboardAdapter({ target }).start(action => emitted.push(action))
+
+    target.dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowRight" }))
+
+    expect(emitted).toEqual([])
+    stop()
+  })
+
+  it("retires an accepted direction even when another listener prevents keyup", () => {
+    const target = new EventTarget()
+    const emitted: InputAction[] = []
+    target.addEventListener("keyup", event => event.preventDefault())
+    const stop = createKeyboardAdapter({ target }).start(action => emitted.push(action))
+
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }))
+    target.dispatchEvent(new KeyboardEvent("keyup", {
+      key: "ArrowRight",
+      cancelable: true,
+    }))
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }))
+
+    expect(emitted).toEqual([
+      {
+        type: "direction",
+        direction: "right",
+        releaseExpected: true,
+        gestureId: 1,
+        source: "keyboard",
+      },
+      {
+        type: "direction-end",
+        direction: "right",
+        gestureId: 1,
+        source: "keyboard",
+      },
+      {
+        type: "direction",
+        direction: "right",
+        releaseExpected: true,
+        gestureId: 2,
+        source: "keyboard",
+      },
+    ])
+    stop()
+  })
+
+  it("quarantines a blurred held key until its stale release arrives", () => {
+    const target = new EventTarget()
+    const emitted: InputAction[] = []
+    const stop = createKeyboardAdapter({ target }).start(action => emitted.push(action))
+
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }))
+    target.dispatchEvent(new Event("blur"))
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }))
+    target.dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowRight" }))
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }))
+
+    expect(emitted).toEqual([
+      {
+        type: "direction",
+        direction: "right",
+        releaseExpected: true,
+        gestureId: 1,
+        source: "keyboard",
+      },
+      {
+        type: "direction-end",
+        direction: "right",
+        gestureId: 1,
+        source: "keyboard",
+      },
+      {
+        type: "direction",
+        direction: "right",
+        releaseExpected: true,
+        gestureId: 2,
         source: "keyboard",
       },
     ])
@@ -96,8 +204,20 @@ describe("createKeyboardAdapter", () => {
     target.dispatchEvent(up)
 
     expect(emitted).toEqual([
-      { type: "direction", direction: "left", source: "keyboard" },
-      { type: "direction", direction: "up", source: "keyboard" },
+      {
+        type: "direction",
+        direction: "left",
+        releaseExpected: true,
+        gestureId: 1,
+        source: "keyboard",
+      },
+      {
+        type: "direction",
+        direction: "up",
+        releaseExpected: true,
+        gestureId: 2,
+        source: "keyboard",
+      },
     ])
     expect(left.defaultPrevented).toBe(true)
     expect(up.defaultPrevented).toBe(true)
@@ -194,7 +314,13 @@ describe("createKeyboardAdapter", () => {
     target.dispatchEvent(new KeyboardEvent("keydown", { key: "KeyO" }))
 
     expect(emitted).toEqual([
-      { type: "direction", direction: "up", source: "keyboard" },
+      {
+        type: "direction",
+        direction: "up",
+        releaseExpected: true,
+        gestureId: 1,
+        source: "keyboard",
+      },
       { type: "options", source: "keyboard" },
     ])
 

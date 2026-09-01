@@ -6,7 +6,11 @@
     "/nix/store/w8dd7pbl8f0qg2cyb7ay8hmli854giwv-sunshine-2025.924.154138.drv"
   ];
   reviewedLibavcodecVersion = "62.11.100";
-  patchSetSha256 = "e96a0fbdfe8441b6bea9207fa2349ab7e80c726ccc022273770bad3d7aa1076a";
+  reviewedFfmpegCommit = "61c50407fd429a5e2ec616e2e846c3fe3743879a";
+  reviewedFfmpegSourceHash = "sha256-LKQUfHb9/Z4uvPx4vrtAOPL95Un9/C26lvCbQZ51avk=";
+  reviewedNvencApiMajor = 12;
+  reviewedNvencApiMinor = 0;
+  patchSetSha256 = "46e32d78438aed4f8b2a4572f26bee158182afcaa6257b01cd0345b9de396901";
   patches = [
     {
       name = "0001-add-runtime-settings-protocol-surface.patch";
@@ -57,6 +61,11 @@
       name = "0015-add-korri-input-seat-event-mirror.patch";
       path = ./patches/0015-add-korri-input-seat-event-mirror.patch;
       sha256 = "69888a0ef824af105f0919ad354876b52ca0d003b0c46be619e732bc1cdbe726";
+    }
+    {
+      name = "0016-add-seamless-nvenc-runtime-path.patch";
+      path = ./patches/0016-add-seamless-nvenc-runtime-path.patch;
+      sha256 = "ba767c4b8d853001ead6af7af44dbc9503d24cf22aa257d29635be3b62a7feb2";
     }
   ];
 }

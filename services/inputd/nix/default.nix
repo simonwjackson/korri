@@ -63,7 +63,7 @@ in
       test -x ${sunshinePackage}/bin/sunshine
       test "${sunshinePackage.pname}" = sunshine-korri
       test "${sunshinePackage.version}" = "${pkgs.sunshine.version}-korri"
-      test "${toString (builtins.length sunshinePackage.korriPatchNames)}" = 10
+      test "${toString (builtins.length sunshinePackage.korriPatchNames)}" = 11
       test "${sunshinePackage.korriBaseSunshineVersion}" = "${sunshineApprovedPatches.baseSunshineVersion}"
       test "${sunshinePackage.korriApprovedBaseSunshineSourceHash}" = "${sunshineApprovedPatches.approvedBaseSourceHash}"
       test "${pkgs.sunshine.src.outputHash}" = "${sunshineApprovedPatches.approvedBaseSourceHash}"
@@ -72,12 +72,19 @@ in
       test "${toString (builtins.elem sunshinePackage.korriBaseSunshineDerivation sunshineApprovedPatches.approvedBaseDerivations)}" = 1
       test "${sunshinePackage.korriApprovedBaseSunshineDerivation}" = "${sunshinePackage.korriBaseSunshineDerivation}"
       test "${sunshinePackage.korriReviewedLibavcodecVersion}" = "${sunshineApprovedPatches.reviewedLibavcodecVersion}"
+      test "${sunshinePackage.korriReviewedFfmpegCommit}" = "${sunshineApprovedPatches.reviewedFfmpegCommit}"
+      test "${sunshinePackage.korriReviewedFfmpegSourceHash}" = "${sunshineApprovedPatches.reviewedFfmpegSourceHash}"
+      test "${toString sunshinePackage.korriReviewedNvencApiMajor}" = "${toString sunshineApprovedPatches.reviewedNvencApiMajor}"
+      test "${toString sunshinePackage.korriReviewedNvencApiMinor}" = "${toString sunshineApprovedPatches.reviewedNvencApiMinor}"
       test "${sunshinePackage.korriPatchSetSha256}" = "${sunshineApprovedPatches.patchSetSha256}"
       provenance=${sunshinePackage}/${sunshinePackage.korriProvenanceRelativePath}
       test -f "$provenance"
       grep -Fx 'package=sunshine-korri' "$provenance" >/dev/null
       grep -Fx 'approved_base_sunshine_source_hash=${sunshineApprovedPatches.approvedBaseSourceHash}' "$provenance" >/dev/null
       grep -Fx 'approved_base_sunshine_derivation=${sunshinePackage.korriBaseSunshineDerivation}' "$provenance" >/dev/null
+      grep -Fx 'reviewed_ffmpeg_commit=${sunshineApprovedPatches.reviewedFfmpegCommit}' "$provenance" >/dev/null
+      grep -Fx 'reviewed_ffmpeg_source_hash=${sunshineApprovedPatches.reviewedFfmpegSourceHash}' "$provenance" >/dev/null
+      grep -Fx 'reviewed_nvenc_api=${toString sunshineApprovedPatches.reviewedNvencApiMajor}.${toString sunshineApprovedPatches.reviewedNvencApiMinor}' "$provenance" >/dev/null
       grep -Fx 'executable=bin/sunshine' "$provenance" >/dev/null
       grep -Fx 'patch_set_sha256=${sunshinePackage.korriPatchSetSha256}' "$provenance" >/dev/null
       touch "$out"
@@ -132,6 +139,9 @@ in
       grep -Fx "EXPECTED_SUNSHINE_BASE_SOURCE_HASH='${sunshineApprovedPatches.approvedBaseSourceHash}'" "$gate" >/dev/null
       grep -Fx "EXPECTED_SUNSHINE_BASE_DERIVATION='/nix/store/w8dd7pbl8f0qg2cyb7ay8hmli854giwv-sunshine-2025.924.154138.drv'" "$gate" >/dev/null
       grep -Fx "EXPECTED_SUNSHINE_LIBAVCODEC_VERSION='${sunshineApprovedPatches.reviewedLibavcodecVersion}'" "$gate" >/dev/null
+      grep -Fx "EXPECTED_SUNSHINE_FFMPEG_COMMIT='${sunshineApprovedPatches.reviewedFfmpegCommit}'" "$gate" >/dev/null
+      grep -Fx "EXPECTED_SUNSHINE_FFMPEG_SOURCE_HASH='${sunshineApprovedPatches.reviewedFfmpegSourceHash}'" "$gate" >/dev/null
+      grep -Fx "EXPECTED_SUNSHINE_NVENC_API='${toString sunshineApprovedPatches.reviewedNvencApiMajor}.${toString sunshineApprovedPatches.reviewedNvencApiMinor}'" "$gate" >/dev/null
       grep -Fx "EXPECTED_SUNSHINE_PATCH_SET_SHA256='${sunshineApprovedPatches.patchSetSha256}'" "$gate" >/dev/null
       grep '^patch=' "$gate" > actual-patch-manifest
       cmp actual-patch-manifest ${sunshinePatchManifestFile}

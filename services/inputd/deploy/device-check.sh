@@ -28,7 +28,10 @@ EXPECTED_SUNSHINE_BASE_VERSION='2025.924.154138'
 EXPECTED_SUNSHINE_BASE_SOURCE_HASH='sha256-QrPfZqd9pgufohUjxlTpO6V0v7B41UrXHZaESsFjZ48='
 EXPECTED_SUNSHINE_BASE_DERIVATION='/nix/store/w8dd7pbl8f0qg2cyb7ay8hmli854giwv-sunshine-2025.924.154138.drv'
 EXPECTED_SUNSHINE_LIBAVCODEC_VERSION='62.11.100'
-EXPECTED_SUNSHINE_PATCH_SET_SHA256='e96a0fbdfe8441b6bea9207fa2349ab7e80c726ccc022273770bad3d7aa1076a'
+EXPECTED_SUNSHINE_FFMPEG_COMMIT='61c50407fd429a5e2ec616e2e846c3fe3743879a'
+EXPECTED_SUNSHINE_FFMPEG_SOURCE_HASH='sha256-LKQUfHb9/Z4uvPx4vrtAOPL95Un9/C26lvCbQZ51avk='
+EXPECTED_SUNSHINE_NVENC_API='12.0'
+EXPECTED_SUNSHINE_PATCH_SET_SHA256='46e32d78438aed4f8b2a4572f26bee158182afcaa6257b01cd0345b9de396901'
 KORRID_CONTROL_GROUP='korri-control'
 KORRID_CONTROL_PEER_USER='korri-inputd'
 KORRID_CONTROL_SOCKET='/run/korrid-control/control.sock'
@@ -52,6 +55,7 @@ patch=0012-persist-runtime-config-and-reinit-capture-after-resolution.patch sha2
 patch=0013-request-async-capture-reinit-after-runtime-resolution.patch sha256=0831530081f9551173ff1a74a5ca2771942e9c519ec476c27548a1d3cbea3fa2
 patch=0014-skip-runtime-vaapi-destructor-flush.patch sha256=59eedaf576f99223bd807205c45b12b1ac5f9850225614530b4ab925e3204e50
 patch=0015-add-korri-input-seat-event-mirror.patch sha256=69888a0ef824af105f0919ad354876b52ca0d003b0c46be619e732bc1cdbe726
+patch=0016-add-seamless-nvenc-runtime-path.patch sha256=ba767c4b8d853001ead6af7af44dbc9503d24cf22aa257d29635be3b62a7feb2
 EOF
 }
 
@@ -699,6 +703,9 @@ approved_base_sunshine_source_hash|$EXPECTED_SUNSHINE_BASE_SOURCE_HASH
 base_sunshine_derivation|$EXPECTED_SUNSHINE_BASE_DERIVATION
 approved_base_sunshine_derivation|$EXPECTED_SUNSHINE_BASE_DERIVATION
 reviewed_libavcodec_version|$EXPECTED_SUNSHINE_LIBAVCODEC_VERSION
+reviewed_ffmpeg_commit|$EXPECTED_SUNSHINE_FFMPEG_COMMIT
+reviewed_ffmpeg_source_hash|$EXPECTED_SUNSHINE_FFMPEG_SOURCE_HASH
+reviewed_nvenc_api|$EXPECTED_SUNSHINE_NVENC_API
 executable|bin/sunshine
 patch_set_sha256|$EXPECTED_SUNSHINE_PATCH_SET_SHA256
 EOF
@@ -713,7 +720,7 @@ EOF
     && "$computed_patch_set" == "$patch_set" ]] \
     || fail 'sunshine-korri provenance ordered patch digest is invalid'
 
-  printf 'sunshine-executable=%s patch-set-sha256=%s patches=10 base-version=%s libavcodec=%s\n' \
+  printf 'sunshine-executable=%s patch-set-sha256=%s patches=11 base-version=%s libavcodec=%s\n' \
     "$running" "$patch_set" "$EXPECTED_SUNSHINE_BASE_VERSION" "$EXPECTED_SUNSHINE_LIBAVCODEC_VERSION"
 }
 

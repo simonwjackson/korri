@@ -15,7 +15,7 @@ Restore Korri's Linux normalized-input boundary as a pinned upstream InputPlumbe
 
 ## 2026-08-31 Sunshine scope amendment
 
-The implementation now also restores `sunshine-korri` as a supported Korri package and adds the compatible Android Moonlight runtime-settings client. The supported scope is the exact ten-patch package, the explicit live-settings Nix gate, protocol `0x5504`/`0x5505`, exact-launch bitrate/FPS/resolution controls, candidate provenance, private Sunshine state preservation, and physical VAAPI acceptance. This amendment supersedes R11 only for the Android Moonlight client. It does not add an Android InputPlumber backend.
+The implementation now also restores `sunshine-korri` as a supported Korri package and adds the compatible Android Moonlight runtime-settings client. The supported scope is the exact eleven-patch package, the explicit live-settings Nix gate, protocol `0x5504`/`0x5505`, exact-launch bitrate/FPS/resolution controls, candidate provenance, private Sunshine state preservation, and physical VAAPI acceptance. This amendment supersedes R11 only for the Android Moonlight client. It does not add an Android InputPlumber backend.
 
 Patch `0015` remains shipped, hardened, and inert by default. Full legacy input-seat equivalence still requires a separate Rust receiver, root-owned launch sidecar and token authority, virtual-seat backend, frame validation, and privilege-boundary proof. That receiver is not silently approximated in this rollout.
 

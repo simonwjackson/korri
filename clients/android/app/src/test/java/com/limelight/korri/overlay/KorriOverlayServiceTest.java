@@ -286,10 +286,19 @@ public class KorriOverlayServiceTest {
     public void showingOverlayConsumesAndSemanticallyTranslatesEveryOwnedInput() throws Exception {
         KorriOverlayService.OverlayInput input = new KorriOverlayService.OverlayInput();
         assertInput(input, KeyEvent.KEYCODE_DPAD_UP,
-                "{\"type\":\"direction\",\"direction\":\"up\",\"source\":\"gamepad\"}",
+                "{\"type\":\"direction\",\"direction\":\"up\","
+                        + "\"releaseExpected\":true,\"gestureId\":1,"
+                        + "\"source\":\"gamepad\"}",
                 false);
+        KorriOverlayService.OverlayInput.Decision directionRelease = input.route(
+                1, KeyEvent.KEYCODE_DPAD_UP, InputDevice.SOURCE_GAMEPAD,
+                KeyEvent.ACTION_UP, 0, true, false);
+        assertTrue(directionRelease.consumed());
+        assertEquals("{\"type\":\"direction-end\",\"direction\":\"up\","
+                + "\"gestureId\":1,\"source\":\"gamepad\"}", directionRelease.inputJson());
         assertInput(input, KeyEvent.KEYCODE_DPAD_RIGHT,
                 "{\"type\":\"direction\",\"direction\":\"right\","
+                        + "\"releaseExpected\":true,\"gestureId\":2,"
                         + "\"repeat\":true,\"source\":\"gamepad\"}",
                 false, 3);
         assertInput(input, KeyEvent.KEYCODE_BUTTON_A,

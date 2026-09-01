@@ -30,16 +30,46 @@ export function parseBridgeInputEvent(json: string): InputAction | null {
 
   if (event.type === "direction") {
     const keys = Object.keys(value).sort().join(",")
-    if (keys !== "direction,source,type" && keys !== "direction,repeat,source,type") {
+    if (keys !== "direction,source,type" &&
+        keys !== "direction,repeat,source,type" &&
+        keys !== "direction,gestureId,releaseExpected,source,type" &&
+        keys !== "direction,gestureId,releaseExpected,repeat,source,type") {
       return null
     }
     if (typeof event.direction !== "string") return null
     if (!directions.has(event.direction)) return null
     if (event.repeat !== undefined && typeof event.repeat !== "boolean") return null
+    if (event.releaseExpected !== undefined && event.releaseExpected !== true) return null
+    if (event.gestureId !== undefined &&
+        (!Number.isSafeInteger(event.gestureId) || event.gestureId <= 0)) return null
+    if (event.gestureId !== undefined && event.releaseExpected !== true) return null
+    if (event.releaseExpected === true && event.gestureId === undefined) return null
+    if (event.releaseExpected === true && event.gestureId !== undefined) {
+      return {
+        type: "direction",
+        direction: event.direction,
+        ...(event.repeat === true ? { repeat: true } : {}),
+        releaseExpected: true,
+        gestureId: event.gestureId,
+        source: "gamepad",
+      }
+    }
     return {
       type: "direction",
       direction: event.direction,
       ...(event.repeat === true ? { repeat: true } : {}),
+      source: "gamepad",
+    }
+  }
+  if (event.type === "direction-end") {
+    if (Object.keys(value).sort().join(",") !== "direction,gestureId,source,type") return null
+    if (typeof event.direction !== "string" || !directions.has(event.direction)) return null
+    const gestureId = event.gestureId
+    if (typeof gestureId !== "number" || !Number.isSafeInteger(gestureId) || gestureId <= 0) return null
+    return {
+      type: "direction-end",
+      direction: event.direction,
+      gestureId,
       source: "gamepad",
     }
   }

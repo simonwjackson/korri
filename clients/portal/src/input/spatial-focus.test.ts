@@ -151,7 +151,7 @@ describe("createSpatialFocusController", () => {
     dispose()
   })
 
-  test("delegates horizontal directions and repeat to the focused horizontal control", () => {
+  test("delegates horizontal direction, repeat, and release to the focused control", () => {
     const bus = createInputBus()
     const dispose = createSpatialFocusController(bus)
     const control = button("control", { x: 0, y: 0 })
@@ -161,11 +161,36 @@ describe("createSpatialFocusController", () => {
     control.addEventListener("korri-semantic-direction", event => {
       received.push((event as CustomEvent).detail)
     })
+    control.addEventListener("korri-semantic-direction-end", event => {
+      received.push({ end: (event as CustomEvent).detail })
+    })
     control.focus()
 
-    bus.emit({ type: "direction", direction: "right", repeat: true })
+    bus.emit({
+      type: "direction",
+      direction: "right",
+      repeat: true,
+      releaseExpected: true,
+      source: "gamepad",
+      gestureId: 7,
+    })
+    bus.emit({
+      type: "direction-end",
+      direction: "right",
+      source: "gamepad",
+      gestureId: 7,
+    })
 
-    expect(received).toEqual([{ direction: "right", repeat: true }])
+    expect(received).toEqual([
+      {
+        direction: "right",
+        repeat: true,
+        releaseExpected: true,
+        source: "gamepad",
+        gestureId: 7,
+      },
+      { end: { direction: "right", source: "gamepad", gestureId: 7 } },
+    ])
     expect(document.activeElement).toBe(control)
     expect(document.activeElement).not.toBe(next)
     dispose()

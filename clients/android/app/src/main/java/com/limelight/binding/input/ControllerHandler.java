@@ -2692,11 +2692,6 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
 
         sendControllerInputPacket(context);
 
-        if (context.pendingExit && context.inputMap == 0) {
-            // All buttons from the quit combo are lifted. Finish the activity now.
-            activityContext.finish();
-        }
-
         return true;
     }
 
@@ -2878,13 +2873,6 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
             break;
         default:
             return false;
-        }
-
-        // Start+Back+LB+RB is the quit combo
-        if (context.inputMap == (ControllerPacket.BACK_FLAG | ControllerPacket.PLAY_FLAG |
-                                 ControllerPacket.LB_FLAG | ControllerPacket.RB_FLAG)) {
-            // Wait for the combo to lift and then finish the activity
-            context.pendingExit = true;
         }
 
         // Start+LB acts like select for controllers with one button
@@ -3141,7 +3129,6 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
         public boolean searchIsMode;
         public boolean ignoreBack;
         public boolean hasJoystickAxes;
-        public boolean pendingExit;
         public boolean isDualShockStandaloneTouchpad;
 
         public int emulatingButtonFlags = 0;

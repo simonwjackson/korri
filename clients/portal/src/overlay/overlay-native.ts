@@ -64,12 +64,37 @@ function parsePortalMessage(json: string): GameplayOverlayToPortalMessage | null
     const input = parseBridgeInputEvent(JSON.stringify(message.payload))
     if (!input) return null
     if (input.type === "direction") {
+      if (input.releaseExpected === true) {
+        return {
+          type: "input",
+          payload: {
+            type: "direction",
+            direction: input.direction,
+            ...(input.repeat === true ? { repeat: true } : {}),
+            releaseExpected: true,
+            gestureId: input.gestureId,
+            source: "gamepad",
+          },
+        }
+      }
       return {
         type: "input",
         payload: {
           type: "direction",
           direction: input.direction,
           ...(input.repeat === true ? { repeat: true } : {}),
+          source: "gamepad",
+        },
+      }
+    }
+    if (input.type === "direction-end") {
+      if (input.gestureId === undefined) return null
+      return {
+        type: "input",
+        payload: {
+          type: "direction-end",
+          direction: input.direction,
+          gestureId: input.gestureId,
           source: "gamepad",
         },
       }

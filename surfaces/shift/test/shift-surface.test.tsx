@@ -557,9 +557,16 @@ describe("Shift gameplay overlay", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Mouse mode" }), {
       target: { value: "direct" },
     })
-    fireEvent.change(screen.getByRole("slider", { name: "Sharpness" }), {
-      target: { value: "55" },
-    })
+    const sharpness = screen.getByRole("slider", { name: "Sharpness" })
+    fireEvent.change(sharpness, { target: { value: "55" } })
+    fireEvent.change(sharpness, { target: { value: "60" } })
+    fireEvent.change(sharpness, { target: { value: "55" } })
+    expect(host.calls).toEqual([
+      "gameplay-control:keyboard",
+      'gameplay-control:fill:{"kind":"toggle","value":false}',
+      'gameplay-control:mouse-mode:{"kind":"choice","value":"direct"}',
+    ])
+    fireEvent.pointerUp(sharpness)
 
     expect(host.calls).toEqual([
       "gameplay-control:keyboard",
@@ -578,7 +585,7 @@ describe("Shift gameplay overlay", () => {
     expect(screen.getByRole("slider", { name: "Sharpness" }).getAttribute("step")).toBe("5")
   })
 
-  test("horizontal repeat advances ranges only while choices ignore repeats", () => {
+  test("horizontal repeat commits one final range value on release", () => {
     const host = createFixtureHost()
     render(<ShiftSurface model={overlayModel()} host={host} />)
     const choice = screen.getByRole("combobox", { name: "Mouse mode" })
@@ -597,24 +604,178 @@ describe("Shift gameplay overlay", () => {
       )
       range.dispatchEvent(
         new CustomEvent("korri-semantic-direction", {
-          detail: { direction: "right", repeat: false },
+          detail: {
+            direction: "right",
+            repeat: false,
+            releaseExpected: true,
+            source: "gamepad",
+            gestureId: 1,
+          },
         }),
       )
       range.dispatchEvent(
         new CustomEvent("korri-semantic-direction", {
-          detail: { direction: "right", repeat: true },
+          detail: {
+            direction: "right",
+            repeat: true,
+            releaseExpected: true,
+            source: "gamepad",
+            gestureId: 1,
+          },
         }),
       )
     })
 
     expect(host.calls).toEqual([
       'gameplay-control:mouse-mode:{"kind":"choice","value":"direct"}',
-      'gameplay-control:sharpness:{"kind":"range","value":55}',
+    ])
+    act(() => {
+      range.dispatchEvent(
+        new CustomEvent("korri-semantic-direction-end", {
+          detail: { direction: "right", source: "gamepad", gestureId: 1 },
+        }),
+      )
+    })
+    expect(host.calls).toEqual([
+      'gameplay-control:mouse-mode:{"kind":"choice","value":"direct"}',
       'gameplay-control:sharpness:{"kind":"range","value":60}',
     ])
   })
 
-  test("resets optimistic values when a new authoritative control object arrives", () => {
+  test("slow repeats and opposite presses remain newest-wins until release", async () => {
+    const host = createFixtureHost()
+    render(<ShiftSurface model={overlayModel()} host={host} />)
+    const range = screen.getByRole("slider", { name: "Sharpness" })
+
+    act(() => {
+      range.dispatchEvent(new CustomEvent("korri-semantic-direction", {
+        detail: {
+          direction: "right",
+          repeat: false,
+          releaseExpected: true,
+          source: "gamepad",
+          gestureId: 1,
+        },
+      }))
+    })
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 220))
+    })
+    act(() => {
+      range.dispatchEvent(new CustomEvent("korri-semantic-direction", {
+        detail: {
+          direction: "right",
+          repeat: true,
+          releaseExpected: true,
+          source: "gamepad",
+          gestureId: 1,
+        },
+      }))
+      range.dispatchEvent(new CustomEvent("korri-semantic-direction", {
+        detail: {
+          direction: "left",
+          repeat: false,
+          releaseExpected: true,
+          source: "gamepad",
+          gestureId: 2,
+        },
+      }))
+    })
+    expect(host.calls).toEqual([])
+    act(() => {
+      range.dispatchEvent(new CustomEvent("korri-semantic-direction-end", {
+        detail: { direction: "right", source: "gamepad", gestureId: 1 },
+      }))
+    })
+    expect(host.calls).toEqual([])
+    act(() => {
+      range.dispatchEvent(new CustomEvent("korri-semantic-direction", {
+        detail: {
+          direction: "left",
+          repeat: true,
+          releaseExpected: true,
+          source: "gamepad",
+          gestureId: 2,
+        },
+      }))
+      range.dispatchEvent(new CustomEvent("korri-semantic-direction-end", {
+        detail: { direction: "left", source: "gamepad", gestureId: 2 },
+      }))
+    })
+    expect(host.calls).toEqual([
+      'gameplay-control:sharpness:{"kind":"range","value":50}',
+    ])
+  })
+
+  test("cross-source gesture ids cannot release one another", () => {
+    const host = createFixtureHost()
+    render(<ShiftSurface model={overlayModel()} host={host} />)
+    const range = screen.getByRole("slider", { name: "Sharpness" })
+
+    act(() => {
+      range.dispatchEvent(new CustomEvent("korri-semantic-direction", {
+        detail: {
+          direction: "right",
+          repeat: false,
+          releaseExpected: true,
+          source: "gamepad",
+          gestureId: 1,
+        },
+      }))
+      range.dispatchEvent(new CustomEvent("korri-semantic-direction", {
+        detail: {
+          direction: "right",
+          repeat: true,
+          releaseExpected: true,
+          source: "keyboard",
+          gestureId: 1,
+        },
+      }))
+      range.dispatchEvent(new CustomEvent("korri-semantic-direction-end", {
+        detail: { direction: "right", source: "gamepad", gestureId: 1 },
+      }))
+    })
+    expect(host.calls).toEqual([])
+    act(() => {
+      range.dispatchEvent(new CustomEvent("korri-semantic-direction-end", {
+        detail: { direction: "right", source: "keyboard", gestureId: 1 },
+      }))
+    })
+    expect(host.calls).toEqual([
+      'gameplay-control:sharpness:{"kind":"range","value":60}',
+    ])
+  })
+
+  test("an identified release cannot flush an unidentified pending gesture", () => {
+    const host = createFixtureHost()
+    render(<ShiftSurface model={overlayModel()} host={host} />)
+    const range = screen.getByRole("slider", { name: "Sharpness" })
+
+    act(() => {
+      range.dispatchEvent(new CustomEvent("korri-semantic-direction", {
+        detail: {
+          direction: "right",
+          repeat: false,
+          releaseExpected: true,
+          source: "gamepad",
+        },
+      }))
+      range.dispatchEvent(new CustomEvent("korri-semantic-direction-end", {
+        detail: { direction: "right", source: "gamepad", gestureId: 99 },
+      }))
+    })
+    expect(host.calls).toEqual([])
+    act(() => {
+      range.dispatchEvent(new CustomEvent("korri-semantic-direction-end", {
+        detail: { direction: "right", source: "gamepad" },
+      }))
+    })
+    expect(host.calls).toEqual([
+      'gameplay-control:sharpness:{"kind":"range","value":55}',
+    ])
+  })
+
+  test("resets optimistic values when an authoritative range value changes", async () => {
     const host = createFixtureHost()
     const rendered = render(
       <ShiftSurface model={overlayModel()} host={host} />,
@@ -632,7 +793,14 @@ describe("Shift gameplay overlay", () => {
       ...presentation,
       groups: presentation.groups.map(group => ({
         ...group,
-        controls: group.controls.map(control => ({ ...control })),
+        controls: group.controls.map(control =>
+          control.id === "sharpness" && control.interaction.kind === "range"
+            ? {
+                ...control,
+                interaction: { ...control.interaction, value: 45 },
+              }
+            : { ...control },
+        ),
       })),
     }
     rendered.rerender(
@@ -655,7 +823,53 @@ describe("Shift gameplay overlay", () => {
     expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Mouse mode" }).value)
       .toBe("trackpad")
     expect(screen.getByRole<HTMLInputElement>("slider", { name: "Sharpness" }).value)
-      .toBe("50")
+      .toBe("45")
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 2100))
+    })
+    expect(host.calls).not.toContain(
+      'gameplay-control:sharpness:{"kind":"range","value":55}',
+    )
+  })
+
+  test("equivalent parent renders preserve one pending range commit", () => {
+    const host = createFixtureHost()
+    const rendered = render(<ShiftSurface model={overlayModel()} host={host} />)
+    fireEvent.change(screen.getByRole("slider", { name: "Sharpness" }), {
+      target: { value: "55" },
+    })
+
+    rendered.rerender(
+      <ShiftSurface
+        model={overlayModel({
+          presentation: {
+            ...presentation,
+            groups: presentation.groups.map(group => ({
+              ...group,
+              controls: group.controls.map(control => ({ ...control })),
+            })),
+          },
+        })}
+        host={host}
+      />,
+    )
+    fireEvent.pointerUp(screen.getByRole("slider", { name: "Sharpness" }))
+    expect(host.calls).toEqual([
+      'gameplay-control:sharpness:{"kind":"range","value":55}',
+    ])
+  })
+
+  test("unmount cancels a pending range commit", async () => {
+    const host = createFixtureHost()
+    const rendered = render(<ShiftSurface model={overlayModel()} host={host} />)
+    fireEvent.change(screen.getByRole("slider", { name: "Sharpness" }), {
+      target: { value: "55" },
+    })
+    rendered.unmount()
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 2100))
+    })
+    expect(host.calls).toEqual([])
   })
 
   test("describes every form and keeps reasoned unavailable values focusable but inert", () => {

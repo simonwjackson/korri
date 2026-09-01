@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /** Machine-checks that no control disappears between the old host and U6. */
@@ -77,6 +78,14 @@ public class KorriMoonlightParityInventoryTest {
         assertTrue(parity.contains("range `1..32`, step `1`"));
         assertTrue(parity.contains("game keeps running"));
         assertTrue(parity.contains("Really want to quit?"));
+    }
+
+    @Test
+    public void controllerChordCannotBypassKorriLifecycleAuthority() throws Exception {
+        String controller = read("src/main/java/com/limelight/binding/input/ControllerHandler.java");
+        assertFalse(controller.contains("Start+Back+LB+RB is the quit combo"));
+        assertFalse(controller.contains("pendingExit"));
+        assertFalse(controller.contains("activityContext.finish()"));
     }
 
     @Test

@@ -12,7 +12,7 @@
  * not jump to a nearer element on another row.
  */
 import type { InputBus } from "./bus"
-import type { Direction } from "./types"
+import type { Direction, InputSource } from "./types"
 
 const FOCUSABLE_SELECTOR =
   "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
@@ -22,10 +22,14 @@ const OFF_AXIS_PENALTY = 3
 
 /** Semantic DOM event understood by focused choice/range controls. */
 const SEMANTIC_DIRECTION_EVENT = "korri-semantic-direction"
+const SEMANTIC_DIRECTION_END_EVENT = "korri-semantic-direction-end"
 
 function delegateHorizontalDirection(
   direction: Direction,
   repeat: boolean,
+  releaseExpected: boolean,
+  source: InputSource | undefined,
+  gestureId: number | undefined,
 ): boolean {
   if (direction !== "left" && direction !== "right") return false
   const active = document.activeElement
@@ -33,7 +37,24 @@ function delegateHorizontalDirection(
   if (!active.hasAttribute("data-korri-horizontal-control")) return false
   active.dispatchEvent(
     new CustomEvent(SEMANTIC_DIRECTION_EVENT, {
-      detail: { direction, repeat },
+      detail: { direction, repeat, releaseExpected, source, gestureId },
+    }),
+  )
+  return true
+}
+
+function delegateHorizontalDirectionEnd(
+  direction: Direction,
+  source: InputSource | undefined,
+  gestureId: number | undefined,
+): boolean {
+  if (direction !== "left" && direction !== "right") return false
+  const active = document.activeElement
+  if (!(active instanceof HTMLElement)) return false
+  if (!active.hasAttribute("data-korri-horizontal-control")) return false
+  active.dispatchEvent(
+    new CustomEvent(SEMANTIC_DIRECTION_END_EVENT, {
+      detail: { direction, source, gestureId },
     }),
   )
   return true
@@ -118,8 +139,17 @@ export function focusInDirection(direction: Direction): boolean {
  */
 export function createSpatialFocusController(bus: InputBus): () => void {
   const offDirection = bus.onAction("direction", action => {
-    if (delegateHorizontalDirection(action.direction, action.repeat ?? false)) return
+    if (delegateHorizontalDirection(
+      action.direction,
+      action.repeat ?? false,
+      action.releaseExpected ?? false,
+      action.source,
+      action.gestureId,
+    )) return
     focusInDirection(action.direction)
+  })
+  const offDirectionEnd = bus.onAction("direction-end", action => {
+    delegateHorizontalDirectionEnd(action.direction, action.source, action.gestureId)
   })
   const offConfirm = bus.onAction("confirm", () => {
     const active = document.activeElement
@@ -129,6 +159,7 @@ export function createSpatialFocusController(bus: InputBus): () => void {
   })
   return () => {
     offDirection()
+    offDirectionEnd()
     offConfirm()
   }
 }

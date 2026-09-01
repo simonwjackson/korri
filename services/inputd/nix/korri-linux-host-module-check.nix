@@ -68,6 +68,9 @@ let
   noRuntimeSettings = evaluate {
     services.korriLinuxHost.sunshine.runtimeSettings.enable = false;
   };
+  nvenc = evaluate {
+    services.korriLinuxHost.sunshine.encoder = "nvenc";
+  };
   wrongGameplayUid = evaluate {
     users.users.gameplay.uid = lib.mkForce 1002;
   };
@@ -111,7 +114,12 @@ assert !cfg.services.sunshine.autoStart;
 assert !cfg.systemd.user.services.sunshine.enable;
 assert cfg.services.sunshine.package == sunshinePackage;
 assert cfg.services.korriLinuxHost.sunshine.runtimeSettings.enable;
+assert cfg.services.korriLinuxHost.sunshine.encoder == "auto";
 assert sunshine.environment.SUNSHINE_LIVE_SETTINGS_MVP == "1";
+assert allAssertionsPass nvenc;
+assert
+  nvenc.config.systemd.services.sunshine.serviceConfig.ExecStart
+  == "${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf log_path=/dev/null encoder=nvenc";
 assert noRuntimeSettings.config.services.sunshine.package == sunshinePackage;
 assert
   noRuntimeSettings.config.systemd.services.sunshine.serviceConfig.ExecStart

@@ -34,6 +34,9 @@ sunshine.overrideAttrs (
       base_sunshine_derivation=${baseSunshineDerivation}
       approved_base_sunshine_derivation=${baseSunshineDerivation}
       reviewed_libavcodec_version=${approved.reviewedLibavcodecVersion}
+      reviewed_ffmpeg_commit=${approved.reviewedFfmpegCommit}
+      reviewed_ffmpeg_source_hash=${approved.reviewedFfmpegSourceHash}
+      reviewed_nvenc_api=${toString approved.reviewedNvencApiMajor}.${toString approved.reviewedNvencApiMinor}
       executable=bin/sunshine
       patch_set_sha256=${approved.patchSetSha256}
       ${patchLines}
@@ -76,6 +79,10 @@ sunshine.overrideAttrs (
         korriBaseSunshineDerivation = baseSunshineDerivation;
         korriApprovedBaseSunshineDerivation = baseSunshineDerivation;
         korriReviewedLibavcodecVersion = approved.reviewedLibavcodecVersion;
+        korriReviewedFfmpegCommit = approved.reviewedFfmpegCommit;
+        korriReviewedFfmpegSourceHash = approved.reviewedFfmpegSourceHash;
+        korriReviewedNvencApiMajor = approved.reviewedNvencApiMajor;
+        korriReviewedNvencApiMinor = approved.reviewedNvencApiMinor;
       };
 
       meta = old.meta // {

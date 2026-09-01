@@ -179,6 +179,11 @@ in
         type = lib.types.bool;
         default = true;
       };
+      encoder = lib.mkOption {
+        type = lib.types.enum [ "auto" "vaapi" "nvenc" ];
+        default = "auto";
+        description = "Sunshine encoder selected through Korri's immutable service argv.";
+      };
       runtimeSettings.enable = lib.mkOption {
         type = lib.types.bool;
         default = true;
@@ -234,10 +239,15 @@ in
           && (cfg.sunshine.package.korriBaseSunshineVersion or null) == sunshineApproved.baseSunshineVersion
           && (cfg.sunshine.package.korriApprovedBaseSunshineSourceHash or null) == sunshineApproved.approvedBaseSourceHash
           && (cfg.sunshine.package.korriReviewedLibavcodecVersion or null) == sunshineApproved.reviewedLibavcodecVersion
+          && (cfg.sunshine.package.korriReviewedFfmpegCommit or null) == sunshineApproved.reviewedFfmpegCommit
+          && (cfg.sunshine.package.korriReviewedFfmpegSourceHash or null) == sunshineApproved.reviewedFfmpegSourceHash
+          && (cfg.sunshine.package.korriReviewedNvencApiMajor or null) == sunshineApproved.reviewedNvencApiMajor
+          && (cfg.sunshine.package.korriReviewedNvencApiMinor or null) == sunshineApproved.reviewedNvencApiMinor
           && builtins.elem (cfg.sunshine.package.korriBaseSunshineDerivation or "") sunshineApproved.approvedBaseDerivations
           && (cfg.sunshine.package.korriApprovedBaseSunshineDerivation or null) == (cfg.sunshine.package.korriBaseSunshineDerivation or null)
           && (cfg.sunshine.package.korriProvenanceRelativePath or null) == "share/korri/sunshine-korri/provenance"
-          && builtins.elem "0015-add-korri-input-seat-event-mirror.patch" (cfg.sunshine.package.korriPatchNames or [ ]);
+          && builtins.elem "0015-add-korri-input-seat-event-mirror.patch" (cfg.sunshine.package.korriPatchNames or [ ])
+          && builtins.elem "0016-add-seamless-nvenc-runtime-path.patch" (cfg.sunshine.package.korriPatchNames or [ ]);
         message = "services.korriLinuxHost must use the exact approved sunshine-korri package and provenance contract.";
       }
       {
@@ -389,7 +399,7 @@ in
         ];
         WorkingDirectory = gameplayHome;
         ExecStartPre = waitForX11;
-        ExecStart = "${lib.getExe cfg.sunshine.package} ${sunshineConfig}/sunshine.conf log_path=/dev/null";
+        ExecStart = "${lib.getExe cfg.sunshine.package} ${sunshineConfig}/sunshine.conf log_path=/dev/null${lib.optionalString (cfg.sunshine.encoder != "auto") " encoder=${cfg.sunshine.encoder}"}";
         Restart = "on-failure";
         RestartSec = 5;
         UMask = "0077";
