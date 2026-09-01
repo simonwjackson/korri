@@ -30,6 +30,7 @@ EXPECTED_SUNSHINE_BASE_DERIVATION='/nix/store/w8dd7pbl8f0qg2cyb7ay8hmli854giwv-s
 EXPECTED_SUNSHINE_LIBAVCODEC_VERSION='62.11.100'
 EXPECTED_SUNSHINE_PATCH_SET_SHA256='4b96bab218af1e4c7fa5961fbbd95592be9d8bdd234eedc77585b48371a24522'
 KORRID_CONTROL_GROUP='korri-control'
+KORRID_CONTROL_PEER_USER='korri-inputd'
 KORRID_CONTROL_SOCKET='/run/korrid-control/control.sock'
 # This path comes from HostSessionControl's existing private-state producer.
 KORRID_HOST_SESSION_ROOT='/var/lib/korrid/host-session'
@@ -140,7 +141,7 @@ remote_private_session_state_absent() {
 remote_refuse_active_game() {
   local response phase code live_units rpc_proven=false proof_source=local-state
   if remote_control_socket_present; then
-    if response="$(curl --fail --silent --connect-timeout 1 --max-time 2 \
+    if response="$(sudo -n -u "$KORRID_CONTROL_PEER_USER" curl --fail --silent --connect-timeout 1 --max-time 2 \
       --unix-socket "$KORRID_CONTROL_SOCKET" http://localhost/rpc \
       -H 'content-type: application/json' -d '{"_tag":"app.session.status","payload":{}}' 2>/dev/null)"; then
       phase="$(jq -r 'if ._tag == "app.session.status" and .outcome._tag == "Ok" then (.outcome.payload.active.phase // "none") else "none" end' <<<"$response" 2>/dev/null)" \

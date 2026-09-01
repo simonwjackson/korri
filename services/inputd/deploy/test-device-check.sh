@@ -1247,8 +1247,10 @@ ACTIVE_GAME_SOURCE="$(awk '
   found && /^}$/ { exit }
 ' "$GATE")"
 [[ "$ACTIVE_GAME_SOURCE" == remote_refuse_active_game* ]]
+grep -F "sudo -n -u \"\$KORRID_CONTROL_PEER_USER\" curl" <<<"$ACTIVE_GAME_SOURCE" >/dev/null
 run_production_active_game_check() (
   local model="$1" private_state="${2:-empty}" modeled_live_units="${3:-none}"
+  export KORRID_CONTROL_PEER_USER=korri-inputd
   export KORRID_CONTROL_SOCKET=/run/korrid-control/control.sock
   # shellcheck disable=SC2329 # Invoked by the production function loaded below.
   fail() {
@@ -1258,6 +1260,12 @@ run_production_active_game_check() (
   # shellcheck disable=SC2329 # Invoked by the production function loaded below.
   remote_control_socket_present() {
     [[ "$model" != no-socket ]]
+  }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  sudo() {
+    [[ "$1" == -n && "$2" == -u && "$3" == "$KORRID_CONTROL_PEER_USER" ]] || return 1
+    shift 3
+    "$@"
   }
   # shellcheck disable=SC2329 # Invoked by the production function loaded below.
   curl() {
