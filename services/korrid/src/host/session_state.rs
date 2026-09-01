@@ -778,7 +778,7 @@ mod tests {
             "--property=ProtectKernelTunables=yes".into(),
             "--property=ProtectKernelModules=yes".into(),
             "--property=ProtectControlGroups=yes".into(),
-            "--property=InaccessiblePaths=/var/lib/korrid /run/korrid /run/korrid-control/control.sock /run/korrid-control /home/gameplay/.config/sunshine /dev/uinput /dev/inputplumber/sources".into(),
+            "--property=InaccessiblePaths=/var/lib/korrid /run/korrid /run/korrid-control/control.sock /run/korrid-control /home/gameplay/.config/sunshine /run/korri-compositor /dev/uinput /dev/inputplumber/sources".into(),
             "--property=RestrictSUIDSGID=yes".into(),
         ] {
             assert!(
@@ -808,6 +808,7 @@ mod tests {
             PathBuf::from("/run/korri-test/control/device.sock"),
             PathBuf::from("/run/korri-test/control"),
             PathBuf::from("/home/gameplay/.config/sunshine"),
+            PathBuf::from("/run/korri-test/compositor-control"),
         )
         .unwrap();
         let launch = backend
@@ -818,7 +819,7 @@ mod tests {
             )
             .unwrap();
         assert!(launch.contains(
-            &"--property=InaccessiblePaths=/srv/korri-test/private-recovery /run/korrid /run/korri-test/control/device.sock /run/korri-test/control /home/gameplay/.config/sunshine /dev/uinput /dev/inputplumber/sources".into()
+            &"--property=InaccessiblePaths=/srv/korri-test/private-recovery /run/korrid /run/korri-test/control/device.sock /run/korri-test/control /home/gameplay/.config/sunshine /run/korri-test/compositor-control /dev/uinput /dev/inputplumber/sources".into()
         ));
     }
 
@@ -859,6 +860,7 @@ mod tests {
             PathBuf::from("/run/control.sock"),
             PathBuf::from("/run"),
             PathBuf::from("/home/gameplay/.config/sunshine"),
+            PathBuf::from("/run/korri-compositor"),
         )
         .is_err());
         assert!(SystemdLaunchUnitBackend::with_protected_paths(
@@ -870,6 +872,7 @@ mod tests {
             PathBuf::from("/run/other/control.sock"),
             PathBuf::from("/run/control"),
             PathBuf::from("/home/gameplay/.config/sunshine"),
+            PathBuf::from("/run/korri-compositor"),
         )
         .is_err());
         assert!(SystemdLaunchUnitBackend::with_protected_paths(
@@ -881,6 +884,19 @@ mod tests {
             PathBuf::from("/run/control/device.sock"),
             PathBuf::from("/run/control"),
             PathBuf::from("/home/gameplay/.config/sunshine"),
+            PathBuf::from("/run/korri-compositor"),
+        )
+        .is_err());
+        assert!(SystemdLaunchUnitBackend::with_protected_paths(
+            PathBuf::from("/bin/systemd-run"),
+            PathBuf::from("/bin/systemctl"),
+            1000,
+            1000,
+            PathBuf::from("/private/recovery"),
+            PathBuf::from("/run/control/device.sock"),
+            PathBuf::from("/run/control"),
+            PathBuf::from("/home/gameplay/.config/sunshine"),
+            PathBuf::from("relative/compositor-control"),
         )
         .is_err());
     }

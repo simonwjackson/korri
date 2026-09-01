@@ -64,6 +64,11 @@ in
       type = lib.types.str;
       description = "Exact Sunshine private configuration directory hidden from every game unit.";
     };
+    compositorControlDirectory = lib.mkOption {
+      type = lib.types.str;
+      default = "/run/korri-compositor";
+      description = "Exact compositor control directory hidden from every game unit.";
+    };
     controlSocket = lib.mkOption {
       type = lib.types.str;
       default = "/run/korrid-control/control.sock";
@@ -100,6 +105,10 @@ in
       {
         assertion = validAbsolutePath cfg.controlSocket && validAbsolutePath controlDirectory;
         message = "korrid controlSocket and its directory must be normalized absolute paths.";
+      }
+      {
+        assertion = validAbsolutePath cfg.compositorControlDirectory;
+        message = "korrid compositorControlDirectory must be a normalized absolute path.";
       }
       {
         assertion =
@@ -175,6 +184,7 @@ in
         KORRID_SUNSHINE_PRIVATE_STATE_ROOT = cfg.sunshinePrivateStateRoot;
         KORRID_CONTROL_SOCKET = cfg.controlSocket;
         KORRID_CONTROL_DIRECTORY = controlDirectory;
+        KORRID_COMPOSITOR_CONTROL_DIRECTORY = cfg.compositorControlDirectory;
         KORRID_CONTROL_PEER_UID = toString cfg.inputdUid;
         KORRID_CONTROL_PEER_GID = toString cfg.controlGid;
         KORRID_GAMEPLAY_UID = toString cfg.gameplayUid;

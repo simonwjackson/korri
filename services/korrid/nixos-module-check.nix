@@ -64,6 +64,7 @@ let
       enable = true;
       privateStateRoot = "/srv/korri-test/recovery";
       controlSocket = "/run/korri-test/control/device.sock";
+      compositorControlDirectory = "/run/korri-test/compositor-control";
     };
   };
   sameUid = evaluate {
@@ -86,6 +87,12 @@ let
     services.korridLinuxDevice = {
       enable = true;
       controlSocket = "relative/control.sock";
+    };
+  };
+  invalidCompositorControlPath = evaluate {
+    services.korridLinuxDevice = {
+      enable = true;
+      compositorControlDirectory = "relative/compositor-control";
     };
   };
   allAssertionsPass = system: lib.all (entry: entry.assertion) system.config.assertions;
@@ -117,6 +124,7 @@ assert service.environment.KORRID_PRIVATE_STATE_ROOT == "/var/lib/korrid";
 assert service.environment.KORRID_SUNSHINE_PRIVATE_STATE_ROOT == "/home/gameplay/.config/sunshine";
 assert service.environment.KORRID_CONTROL_SOCKET == "/run/korrid-control/control.sock";
 assert service.environment.KORRID_CONTROL_DIRECTORY == "/run/korrid-control";
+assert service.environment.KORRID_COMPOSITOR_CONTROL_DIRECTORY == "/run/korri-compositor";
 assert builtins.elem "korrid-control.socket" service.requires;
 assert socket.socketConfig.ListenStream == "/run/korrid-control/control.sock";
 assert socket.socketConfig.SocketUser == "root";
@@ -154,16 +162,20 @@ assert customSocket.socketConfig.ListenStream == "/run/korri-test/control/device
 assert customService.environment.KORRID_PRIVATE_STATE_ROOT == "/srv/korri-test/recovery";
 assert customService.environment.KORRID_CONTROL_SOCKET == "/run/korri-test/control/device.sock";
 assert customService.environment.KORRID_CONTROL_DIRECTORY == "/run/korri-test/control";
+assert customService.environment.KORRID_COMPOSITOR_CONTROL_DIRECTORY == "/run/korri-test/compositor-control";
 assert builtins.elem "d /run/korri-test/control 0750 root korri-control -" customTmpfiles;
 assert hasFailedAssertion "service UID must differ" sameUid;
 assert hasFailedAssertion "gameplay user must not hold raw input" broadGame;
 assert hasFailedAssertion "privateStateRoot and sunshinePrivateStateRoot must be normalized absolute paths" invalidPrivatePath;
 assert hasFailedAssertion "controlSocket and its directory must be normalized absolute paths"
   invalidControlPath;
+assert hasFailedAssertion "compositorControlDirectory must be a normalized absolute path"
+  invalidCompositorControlPath;
 assert evaluationRejected sameUid;
 assert evaluationRejected broadGame;
 assert evaluationRejected invalidPrivatePath;
 assert evaluationRejected invalidControlPath;
+assert evaluationRejected invalidCompositorControlPath;
 pkgs.runCommand "korrid-linux-device-module-check" { } ''
   touch "$out"
 ''
