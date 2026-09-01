@@ -47,14 +47,20 @@ let
         "--signal=TERM",
         "--kill-after=5s",
         "600",
-        "${lib.getExe' pkgs.ffmpeg "ffplay"}",
-        "-loglevel", "error",
-        "-nostats",
-        "-fs",
-        "-an",
-        "-loop", "0",
-        "-vf", "fps=120",
-        "-window_title", "Korri streaming gate",
+        "${lib.getExe' pkgs.coreutils "env"}",
+        ${lib.optionalString (
+          cfg.sunshine.encoder == "nvenc"
+        ) ''"LD_LIBRARY_PATH=/run/opengl-driver/lib",''}
+        "${lib.getExe pkgs.mpv-unwrapped}",
+        "--no-config",
+        "--quiet",
+        "--no-audio",
+        "--loop-file=inf",
+        "--fullscreen",
+        "--vo=x11",
+        "--hwdec=auto-copy-safe",
+        "--vf=fps=120",
+        "--title=Korri streaming gate",
         "${streamingValidationMedia}/share/korri-streaming-validation/video.mp4"
       ]
     ''}

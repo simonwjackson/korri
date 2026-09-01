@@ -106,6 +106,7 @@ let
   sunshine = cfg.systemd.services.sunshine;
   x11 = cfg.systemd.services.x11-headless;
   deviceConfig = cfg.services.korridLinuxDevice.deviceConfig;
+  nvencDeviceConfig = nvenc.config.services.korridLinuxDevice.deviceConfig;
   sunshineExec = pkgs.writeText "korri-linux-host-sunshine-exec" sunshine.serviceConfig.ExecStart;
   udevRules = pkgs.writeText "korri-linux-host-udev-rules" cfg.services.udev.extraRules;
 in
@@ -207,8 +208,11 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     grep -F 'title = "Streaming gate"' ${deviceConfig} >/dev/null
     grep -F '/bin/timeout' ${deviceConfig} >/dev/null
     grep -F -- '--kill-after=5s' ${deviceConfig} >/dev/null
-    grep -F '/bin/ffplay' ${deviceConfig} >/dev/null
-    grep -F 'fps=120' ${deviceConfig} >/dev/null
+    grep -F '/bin/mpv' ${deviceConfig} >/dev/null
+    grep -F -- '--hwdec=auto-copy-safe' ${deviceConfig} >/dev/null
+    grep -F -- '--vf=fps=120' ${deviceConfig} >/dev/null
+    ! grep -F 'LD_LIBRARY_PATH=/run/opengl-driver/lib' ${deviceConfig} >/dev/null
+    grep -F 'LD_LIBRARY_PATH=/run/opengl-driver/lib' ${nvencDeviceConfig} >/dev/null
     grep -F '/share/korri-streaming-validation/video.mp4' ${deviceConfig} >/dev/null
     grep -F 'DISPLAY = ":0"' ${deviceConfig} >/dev/null
     grep -Fx '${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf log_path=/dev/null' ${sunshineExec} >/dev/null
@@ -235,8 +239,9 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     done
     ${pkgs.xorg.xdpyinfo}/bin/xdpyinfo -display "$display" >/dev/null
     DISPLAY="$display" ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=1s 8 \
-      ${lib.getExe' pkgs.ffmpeg "ffplay"} -loglevel error -nostats -fs -an -loop 0 -vf fps=120 \
-      -window_title 'Korri streaming gate' "$media" >"$TMPDIR/ffplay.log" 2>&1 &
+      ${lib.getExe pkgs.mpv-unwrapped} --no-config --quiet --no-audio --loop-file=inf \
+      --fullscreen --vo=x11 --hwdec=auto-copy-safe --vf=fps=120 --title='Korri streaming gate' \
+      "$media" >"$TMPDIR/mpv.log" 2>&1 &
     player_pid=$!
     attempt=0
     while [ "$attempt" -lt 50 ]; do
