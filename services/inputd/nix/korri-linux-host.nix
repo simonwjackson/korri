@@ -10,6 +10,14 @@ let
   system = pkgs.stdenv.hostPlatform.system;
   sunshineApproved = import ../../sunshine/approved-patches.nix;
   gameplayHome = config.users.users.${cfg.gameplayUser}.home or "/home/${cfg.gameplayUser}";
+  gameplayRuntimeDir = "/run/user/${toString cfg.gameplayUid}";
+  compositorControlDirectory = "/run/korri-compositor";
+  compositorControlSocket = "${compositorControlDirectory}/sway-ipc.sock";
+  compositorWorkspace = "korri:game:active";
+  waylandDisplay = "korri-wayland";
+  xwaylandDisplay = ":0";
+  xwaylandSocket = "/tmp/.X11-unix/X0";
+  xwaylandLock = "/tmp/.X0-lock";
   sunshineConfig =
     if cfg.sunshine.configDirectory == null then
       "${gameplayHome}/.config/sunshine"
@@ -36,7 +44,10 @@ let
     label = "${cfg.label}"
 
     [environment]
-    DISPLAY = "${cfg.display}"
+    DISPLAY = "${xwaylandDisplay}"
+    WAYLAND_DISPLAY = "${waylandDisplay}"
+    XDG_RUNTIME_DIR = "${gameplayRuntimeDir}"
+    XDG_SESSION_TYPE = "wayland"
 
     ${lib.optionalString cfg.validation.enable ''
       [[games]]
@@ -57,26 +68,111 @@ let
         "--no-audio",
         "--loop-file=inf",
         "--fullscreen",
-        "--vo=x11",
+        "--vo=gpu-next",
+        "--gpu-context=wayland",
         "--hwdec=auto-copy-safe",
-        "--vf=fps=120",
+        "--vf=fps=60",
         "--title=Korri streaming gate",
         "${streamingValidationMedia}/share/korri-streaming-validation/video.mp4"
       ]
     ''}
   '';
   deviceConfig = if cfg.deviceConfig == null then generatedDeviceConfig else cfg.deviceConfig;
-  waitForX11 = pkgs.writeShellScript "korri-wait-for-x11" ''
+  swayConfig = pkgs.writeText "korri-sway.conf" ''
+    default_border none
+    default_floating_border none
+    hide_edge_borders both
+    xwayland force
+    seat * hide_cursor 1500
+    output ${cfg.compositor.outputName} mode ${cfg.compositor.mode}
+    output ${cfg.compositor.outputName} bg #000000 solid_color
+    workspace "${compositorWorkspace}" output ${cfg.compositor.outputName}
+    workspace "${compositorWorkspace}"
+    exec_always ${publishWaylandSocket}
+  '';
+  publishWaylandSocket = pkgs.writeShellScript "korri-publish-wayland-socket" ''
     set -eu
+    if [[ ! "''${WAYLAND_DISPLAY:-}" =~ ^wayland-[0-9]+$ ]]; then
+      echo "Sway did not publish a numeric Wayland socket name" >&2
+      exit 1
+    fi
+    source="$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
+    destination="$XDG_RUNTIME_DIR/${waylandDisplay}"
     attempt=0
     while [ "$attempt" -lt 60 ]; do
-      if ${pkgs.xorg.xdpyinfo}/bin/xdpyinfo -display ${lib.escapeShellArg cfg.display} >/dev/null 2>&1; then
+      if [ -S "$source" ]; then
+        next="$destination.next.$$"
+        ${pkgs.coreutils}/bin/ln -s -- "$WAYLAND_DISPLAY" "$next"
+        ${pkgs.coreutils}/bin/mv -Tf -- "$next" "$destination"
         exit 0
       fi
       attempt=$((attempt + 1))
       ${pkgs.coreutils}/bin/sleep 0.25
     done
-    echo "X11 display ${cfg.display} did not become ready" >&2
+    echo "Sway Wayland socket did not become ready" >&2
+    exit 1
+  '';
+  cleanupCompositorSockets = pkgs.writeShellScript "korri-clean-compositor-sockets" ''
+    set -eu
+    stable_wayland=${lib.escapeShellArg "${gameplayRuntimeDir}/${waylandDisplay}"}
+    if [ -e "$stable_wayland" ] && [ ! -L "$stable_wayland" ]; then
+      echo "stable Wayland path is not a symbolic link" >&2
+      exit 1
+    fi
+    ${pkgs.coreutils}/bin/rm -f -- "$stable_wayland" "$stable_wayland".next.*
+    for socket in ${lib.escapeShellArg gameplayRuntimeDir}/wayland-[0-9]*; do
+      [ -e "$socket" ] || continue
+      case "$socket" in
+        *.lock) continue ;;
+      esac
+      [ -S "$socket" ] || {
+        echo "unexpected Wayland path type: $socket" >&2
+        exit 1
+      }
+      if ${pkgs.psmisc}/bin/fuser -s "$socket"; then
+        echo "Wayland socket is still owned: $socket" >&2
+        exit 1
+      fi
+      ${pkgs.coreutils}/bin/rm -f -- "$socket" "$socket.lock"
+    done
+    for socket in \
+      ${lib.escapeShellArg compositorControlSocket} \
+      ${lib.escapeShellArg xwaylandSocket}; do
+      if [ -e "$socket" ]; then
+        if ${pkgs.psmisc}/bin/fuser -s "$socket"; then
+          echo "compositor socket is still owned: $socket" >&2
+          exit 1
+        fi
+        ${pkgs.coreutils}/bin/rm -f -- "$socket"
+      fi
+    done
+    if [ -e ${lib.escapeShellArg xwaylandLock} ]; then
+      lock_pid="$(${pkgs.coreutils}/bin/tr -d '[:space:]' < ${lib.escapeShellArg xwaylandLock})"
+      case "$lock_pid" in
+        ""|*[!0-9]*)
+          echo "Xwayland lock has an invalid PID" >&2
+          exit 1
+          ;;
+      esac
+      if [ -e "/proc/$lock_pid" ]; then
+        echo "Xwayland display ${xwaylandDisplay} is still owned by PID $lock_pid" >&2
+        exit 1
+      fi
+      ${pkgs.coreutils}/bin/rm -f -- ${lib.escapeShellArg xwaylandLock}
+    fi
+  '';
+  waitForCompositor = pkgs.writeShellScript "korri-wait-for-compositor" ''
+    set -eu
+    attempt=0
+    while [ "$attempt" -lt 60 ]; do
+      if [ -S ${lib.escapeShellArg "${gameplayRuntimeDir}/${waylandDisplay}"} ] \
+        && [ -S ${lib.escapeShellArg xwaylandSocket} ]; then
+        exit 0
+      fi
+      attempt=$((attempt + 1))
+      ${pkgs.coreutils}/bin/sleep 0.25
+    done
+    echo "Sway displays ${waylandDisplay} and ${xwaylandDisplay} did not become ready" >&2
     exit 1
   '';
   requireNvencRuntime = pkgs.writeShellScript "korri-require-nvenc-runtime" ''
@@ -84,23 +180,12 @@ let
     test -r /run/opengl-driver/lib/libcuda.so.1
     test -r /run/opengl-driver/lib/libnvidia-encode.so.1
   '';
-  validationActionSource = pkgs.writeText "korri-input-action-fixture.c" ''
-    #include <unistd.h>
-
-    int main(void) {
-      for (;;) {
-        pause();
-      }
-    }
-  '';
-  validationActionFixture = pkgs.runCommandCC "korri-input-action-fixture" { } ''
-    mkdir -p "$out/bin"
-    "$CC" -O2 -Wall -Wextra -Werror ${validationActionSource} \
-      -o "$out/bin/korri-input-action-fixture"
-  '';
   validationActions = lib.optionalAttrs cfg.validation.enable {
     workspace-next.command = [
-      "${validationActionFixture}/bin/korri-input-action-fixture"
+      "${pkgs.sway}/bin/swaymsg"
+      "-s"
+      compositorControlSocket
+      ''[workspace="${compositorWorkspace}"] focus, fullscreen enable, border none''
     ];
   };
   validAbsolutePath =
@@ -173,13 +258,19 @@ in
       default = "/var/lib/korrid";
     };
 
-    display = lib.mkOption {
-      type = lib.types.strMatching "^:[0-9]+$";
-      default = ":0";
-    };
-    resolution = lib.mkOption {
-      type = lib.types.strMatching "^[1-9][0-9]*x[1-9][0-9]*x(16|24|32)$";
-      default = "1920x1080x24";
+    compositor = {
+      renderDevice = lib.mkOption {
+        type = lib.types.str;
+        description = "Exact DRM render node used by the headless compositor.";
+      };
+      outputName = lib.mkOption {
+        type = lib.types.strMatching "^[A-Za-z0-9._-]+$";
+        default = "HEADLESS-1";
+      };
+      mode = lib.mkOption {
+        type = lib.types.strMatching "^[1-9][0-9]*x[1-9][0-9]*@[1-9][0-9]*Hz$";
+        default = "1920x1080@60Hz";
+      };
     };
 
     serviceIdentities = {
@@ -319,8 +410,13 @@ in
           sunshineConfig
           cfg.storageRoot
           cfg.privateStateRoot
+          cfg.compositor.renderDevice
         ];
         message = "services.korriLinuxHost paths must be normalized absolute paths without whitespace.";
+      }
+      {
+        assertion = lib.hasPrefix "/dev/dri/" cfg.compositor.renderDevice;
+        message = "services.korriLinuxHost compositor renderDevice must be under /dev/dri/.";
       }
       {
         assertion = lib.all (name: builtins.match "[A-Za-z0-9_.:-]+" name != null) cfg.firewallInterfaces;
@@ -368,6 +464,7 @@ in
       storageRoot = cfg.storageRoot;
       privateStateRoot = cfg.privateStateRoot;
       sunshinePrivateStateRoot = sunshineConfig;
+      inherit compositorControlDirectory;
     };
 
     services.sunshine = {
@@ -400,23 +497,73 @@ in
       allowedTCPPorts = [ cfg.apiPort ];
     });
 
-    systemd.services.x11-headless = {
-      description = "Headless X11 session for Korri";
+    systemd.services.korri-compositor = {
+      description = "Korri headless Sway compositor";
       wantedBy = [ "multi-user.target" ];
-      before = [ "sunshine.service" ];
-      after = [ "systemd-tmpfiles-setup.service" ];
+      wants = [
+        "korrid.service"
+        "sunshine.service"
+      ];
+      requires = [
+        "user-runtime-dir@${toString cfg.gameplayUid}.service"
+        "user@${toString cfg.gameplayUid}.service"
+      ];
+      after = [
+        "systemd-tmpfiles-setup.service"
+        "user-runtime-dir@${toString cfg.gameplayUid}.service"
+        "user@${toString cfg.gameplayUid}.service"
+      ];
+      before = [
+        "korrid.service"
+        "sunshine.service"
+      ];
+      path = [
+        pkgs.dbus
+        pkgs.sway
+        pkgs.xwayland
+      ];
+      environment = {
+        HOME = gameplayHome;
+        XDG_RUNTIME_DIR = gameplayRuntimeDir;
+        XDG_CONFIG_HOME = "${compositorControlDirectory}/config";
+        XDG_STATE_HOME = "${compositorControlDirectory}/state";
+        XDG_DATA_HOME = "${compositorControlDirectory}/data";
+        DBUS_SESSION_BUS_ADDRESS = "unix:path=${gameplayRuntimeDir}/bus";
+        XDG_CURRENT_DESKTOP = "sway";
+        SWAYSOCK = compositorControlSocket;
+        WLR_BACKENDS = "headless";
+        WLR_LIBINPUT_NO_DEVICES = "1";
+        WLR_RENDERER = "vulkan";
+        WLR_RENDER_DRM_DEVICE = cfg.compositor.renderDevice;
+        WLR_NO_HARDWARE_CURSORS = "1";
+      }
+      // lib.optionalAttrs (cfg.sunshine.encoder == "nvenc") {
+        GBM_BACKEND = "nvidia-drm";
+        __GLX_VENDOR_LIBRARY_NAME = "nvidia";
+        LD_LIBRARY_PATH = "/run/opengl-driver/lib";
+      };
       serviceConfig = {
         Type = "simple";
         User = cfg.gameplayUser;
         Group = cfg.gameplayGroup;
-        ExecStart = "${pkgs.xorg.xorgserver}/bin/Xvfb ${cfg.display} -screen 0 ${cfg.resolution} -nolisten tcp -noreset";
+        SupplementaryGroups = [
+          "video"
+          "render"
+        ];
+        RuntimeDirectory = "korri-compositor";
+        RuntimeDirectoryMode = "0700";
+        ExecStartPre = "+${cleanupCompositorSockets}";
+        ExecStart = "${pkgs.sway}/bin/sway --unsupported-gpu --config ${swayConfig}";
+        ExecStartPost = waitForCompositor;
+        ExecStopPost = "+${cleanupCompositorSockets}";
         Restart = "on-failure";
         RestartSec = 2;
+        UMask = "0077";
         NoNewPrivileges = true;
         CapabilityBoundingSet = [ ];
         AmbientCapabilities = [ ];
         PrivateTmp = false;
-        PrivateDevices = true;
+        PrivateDevices = false;
         ProtectSystem = "strict";
         ProtectHome = true;
         ProtectKernelTunables = true;
@@ -425,27 +572,41 @@ in
         ProtectControlGroups = true;
         RestrictSUIDSGID = true;
         LockPersonality = true;
-        MemoryDenyWriteExecute = true;
+        MemoryDenyWriteExecute = false;
         SystemCallArchitectures = "native";
-        ReadWritePaths = [ "/tmp" ];
+        ReadWritePaths = [
+          compositorControlDirectory
+          gameplayRuntimeDir
+          "/tmp"
+        ];
       };
+    };
+
+    systemd.services.korrid = {
+      bindsTo = lib.mkAfter [ "korri-compositor.service" ];
+      requires = lib.mkAfter [ "korri-compositor.service" ];
+      after = lib.mkAfter [ "korri-compositor.service" ];
     };
 
     systemd.services.sunshine = {
       description = "Sunshine stream host for Korri";
       wantedBy = [ "multi-user.target" ];
+      bindsTo = [ "korri-compositor.service" ];
       requires = [
         "korri-input-source-guard.service"
-        "x11-headless.service"
+        "korri-compositor.service"
       ];
       after = [
         "korri-input-source-guard.service"
+        "korri-compositor.service"
         "network-online.target"
-        "x11-headless.service"
       ];
       wants = [ "network-online.target" ];
       environment = {
-        DISPLAY = cfg.display;
+        DISPLAY = xwaylandDisplay;
+        WAYLAND_DISPLAY = waylandDisplay;
+        XDG_RUNTIME_DIR = gameplayRuntimeDir;
+        XDG_SESSION_TYPE = "wayland";
         HOME = gameplayHome;
         XDG_CONFIG_HOME = "${gameplayHome}/.config";
       }
@@ -466,7 +627,7 @@ in
         ];
         WorkingDirectory = gameplayHome;
         ExecCondition = lib.optional (cfg.sunshine.encoder == "nvenc") requireNvencRuntime;
-        ExecStartPre = waitForX11;
+        ExecStartPre = waitForCompositor;
         ExecStart = "${lib.getExe cfg.sunshine.package} ${sunshineConfig}/sunshine.conf log_path=/dev/null${
           lib.optionalString (cfg.sunshine.encoder != "auto") " encoder=${cfg.sunshine.encoder}"
         }";
@@ -492,7 +653,10 @@ in
           sunshineConfig
           "/tmp"
         ];
-        InaccessiblePaths = [ "/dev/inputplumber/sources" ];
+        InaccessiblePaths = [
+          "/dev/inputplumber/sources"
+          compositorControlDirectory
+        ];
       };
     };
 

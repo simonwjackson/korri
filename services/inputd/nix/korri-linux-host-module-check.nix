@@ -46,6 +46,7 @@ let
             gameplayGid = 1001;
             firewallInterfaces = [ "tailscale0" ];
             sunshine.package = sunshinePackage;
+            compositor.renderDevice = "/dev/dri/renderD128";
           };
         }
         extra
@@ -104,10 +105,14 @@ let
   inputd = cfg.systemd.services.korri-inputd;
   korrid = cfg.systemd.services.korrid;
   sunshine = cfg.systemd.services.sunshine;
-  x11 = cfg.systemd.services.x11-headless;
+  compositor = cfg.systemd.services.korri-compositor;
+  nvencCompositor = nvenc.config.systemd.services.korri-compositor;
+  vaapiCompositor = vaapi.config.systemd.services.korri-compositor;
   deviceConfig = cfg.services.korridLinuxDevice.deviceConfig;
   nvencDeviceConfig = nvenc.config.services.korridLinuxDevice.deviceConfig;
   sunshineExec = pkgs.writeText "korri-linux-host-sunshine-exec" sunshine.serviceConfig.ExecStart;
+  compositorExec = pkgs.writeText "korri-linux-host-compositor-exec" compositor.serviceConfig.ExecStart;
+  validationAction = cfg.services.korriLinuxInput.inputd.actions.workspace-next.command;
   udevRules = pkgs.writeText "korri-linux-host-udev-rules" cfg.services.udev.extraRules;
 in
 assert allAssertionsPass valid;
@@ -172,6 +177,8 @@ assert cfg.services.korridLinuxDevice.sunshinePrivateStateRoot == "/home/gamepla
 assert sunshine.serviceConfig.User == "gameplay";
 assert sunshine.serviceConfig.WorkingDirectory == "/home/gameplay";
 assert sunshine.environment.DISPLAY == ":0";
+assert sunshine.environment.WAYLAND_DISPLAY == "korri-wayland";
+assert sunshine.environment.XDG_RUNTIME_DIR == "/run/user/1001";
 assert sunshine.environment.HOME == "/home/gameplay";
 assert sunshine.environment.XDG_CONFIG_HOME == "/home/gameplay/.config";
 assert
@@ -180,18 +187,48 @@ assert
 assert sunshine.serviceConfig.ProtectSystem == "strict";
 assert sunshine.serviceConfig.ProtectHome == "read-only";
 assert builtins.elem "/home/gameplay/.config/sunshine" sunshine.serviceConfig.ReadWritePaths;
-assert x11.serviceConfig.User == "gameplay";
-assert x11.serviceConfig.PrivateDevices;
-assert !(builtins.elem "/dev/inputplumber/sources" (x11.serviceConfig.InaccessiblePaths or [ ]));
+assert !(cfg.systemd.services ? x11-headless);
+assert compositor.serviceConfig.User == "gameplay";
+assert compositor.environment.WLR_BACKENDS == "headless";
+assert compositor.environment.WLR_RENDERER == "vulkan";
+assert compositor.environment.WLR_RENDER_DRM_DEVICE == "/dev/dri/renderD128";
+assert (compositor.environment.WAYLAND_DISPLAY or null) == null;
+assert compositor.environment.SWAYSOCK == "/run/korri-compositor/sway-ipc.sock";
+assert !(builtins.hasAttr "GBM_BACKEND" compositor.environment);
+assert !(builtins.hasAttr "__GLX_VENDOR_LIBRARY_NAME" compositor.environment);
+assert !(builtins.hasAttr "LD_LIBRARY_PATH" compositor.environment);
+assert nvencCompositor.environment.GBM_BACKEND == "nvidia-drm";
+assert nvencCompositor.environment.__GLX_VENDOR_LIBRARY_NAME == "nvidia";
+assert nvencCompositor.environment.LD_LIBRARY_PATH == "/run/opengl-driver/lib";
+assert !(builtins.hasAttr "GBM_BACKEND" vaapiCompositor.environment);
+assert !(builtins.hasAttr "__GLX_VENDOR_LIBRARY_NAME" vaapiCompositor.environment);
+assert !(builtins.hasAttr "LD_LIBRARY_PATH" vaapiCompositor.environment);
+assert compositor.serviceConfig.PrivateDevices == false;
+assert compositor.serviceConfig.RuntimeDirectory == "korri-compositor";
+assert builtins.elem "user-runtime-dir@1001.service" compositor.requires;
+assert builtins.elem "user@1001.service" compositor.requires;
+assert builtins.elem "korrid.service" compositor.wants;
+assert builtins.elem "sunshine.service" compositor.wants;
+assert builtins.elem "korri-compositor.service" korrid.bindsTo;
+assert builtins.elem "korri-compositor.service" korrid.requires;
+assert builtins.elem "korri-compositor.service" korrid.after;
+assert builtins.elem "korri-compositor.service" sunshine.bindsTo;
+assert lib.hasInfix "korri-wait-for-compositor" compositor.serviceConfig.ExecStartPost;
 assert builtins.elem "korri-input-source-guard.service" sunshine.requires;
-assert builtins.elem "x11-headless.service" sunshine.requires;
+assert builtins.elem "korri-compositor.service" sunshine.requires;
 assert builtins.elem "/dev/inputplumber/sources" sunshine.serviceConfig.InaccessiblePaths;
+assert builtins.elem "/run/korri-compositor" sunshine.serviceConfig.InaccessiblePaths;
 assert builtins.elem 39217 cfg.networking.firewall.interfaces.tailscale0.allowedTCPPorts;
 assert builtins.hasAttr "workspace-next" cfg.services.korriLinuxInput.inputd.actions;
-assert builtins.length cfg.services.korriLinuxInput.inputd.actions.workspace-next.command == 1;
-assert lib.hasSuffix "/bin/korri-input-action-fixture" (
-  builtins.head cfg.services.korriLinuxInput.inputd.actions.workspace-next.command
-);
+assert
+  validationAction == [
+    "${pkgs.sway}/bin/swaymsg"
+    "-s"
+    "/run/korri-compositor/sway-ipc.sock"
+    ''[workspace="korri:game:active"] focus, fullscreen enable, border none''
+  ];
+assert cfg.services.korridLinuxDevice.compositorControlDirectory == "/run/korri-compositor";
+assert korrid.environment.KORRID_COMPOSITOR_CONTROL_DIRECTORY == "/run/korri-compositor";
 assert noValidation.config.services.korriLinuxInput.inputd.actions == { };
 assert hasFailedAssertion "gameplay identity" wrongGameplayUid;
 assert evaluationRejected wrongGameplayUid;
@@ -210,11 +247,16 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     grep -F -- '--kill-after=5s' ${deviceConfig} >/dev/null
     grep -F '/bin/mpv' ${deviceConfig} >/dev/null
     grep -F -- '--hwdec=auto-copy-safe' ${deviceConfig} >/dev/null
-    grep -F -- '--vf=fps=120' ${deviceConfig} >/dev/null
+    grep -F -- '--vf=fps=60' ${deviceConfig} >/dev/null
+    grep -F -- '--gpu-context=wayland' ${deviceConfig} >/dev/null
     ! grep -F 'LD_LIBRARY_PATH=/run/opengl-driver/lib' ${deviceConfig} >/dev/null
     grep -F 'LD_LIBRARY_PATH=/run/opengl-driver/lib' ${nvencDeviceConfig} >/dev/null
     grep -F '/share/korri-streaming-validation/video.mp4' ${deviceConfig} >/dev/null
     grep -F 'DISPLAY = ":0"' ${deviceConfig} >/dev/null
+    grep -F 'WAYLAND_DISPLAY = "korri-wayland"' ${deviceConfig} >/dev/null
+    grep -F 'XDG_RUNTIME_DIR = "/run/user/1001"' ${deviceConfig} >/dev/null
+    ! grep -F 'SWAYSOCK' ${deviceConfig} >/dev/null
+    grep -F -- '--config /nix/store/' ${compositorExec} >/dev/null
     grep -Fx '${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf log_path=/dev/null' ${sunshineExec} >/dev/null
     grep -F 'TAG-="uaccess"' ${udevRules} >/dev/null
 
@@ -225,39 +267,97 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     probe="$(${lib.getExe' pkgs.ffmpeg "ffprobe"} -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate -of csv=p=0 "$media")"
     test "$probe" = '1920,1080,60/1'
 
-    display=:91
-    ${pkgs.xorg.xorgserver}/bin/Xvfb "$display" -screen 0 1920x1080x24 -nolisten tcp -noreset >"$TMPDIR/xvfb.log" 2>&1 &
-    xvfb_pid=$!
-    trap '${pkgs.coreutils}/bin/kill "$xvfb_pid" 2>/dev/null || true' EXIT
+    compositor_config="$(${pkgs.gnugrep}/bin/grep -oE '/nix/store/[^ ]+-korri-sway\.conf' ${compositorExec} | head -n1)"
+    test -f "$compositor_config"
+    runtime="$TMPDIR/runtime"
+    control="$TMPDIR/control"
+    mkdir -m 700 "$runtime" "$control"
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.sway
+        pkgs.xwayland
+        pkgs.coreutils
+        pkgs.procps
+        pkgs.gnugrep
+      ]
+    }
+    XDG_RUNTIME_DIR="$runtime" \
+      XDG_CONFIG_HOME="$TMPDIR/config" \
+      XDG_STATE_HOME="$TMPDIR/state" \
+      XDG_DATA_HOME="$TMPDIR/data" \
+      WLR_BACKENDS=headless \
+      WLR_LIBINPUT_NO_DEVICES=1 \
+      WLR_RENDERER=pixman \
+      SWAYSOCK="$control/sway-ipc.sock" \
+      ${pkgs.sway-unwrapped}/bin/sway --unsupported-gpu --config "$compositor_config" \
+      >"$TMPDIR/sway.log" 2>&1 &
+    sway_pid=$!
+    trap '${pkgs.coreutils}/bin/cat "$TMPDIR/sway.log" >&2 2>/dev/null || true; ${pkgs.coreutils}/bin/cat "$TMPDIR/mpv.log" >&2 2>/dev/null || true; ${pkgs.coreutils}/bin/kill "$sway_pid" 2>/dev/null || true' EXIT
     attempt=0
-    while [ "$attempt" -lt 40 ]; do
-      if ${pkgs.xorg.xdpyinfo}/bin/xdpyinfo -display "$display" >/dev/null 2>&1; then
+    while [ "$attempt" -lt 80 ]; do
+      raw_wayland_display="$(${pkgs.findutils}/bin/find "$runtime" -maxdepth 1 -type s -name 'wayland-[0-9]*' -printf '%f\n' | head -n1)"
+      if test -S "$control/sway-ipc.sock" && test -n "$raw_wayland_display"; then
         break
       fi
+      test -e "/proc/$sway_pid"
       attempt=$((attempt + 1))
       ${pkgs.coreutils}/bin/sleep 0.1
     done
-    ${pkgs.xorg.xdpyinfo}/bin/xdpyinfo -display "$display" >/dev/null
-    DISPLAY="$display" ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=1s 8 \
+    test -S "$control/sway-ipc.sock"
+    raw_wayland_display="$(${pkgs.findutils}/bin/find "$runtime" -maxdepth 1 -type s -name 'wayland-[0-9]*' -printf '%f\n' | head -n1)"
+    test -n "$raw_wayland_display"
+    publisher="$(${pkgs.gawk}/bin/awk '$1 == "exec_always" { print $2 }' "$compositor_config")"
+    test -x "$publisher"
+    XDG_RUNTIME_DIR="$runtime" WAYLAND_DISPLAY="$raw_wayland_display" "$publisher"
+    test -S "$runtime/korri-wayland"
+    test "$(${pkgs.coreutils}/bin/readlink "$runtime/korri-wayland")" = "$raw_wayland_display"
+    wayland_display=korri-wayland
+    ${pkgs.sway}/bin/swaymsg -s "$control/sway-ipc.sock" -t get_outputs -r \
+      | ${pkgs.jq}/bin/jq -e '.[] | select(.name == "HEADLESS-1" and .active == true and .current_mode.width == 1920 and .current_mode.height == 1080 and .current_mode.refresh == 60000)' \
+      >/dev/null
+    test -S /tmp/.X11-unix/X0
+
+    XDG_RUNTIME_DIR="$runtime" WAYLAND_DISPLAY="$wayland_display" \
+      ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=1s 8 \
       ${lib.getExe pkgs.mpv-unwrapped} --no-config --quiet --no-audio --loop-file=inf \
-      --fullscreen --vo=x11 --hwdec=auto-copy-safe --vf=fps=120 --title='Korri streaming gate' \
-      "$media" >"$TMPDIR/mpv.log" 2>&1 &
+      --no-fullscreen --vo=wlshm --hwdec=no --vf=fps=60 \
+      --title='Korri action gate' "$media" >"$TMPDIR/mpv.log" 2>&1 &
     player_pid=$!
     attempt=0
-    while [ "$attempt" -lt 50 ]; do
-      if DISPLAY="$display" ${pkgs.xorg.xwininfo}/bin/xwininfo -root -tree 2>/dev/null | grep -F 'Korri streaming gate' >/dev/null; then
+    while [ "$attempt" -lt 80 ]; do
+      if ${pkgs.sway}/bin/swaymsg -s "$control/sway-ipc.sock" -t get_tree -r \
+        | ${pkgs.jq}/bin/jq -e '.. | objects | select(.name? == "Korri action gate" and .fullscreen_mode == 0)' \
+        >/dev/null 2>&1; then
         break
       fi
       test -e "/proc/$player_pid"
       attempt=$((attempt + 1))
       ${pkgs.coreutils}/bin/sleep 0.1
     done
-    DISPLAY="$display" ${pkgs.xorg.xwininfo}/bin/xwininfo -root -tree | grep -F 'Korri streaming gate' >/dev/null
-    test -e "/proc/$player_pid"
+    ${pkgs.sway}/bin/swaymsg -s "$control/sway-ipc.sock" -t get_tree -r \
+      | ${pkgs.jq}/bin/jq -e '.. | objects | select(.name? == "Korri action gate" and .fullscreen_mode == 0)' \
+      >/dev/null
+    ${pkgs.sway}/bin/swaymsg -s "$control/sway-ipc.sock" ${lib.escapeShellArg (builtins.elemAt validationAction 3)} >/dev/null
+    ${pkgs.sway}/bin/swaymsg -s "$control/sway-ipc.sock" -t get_tree -r \
+      | ${pkgs.jq}/bin/jq -e '.. | objects | select(.name? == "Korri action gate" and .fullscreen_mode > 0)' \
+      >/dev/null
+
+    XDG_RUNTIME_DIR="$runtime" WAYLAND_DISPLAY="$wayland_display" \
+      ${pkgs.grim}/bin/grim -o HEADLESS-1 "$TMPDIR/frame-1.png"
+    ${pkgs.coreutils}/bin/sleep 0.5
+    XDG_RUNTIME_DIR="$runtime" WAYLAND_DISPLAY="$wayland_display" \
+      ${pkgs.grim}/bin/grim -o HEADLESS-1 "$TMPDIR/frame-2.png"
+    test "$(${pkgs.imagemagick}/bin/magick identify -format '%wx%h' "$TMPDIR/frame-1.png")" = 1920x1080
+    set +e
+    ${pkgs.imagemagick}/bin/magick compare -metric AE "$TMPDIR/frame-1.png" "$TMPDIR/frame-2.png" null: >/dev/null 2>&1
+    compare_status=$?
+    set -e
+    test "$compare_status" -eq 1
+
     ${pkgs.coreutils}/bin/kill "$player_pid"
     wait "$player_pid" || true
-    ${pkgs.coreutils}/bin/kill "$xvfb_pid"
-    wait "$xvfb_pid" || true
+    ${pkgs.coreutils}/bin/kill "$sway_pid"
+    wait "$sway_pid" || true
     trap - EXIT
 
     home="$TMPDIR/home"
