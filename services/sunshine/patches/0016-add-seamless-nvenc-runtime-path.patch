@@ -160,7 +160,7 @@
    };
  
    struct sync_session_t {
-@@ -717,6 +847,17 @@
+@@ -717,6 +847,22 @@
      return encoder.name == "vaapi"sv && encoder.codec_from_config(config).name == "h264_vaapi";
    }
  
@@ -172,13 +172,18 @@
 +    return runtime_settings_supports_vaapi_h264(encoder, config) || runtime_settings_supports_nvenc_h264(encoder, config);
 +  }
 +
++  bool strict_encoder_selection_enabled() {
++    const auto *value = std::getenv("SUNSHINE_STRICT_ENCODER");
++    return value != nullptr && value[0] == '1' && value[1] == '\0';
++  }
++
 +  constexpr auto RUNTIME_NVENC_BITRATE_MIN_INTERVAL = std::chrono::milliseconds {500};
 +  constexpr auto RUNTIME_NVENC_BITRATE_SLOW_CALL = std::chrono::milliseconds {100};
 +
    std::chrono::steady_clock::duration runtime_fps_interval(std::uint32_t fps) {
      return std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double> {1.0 / fps});
    }
-@@ -2182,10 +2323,12 @@
+@@ -2182,10 +2328,12 @@
      });
      std::uint32_t runtime_fps = config.framerate;
      auto next_runtime_frame = std::chrono::steady_clock::now();
@@ -193,7 +198,7 @@
  
      {
        // Load a dummy image into the AVFrame to ensure we have something to encode
-@@ -2229,16 +2372,39 @@
+@@ -2229,16 +2377,39 @@
              std::uint32_t applied_bitrate_kbps = config.bitrate;
              std::uint16_t status = RUNTIME_SETTINGS_STATUS_FAILED;
              std::uint16_t reason = RUNTIME_SETTINGS_REASON_APPLY_FAILED;
@@ -237,7 +242,7 @@
                  << " encoder="sv << encoder.name
                  << " codec="sv << encoder.codec_from_config(config).name
                  << " requested_kbps="sv << request->value;
-@@ -2250,20 +2416,20 @@
+@@ -2250,20 +2421,20 @@
                << " applied_kbps="sv << applied_bitrate_kbps
                << " status="sv << status
                << " reason="sv << reason
@@ -261,7 +266,7 @@
                BOOST_LOG(warning)
                  << "live-settings-mvp: runtime FPS unsupported request_id="sv << request->request_id
                  << " encoder="sv << encoder.name
-@@ -2287,7 +2453,7 @@
+@@ -2287,7 +2458,7 @@
              auto updated_config = config;
              updated_config.width = request->width;
              updated_config.height = request->height;
@@ -270,7 +275,7 @@
                auto replacement_encode_device = make_encode_device(*disp, encoder, updated_config);
                if (replacement_encode_device) {
                  auto replacement_session = make_encode_session(disp.get(), encoder, updated_config, disp->width, disp->height, std::move(replacement_encode_device));
-@@ -2305,15 +2471,21 @@
+@@ -2305,15 +2476,21 @@
                  if (replacement_session && first_img) {
                    replacement_session->request_idr_frame();
                    if (!replacement_session->convert(*first_img)) {
@@ -299,7 +304,7 @@
                      config = updated_config;
                      applied_width = request->width;
                      applied_height = request->height;
-@@ -2536,6 +2708,15 @@
+@@ -2536,6 +2713,15 @@
        return std::nullopt;
      }
  
@@ -315,7 +320,7 @@
      encode_session.session = std::move(session);
  
      return encode_session;
-@@ -2648,24 +2829,44 @@
+@@ -2648,24 +2834,44 @@
              ctx->idr_events->pop();
            }
  
@@ -366,7 +371,7 @@
                      << " encoder="sv << encoder.name
                      << " codec="sv << encoder.codec_from_config(ctx->config).name
                      << " requested_kbps="sv << request->value;
-@@ -2677,7 +2878,7 @@
+@@ -2677,7 +2883,7 @@
                    << " applied_kbps="sv << applied_bitrate_kbps
                    << " status="sv << status
                    << " reason="sv << reason
@@ -375,7 +380,7 @@
                  ctx->runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS, status, applied_bitrate_kbps, 0, 0, reason});
                } else if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_FPS) {
                  if (ctx->runtime_fps == 0) {
-@@ -2686,14 +2887,14 @@
+@@ -2686,14 +2892,14 @@
                  std::uint32_t applied_fps = ctx->runtime_fps;
                  std::uint16_t status = RUNTIME_SETTINGS_STATUS_FAILED;
                  std::uint16_t reason = RUNTIME_SETTINGS_REASON_APPLY_FAILED;
@@ -392,7 +397,7 @@
                    BOOST_LOG(warning)
                      << "live-settings-mvp: runtime FPS unsupported request_id="sv << request->request_id
                      << " encoder="sv << encoder.name
-@@ -2718,13 +2919,17 @@
+@@ -2718,13 +2924,17 @@
                  auto updated_config = ctx->config;
                  updated_config.width = request->width;
                  updated_config.height = request->height;
@@ -413,6 +418,17 @@
                      pos->session->request_idr_frame();
                      ctx->touch_port_events->raise(make_port(disp.get(), ctx->config));
                      applied_width = request->width;
+@@ -3277,6 +3487,10 @@
+ 
+       if (chosen_encoder == nullptr) {
+         BOOST_LOG(error) << "Couldn't find any working encoder matching ["sv << config::video.encoder << ']';
++        if (strict_encoder_selection_enabled()) {
++          BOOST_LOG(error) << "Strict encoder selection refuses automatic fallback"sv;
++          return -1;
++        }
+       }
+     }
+ 
 --- a/src/korri_nvenc_runtime_layout.h
 +++ b/src/korri_nvenc_runtime_layout.h
 @@ -0,0 +1,58 @@

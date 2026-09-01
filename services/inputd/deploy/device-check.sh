@@ -31,7 +31,7 @@ EXPECTED_SUNSHINE_LIBAVCODEC_VERSION='62.11.100'
 EXPECTED_SUNSHINE_FFMPEG_COMMIT='61c50407fd429a5e2ec616e2e846c3fe3743879a'
 EXPECTED_SUNSHINE_FFMPEG_SOURCE_HASH='sha256-LKQUfHb9/Z4uvPx4vrtAOPL95Un9/C26lvCbQZ51avk='
 EXPECTED_SUNSHINE_NVENC_API='12.0'
-EXPECTED_SUNSHINE_PATCH_SET_SHA256='46e32d78438aed4f8b2a4572f26bee158182afcaa6257b01cd0345b9de396901'
+EXPECTED_SUNSHINE_PATCH_SET_SHA256='68c6f746306b5361dc9c9ccb0e9d3fd034467b24733e1e0cca348ced4fd40914'
 KORRID_CONTROL_GROUP='korri-control'
 KORRID_CONTROL_PEER_USER='korri-inputd'
 KORRID_CONTROL_SOCKET='/run/korrid-control/control.sock'
@@ -55,7 +55,7 @@ patch=0012-persist-runtime-config-and-reinit-capture-after-resolution.patch sha2
 patch=0013-request-async-capture-reinit-after-runtime-resolution.patch sha256=0831530081f9551173ff1a74a5ca2771942e9c519ec476c27548a1d3cbea3fa2
 patch=0014-skip-runtime-vaapi-destructor-flush.patch sha256=59eedaf576f99223bd807205c45b12b1ac5f9850225614530b4ab925e3204e50
 patch=0015-add-korri-input-seat-event-mirror.patch sha256=69888a0ef824af105f0919ad354876b52ca0d003b0c46be619e732bc1cdbe726
-patch=0016-add-seamless-nvenc-runtime-path.patch sha256=ba767c4b8d853001ead6af7af44dbc9503d24cf22aa257d29635be3b62a7feb2
+patch=0016-add-seamless-nvenc-runtime-path.patch sha256=686decb81379741e01e0b9b0e9105bbe23765a1bf728565767604383983a7074
 EOF
 }
 
@@ -1299,6 +1299,47 @@ remote_attempt_reconcile_root() {
   sync -f "${ATTEMPT_MARKER%/*}"
 }
 
+remote_nvenc_stream_log_gate() {
+  local log="$1" latest_start session_log first_h264
+  latest_start="$(grep -F 'New streaming session started' <<<"$log" | tail -n 1)"
+  [[ "$latest_start" == *'[active sessions: 1]'* ]] \
+    || { printf 'latest NVENC stream is absent or concurrent\n' >&2; return 1; }
+  session_log="$(awk '
+    /New streaming session started/ { seen = 1; block = ""; next }
+    seen { block = block $0 "\\n" }
+    END { printf "%s", block }
+  ' <<<"$log")"
+  grep -F 'CLIENT CONNECTED' <<<"$session_log" >/dev/null \
+    || { printf 'latest NVENC stream never connected\n' >&2; return 1; }
+  first_h264="$(grep -F 'Creating encoder [h264_' <<<"$session_log" | head -n 1)"
+  [[ "$first_h264" == *'Creating encoder [h264_nvenc]'* ]] \
+    || { printf 'latest explicit NVENC stream did not first create h264_nvenc\n' >&2; return 1; }
+  ! grep -F 'Creating encoder [h264_vaapi]' <<<"$session_log" >/dev/null \
+    || { printf 'latest explicit NVENC stream fell back to h264_vaapi\n' >&2; return 1; }
+}
+
+remote_nvenc_stream_gate() {
+  local exec_start environment snapshot active main_pid invocation log
+  exec_start="$(systemctl show sunshine.service -p ExecStart --value)" || return 1
+  if [[ "$exec_start" != *' encoder=nvenc'* ]]; then
+    printf 'nvenc-stream-gate=not-required\n'
+    return 0
+  fi
+  environment="$(systemctl show sunshine.service -p Environment --value)" || return 1
+  grep -F 'SUNSHINE_STRICT_ENCODER=1' <<<"$environment" >/dev/null \
+    || { printf 'explicit NVENC service is not strict\n' >&2; return 1; }
+  snapshot="$(systemctl show sunshine.service -p ActiveState -p MainPID -p InvocationID)" || return 1
+  active="$(awk -F= '$1 == "ActiveState" {print $2}' <<<"$snapshot")"
+  main_pid="$(awk -F= '$1 == "MainPID" {print $2}' <<<"$snapshot")"
+  invocation="$(awk -F= '$1 == "InvocationID" {print $2}' <<<"$snapshot")"
+  [[ "$active" == active && "$main_pid" =~ ^[1-9][0-9]*$ && "$invocation" =~ ^[0-9a-f]{32}$ ]] \
+    || { printf 'current explicit NVENC Sunshine invocation is not live\n' >&2; return 1; }
+  log="$(journalctl -b --no-pager -o cat -n 2000 \
+    _SYSTEMD_UNIT=sunshine.service _SYSTEMD_INVOCATION_ID="$invocation")" || return 1
+  remote_nvenc_stream_log_gate "$log" || return 1
+  printf 'nvenc-stream-gate=pass encoder=h264_nvenc strict=yes invocation=current\n'
+}
+
 remote_attempt_execute_root() {
   local nonce="$1" candidate="$2" action="$3"
   shift 3
@@ -1312,6 +1353,7 @@ remote_attempt_execute_root() {
     current-generation) remote_generation ;;
     acceptance-fingerprint) remote_acceptance_fingerprint "${1:?}" "${2:-}" "${3:-}" "${4:?}" ;;
     automated-gates) remote_automated_gates "${1:?}" "${2:-}" "${3:-}" "${4:?}" ;;
+    nvenc-stream-gate) remote_nvenc_stream_gate ;;
     rollback-gates) remote_rollback_gates ;;
     activate-test) remote_activate_test "${1:?}" "${2:?}" ;;
     inject-health-failure) remote_inject_health_failure "${1:?}" "${2:?}" "${3:?}" "${@:4}" ;;
@@ -1349,6 +1391,7 @@ if [[ "${1:-}" == --remote ]]; then
     preflight) remote_preflight "${1:?}" "${2:?}" "${3:-}" "${4:-}" ;;
     boot-id) tr -d '\n' </proc/sys/kernel/random/boot_id ;;
     current-generation) remote_generation ;;
+    nvenc-stream-gate) remote_nvenc_stream_gate ;;
     bitmap-codes) remote_bitmap_codes "${1:?}" "${2:-}" ;;
     attempt-start-root) remote_attempt_start_root "${1:?}" "${2:?}" "${3:?}" ;;
     attempt-finish-root) remote_attempt_finish_root "${1:?}" "${2:?}" ;;
@@ -1996,6 +2039,7 @@ case "$MODE" in
     printf '%s\n' "$automated_evidence"
     store_automated_evidence candidate-automated.txt "$automated_evidence"
     require_hitl pending-mutation
+    run_remote_attempt nvenc-stream-gate
     verify_fingerprint_unchanged "$automated_evidence" true
     save_candidate_controller_proof "$automated_evidence"
     run_remote_attempt restore "$ROLLBACK" false "$GAMEPLAY_USER" \
@@ -2058,6 +2102,7 @@ case "$MODE" in
       printf '%s\n' "$automated_evidence"
       store_automated_evidence persistent-automated.txt "$automated_evidence"
       require_hitl pending-mutation
+      run_remote_attempt nvenc-stream-gate
       verify_fingerprint_unchanged "$automated_evidence" true
       save_accepted_private_digest "$automated_evidence"
       # This durable accepted state makes a failed boot-ID fetch resumable.
@@ -2081,6 +2126,7 @@ case "$MODE" in
     store_automated_evidence candidate-reboot.txt "$automated_evidence"
     verify_accepted_private_digest "$automated_evidence"
     require_hitl candidate-reboot-verifying
+    run_remote_attempt nvenc-stream-gate
     verify_fingerprint_unchanged "$automated_evidence" true
     finish_attempt
     verification_active=false

@@ -220,6 +220,17 @@ let
 +                    ctx->runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(pos->session.get()));
 ''
     ))
+    (check "explicit strict encoder selection refuses automatic fallback" (
+      patchContains ''std::getenv("SUNSHINE_STRICT_ENCODER")''
+      && patchContains "value[0] == '1' && value[1] == '\\0'"
+      && patchContains "Strict encoder selection refuses automatic fallback"
+      && patchContains ''
++        if (strict_encoder_selection_enabled()) {
++          BOOST_LOG(error) << "Strict encoder selection refuses automatic fallback"sv;
++          return -1;
++        }
+''
+    ))
     (check "runtime FPS and resolution support is limited to H.264 VAAPI or NVENC" (
       patchContains "runtime_settings_supports_h264_dynamic"
       && patchContains "runtime_settings_supports_vaapi_h264"

@@ -42,6 +42,11 @@ let
     echo "X11 display ${cfg.display} did not become ready" >&2
     exit 1
   '';
+  requireNvencRuntime = pkgs.writeShellScript "korri-require-nvenc-runtime" ''
+    set -eu
+    test -r /run/opengl-driver/lib/libcuda.so.1
+    test -r /run/opengl-driver/lib/libnvidia-encode.so.1
+  '';
   validationActionSource = pkgs.writeText "korri-input-action-fixture.c" ''
     #include <unistd.h>
 
@@ -388,6 +393,10 @@ in
       }
       // lib.optionalAttrs cfg.sunshine.runtimeSettings.enable {
         SUNSHINE_LIVE_SETTINGS_MVP = "1";
+      }
+      // lib.optionalAttrs (cfg.sunshine.encoder == "nvenc") {
+        LD_LIBRARY_PATH = "/run/opengl-driver/lib";
+        SUNSHINE_STRICT_ENCODER = "1";
       };
       serviceConfig = {
         Type = "simple";
@@ -398,6 +407,7 @@ in
           "render"
         ];
         WorkingDirectory = gameplayHome;
+        ExecCondition = lib.optional (cfg.sunshine.encoder == "nvenc") requireNvencRuntime;
         ExecStartPre = waitForX11;
         ExecStart = "${lib.getExe cfg.sunshine.package} ${sunshineConfig}/sunshine.conf log_path=/dev/null${lib.optionalString (cfg.sunshine.encoder != "auto") " encoder=${cfg.sunshine.encoder}"}";
         Restart = "on-failure";

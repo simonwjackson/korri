@@ -71,6 +71,9 @@ let
   nvenc = evaluate {
     services.korriLinuxHost.sunshine.encoder = "nvenc";
   };
+  vaapi = evaluate {
+    services.korriLinuxHost.sunshine.encoder = "vaapi";
+  };
   wrongGameplayUid = evaluate {
     users.users.gameplay.uid = lib.mkForce 1002;
   };
@@ -117,6 +120,21 @@ assert cfg.services.korriLinuxHost.sunshine.runtimeSettings.enable;
 assert cfg.services.korriLinuxHost.sunshine.encoder == "auto";
 assert sunshine.environment.SUNSHINE_LIVE_SETTINGS_MVP == "1";
 assert allAssertionsPass nvenc;
+assert allAssertionsPass vaapi;
+assert nvenc.config.systemd.services.sunshine.environment.LD_LIBRARY_PATH == "/run/opengl-driver/lib";
+assert nvenc.config.systemd.services.sunshine.environment.SUNSHINE_STRICT_ENCODER == "1";
+assert !(builtins.hasAttr "LD_LIBRARY_PATH" sunshine.environment);
+assert !(builtins.hasAttr "SUNSHINE_STRICT_ENCODER" sunshine.environment);
+assert !(builtins.hasAttr "LD_LIBRARY_PATH" vaapi.config.systemd.services.sunshine.environment);
+assert !(builtins.hasAttr "SUNSHINE_STRICT_ENCODER" vaapi.config.systemd.services.sunshine.environment);
+assert builtins.length nvenc.config.systemd.services.sunshine.serviceConfig.ExecCondition == 1;
+assert vaapi.config.systemd.services.sunshine.serviceConfig.ExecCondition == [ ];
+assert
+  let
+    script = builtins.readFile (builtins.elemAt nvenc.config.systemd.services.sunshine.serviceConfig.ExecCondition 0);
+  in
+  lib.hasInfix "/run/opengl-driver/lib/libcuda.so.1" script
+  && lib.hasInfix "/run/opengl-driver/lib/libnvidia-encode.so.1" script;
 assert
   nvenc.config.systemd.services.sunshine.serviceConfig.ExecStart
   == "${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf log_path=/dev/null encoder=nvenc";

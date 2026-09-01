@@ -10,7 +10,7 @@
   reviewedFfmpegSourceHash = "sha256-LKQUfHb9/Z4uvPx4vrtAOPL95Un9/C26lvCbQZ51avk=";
   reviewedNvencApiMajor = 12;
   reviewedNvencApiMinor = 0;
-  patchSetSha256 = "46e32d78438aed4f8b2a4572f26bee158182afcaa6257b01cd0345b9de396901";
+  patchSetSha256 = "68c6f746306b5361dc9c9ccb0e9d3fd034467b24733e1e0cca348ced4fd40914";
   patches = [
     {
       name = "0001-add-runtime-settings-protocol-surface.patch";
@@ -65,7 +65,7 @@
     {
       name = "0016-add-seamless-nvenc-runtime-path.patch";
       path = ./patches/0016-add-seamless-nvenc-runtime-path.patch;
-      sha256 = "ba767c4b8d853001ead6af7af44dbc9503d24cf22aa257d29635be3b62a7feb2";
+      sha256 = "686decb81379741e01e0b9b0e9105bbe23765a1bf728565767604383983a7074";
     }
   ];
 }

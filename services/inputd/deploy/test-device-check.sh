@@ -514,6 +514,9 @@ case "$(basename "$0")" in
           fi
           printf '\n'
           ;;
+        nvenc-stream-gate)
+          printf 'nvenc-stream-gate=pass encoder=h264_nvenc strict=yes\n'
+          ;;
         rollback-gates)
           printf 'rollback-gates=pass\n'
           ;;
@@ -767,6 +770,36 @@ if grep -F '[[ "$running" == /nix/store/*/bin/sunshine ]]' "$GATE" >/dev/null; t
 fi
 # shellcheck disable=SC2016 # Literal production source invariant.
 grep -F 'remote_resolve_sunshine_executable "$running" "$declared"' "$GATE" >/dev/null
+grep -F "grep -F 'SUNSHINE_STRICT_ENCODER=1'" "$GATE" >/dev/null
+# shellcheck disable=SC2016 # Literal production journal filter.
+grep -F '_SYSTEMD_INVOCATION_ID="$invocation"' "$GATE" >/dev/null
+grep -F "first_h264=\"\$(grep -F 'Creating encoder [h264_'" "$GATE" >/dev/null
+grep -F "! grep -F 'Creating encoder [h264_vaapi]'" "$GATE" >/dev/null
+[[ "$(grep -Fc 'run_remote_attempt nvenc-stream-gate' "$GATE")" -eq 3 ]]
+
+NVENC_LOG_GATE_SOURCE="$(awk '
+  /^remote_nvenc_stream_log_gate\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$NVENC_LOG_GATE_SOURCE" == remote_nvenc_stream_log_gate* ]]
+run_nvenc_log_gate() (
+  eval "$NVENC_LOG_GATE_SOURCE"
+  remote_nvenc_stream_log_gate "$1"
+)
+expect_nvenc_log_failure() {
+  if run_nvenc_log_gate "$1"; then
+    printf 'NVENC log fixture was unexpectedly accepted\n' >&2
+    return 1
+  fi
+}
+nvenc_success=$'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]'
+run_nvenc_log_gate "$nvenc_success"
+expect_nvenc_log_failure $'New streaming session started [active sessions: 2]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]'
+expect_nvenc_log_failure $'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [hevc_nvenc]'
+expect_nvenc_log_failure $'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_vaapi]\nCreating encoder [h264_nvenc]'
+expect_nvenc_log_failure $'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]\nCreating encoder [h264_vaapi]'
+run_nvenc_log_gate $'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_vaapi]\nNew streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]'
 # stat(1) canonicalizes 0700/0600 to 700/600; candidate calls must use the
 # canonical forms so post-chmod verification compares equal.
 # shellcheck disable=SC2016

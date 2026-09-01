@@ -5,6 +5,7 @@
 #include <cstring>
 #include <limits>
 #include <optional>
+#include <string>
 #include <vector>
 
 using namespace std::chrono_literals;
@@ -63,6 +64,17 @@ static bool reconfigure_nvenc(NvencRateControl& active, std::uint32_t bitrate_kb
   return true;
 }
 
+std::optional<std::string> chooseEncoder(
+  std::string requested,
+  bool requestedWorks,
+  bool strict,
+  std::string fallback
+) {
+  if (requestedWorks) return requested;
+  if (strict) return std::nullopt;
+  return fallback;
+}
+
 struct NvencAttemptLimiter {
   std::optional<std::chrono::steady_clock::time_point> completed;
   bool blocked{};
@@ -109,6 +121,10 @@ struct SerializedCapabilityAck {
 };
 
 int main() {
+  assert(chooseEncoder("nvenc", true, true, "vaapi") == "nvenc");
+  assert(!chooseEncoder("nvenc", false, true, "vaapi"));
+  assert(chooseEncoder("nvenc", false, false, "vaapi") == "vaapi");
+
   NvencRateControl nvenc;
   assert(reconfigure_nvenc(nvenc, 1000));
   assert(nvenc.average_bps == 1'000'000);
