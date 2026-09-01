@@ -115,7 +115,7 @@ assert sunshine.environment.SUNSHINE_LIVE_SETTINGS_MVP == "1";
 assert noRuntimeSettings.config.services.sunshine.package == sunshinePackage;
 assert
   noRuntimeSettings.config.systemd.services.sunshine.serviceConfig.ExecStart
-  == "${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf";
+  == "${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf log_path=/dev/null";
 assert
   !(builtins.hasAttr "SUNSHINE_LIVE_SETTINGS_MVP" noRuntimeSettings.config.systemd.services.sunshine.environment);
 assert cfg.hardware.graphics.enable;
@@ -140,7 +140,7 @@ assert sunshine.environment.HOME == "/home/gameplay";
 assert sunshine.environment.XDG_CONFIG_HOME == "/home/gameplay/.config";
 assert
   sunshine.serviceConfig.ExecStart
-  == "${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf";
+  == "${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf log_path=/dev/null";
 assert sunshine.serviceConfig.ProtectSystem == "strict";
 assert sunshine.serviceConfig.ProtectHome == "read-only";
 assert builtins.elem "/home/gameplay/.config/sunshine" sunshine.serviceConfig.ReadWritePaths;
@@ -170,7 +170,26 @@ assert evaluationRejected invalidLabel;
 pkgs.runCommand "korri-linux-host-module-check" { } ''
   grep -F 'id = "inputd-gate"' ${deviceConfig} >/dev/null
   grep -F 'DISPLAY = ":0"' ${deviceConfig} >/dev/null
-  grep -F '${sunshinePackage}/bin/sunshine' ${sunshineExec} >/dev/null
+  grep -Fx '${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf log_path=/dev/null' ${sunshineExec} >/dev/null
   grep -F 'TAG-="uaccess"' ${udevRules} >/dev/null
+
+  home="$TMPDIR/home"
+  private="$home/.config/sunshine"
+  mkdir -p "$private/credentials"
+  printf '{"root":{"named_devices":[]}}\n' > "$private/sunshine_state.json"
+  printf '{}\n' > "$private/apps.json"
+  cat > "$private/sunshine.conf" <<EOF
+file_state = $private/sunshine_state.json
+log_path = $private/sunshine.log
+EOF
+  private_before="$(${inputdPackage}/bin/korri-sunshine-state-digest "$home" "$(${pkgs.coreutils}/bin/id -u)")"
+  HOME="$home" XDG_CONFIG_HOME="$home/.config" \
+    ${sunshinePackage}/bin/sunshine "$private/sunshine.conf" log_path=/dev/null --version \
+    > "$TMPDIR/sunshine-version.txt"
+  private_after="$(${inputdPackage}/bin/korri-sunshine-state-digest "$home" "$(${pkgs.coreutils}/bin/id -u)")"
+  test "$private_before" = "$private_after"
+  test ! -e "$private/sunshine.log"
+  grep -F 'Sunshine version: 2025.924.154138-korri' "$TMPDIR/sunshine-version.txt" >/dev/null
+
   touch "$out"
 ''

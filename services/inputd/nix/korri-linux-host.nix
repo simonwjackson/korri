@@ -386,7 +386,7 @@ in
         ];
         WorkingDirectory = gameplayHome;
         ExecStartPre = waitForX11;
-        ExecStart = "${lib.getExe cfg.sunshine.package} ${sunshineConfig}/sunshine.conf";
+        ExecStart = "${lib.getExe cfg.sunshine.package} ${sunshineConfig}/sunshine.conf log_path=/dev/null";
         Restart = "on-failure";
         RestartSec = 5;
         UMask = "0077";
