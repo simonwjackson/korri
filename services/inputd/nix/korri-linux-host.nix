@@ -15,6 +15,23 @@ let
       "${gameplayHome}/.config/sunshine"
     else
       cfg.sunshine.configDirectory;
+  streamingValidationVideoSource = pkgs.fetchurl {
+    url = "https://raw.githubusercontent.com/bower-media-samples/big-buck-bunny-1080p-60fps-30s/c4c7ec6aa5d68944d32faa28f332f999c8866cbc/video.mp4";
+    hash = "sha256-uttTQLkaife5kQ3EL1B7sq/fhX4FQBLBANVuo73ndaY=";
+  };
+  streamingValidationMedia = pkgs.runCommand "korri-streaming-validation-media" { } ''
+    mkdir -p "$out/share/korri-streaming-validation"
+    cp ${streamingValidationVideoSource} "$out/share/korri-streaming-validation/video.mp4"
+    cat > "$out/share/korri-streaming-validation/ATTRIBUTION.txt" <<'EOF'
+    Big Buck Bunny
+    Copyright Blender Foundation 2008
+    Licensed under Creative Commons Attribution 3.0
+    https://creativecommons.org/licenses/by/3.0/
+
+    1080p60 30-second downstream encode:
+    https://github.com/bower-media-samples/big-buck-bunny-1080p-60fps-30s/tree/c4c7ec6aa5d68944d32faa28f332f999c8866cbc
+    EOF
+  '';
   generatedDeviceConfig = pkgs.writeText "korrid-${cfg.label}-host.toml" ''
     label = "${cfg.label}"
 
@@ -24,8 +41,22 @@ let
     ${lib.optionalString cfg.validation.enable ''
       [[games]]
       id = "inputd-gate"
-      title = "Input gate"
-      command = ["${pkgs.coreutils}/bin/sleep", "600"]
+      title = "Streaming gate"
+      command = [
+        "${lib.getExe' pkgs.coreutils "timeout"}",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "600",
+        "${lib.getExe' pkgs.ffmpeg "ffplay"}",
+        "-loglevel", "error",
+        "-nostats",
+        "-fs",
+        "-an",
+        "-loop", "0",
+        "-vf", "fps=120",
+        "-window_title", "Korri streaming gate",
+        "${streamingValidationMedia}/share/korri-streaming-validation/video.mp4"
+      ]
     ''}
   '';
   deviceConfig = if cfg.deviceConfig == null then generatedDeviceConfig else cfg.deviceConfig;
@@ -185,7 +216,11 @@ in
         default = true;
       };
       encoder = lib.mkOption {
-        type = lib.types.enum [ "auto" "vaapi" "nvenc" ];
+        type = lib.types.enum [
+          "auto"
+          "vaapi"
+          "nvenc"
+        ];
         default = "auto";
         description = "Sunshine encoder selected through Korri's immutable service argv.";
       };
@@ -242,17 +277,34 @@ in
           && (cfg.sunshine.package.outPath or null) == korri.packages.${system}.sunshine-korri.outPath
           && (cfg.sunshine.package.korriPatchSetSha256 or null) == sunshineApproved.patchSetSha256
           && (cfg.sunshine.package.korriBaseSunshineVersion or null) == sunshineApproved.baseSunshineVersion
-          && (cfg.sunshine.package.korriApprovedBaseSunshineSourceHash or null) == sunshineApproved.approvedBaseSourceHash
-          && (cfg.sunshine.package.korriReviewedLibavcodecVersion or null) == sunshineApproved.reviewedLibavcodecVersion
+          &&
+            (cfg.sunshine.package.korriApprovedBaseSunshineSourceHash or null)
+            == sunshineApproved.approvedBaseSourceHash
+          &&
+            (cfg.sunshine.package.korriReviewedLibavcodecVersion or null)
+            == sunshineApproved.reviewedLibavcodecVersion
           && (cfg.sunshine.package.korriReviewedFfmpegCommit or null) == sunshineApproved.reviewedFfmpegCommit
-          && (cfg.sunshine.package.korriReviewedFfmpegSourceHash or null) == sunshineApproved.reviewedFfmpegSourceHash
-          && (cfg.sunshine.package.korriReviewedNvencApiMajor or null) == sunshineApproved.reviewedNvencApiMajor
-          && (cfg.sunshine.package.korriReviewedNvencApiMinor or null) == sunshineApproved.reviewedNvencApiMinor
-          && builtins.elem (cfg.sunshine.package.korriBaseSunshineDerivation or "") sunshineApproved.approvedBaseDerivations
-          && (cfg.sunshine.package.korriApprovedBaseSunshineDerivation or null) == (cfg.sunshine.package.korriBaseSunshineDerivation or null)
-          && (cfg.sunshine.package.korriProvenanceRelativePath or null) == "share/korri/sunshine-korri/provenance"
-          && builtins.elem "0015-add-korri-input-seat-event-mirror.patch" (cfg.sunshine.package.korriPatchNames or [ ])
-          && builtins.elem "0016-add-seamless-nvenc-runtime-path.patch" (cfg.sunshine.package.korriPatchNames or [ ]);
+          &&
+            (cfg.sunshine.package.korriReviewedFfmpegSourceHash or null)
+            == sunshineApproved.reviewedFfmpegSourceHash
+          &&
+            (cfg.sunshine.package.korriReviewedNvencApiMajor or null) == sunshineApproved.reviewedNvencApiMajor
+          &&
+            (cfg.sunshine.package.korriReviewedNvencApiMinor or null) == sunshineApproved.reviewedNvencApiMinor
+          && builtins.elem (cfg.sunshine.package.korriBaseSunshineDerivation or ""
+          ) sunshineApproved.approvedBaseDerivations
+          &&
+            (cfg.sunshine.package.korriApprovedBaseSunshineDerivation or null)
+            == (cfg.sunshine.package.korriBaseSunshineDerivation or null)
+          &&
+            (cfg.sunshine.package.korriProvenanceRelativePath or null)
+            == "share/korri/sunshine-korri/provenance"
+          && builtins.elem "0015-add-korri-input-seat-event-mirror.patch" (
+            cfg.sunshine.package.korriPatchNames or [ ]
+          )
+          && builtins.elem "0016-add-seamless-nvenc-runtime-path.patch" (
+            cfg.sunshine.package.korriPatchNames or [ ]
+          );
         message = "services.korriLinuxHost must use the exact approved sunshine-korri package and provenance contract.";
       }
       {
@@ -409,7 +461,9 @@ in
         WorkingDirectory = gameplayHome;
         ExecCondition = lib.optional (cfg.sunshine.encoder == "nvenc") requireNvencRuntime;
         ExecStartPre = waitForX11;
-        ExecStart = "${lib.getExe cfg.sunshine.package} ${sunshineConfig}/sunshine.conf log_path=/dev/null${lib.optionalString (cfg.sunshine.encoder != "auto") " encoder=${cfg.sunshine.encoder}"}";
+        ExecStart = "${lib.getExe cfg.sunshine.package} ${sunshineConfig}/sunshine.conf log_path=/dev/null${
+          lib.optionalString (cfg.sunshine.encoder != "auto") " encoder=${cfg.sunshine.encoder}"
+        }";
         Restart = "on-failure";
         RestartSec = 5;
         UMask = "0077";
