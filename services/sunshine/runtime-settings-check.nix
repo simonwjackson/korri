@@ -80,6 +80,9 @@ let
       builtins.elem "0017-use-wayland-ram-capture-for-cuda.patch" sunshinePackage.korriPatchNames
       && patchContains "NVIDIA headless wlroots buffers can carry modifiers"
       && patchContains "+    if (hwdevice_type == platf::mem_type_e::vaapi) {"
+      && patchContains "DRM_FORMAT_BGR888"
+      && patchContains "destination[0] = source[2];"
+      && patchContains "destination[2] = source[0];"
     ))
     (check "runtime settings packet IDs remain stable" (
       patchContains "RUNTIME_SETTINGS_REQUEST_PACKET = 0x5504"

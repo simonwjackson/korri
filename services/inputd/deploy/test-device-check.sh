@@ -874,6 +874,9 @@ grep -F "grep -F 'SUNSHINE_STRICT_ENCODER=1'" "$GATE" >/dev/null
 grep -F '_SYSTEMD_INVOCATION_ID="$invocation"' "$GATE" >/dev/null
 grep -F "first_h264=\"\$(grep -F 'Creating encoder [h264_'" "$GATE" >/dev/null
 grep -F "! grep -F 'Creating encoder [h264_vaapi]'" "$GATE" >/dev/null
+grep -F "! grep -F 'Unsupported screencopy SHM format:'" "$GATE" >/dev/null
+grep -F "! grep -F 'Frame capture failed'" "$GATE" >/dev/null
+grep -F "! grep -F \"Couldn't scale frame:\"" "$GATE" >/dev/null
 [[ "$(grep -Fc 'run_remote_attempt nvenc-stream-gate' "$GATE")" -eq 3 ]]
 grep -F 'PREDICATE_SYSTEM_UNITS=(korrid.service sunshine.service x11-headless.service korri-compositor.service)' "$GATE" >/dev/null
 grep -F 'remote_wait_unit korri-compositor.service' "$GATE" >/dev/null
@@ -933,6 +936,9 @@ expect_nvenc_log_failure "$wayland_capture"$'New streaming session started [acti
 expect_nvenc_log_failure "$wayland_capture"$'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [hevc_nvenc]'
 expect_nvenc_log_failure "$wayland_capture"$'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_vaapi]\nCreating encoder [h264_nvenc]'
 expect_nvenc_log_failure "$wayland_capture"$'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]\nCreating encoder [h264_vaapi]'
+expect_nvenc_log_failure "$wayland_capture"$'Unsupported screencopy SHM format: 875710274\nNew streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]'
+expect_nvenc_log_failure "$wayland_capture"$'Frame capture failed\nNew streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]'
+expect_nvenc_log_failure "$wayland_capture"$"Couldn't scale frame: Invalid argument"$'\nNew streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]'
 run_nvenc_log_gate "$wayland_capture"$'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_vaapi]\nNew streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]'
 # stat(1) canonicalizes 0700/0600 to 700/600; candidate calls must use the
 # canonical forms so post-chmod verification compares equal.
