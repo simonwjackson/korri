@@ -229,7 +229,7 @@ assert
     "${pkgs.sway-unwrapped}/bin/swaymsg"
     "-s"
     "/run/korri-compositor/sway-ipc.sock"
-    ''[workspace="korri:game:active"] focus, fullscreen enable, border none''
+    ''workspace "korri:game:active"; focus child; fullscreen enable; border none''
   ];
 assert cfg.services.korridLinuxDevice.compositorControlDirectory == "/run/korri-compositor";
 assert korrid.environment.KORRID_COMPOSITOR_CONTROL_DIRECTORY == "/run/korri-compositor";
@@ -346,6 +346,10 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     done
     ${pkgs.sway}/bin/swaymsg -s "$control/sway-ipc.sock" -t get_tree -r \
       | ${pkgs.jq}/bin/jq -e '.. | objects | select(.name? == "Korri action gate" and .fullscreen_mode == 0)' \
+      >/dev/null
+    ${pkgs.sway}/bin/swaymsg -s "$control/sway-ipc.sock" '[title="Korri action gate"] floating enable' >/dev/null
+    ${pkgs.sway}/bin/swaymsg -s "$control/sway-ipc.sock" -t get_tree -r \
+      | ${pkgs.jq}/bin/jq -e '.. | objects | select(.name? == "Korri action gate" and .floating == "user_on" and .fullscreen_mode == 0)' \
       >/dev/null
     ${pkgs.sway}/bin/swaymsg -s "$control/sway-ipc.sock" ${lib.escapeShellArg (builtins.elemAt validationAction 3)} >/dev/null
     ${pkgs.sway}/bin/swaymsg -s "$control/sway-ipc.sock" -t get_tree -r \

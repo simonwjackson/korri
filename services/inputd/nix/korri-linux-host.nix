@@ -86,7 +86,7 @@ let
         "--signal=TERM",
         "--kill-after=5s",
         "600",
-        "${lib.getExe pkgs.neverball}"
+        "${lib.getExe' pkgs.neverball "neverball"}"
       ]
     ''}
   '';
@@ -204,7 +204,7 @@ let
       "${pkgs.sway-unwrapped}/bin/swaymsg"
       "-s"
       compositorControlSocket
-      ''[workspace="${compositorWorkspace}"] focus, fullscreen enable, border none''
+      ''workspace "${compositorWorkspace}"; focus child; fullscreen enable; border none''
     ];
   };
   validAbsolutePath =
