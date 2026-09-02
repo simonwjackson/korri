@@ -67,13 +67,15 @@ let
       && sunshinePackage.korriBaseSunshineVersion == approved.baseSunshineVersion
       && sunshinePackage.korriApprovedBaseSunshineSourceHash == approved.approvedBaseSourceHash
       && builtins.elem sunshinePackage.korriBaseSunshineDerivation approved.approvedBaseDerivations
-      && sunshinePackage.korriApprovedBaseSunshineDerivation == sunshinePackage.korriBaseSunshineDerivation
+      && sunshinePackage.korriApprovedBaseSunshineDerivation == approved.approvedCudaBaseDerivation
+      && sunshinePackage.korriBaseSunshineDerivation == approved.approvedCudaBaseDerivation
       && pkgs.sunshine.src.outputHash == approved.approvedBaseSourceHash
       && sunshinePackage.korriReviewedLibavcodecVersion == approved.reviewedLibavcodecVersion
       && sunshinePackage.korriReviewedFfmpegCommit == approved.reviewedFfmpegCommit
       && sunshinePackage.korriReviewedFfmpegSourceHash == approved.reviewedFfmpegSourceHash
       && sunshinePackage.korriReviewedNvencApiMajor == approved.reviewedNvencApiMajor
       && sunshinePackage.korriReviewedNvencApiMinor == approved.reviewedNvencApiMinor
+      && sunshinePackage.korriCudaEnabled
     ))
     (check "runtime settings packet IDs remain stable" (
       patchContains "RUNTIME_SETTINGS_REQUEST_PACKET = 0x5504"
@@ -388,9 +390,10 @@ let
         == builtins.unsafeDiscardStringContext (toString pkgs.sunshine.src)
       &&
         sunshinePackage.korriBaseSunshineDerivation
-        == builtins.unsafeDiscardStringContext pkgs.sunshine.drvPath
+        == builtins.unsafeDiscardStringContext (pkgs.sunshine.override { cudaSupport = true; }).drvPath
       && builtins.elem sunshinePackage.korriBaseSunshineDerivation approved.approvedBaseDerivations
-      && sunshinePackage.korriApprovedBaseSunshineDerivation == sunshinePackage.korriBaseSunshineDerivation
+      && sunshinePackage.korriApprovedBaseSunshineDerivation == approved.approvedCudaBaseDerivation
+      && sunshinePackage.korriBaseSunshineDerivation == approved.approvedCudaBaseDerivation
       && contains "Package provenance" readme
     ))
   ];

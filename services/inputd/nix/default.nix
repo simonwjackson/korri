@@ -68,14 +68,18 @@ in
       test "${sunshinePackage.korriApprovedBaseSunshineSourceHash}" = "${sunshineApprovedPatches.approvedBaseSourceHash}"
       test "${pkgs.sunshine.src.outputHash}" = "${sunshineApprovedPatches.approvedBaseSourceHash}"
       test "${sunshinePackage.korriBaseSunshineSource}" = "${builtins.unsafeDiscardStringContext (toString pkgs.sunshine.src)}"
-      test "${sunshinePackage.korriBaseSunshineDerivation}" = "${builtins.unsafeDiscardStringContext pkgs.sunshine.drvPath}"
+      test "${sunshinePackage.korriBaseSunshineDerivation}" = "${
+        builtins.unsafeDiscardStringContext (pkgs.sunshine.override { cudaSupport = true; }).drvPath
+      }"
       test "${toString (builtins.elem sunshinePackage.korriBaseSunshineDerivation sunshineApprovedPatches.approvedBaseDerivations)}" = 1
-      test "${sunshinePackage.korriApprovedBaseSunshineDerivation}" = "${sunshinePackage.korriBaseSunshineDerivation}"
+      test "${sunshinePackage.korriApprovedBaseSunshineDerivation}" = "${sunshineApprovedPatches.approvedCudaBaseDerivation}"
+      test "${sunshinePackage.korriBaseSunshineDerivation}" = "${sunshineApprovedPatches.approvedCudaBaseDerivation}"
       test "${sunshinePackage.korriReviewedLibavcodecVersion}" = "${sunshineApprovedPatches.reviewedLibavcodecVersion}"
       test "${sunshinePackage.korriReviewedFfmpegCommit}" = "${sunshineApprovedPatches.reviewedFfmpegCommit}"
       test "${sunshinePackage.korriReviewedFfmpegSourceHash}" = "${sunshineApprovedPatches.reviewedFfmpegSourceHash}"
       test "${toString sunshinePackage.korriReviewedNvencApiMajor}" = "${toString sunshineApprovedPatches.reviewedNvencApiMajor}"
       test "${toString sunshinePackage.korriReviewedNvencApiMinor}" = "${toString sunshineApprovedPatches.reviewedNvencApiMinor}"
+      test "${toString sunshinePackage.korriCudaEnabled}" = 1
       test "${sunshinePackage.korriPatchSetSha256}" = "${sunshineApprovedPatches.patchSetSha256}"
       provenance=${sunshinePackage}/${sunshinePackage.korriProvenanceRelativePath}
       test -f "$provenance"
@@ -137,7 +141,7 @@ in
       grep -Fx "EXPECTED_SUNSHINE_FORMAT='1'" "$gate" >/dev/null
       grep -Fx "EXPECTED_SUNSHINE_BASE_VERSION='${sunshineApprovedPatches.baseSunshineVersion}'" "$gate" >/dev/null
       grep -Fx "EXPECTED_SUNSHINE_BASE_SOURCE_HASH='${sunshineApprovedPatches.approvedBaseSourceHash}'" "$gate" >/dev/null
-      grep -Fx "EXPECTED_SUNSHINE_BASE_DERIVATION='/nix/store/w8dd7pbl8f0qg2cyb7ay8hmli854giwv-sunshine-2025.924.154138.drv'" "$gate" >/dev/null
+      grep -Fx "EXPECTED_SUNSHINE_BASE_DERIVATION='${sunshinePackage.korriBaseSunshineDerivation}'" "$gate" >/dev/null
       grep -Fx "EXPECTED_SUNSHINE_LIBAVCODEC_VERSION='${sunshineApprovedPatches.reviewedLibavcodecVersion}'" "$gate" >/dev/null
       grep -Fx "EXPECTED_SUNSHINE_FFMPEG_COMMIT='${sunshineApprovedPatches.reviewedFfmpegCommit}'" "$gate" >/dev/null
       grep -Fx "EXPECTED_SUNSHINE_FFMPEG_SOURCE_HASH='${sunshineApprovedPatches.reviewedFfmpegSourceHash}'" "$gate" >/dev/null

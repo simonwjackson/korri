@@ -1,9 +1,9 @@
 {
   baseSunshineVersion = "2025.924.154138";
   approvedBaseSourceHash = "sha256-QrPfZqd9pgufohUjxlTpO6V0v7B41UrXHZaESsFjZ48=";
+  approvedCudaBaseDerivation = "/nix/store/63c39c0mjs72ixh20hs18r8l8zh3wix7-sunshine-2025.924.154138.drv";
   approvedBaseDerivations = [
-    "/nix/store/a1dm23k8b0v3qhs9mpj0yiz4jd8jmwpc-sunshine-2025.924.154138.drv"
-    "/nix/store/w8dd7pbl8f0qg2cyb7ay8hmli854giwv-sunshine-2025.924.154138.drv"
+    "/nix/store/63c39c0mjs72ixh20hs18r8l8zh3wix7-sunshine-2025.924.154138.drv"
   ];
   reviewedLibavcodecVersion = "62.11.100";
   reviewedFfmpegCommit = "61c50407fd429a5e2ec616e2e846c3fe3743879a";

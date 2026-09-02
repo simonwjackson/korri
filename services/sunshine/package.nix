@@ -1,13 +1,24 @@
 { sunshine }:
 
-sunshine.overrideAttrs (
+let
+  sunshineWithCuda = sunshine.override { cudaSupport = true; };
+in
+sunshineWithCuda.overrideAttrs (
   old:
   let
     approved = import ./approved-patches.nix;
-    baseSunshineSource = builtins.unsafeDiscardStringContext (toString sunshine.src);
-    baseSunshineSourceHash = sunshine.src.outputHash;
-    baseSunshineDerivation = builtins.unsafeDiscardStringContext sunshine.drvPath;
+    baseSunshineSource = builtins.unsafeDiscardStringContext (toString sunshineWithCuda.src);
+    baseSunshineSourceHash = sunshineWithCuda.src.outputHash;
+    baseSunshineDerivation = builtins.unsafeDiscardStringContext sunshineWithCuda.drvPath;
     basePatches = old.patches or [ ];
+    cudaEnabled =
+      !(builtins.elem "-DSUNSHINE_ENABLE_CUDA:BOOL=FALSE" sunshineWithCuda.cmakeFlags)
+      && builtins.any (
+        input: builtins.match ".*cuda_nvcc.*" (toString input) != null
+      ) sunshineWithCuda.nativeBuildInputs
+      && builtins.any (
+        input: builtins.match ".*(cuda_cudart|cuda-merged).*" (toString input) != null
+      ) sunshineWithCuda.buildInputs;
     provenanceRelativePath = "share/korri/sunshine-korri/provenance";
     patchRecords = map (record: {
       inherit (record) name path sha256;
@@ -32,7 +43,7 @@ sunshine.overrideAttrs (
       approved_base_sunshine_source_hash=${approved.approvedBaseSourceHash}
       base_sunshine_source=${baseSunshineSource}
       base_sunshine_derivation=${baseSunshineDerivation}
-      approved_base_sunshine_derivation=${baseSunshineDerivation}
+      approved_base_sunshine_derivation=${approved.approvedCudaBaseDerivation}
       reviewed_libavcodec_version=${approved.reviewedLibavcodecVersion}
       reviewed_ffmpeg_commit=${approved.reviewedFfmpegCommit}
       reviewed_ffmpeg_source_hash=${approved.reviewedFfmpegSourceHash}
@@ -46,8 +57,12 @@ sunshine.overrideAttrs (
     throw "sunshine-korri base version changed; review the approved patch set before building"
   else if baseSunshineSourceHash != approved.approvedBaseSourceHash then
     throw "sunshine-korri base source hash changed; review the approved source before building"
+  else if !cudaEnabled then
+    throw "sunshine-korri CUDA support is not present in the actual build inputs"
+  else if baseSunshineDerivation != approved.approvedCudaBaseDerivation then
+    throw "sunshine-korri CUDA base derivation changed; review the complete upstream recipe before building"
   else if !(builtins.elem baseSunshineDerivation approved.approvedBaseDerivations) then
-    throw "sunshine-korri base derivation changed; review the complete upstream recipe before building"
+    throw "sunshine-korri base derivation is not in the approved set"
   else if basePatches != [ ] then
     throw "sunshine-korri base derivation carries unapproved patches"
   else if !patchesApproved then
@@ -77,12 +92,13 @@ sunshine.overrideAttrs (
         korriApprovedBaseSunshineSourceHash = approved.approvedBaseSourceHash;
         korriBaseSunshineSource = baseSunshineSource;
         korriBaseSunshineDerivation = baseSunshineDerivation;
-        korriApprovedBaseSunshineDerivation = baseSunshineDerivation;
+        korriApprovedBaseSunshineDerivation = approved.approvedCudaBaseDerivation;
         korriReviewedLibavcodecVersion = approved.reviewedLibavcodecVersion;
         korriReviewedFfmpegCommit = approved.reviewedFfmpegCommit;
         korriReviewedFfmpegSourceHash = approved.reviewedFfmpegSourceHash;
         korriReviewedNvencApiMajor = approved.reviewedNvencApiMajor;
         korriReviewedNvencApiMinor = approved.reviewedNvencApiMinor;
+        korriCudaEnabled = cudaEnabled;
       };
 
       meta = old.meta // {
