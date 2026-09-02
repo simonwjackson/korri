@@ -76,6 +76,11 @@ let
       && sunshinePackage.korriReviewedNvencApiMinor == approved.reviewedNvencApiMinor
       && sunshinePackage.korriCudaEnabled
     ))
+    (check "Wayland CUDA capture uses the approved RAM transfer path" (
+      builtins.elem "0017-use-wayland-ram-capture-for-cuda.patch" sunshinePackage.korriPatchNames
+      && patchContains "NVIDIA headless wlroots buffers can carry modifiers"
+      && patchContains "+    if (hwdevice_type == platf::mem_type_e::vaapi) {"
+    ))
     (check "runtime settings packet IDs remain stable" (
       patchContains "RUNTIME_SETTINGS_REQUEST_PACKET = 0x5504"
       && patchContains "RUNTIME_SETTINGS_ACK_PACKET = 0x5505"
