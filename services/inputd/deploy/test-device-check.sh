@@ -908,6 +908,26 @@ grep -F '"$subject PID namespace exposes the compositor process"' "$GATE" >/dev/
 # shellcheck disable=SC2016 # Literal production source invariant.
 grep -F '"$subject can reach compositor control through procfs"' "$GATE" >/dev/null
 grep -F 'system-korri-compositor=active' "$GATE" >/dev/null
+# Candidate and rollback activation must select the bundle declared by that
+# generation. A NixOS switch does not replace an existing selector by itself.
+# shellcheck disable=SC2016 # Literal production source invariants.
+[[ "$(grep -Fc 'remote_switch_generation_bundle "$candidate"' "$GATE")" -eq 2 ]]
+# shellcheck disable=SC2016 # Literal production source invariant.
+grep -F 'remote_switch_generation_bundle "$rollback"' "$GATE" >/dev/null
+grep -F 'for unit in sunshine.service korrid.service korri-compositor.service korri-inputd.service inputplumber.service' "$GATE" >/dev/null
+RESTORE_SOURCE="$(awk '
+  /^remote_restore\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+stop_line="$(grep -n 'remote_stop_candidate_services' <<<"$RESTORE_SOURCE" | cut -d: -f1)"
+raw_line="$(grep -n 'remote_restore_raw_joystick_udev' <<<"$RESTORE_SOURCE" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal production function call.
+activate_line="$(grep -n 'remote_activate_generation "$rollback"' <<<"$RESTORE_SOURCE" | head -n1 | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal production function call.
+bundle_line="$(grep -n 'remote_switch_generation_bundle "$rollback"' <<<"$RESTORE_SOURCE" | cut -d: -f1)"
+[[ -n "$stop_line" && -n "$raw_line" && -n "$activate_line" && -n "$bundle_line" ]]
+[[ "$stop_line" -lt "$raw_line" && "$raw_line" -lt "$activate_line" && "$activate_line" -lt "$bundle_line" ]]
 
 NVENC_LOG_GATE_SOURCE="$(awk '
   /^remote_nvenc_stream_log_gate\(\) \{/ { found=1 }

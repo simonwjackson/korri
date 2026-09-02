@@ -241,6 +241,36 @@ remote_clear_orphan_bundle_selector() {
   clear_bundle_selector_root "$BUNDLE_SELECTOR_ROOT" 0 0
 }
 
+remote_generation_bundle() {
+  local generation="$1" unit
+  local -a bundles
+  unit="$generation/etc/systemd/system/korri-bundle-selector.service"
+  [[ -f "$unit" ]] || fail 'generation bundle selector unit is absent'
+  mapfile -t bundles < <(
+    grep -oE '/nix/store/[0-9a-df-np-sv-z]{32}-korri-bundle-[A-Za-z0-9+._?=-]+' "$unit" \
+      | LC_ALL=C sort -u
+  )
+  [[ "${#bundles[@]}" -eq 1 ]] || fail 'generation does not declare exactly one Korri bundle'
+  printf '%s\n' "${bundles[0]}"
+}
+
+remote_switch_generation_bundle() {
+  local generation="$1" bundle selector systemctl_bin
+  bundle="$(remote_generation_bundle "$generation")" \
+    || fail 'generation bundle could not be resolved'
+  selector="$(readlink -f -- "$generation/sw/bin/korri-bundle-select" 2>/dev/null)" \
+    || fail 'generation bundle selector executable is unavailable'
+  systemctl_bin="$(readlink -f -- "$generation/sw/bin/systemctl" 2>/dev/null)" \
+    || fail 'generation systemctl executable is unavailable'
+  [[ "$selector" == /nix/store/*/bin/korri-bundle-select && -x "$selector" ]] \
+    || fail 'generation bundle selector executable is not immutable'
+  [[ "$systemctl_bin" == /nix/store/*/bin/systemctl && -x "$systemctl_bin" ]] \
+    || fail 'generation systemctl executable is not immutable'
+  sudo -n "$selector" switch "$bundle" "$systemctl_bin"
+  [[ "$(readlink -f -- "$BUNDLE_SELECTOR_ROOT/active" 2>/dev/null)" == "$bundle" ]] \
+    || fail 'active Korri bundle does not match the requested generation'
+}
+
 remote_quiesce_old_user_units() {
   local gameplay_user="$1" unit state
   for unit in "${OLD_USER_UNITS[@]}"; do
@@ -1040,7 +1070,7 @@ remote_start_candidate_services() {
 
 remote_stop_candidate_services() {
   local unit
-  for unit in sunshine.service korrid.service korri-compositor.service; do
+  for unit in sunshine.service korrid.service korri-compositor.service korri-inputd.service inputplumber.service; do
     systemctl stop "$unit" >/dev/null
     ! systemctl is-active --quiet "$unit" || fail "candidate system service remained active: $unit"
   done
@@ -1345,6 +1375,7 @@ remote_activate_test() {
   remote_quiesce_old_user_units "$gameplay_user"
   remote_set_pairing_state_modes "$gameplay_user" 700 600 >/dev/null
   remote_activate_generation "$candidate" test
+  remote_switch_generation_bundle "$candidate"
   remote_disable_old_user_units "$gameplay_user"
   remote_start_candidate_services "$gameplay_user"
 }
@@ -1354,16 +1385,15 @@ remote_restore() {
   shift 3
   [[ "$#" -eq 8 ]] || fail 'rollback requires all old user-unit states and pairing modes'
   remote_refuse_active_game
-  if [[ "$(remote_generation)" != "$rollback" ]]; then
-    remote_stop_candidate_services
-  fi
+  remote_stop_candidate_services
+  remote_restore_raw_joystick_udev
   if [[ "$persistent" == true ]]; then
     sudo -n nix-env -p /nix/var/nix/profiles/system --set "$rollback"
     remote_activate_generation "$rollback" switch
   else
     remote_activate_generation "$rollback" test
   fi
-  remote_restore_raw_joystick_udev
+  remote_switch_generation_bundle "$rollback"
   remote_clear_orphan_bundle_selector
   remote_set_pairing_state_modes "$gameplay_user" "$7" "$8" >/dev/null
   remote_restore_old_user_units "$gameplay_user" "$1" "$2" "$3" "$4" "$5" "$6"
@@ -1482,6 +1512,7 @@ remote_persistent_switch() {
   remote_set_pairing_state_modes "$gameplay_user" 700 600 >/dev/null
   sudo -n nix-env -p /nix/var/nix/profiles/system --set "$candidate"
   remote_activate_generation "$candidate" switch
+  remote_switch_generation_bundle "$candidate"
   remote_disable_old_user_units "$gameplay_user"
   remote_start_candidate_services "$gameplay_user"
   [[ "$(remote_generation)" == "$candidate" ]]
