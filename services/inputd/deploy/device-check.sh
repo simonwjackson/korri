@@ -658,15 +658,19 @@ remote_process_group_policy() {
 
 REMOTE_SUNSHINE_PACKAGE_ROOT=''
 remote_resolve_sunshine_executable() {
-  local running="$1" declared="$2" package_root expected
+  local running="$1" declared="$2" package_root wrapper_link expected
   REMOTE_SUNSHINE_PACKAGE_ROOT=''
   [[ "$running" == /nix/store/*/* && "$running" == "$(readlink -f -- "$running" 2>/dev/null || true)" \
     && -f "$running" && -x "$running" && ! -L "$running" ]] || return 1
-  [[ "$declared" == /nix/store/*/bin/sunshine ]] || return 1
+  [[ "$declared" == /nix/store/*/bin/sunshine && -f "$declared" && -x "$declared" && ! -L "$declared" ]] \
+    || return 1
   package_root="${declared%/bin/sunshine}"
   [[ "$package_root" == "$(readlink -f -- "$package_root" 2>/dev/null || true)" ]] || return 1
-  expected="$(readlink -f -- "$declared" 2>/dev/null || true)"
-  [[ "$expected" == "$package_root"/* && "$running" == "$expected" \
+  wrapper_link="$package_root/bin/.sunshine-wrapped"
+  [[ -L "$wrapper_link" ]] || return 1
+  grep -F "\"$wrapper_link\"" "$declared" >/dev/null || return 1
+  expected="$(readlink -f -- "$wrapper_link" 2>/dev/null || true)"
+  [[ "$expected" == "$package_root"/bin/sunshine-* && "$running" == "$expected" \
     && -f "$expected" && -x "$expected" && ! -L "$expected" ]] || return 1
   REMOTE_SUNSHINE_PACKAGE_ROOT="$package_root"
 }

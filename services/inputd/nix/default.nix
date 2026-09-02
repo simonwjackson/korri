@@ -60,7 +60,11 @@ in
   };
   checks = {
     sunshine-korri-package = pkgs.runCommand "sunshine-korri-package-check" { } ''
+      test -f ${sunshinePackage}/bin/sunshine
       test -x ${sunshinePackage}/bin/sunshine
+      test ! -L ${sunshinePackage}/bin/sunshine
+      test -L ${sunshinePackage}/bin/.sunshine-wrapped
+      grep -F '"${sunshinePackage}/bin/.sunshine-wrapped"' ${sunshinePackage}/bin/sunshine >/dev/null
       test "${sunshinePackage.pname}" = sunshine-korri
       test "${sunshinePackage.version}" = "${pkgs.sunshine.version}-korri"
       test "${toString (builtins.length sunshinePackage.korriPatchNames)}" = 11

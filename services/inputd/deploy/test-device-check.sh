@@ -858,7 +858,7 @@ confirm="CONFIRM-$(printf '%s' "$MACHINE_ID|$HOSTNAME|$CANDIDATE" | sha256sum | 
 grep -F -- '--setenv="PATH=$candidate/sw/bin"' "$GATE" >/dev/null
 grep -Fx 'UNHEALTHY_OBSERVE_SECONDS=60' "$GATE" >/dev/null
 # shellcheck disable=SC2016 # Literal production source invariants.
-grep -F 'expected="$(readlink -f -- "$declared"' "$GATE" >/dev/null
+grep -F 'expected="$(readlink -f -- "$wrapper_link"' "$GATE" >/dev/null
 # shellcheck disable=SC2016 # Literal production source invariants.
 grep -F 'package_root="${declared%/bin/sunshine}"' "$GATE" >/dev/null
 # The process executable is a resolved regular file and may use Sunshine's
