@@ -1,7 +1,7 @@
 ---
 title: "feat: Restore Korri-owned headless Sway compositor on Zao"
 type: feat
-status: active
+status: completed
 date: 2026-09-01
 verify_command: "nix build --no-link .#checks.x86_64-linux.korri-linux-host-module"
 ---
