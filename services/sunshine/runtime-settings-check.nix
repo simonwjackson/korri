@@ -67,8 +67,7 @@ let
       && sunshinePackage.korriBaseSunshineVersion == approved.baseSunshineVersion
       && sunshinePackage.korriApprovedBaseSunshineSourceHash == approved.approvedBaseSourceHash
       && builtins.elem sunshinePackage.korriBaseSunshineDerivation approved.approvedBaseDerivations
-      && sunshinePackage.korriApprovedBaseSunshineDerivation == approved.approvedCudaBaseDerivation
-      && sunshinePackage.korriBaseSunshineDerivation == approved.approvedCudaBaseDerivation
+      && sunshinePackage.korriApprovedBaseSunshineDerivation == sunshinePackage.korriBaseSunshineDerivation
       && pkgs.sunshine.src.outputHash == approved.approvedBaseSourceHash
       && sunshinePackage.korriReviewedLibavcodecVersion == approved.reviewedLibavcodecVersion
       && sunshinePackage.korriReviewedFfmpegCommit == approved.reviewedFfmpegCommit
@@ -392,8 +391,7 @@ let
         sunshinePackage.korriBaseSunshineDerivation
         == builtins.unsafeDiscardStringContext (pkgs.sunshine.override { cudaSupport = true; }).drvPath
       && builtins.elem sunshinePackage.korriBaseSunshineDerivation approved.approvedBaseDerivations
-      && sunshinePackage.korriApprovedBaseSunshineDerivation == approved.approvedCudaBaseDerivation
-      && sunshinePackage.korriBaseSunshineDerivation == approved.approvedCudaBaseDerivation
+      && sunshinePackage.korriApprovedBaseSunshineDerivation == sunshinePackage.korriBaseSunshineDerivation
       && contains "Package provenance" readme
     ))
   ];

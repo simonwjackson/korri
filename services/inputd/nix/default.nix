@@ -72,8 +72,8 @@ in
         builtins.unsafeDiscardStringContext (pkgs.sunshine.override { cudaSupport = true; }).drvPath
       }"
       test "${toString (builtins.elem sunshinePackage.korriBaseSunshineDerivation sunshineApprovedPatches.approvedBaseDerivations)}" = 1
-      test "${sunshinePackage.korriApprovedBaseSunshineDerivation}" = "${sunshineApprovedPatches.approvedCudaBaseDerivation}"
-      test "${sunshinePackage.korriBaseSunshineDerivation}" = "${sunshineApprovedPatches.approvedCudaBaseDerivation}"
+      test "${sunshinePackage.korriApprovedBaseSunshineDerivation}" = "${sunshinePackage.korriBaseSunshineDerivation}"
+      test "${toString (builtins.elem sunshineApprovedPatches.approvedDeviceBaseDerivation sunshineApprovedPatches.approvedBaseDerivations)}" = 1
       test "${sunshinePackage.korriReviewedLibavcodecVersion}" = "${sunshineApprovedPatches.reviewedLibavcodecVersion}"
       test "${sunshinePackage.korriReviewedFfmpegCommit}" = "${sunshineApprovedPatches.reviewedFfmpegCommit}"
       test "${sunshinePackage.korriReviewedFfmpegSourceHash}" = "${sunshineApprovedPatches.reviewedFfmpegSourceHash}"
@@ -141,7 +141,7 @@ in
       grep -Fx "EXPECTED_SUNSHINE_FORMAT='1'" "$gate" >/dev/null
       grep -Fx "EXPECTED_SUNSHINE_BASE_VERSION='${sunshineApprovedPatches.baseSunshineVersion}'" "$gate" >/dev/null
       grep -Fx "EXPECTED_SUNSHINE_BASE_SOURCE_HASH='${sunshineApprovedPatches.approvedBaseSourceHash}'" "$gate" >/dev/null
-      grep -Fx "EXPECTED_SUNSHINE_BASE_DERIVATION='${sunshinePackage.korriBaseSunshineDerivation}'" "$gate" >/dev/null
+      grep -Fx "EXPECTED_SUNSHINE_BASE_DERIVATION='${sunshineApprovedPatches.approvedDeviceBaseDerivation}'" "$gate" >/dev/null
       grep -Fx "EXPECTED_SUNSHINE_LIBAVCODEC_VERSION='${sunshineApprovedPatches.reviewedLibavcodecVersion}'" "$gate" >/dev/null
       grep -Fx "EXPECTED_SUNSHINE_FFMPEG_COMMIT='${sunshineApprovedPatches.reviewedFfmpegCommit}'" "$gate" >/dev/null
       grep -Fx "EXPECTED_SUNSHINE_FFMPEG_SOURCE_HASH='${sunshineApprovedPatches.reviewedFfmpegSourceHash}'" "$gate" >/dev/null

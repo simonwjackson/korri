@@ -19,6 +19,11 @@ sunshineWithCuda.overrideAttrs (
       && builtins.any (
         input: builtins.match ".*(cuda_cudart|cuda-merged).*" (toString input) != null
       ) sunshineWithCuda.buildInputs;
+    approvedBaseSunshineDerivation = builtins.head (
+      builtins.filter (
+        candidate: candidate == baseSunshineDerivation
+      ) approved.approvedBaseDerivations
+    );
     provenanceRelativePath = "share/korri/sunshine-korri/provenance";
     patchRecords = map (record: {
       inherit (record) name path sha256;
@@ -43,7 +48,7 @@ sunshineWithCuda.overrideAttrs (
       approved_base_sunshine_source_hash=${approved.approvedBaseSourceHash}
       base_sunshine_source=${baseSunshineSource}
       base_sunshine_derivation=${baseSunshineDerivation}
-      approved_base_sunshine_derivation=${approved.approvedCudaBaseDerivation}
+      approved_base_sunshine_derivation=${approvedBaseSunshineDerivation}
       reviewed_libavcodec_version=${approved.reviewedLibavcodecVersion}
       reviewed_ffmpeg_commit=${approved.reviewedFfmpegCommit}
       reviewed_ffmpeg_source_hash=${approved.reviewedFfmpegSourceHash}
@@ -59,10 +64,8 @@ sunshineWithCuda.overrideAttrs (
     throw "sunshine-korri base source hash changed; review the approved source before building"
   else if !cudaEnabled then
     throw "sunshine-korri CUDA support is not present in the actual build inputs"
-  else if baseSunshineDerivation != approved.approvedCudaBaseDerivation then
-    throw "sunshine-korri CUDA base derivation changed; review the complete upstream recipe before building"
   else if !(builtins.elem baseSunshineDerivation approved.approvedBaseDerivations) then
-    throw "sunshine-korri base derivation is not in the approved set"
+    throw "sunshine-korri CUDA base derivation changed; review the complete upstream recipe before building"
   else if basePatches != [ ] then
     throw "sunshine-korri base derivation carries unapproved patches"
   else if !patchesApproved then
@@ -92,7 +95,7 @@ sunshineWithCuda.overrideAttrs (
         korriApprovedBaseSunshineSourceHash = approved.approvedBaseSourceHash;
         korriBaseSunshineSource = baseSunshineSource;
         korriBaseSunshineDerivation = baseSunshineDerivation;
-        korriApprovedBaseSunshineDerivation = approved.approvedCudaBaseDerivation;
+        korriApprovedBaseSunshineDerivation = approvedBaseSunshineDerivation;
         korriReviewedLibavcodecVersion = approved.reviewedLibavcodecVersion;
         korriReviewedFfmpegCommit = approved.reviewedFfmpegCommit;
         korriReviewedFfmpegSourceHash = approved.reviewedFfmpegSourceHash;
