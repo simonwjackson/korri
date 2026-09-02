@@ -854,7 +854,7 @@ remote_compositor_gate() {
     || fail 'compositor control socket is absent or linked'
   control_metadata="$(stat -Lc '%u:%g:%a' -- "$COMPOSITOR_CONTROL_SOCKET" 2>/dev/null)" \
     || fail 'compositor control socket metadata is unavailable'
-  [[ "$control_metadata" == "$uid:$gid:600" ]] \
+  [[ "$control_metadata" == "$uid:$gid:700" ]] \
     || fail 'compositor control socket ownership or mode is invalid'
   [[ -L "$stable" ]] || fail 'stable Wayland display alias is absent'
   target="$(readlink -- "$stable")" || fail 'stable Wayland display alias target is unavailable'

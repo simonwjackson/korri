@@ -884,6 +884,8 @@ grep -F '[[ "$jq_helper" == /nix/store/*/bin/jq && -x "$jq_helper" ]]' "$GATE" >
 grep -F 'mapfile -t wrapped_targets < <(grep -oE' "$GATE" >/dev/null
 # shellcheck disable=SC2016 # Literal production source invariant.
 grep -F '[[ "$running" == "$running_target" ]]' "$GATE" >/dev/null
+# shellcheck disable=SC2016 # Literal production source invariant.
+grep -F '[[ "$control_metadata" == "$uid:$gid:700" ]]' "$GATE" >/dev/null
 grep -F 'live game unit can access an unapproved X11 socket' "$GATE" >/dev/null
 # shellcheck disable=SC2016 # Literal production source invariant.
 grep -F '"$subject PID namespace exposes the compositor process"' "$GATE" >/dev/null
