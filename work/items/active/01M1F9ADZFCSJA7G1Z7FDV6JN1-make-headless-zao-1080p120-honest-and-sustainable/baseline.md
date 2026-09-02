@@ -46,3 +46,9 @@ The accepted threshold was not met. Bandai returned to its exact saved settings.
 A candidate tested patch `0018`, which changed missed-deadline recovery in Sunshine's Wayland RAM capture scheduler. The candidate regressed the stream. Five incoming-FPS samples were `105.42`, `109.28`, `118.03`, `108.07`, and `107.27`. Their mean was `109.614`. Eight final decoder work-rate samples averaged `107.963`.
 
 The experiment failed and the patch was removed. Bandai returned to its saved settings. Zao returned to the exact 1080p60 generation and bundle with no game, marker, or lease.
+
+## Candidate iteration 4
+
+A candidate ran Sway and Sunshine at nice `-10`. Five incoming-FPS samples were `103.23`, `105.53`, `107.41`, `109.73`, and `103.29`. Their mean was `105.838`. Eight final decoder work-rate samples averaged `107.417`.
+
+The priority change regressed the stream and was removed. Bandai returned to its saved settings. Zao returned to the exact 1080p60 generation and bundle with no game, marker, or lease.
