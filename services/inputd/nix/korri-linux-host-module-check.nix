@@ -205,6 +205,7 @@ assert !(builtins.hasAttr "GBM_BACKEND" vaapiCompositor.environment);
 assert !(builtins.hasAttr "__GLX_VENDOR_LIBRARY_NAME" vaapiCompositor.environment);
 assert !(builtins.hasAttr "LD_LIBRARY_PATH" vaapiCompositor.environment);
 assert compositor.serviceConfig.PrivateDevices == false;
+assert compositor.serviceConfig.ProtectHome == "read-only";
 assert compositor.serviceConfig.RuntimeDirectory == "korri-compositor";
 assert builtins.elem "user-runtime-dir@1001.service" compositor.requires;
 assert builtins.elem "user@1001.service" compositor.requires;

@@ -563,7 +563,7 @@ in
         PrivateTmp = false;
         PrivateDevices = false;
         ProtectSystem = "strict";
-        ProtectHome = true;
+        ProtectHome = "read-only";
         ProtectKernelTunables = true;
         ProtectKernelModules = true;
         ProtectKernelLogs = true;
