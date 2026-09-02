@@ -52,3 +52,15 @@ The experiment failed and the patch was removed. Bandai returned to its saved se
 A candidate ran Sway and Sunshine at nice `-10`. Five incoming-FPS samples were `103.23`, `105.53`, `107.41`, `109.73`, and `103.29`. Their mean was `105.838`. Eight final decoder work-rate samples averaged `107.417`.
 
 The priority change regressed the stream and was removed. Bandai returned to its saved settings. Zao returned to the exact 1080p60 generation and bundle with no game, marker, or lease.
+
+## Candidate iteration 5
+
+A client-only diagnostic enabled Bandai's low-latency frame-balance option. Five incoming-FPS samples were `102.32`, `103.74`, `108.67`, `111.11`, and `108.42`. Their mean was `106.852`. Eight final decoder work-rate samples averaged `106.994`.
+
+The client setting improved rendered FPS relative to incoming FPS, but it reduced incoming throughput. Bandai returned to its saved settings. Zao returned to the exact 1080p60 generation and bundle with no game, marker, or lease.
+
+## Candidate iteration 6
+
+A client-only diagnostic reduced Bandai's requested bitrate from the automatic value to 10,000 Kbps. Bandwidth fell from about `3.3 MB/s` to `1.08 MB/s`, but the first steady incoming rate was `104.63 FPS`. Network loss remained `0.00%`.
+
+The lower bitrate did not remove the frame-rate limit, so the test stopped before a full soak. Bandai returned to its saved settings. Zao returned to the exact 1080p60 generation and bundle with no game, marker, or lease.

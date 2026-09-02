@@ -27,6 +27,25 @@ let
       "${gameplayHome}/.config/sunshine"
     else
       cfg.sunshine.configDirectory;
+  streamingValidationMedia = pkgs.runCommand "korri-streaming-validation-${compositorWidth}x${compositorHeight}-${compositorRefreshRate}fps" {
+    nativeBuildInputs = [ pkgs.ffmpeg ];
+  } ''
+    mkdir -p "$out/share/korri-streaming-validation"
+    ffmpeg -hide_banner -loglevel error \
+      -f lavfi \
+      -i 'testsrc2=size=${compositorWidth}x${compositorHeight}:rate=${compositorRefreshRate}' \
+      -t 8 \
+      -an \
+      -c:v libx264 \
+      -preset ultrafast \
+      -tune zerolatency \
+      -crf 18 \
+      -pix_fmt yuv420p \
+      -g ${compositorRefreshRate} \
+      -keyint_min ${compositorRefreshRate} \
+      -sc_threshold 0 \
+      "$out/share/korri-streaming-validation/video.mp4"
+  '';
   generatedDeviceConfig = pkgs.writeText "korrid-${cfg.label}-host.toml" ''
     label = "${cfg.label}"
 
@@ -53,14 +72,13 @@ let
         "--no-config",
         "--quiet",
         "--no-audio",
+        "--loop-file=inf",
         "--fullscreen",
         "--vo=gpu-next",
         "--gpu-context=x11egl",
         "--hwdec=auto-copy-safe",
-        "--demuxer-lavf-format=lavfi",
-        "--vf=fps=${compositorRefreshRate}",
         "--title=Korri streaming gate",
-        "av://lavfi:testsrc2=size=${compositorWidth}x${compositorHeight}:rate=${compositorRefreshRate}"
+        "${streamingValidationMedia}/share/korri-streaming-validation/video.mp4"
       ]
 
       [[games]]

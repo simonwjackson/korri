@@ -261,15 +261,22 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     grep -F -- '--kill-after=5s' ${deviceConfig} >/dev/null
     grep -F '/bin/mpv' ${deviceConfig} >/dev/null
     grep -F -- '--hwdec=auto-copy-safe' ${deviceConfig} >/dev/null
-    grep -F -- '--vf=fps=60' ${deviceConfig} >/dev/null
-    grep -F -- '--vf=fps=120' ${highRefreshDeviceConfig} >/dev/null
-    grep -F -- '--demuxer-lavf-format=lavfi' ${highRefreshDeviceConfig} >/dev/null
-    grep -F 'av://lavfi:testsrc2=size=1920x1080:rate=120' ${highRefreshDeviceConfig} >/dev/null
+    grep -F -- '--loop-file=inf' ${deviceConfig} >/dev/null
+    grep -F -- '--loop-file=inf' ${highRefreshDeviceConfig} >/dev/null
+    ! grep -F -- '--demuxer-lavf-format=lavfi' ${highRefreshDeviceConfig} >/dev/null
+    ! grep -F 'av://lavfi:' ${highRefreshDeviceConfig} >/dev/null
     grep -F -- '--gpu-context=x11egl' ${deviceConfig} >/dev/null
     ! grep -F 'LD_LIBRARY_PATH=/run/opengl-driver/lib' ${deviceConfig} >/dev/null
     grep -F 'LD_LIBRARY_PATH=/run/opengl-driver/lib' ${nvencDeviceConfig} >/dev/null
-    grep -F -- '--demuxer-lavf-format=lavfi' ${deviceConfig} >/dev/null
-    grep -F 'av://lavfi:testsrc2=size=1920x1080:rate=60' ${deviceConfig} >/dev/null
+    media60="$(${pkgs.gnugrep}/bin/grep -oE '/nix/store/[^\"]+/share/korri-streaming-validation/video\.mp4' ${deviceConfig} | head -n1)"
+    media120="$(${pkgs.gnugrep}/bin/grep -oE '/nix/store/[^\"]+/share/korri-streaming-validation/video\.mp4' ${highRefreshDeviceConfig} | head -n1)"
+    test -f "$media60"
+    test -f "$media120"
+    test "$media60" != "$media120"
+    probe60="$(${lib.getExe' pkgs.ffmpeg "ffprobe"} -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate -of csv=p=0 "$media60")"
+    probe120="$(${lib.getExe' pkgs.ffmpeg "ffprobe"} -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate -of csv=p=0 "$media120")"
+    test "$probe60" = '1920,1080,60/1'
+    test "$probe120" = '1920,1080,120/1'
     grep -F 'id = "neverball"' ${deviceConfig} >/dev/null
     grep -F 'title = "Neverball (consumer)"' ${deviceConfig} >/dev/null
     grep -F '${pkgs.neverball}/bin/neverball' ${deviceConfig} >/dev/null
@@ -338,8 +345,8 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     DISPLAY=:0 XDG_SESSION_TYPE=x11 \
       ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=1s 8 \
       ${lib.getExe pkgs.mpv-unwrapped} --no-config --quiet --no-audio \
-      --no-fullscreen --vo=x11 --hwdec=no --demuxer-lavf-format=lavfi --vf=fps=60 \
-      --title='Korri action gate' 'av://lavfi:testsrc2=size=1920x1080:rate=60' >"$TMPDIR/mpv.log" 2>&1 &
+      --no-fullscreen --vo=x11 --hwdec=no \
+      --title='Korri action gate' "$media60" >"$TMPDIR/mpv.log" 2>&1 &
     player_pid=$!
     attempt=0
     while [ "$attempt" -lt 80 ]; do
