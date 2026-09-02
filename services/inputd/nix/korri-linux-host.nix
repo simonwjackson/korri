@@ -567,6 +567,7 @@ in
         ExecStopPost = "+${cleanupCompositorSockets}";
         Restart = "on-failure";
         RestartSec = 2;
+        Nice = -10;
         UMask = "0077";
         NoNewPrivileges = true;
         CapabilityBoundingSet = [ ];
@@ -642,6 +643,7 @@ in
         }";
         Restart = "on-failure";
         RestartSec = 5;
+        Nice = -10;
         UMask = "0077";
         NoNewPrivileges = true;
         CapabilityBoundingSet = [ ];
