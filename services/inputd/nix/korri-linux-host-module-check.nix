@@ -72,6 +72,9 @@ let
   nvenc = evaluate {
     services.korriLinuxHost.sunshine.encoder = "nvenc";
   };
+  highRefresh = evaluate {
+    services.korriLinuxHost.compositor.mode = "1920x1080@120Hz";
+  };
   vaapi = evaluate {
     services.korriLinuxHost.sunshine.encoder = "vaapi";
   };
@@ -110,8 +113,10 @@ let
   vaapiCompositor = vaapi.config.systemd.services.korri-compositor;
   deviceConfig = cfg.services.korridLinuxDevice.deviceConfig;
   nvencDeviceConfig = nvenc.config.services.korridLinuxDevice.deviceConfig;
+  highRefreshDeviceConfig = highRefresh.config.services.korridLinuxDevice.deviceConfig;
   sunshineExec = pkgs.writeText "korri-linux-host-sunshine-exec" sunshine.serviceConfig.ExecStart;
   compositorExec = pkgs.writeText "korri-linux-host-compositor-exec" compositor.serviceConfig.ExecStart;
+  highRefreshCompositorExec = pkgs.writeText "korri-linux-host-high-refresh-compositor-exec" highRefresh.config.systemd.services.korri-compositor.serviceConfig.ExecStart;
   validationAction = cfg.services.korriLinuxInput.inputd.actions.workspace-next.command;
   udevRules = pkgs.writeText "korri-linux-host-udev-rules" cfg.services.udev.extraRules;
 in
@@ -216,8 +221,12 @@ assert builtins.elem "korri-compositor.service" korrid.requires;
 assert builtins.elem "korri-compositor.service" korrid.after;
 assert builtins.elem "korri-compositor.service" sunshine.bindsTo;
 assert builtins.length compositor.serviceConfig.ExecStartPost == 2;
-assert lib.hasInfix "korri-publish-wayland-socket" (builtins.elemAt compositor.serviceConfig.ExecStartPost 0);
-assert lib.hasInfix "korri-wait-for-compositor" (builtins.elemAt compositor.serviceConfig.ExecStartPost 1);
+assert lib.hasInfix "korri-publish-wayland-socket" (
+  builtins.elemAt compositor.serviceConfig.ExecStartPost 0
+);
+assert lib.hasInfix "korri-wait-for-compositor" (
+  builtins.elemAt compositor.serviceConfig.ExecStartPost 1
+);
 assert builtins.elem "korri-input-source-guard.service" sunshine.requires;
 assert builtins.elem "korri-compositor.service" sunshine.requires;
 assert builtins.elem "/dev/inputplumber/sources" sunshine.serviceConfig.InaccessiblePaths;
@@ -253,10 +262,14 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     grep -F '/bin/mpv' ${deviceConfig} >/dev/null
     grep -F -- '--hwdec=auto-copy-safe' ${deviceConfig} >/dev/null
     grep -F -- '--vf=fps=60' ${deviceConfig} >/dev/null
+    grep -F -- '--vf=fps=120' ${highRefreshDeviceConfig} >/dev/null
+    grep -F -- '--demuxer-lavf-format=lavfi' ${highRefreshDeviceConfig} >/dev/null
+    grep -F 'av://lavfi:testsrc2=size=1920x1080:rate=120' ${highRefreshDeviceConfig} >/dev/null
     grep -F -- '--gpu-context=x11egl' ${deviceConfig} >/dev/null
     ! grep -F 'LD_LIBRARY_PATH=/run/opengl-driver/lib' ${deviceConfig} >/dev/null
     grep -F 'LD_LIBRARY_PATH=/run/opengl-driver/lib' ${nvencDeviceConfig} >/dev/null
-    grep -F '/share/korri-streaming-validation/video.mp4' ${deviceConfig} >/dev/null
+    grep -F -- '--demuxer-lavf-format=lavfi' ${deviceConfig} >/dev/null
+    grep -F 'av://lavfi:testsrc2=size=1920x1080:rate=60' ${deviceConfig} >/dev/null
     grep -F 'id = "neverball"' ${deviceConfig} >/dev/null
     grep -F 'title = "Neverball (consumer)"' ${deviceConfig} >/dev/null
     grep -F '${pkgs.neverball}/bin/neverball' ${deviceConfig} >/dev/null
@@ -266,15 +279,10 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     ! grep -F 'XDG_RUNTIME_DIR' ${deviceConfig} >/dev/null
     ! grep -F 'SWAYSOCK' ${deviceConfig} >/dev/null
     grep -F -- '--config /nix/store/' ${compositorExec} >/dev/null
+    high_refresh_compositor_config="$(${pkgs.gnugrep}/bin/grep -oE '/nix/store/[^ ]+-korri-sway\.conf' ${highRefreshCompositorExec} | head -n1)"
+    grep -F 'output HEADLESS-1 mode 1920x1080@120Hz' "$high_refresh_compositor_config" >/dev/null
     grep -Fx '${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf log_path=/dev/null' ${sunshineExec} >/dev/null
     grep -F 'TAG-="uaccess"' ${udevRules} >/dev/null
-
-    media="$(${pkgs.gnugrep}/bin/grep -oE '/nix/store/[^\"]+/share/korri-streaming-validation/video\.mp4' ${deviceConfig} | head -n1)"
-    test -f "$media"
-    attribution="''${media%/video.mp4}/ATTRIBUTION.txt"
-    grep -F 'Blender Foundation 2008' "$attribution" >/dev/null
-    probe="$(${lib.getExe' pkgs.ffmpeg "ffprobe"} -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate -of csv=p=0 "$media")"
-    test "$probe" = '1920,1080,60/1'
 
     compositor_config="$(${pkgs.gnugrep}/bin/grep -oE '/nix/store/[^ ]+-korri-sway\.conf' ${compositorExec} | head -n1)"
     test -f "$compositor_config"
@@ -329,9 +337,9 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
 
     DISPLAY=:0 XDG_SESSION_TYPE=x11 \
       ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=1s 8 \
-      ${lib.getExe pkgs.mpv-unwrapped} --no-config --quiet --no-audio --loop-file=inf \
-      --no-fullscreen --vo=x11 --hwdec=no --vf=fps=60 \
-      --title='Korri action gate' "$media" >"$TMPDIR/mpv.log" 2>&1 &
+      ${lib.getExe pkgs.mpv-unwrapped} --no-config --quiet --no-audio \
+      --no-fullscreen --vo=x11 --hwdec=no --demuxer-lavf-format=lavfi --vf=fps=60 \
+      --title='Korri action gate' 'av://lavfi:testsrc2=size=1920x1080:rate=60' >"$TMPDIR/mpv.log" 2>&1 &
     player_pid=$!
     attempt=0
     while [ "$attempt" -lt 80 ]; do

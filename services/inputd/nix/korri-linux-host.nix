@@ -18,28 +18,15 @@ let
   xwaylandDisplay = ":0";
   xwaylandSocket = "/tmp/.X11-unix/X0";
   xwaylandLock = "/tmp/.X0-lock";
+  compositorMode = builtins.match "^([1-9][0-9]*)x([1-9][0-9]*)@([1-9][0-9]*)Hz$" cfg.compositor.mode;
+  compositorWidth = builtins.elemAt compositorMode 0;
+  compositorHeight = builtins.elemAt compositorMode 1;
+  compositorRefreshRate = builtins.elemAt compositorMode 2;
   sunshineConfig =
     if cfg.sunshine.configDirectory == null then
       "${gameplayHome}/.config/sunshine"
     else
       cfg.sunshine.configDirectory;
-  streamingValidationVideoSource = pkgs.fetchurl {
-    url = "https://raw.githubusercontent.com/bower-media-samples/big-buck-bunny-1080p-60fps-30s/c4c7ec6aa5d68944d32faa28f332f999c8866cbc/video.mp4";
-    hash = "sha256-uttTQLkaife5kQ3EL1B7sq/fhX4FQBLBANVuo73ndaY=";
-  };
-  streamingValidationMedia = pkgs.runCommand "korri-streaming-validation-media" { } ''
-    mkdir -p "$out/share/korri-streaming-validation"
-    cp ${streamingValidationVideoSource} "$out/share/korri-streaming-validation/video.mp4"
-    cat > "$out/share/korri-streaming-validation/ATTRIBUTION.txt" <<'EOF'
-    Big Buck Bunny
-    Copyright Blender Foundation 2008
-    Licensed under Creative Commons Attribution 3.0
-    https://creativecommons.org/licenses/by/3.0/
-
-    1080p60 30-second downstream encode:
-    https://github.com/bower-media-samples/big-buck-bunny-1080p-60fps-30s/tree/c4c7ec6aa5d68944d32faa28f332f999c8866cbc
-    EOF
-  '';
   generatedDeviceConfig = pkgs.writeText "korrid-${cfg.label}-host.toml" ''
     label = "${cfg.label}"
 
@@ -66,14 +53,14 @@ let
         "--no-config",
         "--quiet",
         "--no-audio",
-        "--loop-file=inf",
         "--fullscreen",
         "--vo=gpu-next",
         "--gpu-context=x11egl",
         "--hwdec=auto-copy-safe",
-        "--vf=fps=60",
+        "--demuxer-lavf-format=lavfi",
+        "--vf=fps=${compositorRefreshRate}",
         "--title=Korri streaming gate",
-        "${streamingValidationMedia}/share/korri-streaming-validation/video.mp4"
+        "av://lavfi:testsrc2=size=${compositorWidth}x${compositorHeight}:rate=${compositorRefreshRate}"
       ]
 
       [[games]]
