@@ -247,6 +247,7 @@ assert evaluationRejected invalidLabel;
 pkgs.runCommand "korri-linux-host-module-check" { } ''
     grep -F 'id = "inputd-gate"' ${deviceConfig} >/dev/null
     grep -F 'title = "Streaming gate"' ${deviceConfig} >/dev/null
+    grep -F '/bin/tini' ${deviceConfig} >/dev/null
     grep -F '/bin/timeout' ${deviceConfig} >/dev/null
     grep -F -- '--kill-after=5s' ${deviceConfig} >/dev/null
     grep -F '/bin/mpv' ${deviceConfig} >/dev/null

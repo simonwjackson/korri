@@ -52,6 +52,8 @@ let
       id = "inputd-gate"
       title = "Streaming gate"
       command = [
+        "${lib.getExe pkgs.tini}",
+        "--",
         "${lib.getExe' pkgs.coreutils "timeout"}",
         "--signal=TERM",
         "--kill-after=5s",
