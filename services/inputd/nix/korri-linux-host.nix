@@ -75,6 +75,19 @@ let
         "--title=Korri streaming gate",
         "${streamingValidationMedia}/share/korri-streaming-validation/video.mp4"
       ]
+
+      [[games]]
+      id = "neverball"
+      title = "Neverball (${cfg.label})"
+      command = [
+        "${lib.getExe pkgs.tini}",
+        "--",
+        "${lib.getExe' pkgs.coreutils "timeout"}",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "600",
+        "${lib.getExe pkgs.neverball}"
+      ]
     ''}
   '';
   deviceConfig = if cfg.deviceConfig == null then generatedDeviceConfig else cfg.deviceConfig;

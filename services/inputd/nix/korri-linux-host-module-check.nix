@@ -257,6 +257,9 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     ! grep -F 'LD_LIBRARY_PATH=/run/opengl-driver/lib' ${deviceConfig} >/dev/null
     grep -F 'LD_LIBRARY_PATH=/run/opengl-driver/lib' ${nvencDeviceConfig} >/dev/null
     grep -F '/share/korri-streaming-validation/video.mp4' ${deviceConfig} >/dev/null
+    grep -F 'id = "neverball"' ${deviceConfig} >/dev/null
+    grep -F 'title = "Neverball (consumer)"' ${deviceConfig} >/dev/null
+    grep -F '${pkgs.neverball}/bin/neverball' ${deviceConfig} >/dev/null
     grep -F 'DISPLAY = ":0"' ${deviceConfig} >/dev/null
     grep -F 'XDG_SESSION_TYPE = "x11"' ${deviceConfig} >/dev/null
     ! grep -F 'WAYLAND_DISPLAY' ${deviceConfig} >/dev/null
