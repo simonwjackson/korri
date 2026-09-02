@@ -241,11 +241,17 @@ remote_clear_orphan_bundle_selector() {
   clear_bundle_selector_root "$BUNDLE_SELECTOR_ROOT" 0 0
 }
 
+remote_generation_has_bundle_selector() {
+  local generation="$1"
+  [[ -f "$generation/etc/systemd/system/korri-bundle-selector.service" ]]
+}
+
 remote_generation_bundle() {
   local generation="$1" unit
   local -a bundles
   unit="$generation/etc/systemd/system/korri-bundle-selector.service"
-  [[ -f "$unit" ]] || fail 'generation bundle selector unit is absent'
+  remote_generation_has_bundle_selector "$generation" \
+    || fail 'generation bundle selector unit is absent'
   mapfile -t bundles < <(
     grep -oE '/nix/store/[0-9a-df-np-sv-z]{32}-korri-bundle-[A-Za-z0-9+._?=-]+' "$unit" \
       | LC_ALL=C sort -u
@@ -1381,20 +1387,27 @@ remote_activate_test() {
 }
 
 remote_restore() {
-  local rollback="$1" persistent="$2" gameplay_user="$3"
+  local rollback="$1" persistent="$2" gameplay_user="$3" rollback_has_bundle_selector=false
   shift 3
   [[ "$#" -eq 8 ]] || fail 'rollback requires all old user-unit states and pairing modes'
   remote_refuse_active_game
   remote_stop_candidate_services
   remote_restore_raw_joystick_udev
+  if remote_generation_has_bundle_selector "$rollback"; then
+    rollback_has_bundle_selector=true
+  else
+    systemctl stop korri-bundle-selector.service >/dev/null 2>&1 || true
+    clear_bundle_selector_root "$BUNDLE_SELECTOR_ROOT" 0 0
+  fi
   if [[ "$persistent" == true ]]; then
     sudo -n nix-env -p /nix/var/nix/profiles/system --set "$rollback"
     remote_activate_generation "$rollback" switch
   else
     remote_activate_generation "$rollback" test
   fi
-  remote_switch_generation_bundle "$rollback"
-  remote_clear_orphan_bundle_selector
+  if [[ "$rollback_has_bundle_selector" == true ]]; then
+    remote_switch_generation_bundle "$rollback"
+  fi
   remote_set_pairing_state_modes "$gameplay_user" "$7" "$8" >/dev/null
   remote_restore_old_user_units "$gameplay_user" "$1" "$2" "$3" "$4" "$5" "$6"
   [[ "$(remote_generation)" == "$rollback" ]]

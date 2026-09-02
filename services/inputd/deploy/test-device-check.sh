@@ -912,8 +912,11 @@ grep -F 'system-korri-compositor=active' "$GATE" >/dev/null
 # generation. A NixOS switch does not replace an existing selector by itself.
 # shellcheck disable=SC2016 # Literal production source invariants.
 [[ "$(grep -Fc 'remote_switch_generation_bundle "$candidate"' "$GATE")" -eq 2 ]]
+# shellcheck disable=SC2016 # Literal production source invariants.
+grep -F 'if remote_generation_has_bundle_selector "$rollback"; then' "$GATE" >/dev/null
 # shellcheck disable=SC2016 # Literal production source invariant.
 grep -F 'remote_switch_generation_bundle "$rollback"' "$GATE" >/dev/null
+grep -F 'systemctl stop korri-bundle-selector.service' "$GATE" >/dev/null
 grep -F 'for unit in sunshine.service korrid.service korri-compositor.service korri-inputd.service inputplumber.service' "$GATE" >/dev/null
 RESTORE_SOURCE="$(awk '
   /^remote_restore\(\) \{/ { found=1 }
@@ -923,11 +926,50 @@ RESTORE_SOURCE="$(awk '
 stop_line="$(grep -n 'remote_stop_candidate_services' <<<"$RESTORE_SOURCE" | cut -d: -f1)"
 raw_line="$(grep -n 'remote_restore_raw_joystick_udev' <<<"$RESTORE_SOURCE" | cut -d: -f1)"
 # shellcheck disable=SC2016 # Literal production function call.
+clear_line="$(grep -n 'clear_bundle_selector_root "$BUNDLE_SELECTOR_ROOT" 0 0' <<<"$RESTORE_SOURCE" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Literal production function call.
 activate_line="$(grep -n 'remote_activate_generation "$rollback"' <<<"$RESTORE_SOURCE" | head -n1 | cut -d: -f1)"
 # shellcheck disable=SC2016 # Literal production function call.
 bundle_line="$(grep -n 'remote_switch_generation_bundle "$rollback"' <<<"$RESTORE_SOURCE" | cut -d: -f1)"
-[[ -n "$stop_line" && -n "$raw_line" && -n "$activate_line" && -n "$bundle_line" ]]
-[[ "$stop_line" -lt "$raw_line" && "$raw_line" -lt "$activate_line" && "$activate_line" -lt "$bundle_line" ]]
+[[ -n "$stop_line" && -n "$raw_line" && -n "$clear_line" && -n "$activate_line" && -n "$bundle_line" ]]
+[[ "$stop_line" -lt "$raw_line" && "$raw_line" -lt "$clear_line" && "$clear_line" -lt "$activate_line" && "$activate_line" -lt "$bundle_line" ]]
+run_modeled_restore() (
+  model="$1"
+  log="$TMP/modeled-restore-$model.log"
+  : >"$log"
+  # shellcheck disable=SC2329 # The extracted production function calls these test doubles indirectly.
+  fail() { printf '%s\n' "$1" >&2; exit 1; }
+  # shellcheck disable=SC2329
+  remote_refuse_active_game() { printf 'refuse\n' >>"$log"; }
+  # shellcheck disable=SC2329
+  remote_stop_candidate_services() { printf 'stop\n' >>"$log"; }
+  # shellcheck disable=SC2329
+  remote_restore_raw_joystick_udev() { printf 'raw\n' >>"$log"; }
+  # shellcheck disable=SC2329
+  remote_generation_has_bundle_selector() { [[ "$model" == selector ]]; }
+  # shellcheck disable=SC2329
+  systemctl() { printf 'selector-stop\n' >>"$log"; }
+  # shellcheck disable=SC2329
+  clear_bundle_selector_root() { printf 'selector-clear\n' >>"$log"; }
+  # shellcheck disable=SC2329
+  remote_activate_generation() { printf 'activate-%s\n' "$2" >>"$log"; }
+  # shellcheck disable=SC2329
+  remote_switch_generation_bundle() { printf 'bundle-switch\n' >>"$log"; }
+  # shellcheck disable=SC2329
+  remote_set_pairing_state_modes() { printf 'pairing\n' >>"$log"; }
+  # shellcheck disable=SC2329
+  remote_restore_old_user_units() { printf 'old-units\n' >>"$log"; }
+  # shellcheck disable=SC2329
+  remote_generation() { printf '%s\n' /nix/store/11111111111111111111111111111111-nixos-system-rollback-1; }
+  # shellcheck disable=SC2034 # The extracted production function reads this global.
+  BUNDLE_SELECTOR_ROOT=/nix/var/nix/gcroots/korri-bundle
+  eval "$RESTORE_SOURCE"
+  remote_restore /nix/store/11111111111111111111111111111111-nixos-system-rollback-1 \
+    false gameplay false false false false false false 700 600
+  cat "$log"
+)
+[[ "$(run_modeled_restore selector)" == $'refuse\nstop\nraw\nactivate-test\nbundle-switch\npairing\nold-units' ]]
+[[ "$(run_modeled_restore no-selector)" == $'refuse\nstop\nraw\nselector-stop\nselector-clear\nactivate-test\npairing\nold-units' ]]
 
 NVENC_LOG_GATE_SOURCE="$(awk '
   /^remote_nvenc_stream_log_gate\(\) \{/ { found=1 }
@@ -1132,7 +1174,7 @@ assert_fails_with 'orphan bundle selector root ownership or mode is invalid' \
 ln -s "$TMP" "$TMP/selector-root-link"
 assert_fails_with 'orphan bundle selector root is a symbolic link' \
   run_selector_clear "$TMP/selector-root-link"
-[[ "$(grep -Fc 'remote_clear_orphan_bundle_selector' "$GATE")" -eq 4 ]]
+[[ "$(grep -Fc 'remote_clear_orphan_bundle_selector' "$GATE")" -eq 3 ]]
 
 SELECTOR_SERVICE_SOURCE="$(awk '
   /^remote_bundle_selector_service_loaded\(\) \{/ { found=1 }
