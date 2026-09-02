@@ -226,7 +226,7 @@ assert builtins.elem 39217 cfg.networking.firewall.interfaces.tailscale0.allowed
 assert builtins.hasAttr "workspace-next" cfg.services.korriLinuxInput.inputd.actions;
 assert
   validationAction == [
-    "${pkgs.sway}/bin/swaymsg"
+    "${pkgs.sway-unwrapped}/bin/swaymsg"
     "-s"
     "/run/korri-compositor/sway-ipc.sock"
     ''[workspace="korri:game:active"] focus, fullscreen enable, border none''

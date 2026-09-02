@@ -186,7 +186,7 @@ let
   '';
   validationActions = lib.optionalAttrs cfg.validation.enable {
     workspace-next.command = [
-      "${pkgs.sway}/bin/swaymsg"
+      "${pkgs.sway-unwrapped}/bin/swaymsg"
       "-s"
       compositorControlSocket
       ''[workspace="${compositorWorkspace}"] focus, fullscreen enable, border none''
