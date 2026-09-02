@@ -36,6 +36,14 @@ bun install --frozen-lockfile --ignore-scripts
 cd "$ROOT/surfaces/shift"
 bun install --frozen-lockfile --ignore-scripts
 
+# The portal compiles Shift from source. Both packages must resolve React to
+# the portal-owned instance or ReactDOM rejects every Shift hook at runtime.
+for package in react react-dom; do
+  rm -rf "$ROOT/surfaces/shift/node_modules/$package"
+  ln -s "$ROOT/clients/portal/node_modules/$package" \
+    "$ROOT/surfaces/shift/node_modules/$package"
+done
+
 cd "$ROOT/clients/portal"
 bun run typecheck
 bun test
