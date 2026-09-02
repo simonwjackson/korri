@@ -792,7 +792,7 @@ remote_namespace_test() {
   [[ "$nsenter" == /nix/store/*/bin/nsenter && -x "$nsenter" ]] \
     || fail 'namespace inspection helper is not immutable'
   if [[ "$include_pid_namespace" == yes ]]; then
-    "$nsenter" --mount="/proc/$pid/ns/mnt" --pid="/proc/$pid/ns/pid" --fork -- "$@"
+    "$nsenter" --mount="/proc/$pid/ns/mnt" --pid="/proc/$pid/ns/pid" -- "$@"
   else
     "$nsenter" --mount="/proc/$pid/ns/mnt" -- "$@"
   fi

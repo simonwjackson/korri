@@ -889,6 +889,10 @@ grep -F '[[ "$running" == "$running_target" ]]' "$GATE" >/dev/null
 # shellcheck disable=SC2016 # Literal production source invariant.
 grep -F '[[ "$control_metadata" == "$uid:$gid:700" ]]' "$GATE" >/dev/null
 grep -F 'live game unit can access an unapproved X11 socket' "$GATE" >/dev/null
+if grep -F -- '--fork' "$GATE" >/dev/null; then
+  printf 'device gate must use the util-linux default PID namespace fork behavior\n' >&2
+  exit 1
+fi
 # shellcheck disable=SC2016 # Literal production source invariant.
 grep -F '"$subject PID namespace exposes the compositor process"' "$GATE" >/dev/null
 # shellcheck disable=SC2016 # Literal production source invariant.
