@@ -86,21 +86,27 @@ let
     output ${cfg.compositor.outputName} bg #000000 solid_color
     workspace "${compositorWorkspace}" output ${cfg.compositor.outputName}
     workspace "${compositorWorkspace}"
-    exec_always ${publishWaylandSocket}
   '';
   publishWaylandSocket = pkgs.writeShellScript "korri-publish-wayland-socket" ''
     set -eu
-    if [[ ! "''${WAYLAND_DISPLAY:-}" =~ ^wayland-[0-9]+$ ]]; then
-      echo "Sway did not publish a numeric Wayland socket name" >&2
-      exit 1
-    fi
-    source="$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
     destination="$XDG_RUNTIME_DIR/${waylandDisplay}"
     attempt=0
     while [ "$attempt" -lt 60 ]; do
-      if [ -S "$source" ]; then
+      source=
+      count=0
+      for socket in "$XDG_RUNTIME_DIR"/wayland-[0-9]*; do
+        [ -S "$socket" ] || continue
+        source="$socket"
+        count=$((count + 1))
+      done
+      if [ "$count" -gt 1 ]; then
+        echo "Sway published more than one numeric Wayland socket" >&2
+        exit 1
+      fi
+      if [ "$count" -eq 1 ]; then
+        target="''${source##*/}"
         next="$destination.next.$$"
-        ${pkgs.coreutils}/bin/ln -s -- "$WAYLAND_DISPLAY" "$next"
+        ${pkgs.coreutils}/bin/ln -s -- "$target" "$next"
         ${pkgs.coreutils}/bin/mv -Tf -- "$next" "$destination"
         exit 0
       fi
@@ -552,7 +558,10 @@ in
         RuntimeDirectoryMode = "0700";
         ExecStartPre = "+${cleanupCompositorSockets}";
         ExecStart = "${pkgs.sway}/bin/sway --unsupported-gpu --config ${swayConfig}";
-        ExecStartPost = waitForCompositor;
+        ExecStartPost = [
+          publishWaylandSocket
+          waitForCompositor
+        ];
         ExecStopPost = "+${cleanupCompositorSockets}";
         Restart = "on-failure";
         RestartSec = 2;

@@ -215,7 +215,9 @@ assert builtins.elem "korri-compositor.service" korrid.bindsTo;
 assert builtins.elem "korri-compositor.service" korrid.requires;
 assert builtins.elem "korri-compositor.service" korrid.after;
 assert builtins.elem "korri-compositor.service" sunshine.bindsTo;
-assert lib.hasInfix "korri-wait-for-compositor" compositor.serviceConfig.ExecStartPost;
+assert builtins.length compositor.serviceConfig.ExecStartPost == 2;
+assert lib.hasInfix "korri-publish-wayland-socket" (builtins.elemAt compositor.serviceConfig.ExecStartPost 0);
+assert lib.hasInfix "korri-wait-for-compositor" (builtins.elemAt compositor.serviceConfig.ExecStartPost 1);
 assert builtins.elem "korri-input-source-guard.service" sunshine.requires;
 assert builtins.elem "korri-compositor.service" sunshine.requires;
 assert builtins.elem "/dev/inputplumber/sources" sunshine.serviceConfig.InaccessiblePaths;
@@ -272,6 +274,7 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
 
     compositor_config="$(${pkgs.gnugrep}/bin/grep -oE '/nix/store/[^ ]+-korri-sway\.conf' ${compositorExec} | head -n1)"
     test -f "$compositor_config"
+    ! ${pkgs.gnugrep}/bin/grep -F 'exec_always' "$compositor_config" >/dev/null
     runtime="$TMPDIR/runtime"
     control="$TMPDIR/control"
     mkdir -m 700 "$runtime" "$control"
@@ -309,9 +312,9 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     test -S "$control/sway-ipc.sock"
     raw_wayland_display="$(${pkgs.findutils}/bin/find "$runtime" -maxdepth 1 -type s -name 'wayland-[0-9]*' -printf '%f\n' | head -n1)"
     test -n "$raw_wayland_display"
-    publisher="$(${pkgs.gawk}/bin/awk '$1 == "exec_always" { print $2 }' "$compositor_config")"
+    publisher=${builtins.elemAt compositor.serviceConfig.ExecStartPost 0}
     test -x "$publisher"
-    XDG_RUNTIME_DIR="$runtime" WAYLAND_DISPLAY="$raw_wayland_display" "$publisher"
+    XDG_RUNTIME_DIR="$runtime" "$publisher"
     test -S "$runtime/korri-wayland"
     test "$(${pkgs.coreutils}/bin/readlink "$runtime/korri-wayland")" = "$raw_wayland_display"
     wayland_display=korri-wayland
