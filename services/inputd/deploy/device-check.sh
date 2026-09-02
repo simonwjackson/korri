@@ -996,9 +996,9 @@ remote_compositor_game_gate() {
     || fail 'live game unit received native compositor access environment'
   bind_paths="$(systemctl show "$unit" -p BindReadOnlyPaths --value 2>/dev/null)" \
     || fail 'live game unit Xwayland bind state is unavailable'
-  [[ " $bind_paths " == *" /tmp/.X11-unix/X0 "* ]] \
-    || fail 'live game unit lacks the read-only Xwayland X0 socket bind'
-  [[ " $bind_paths " != *" /tmp/.X11-unix "* ]] \
+  [[ " $bind_paths " == *" /tmp/.X11-unix/X0:/tmp/.X11-unix/X0:rbind "* ]] \
+    || fail 'live game unit lacks the exact read-only Xwayland X0 socket bind'
+  [[ " $bind_paths " != *" /tmp/.X11-unix:/tmp/.X11-unix:"* ]] \
     || fail 'live game unit binds the complete X11 socket directory'
   private_pids="$(systemctl show "$unit" -p PrivatePIDs --value 2>/dev/null)" \
     || fail 'live game unit PID namespace state is unavailable'
