@@ -837,9 +837,9 @@ remote_assert_game_display_namespace() {
 remote_compositor_gate() {
   local gameplay_user="$1" uid gid runtime stable target control_metadata directory_metadata
   local compositor_environment sunshine_environment sunshine_inaccessible korrid_environment
-  local execstart running declared declared_real package_root swaymsg outputs render_device render_real render_driver token dev_sys dev_stat jq_helper
+  local execstart running declared declared_real running_target package_root swaymsg outputs render_device render_real render_driver token dev_sys dev_stat jq_helper
   local sunshine_pid sunshine_private_pids sway_pid
-  local -a sway_execs=() render_devices=()
+  local -a sway_execs=() wrapped_targets=() render_devices=()
   uid="$(id -u "$gameplay_user")" || fail 'gameplay user is unavailable for compositor validation'
   gid="$(id -g "$gameplay_user")" || fail 'gameplay group is unavailable for compositor validation'
   runtime="/run/user/$uid"
@@ -930,12 +930,19 @@ remote_compositor_gate() {
     || fail 'declared compositor wrapper or target is invalid'
   grep -F "\"$declared_real\"" "$declared" >/dev/null \
     || fail 'declared compositor wrapper does not execute its same-package target'
+  mapfile -t wrapped_targets < <(grep -oE '/nix/store/[^ ;{}"]+/bin/sway' "$declared_real" | sort -u)
+  [[ "${#wrapped_targets[@]}" -eq 1 ]] \
+    || fail 'same-package compositor wrapper does not declare one final Sway executable'
+  running_target="${wrapped_targets[0]}"
+  [[ "$running_target" == /nix/store/*-sway-unwrapped-*/bin/sway \
+    && -f "$running_target" && -x "$running_target" && ! -L "$running_target" ]] \
+    || fail 'final compositor executable target is invalid'
   sway_pid="$(systemctl show korri-compositor.service -p MainPID --value 2>/dev/null)" \
     || fail 'running compositor PID is unavailable'
   [[ "$sway_pid" =~ ^[1-9][0-9]*$ ]] || fail 'running compositor PID is invalid'
   running="$(readlink -f -- "/proc/$sway_pid/exe" 2>/dev/null)" \
     || fail 'running compositor executable is unavailable'
-  [[ "$running" == "$declared_real" ]] || fail 'running compositor executable differs from the candidate unit'
+  [[ "$running" == "$running_target" ]] || fail 'running compositor executable differs from the candidate unit'
   sunshine_pid="$(systemctl show sunshine.service -p MainPID --value 2>/dev/null)" \
     || fail 'Sunshine PID is unavailable for compositor isolation validation'
   [[ "$sunshine_pid" =~ ^[1-9][0-9]*$ ]] || fail 'Sunshine PID is invalid for compositor isolation validation'

@@ -880,6 +880,10 @@ grep -F -- '--property=BindReadOnlyPaths=/tmp/.X11-unix/X0' "$HERE/../../korrid/
 grep -F 'remote_assert_pid_namespace_hides_compositor Sunshine "$sunshine_pid" "$sway_pid"' "$GATE" >/dev/null
 # shellcheck disable=SC2016 # Literal production source invariant.
 grep -F '[[ "$jq_helper" == /nix/store/*/bin/jq && -x "$jq_helper" ]]' "$GATE" >/dev/null
+# shellcheck disable=SC2016 # Literal production source invariant.
+grep -F 'mapfile -t wrapped_targets < <(grep -oE' "$GATE" >/dev/null
+# shellcheck disable=SC2016 # Literal production source invariant.
+grep -F '[[ "$running" == "$running_target" ]]' "$GATE" >/dev/null
 grep -F 'live game unit can access an unapproved X11 socket' "$GATE" >/dev/null
 # shellcheck disable=SC2016 # Literal production source invariant.
 grep -F '"$subject PID namespace exposes the compositor process"' "$GATE" >/dev/null
