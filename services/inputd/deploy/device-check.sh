@@ -837,7 +837,7 @@ remote_assert_game_display_namespace() {
 remote_compositor_gate() {
   local gameplay_user="$1" uid gid runtime stable target control_metadata directory_metadata
   local compositor_environment sunshine_environment sunshine_inaccessible korrid_environment
-  local execstart running declared declared_real running_target package_root swaymsg outputs render_device render_real render_driver token dev_sys dev_stat jq_helper
+  local execstart running declared declared_link declared_real running_target package_root swaymsg outputs render_device render_real render_driver token dev_sys dev_stat jq_helper
   local sunshine_pid sunshine_private_pids sway_pid
   local -a sway_execs=() wrapped_targets=() render_devices=()
   uid="$(id -u "$gameplay_user")" || fail 'gameplay user is unavailable for compositor validation'
@@ -924,12 +924,17 @@ remote_compositor_gate() {
   swaymsg="$package_root/bin/swaymsg"
   [[ "$declared" == /nix/store/*/bin/sway && -x "$declared" && -x "$swaymsg" ]] \
     || fail 'compositor command package is invalid'
-  declared_real="$package_root/bin/.sway-wrapped"
+  declared_link="$package_root/bin/.sway-wrapped"
   [[ -f "$declared" && -x "$declared" && ! -L "$declared" \
+    && -L "$declared_link" ]] \
+    || fail 'declared compositor wrapper or same-package link is invalid'
+  grep -F "\"$declared_link\"" "$declared" >/dev/null \
+    || fail 'declared compositor wrapper does not execute its same-package link'
+  declared_real="$(readlink -f -- "$declared_link" 2>/dev/null)" \
+    || fail 'declared compositor wrapper target is unavailable'
+  [[ "$declared_real" == /nix/store/*-sway/bin/sway \
     && -f "$declared_real" && -x "$declared_real" && ! -L "$declared_real" ]] \
-    || fail 'declared compositor wrapper or target is invalid'
-  grep -F "\"$declared_real\"" "$declared" >/dev/null \
-    || fail 'declared compositor wrapper does not execute its same-package target'
+    || fail 'declared compositor wrapper target is invalid'
   mapfile -t wrapped_targets < <(grep -oE '/nix/store/[^ ;{}"]+/bin/sway' "$declared_real" | sort -u)
   [[ "${#wrapped_targets[@]}" -eq 1 ]] \
     || fail 'same-package compositor wrapper does not declare one final Sway executable'

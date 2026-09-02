@@ -883,6 +883,8 @@ grep -F '[[ "$jq_helper" == /nix/store/*/bin/jq && -x "$jq_helper" ]]' "$GATE" >
 # shellcheck disable=SC2016 # Literal production source invariant.
 grep -F 'mapfile -t wrapped_targets < <(grep -oE' "$GATE" >/dev/null
 # shellcheck disable=SC2016 # Literal production source invariant.
+grep -F 'declared_real="$(readlink -f -- "$declared_link"' "$GATE" >/dev/null
+# shellcheck disable=SC2016 # Literal production source invariant.
 grep -F '[[ "$running" == "$running_target" ]]' "$GATE" >/dev/null
 # shellcheck disable=SC2016 # Literal production source invariant.
 grep -F '[[ "$control_metadata" == "$uid:$gid:700" ]]' "$GATE" >/dev/null
@@ -2035,9 +2037,16 @@ run_startup_abrupt_kill() {
   fi
   kill -KILL -- "-$pid"
   wait "$pid" 2>/dev/null || true
+  for _ in $(seq 1 100); do
+    ! kill -0 -- "-$pid" 2>/dev/null && break
+    sleep 0.01
+  done
+  if kill -0 -- "-$pid" 2>/dev/null; then
+    printf 'modeled gate process group survived SIGKILL: %s\n' "$pid" >&2
+    return 1
+  fi
   # Production leases are systemd units and survive the local gate process.
-  # The shell harness shares a process group with its modeled holder, so restore
-  # the already-proven live marker after SIGKILL to model that ownership exactly.
+  # Restore the proven lease only after all modeled process-group cleanup stops.
   [[ "$window" != post-marker ]] || : >"$HARNESS_ATTEMPT_LEASE"
   rmdir "$HARNESS_LOG.lock" 2>/dev/null || true
   unset HARNESS_ATTEMPT_START_PAUSE HARNESS_PAUSE_MARKER
