@@ -281,6 +281,8 @@ case "$(basename "$0")" in
             "${HARNESS_SYSTEM_SUNSHINE_ACTIVE:-inactive}" "${HARNESS_SYSTEM_SUNSHINE_ENABLED:-disabled}"
           printf 'system/x11-headless.service LoadState=loaded ActiveState=%s SubState=dead UnitFileState=%s StatusText=\n' \
             "${HARNESS_SYSTEM_X11_ACTIVE:-inactive}" "${HARNESS_SYSTEM_X11_ENABLED:-disabled}"
+          printf 'system/korri-compositor.service LoadState=loaded ActiveState=%s SubState=dead UnitFileState=%s StatusText=\n' \
+            "${HARNESS_SYSTEM_COMPOSITOR_ACTIVE:-inactive}" "${HARNESS_SYSTEM_COMPOSITOR_ENABLED:-disabled}"
           printf 'user/sunshine.service LoadState=loaded ActiveState=%s SubState=running UnitFileState=%s StatusText=\n' \
             "$old_sunshine_active" "$old_sunshine_enabled"
           printf 'user/x11-headless.service LoadState=loaded ActiveState=%s SubState=running UnitFileState=%s StatusText=\n' \
@@ -310,6 +312,8 @@ case "$(basename "$0")" in
           printf 'system.sunshine.enabled=%s\n' "${HARNESS_SYSTEM_SUNSHINE_ENABLED:-disabled}"
           printf 'system.x11-headless.active=%s\n' "${HARNESS_SYSTEM_X11_ACTIVE:-inactive}"
           printf 'system.x11-headless.enabled=%s\n' "${HARNESS_SYSTEM_X11_ENABLED:-disabled}"
+          printf 'system.korri-compositor.active=%s\n' "${HARNESS_SYSTEM_COMPOSITOR_ACTIVE:-inactive}"
+          printf 'system.korri-compositor.enabled=%s\n' "${HARNESS_SYSTEM_COMPOSITOR_ENABLED:-disabled}"
           printf 'topology.target=%s\n' "${HARNESS_TARGET_TOPOLOGY:-target-baseline}"
           printf 'topology.raw=%s\n' "${HARNESS_RAW_TOPOLOGY:-raw-baseline}"
           printf 'input.acl-readability=%s\n' "${HARNESS_ACL_BASELINE:-acl-baseline}"
@@ -477,7 +481,8 @@ case "$(basename "$0")" in
           [[ "${HARNESS_CATALOG:-Ok}" == Ok ]] || exit 64
           normalized="${HARNESS_FINGERPRINT:-node=/dev/input/event9 sysfs=/sys/devices/virtual/input/input9/event9 dev=13:73 inode=1:9 inputplumber=/nix/store/provider/bin/inputplumber version=0.75.2 keys=exact abs=exact ff=yes}"
           physical="identity=$expected_identity event=event8 sysfs=/sys/devices/pci0000:00/input/input8/event8 profile=$profile"
-          printf 'automated-gates=pass raw-readable=0 inputd-status=Ready system-korrid=active system-x11-headless=active system-sunshine=active pairing-state=present credentials=service-specific sunshine-package=attested catalog=Ok delegate=yes controllers=pids\n'
+          printf 'compositor-gate=pass renderer=vulkan output=HEADLESS-1 mode=1920x1080@60 wayland=stable xwayland=:0 sunshine-control=denied\n'
+          printf 'automated-gates=pass raw-readable=0 inputd-status=Ready system-korrid=active system-korri-compositor=active system-sunshine=active pairing-state=present credentials=service-specific sunshine-package=attested catalog=Ok delegate=yes controllers=pids\n'
           printf 'sunshine-executable=/nix/store/sunshine-korri/bin/sunshine-2025.924.154138-korri patch-set-sha256=%064d patches=11 base-version=2025.924.154138 libavcodec=62.11.100\n' 0
           printf 'sunshine-private-state=protected digest=%s\n' "${HARNESS_PRIVATE_STATE_DIGEST:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
           printf 'normalized-fingerprint=%s\n' "$normalized"
@@ -514,8 +519,11 @@ case "$(basename "$0")" in
           fi
           printf '\n'
           ;;
+        compositor-game-gate)
+          printf 'game-compositor-gate=pass xwayland=visible wayland=hidden control=hidden procfs=isolated unit=one\n'
+          ;;
         nvenc-stream-gate)
-          printf 'nvenc-stream-gate=pass encoder=h264_nvenc strict=yes\n'
+          printf 'nvenc-stream-gate=pass encoder=h264_nvenc strict=yes capture=wayland\n'
           ;;
         rollback-gates)
           printf 'rollback-gates=pass\n'
@@ -658,6 +666,90 @@ named_read_acl="$(remote_canonical_acl "$acl_fixture")"
 grep -F 'user:1234:r--' <<<"$named_read_acl" >/dev/null
 setfacl -m u:1234:rw- "$acl_fixture"
 [[ "$(remote_canonical_acl "$acl_fixture")" != "$named_read_acl" ]]
+
+source_gate_function() {
+  local name="$1"
+  # shellcheck disable=SC1090 # The test extracts the exact gate function under test.
+  source <(awk -v signature="$name() {" '
+    $0 == signature { capture = 1 }
+    capture { print }
+    capture && /^}/ { exit }
+  ' "$GATE")
+}
+
+source_gate_function remote_assert_pid_namespace_hides_compositor
+source_gate_function remote_assert_game_display_namespace
+
+modeled_namespace_test() {
+  local pid="$1" include_pid_namespace="$2"
+  shift 2
+  case "$*" in
+    'test -S /tmp/.X11-unix/X0') [[ "${MODEL_X0_VISIBLE:-yes}" == yes ]] ;;
+    "test -e /run/user/${MODEL_UID:-1000}") [[ "${MODEL_RUNTIME_VISIBLE:-no}" == yes ]] ;;
+    'test -e /run/korri-compositor/sway-ipc.sock') [[ "${MODEL_CONTROL_VISIBLE:-no}" == yes ]] ;;
+    "test -e /proc/${MODEL_SWAY_PID:-222}")
+      [[ "$include_pid_namespace" == yes && "${MODEL_SWAY_PROCESS_VISIBLE:-no}" == yes ]]
+      ;;
+    "test -e /proc/${MODEL_SWAY_PID:-222}/root/run/korri-compositor/sway-ipc.sock")
+      [[ "$include_pid_namespace" == yes && "${MODEL_SWAY_ROOT_VISIBLE:-no}" == yes ]]
+      ;;
+    *) printf 'unexpected modeled namespace test for pid %s: %s\n' "$pid" "$*" >&2; return 2 ;;
+  esac
+}
+
+run_modeled_game_namespace_gate() (
+  # shellcheck disable=SC2329 # The extracted production functions call these test doubles indirectly.
+  fail() { printf '%s\n' "$1" >&2; exit 1; }
+  # shellcheck disable=SC2329 # The extracted production functions call these test doubles indirectly.
+  remote_namespace_test() { modeled_namespace_test "$@"; }
+  # shellcheck disable=SC2329 # The extracted production functions call these test doubles indirectly.
+  remote_namespace_first_extra_x11_socket() { printf '%s' "${MODEL_EXTRA_X11_SOCKET:-}"; }
+  COMPOSITOR_CONTROL_SOCKET=/run/korri-compositor/sway-ipc.sock
+  remote_assert_game_display_namespace 111 "/run/user/${MODEL_UID:-1000}"
+  remote_assert_pid_namespace_hides_compositor game 111 "${MODEL_SWAY_PID:-222}"
+)
+
+run_modeled_sunshine_namespace_gate() (
+  # shellcheck disable=SC2329 # The extracted production function calls this test double indirectly.
+  fail() { printf '%s\n' "$1" >&2; exit 1; }
+  # shellcheck disable=SC2329 # The extracted production function calls this test double indirectly.
+  remote_namespace_test() { modeled_namespace_test "$@"; }
+  # shellcheck disable=SC2034 # The extracted production function reads this global indirectly.
+  COMPOSITOR_CONTROL_SOCKET=/run/korri-compositor/sway-ipc.sock
+  remote_assert_pid_namespace_hides_compositor Sunshine 333 "${MODEL_SWAY_PID:-222}"
+)
+
+assert_modeled_namespace_fails() {
+  local expected="$1"
+  shift
+  : >"$TMP/namespace.stdout"
+  : >"$TMP/namespace.stderr"
+  if "$@" >"$TMP/namespace.stdout" 2>"$TMP/namespace.stderr"; then
+    printf 'modeled namespace gate unexpectedly passed: %s\n' "$expected" >&2
+    exit 1
+  fi
+  grep -F "$expected" "$TMP/namespace.stderr" >/dev/null
+}
+
+run_modeled_game_namespace_gate
+MODEL_X0_VISIBLE=no assert_modeled_namespace_fails \
+  'Xwayland display is not visible inside the live game unit' run_modeled_game_namespace_gate
+MODEL_EXTRA_X11_SOCKET=/tmp/.X11-unix/X1 assert_modeled_namespace_fails \
+  'live game unit can access an unapproved X11 socket' run_modeled_game_namespace_gate
+MODEL_RUNTIME_VISIBLE=yes assert_modeled_namespace_fails \
+  'native Wayland runtime is visible inside the live game unit' run_modeled_game_namespace_gate
+MODEL_CONTROL_VISIBLE=yes assert_modeled_namespace_fails \
+  'compositor control is visible inside the live game unit' run_modeled_game_namespace_gate
+MODEL_SWAY_PROCESS_VISIBLE=yes assert_modeled_namespace_fails \
+  'game PID namespace exposes the compositor process' run_modeled_game_namespace_gate
+MODEL_SWAY_ROOT_VISIBLE=yes assert_modeled_namespace_fails \
+  'game can reach compositor control through procfs' run_modeled_game_namespace_gate
+run_modeled_sunshine_namespace_gate
+MODEL_SWAY_PROCESS_VISIBLE=yes assert_modeled_namespace_fails \
+  'Sunshine PID namespace exposes the compositor process' run_modeled_sunshine_namespace_gate
+MODEL_SWAY_ROOT_VISIBLE=yes assert_modeled_namespace_fails \
+  'Sunshine can reach compositor control through procfs' run_modeled_sunshine_namespace_gate
+
 SELF="$(realpath "$0")"
 ln -s "$SELF" "$TMP/ssh-command-harness"
 mkdir "$TMP/user-scope-bin"
@@ -776,6 +868,24 @@ grep -F '_SYSTEMD_INVOCATION_ID="$invocation"' "$GATE" >/dev/null
 grep -F "first_h264=\"\$(grep -F 'Creating encoder [h264_'" "$GATE" >/dev/null
 grep -F "! grep -F 'Creating encoder [h264_vaapi]'" "$GATE" >/dev/null
 [[ "$(grep -Fc 'run_remote_attempt nvenc-stream-gate' "$GATE")" -eq 3 ]]
+grep -F 'PREDICATE_SYSTEM_UNITS=(korrid.service sunshine.service x11-headless.service korri-compositor.service)' "$GATE" >/dev/null
+grep -F 'remote_wait_unit korri-compositor.service' "$GATE" >/dev/null
+# shellcheck disable=SC2016 # Literal production source invariant.
+grep -F 'remote_compositor_gate "$gameplay_user"' "$GATE" >/dev/null
+# shellcheck disable=SC2016 # Literal production source invariant.
+grep -F 'run_remote_attempt compositor-game-gate "$GAMEPLAY_USER"' "$GATE" >/dev/null
+grep -F -- '--property=PrivatePIDs=yes' "$HERE/../../korrid/src/host/systemd_unit.rs" >/dev/null
+grep -F -- '--property=BindReadOnlyPaths=/tmp/.X11-unix/X0' "$HERE/../../korrid/src/host/systemd_unit.rs" >/dev/null
+# shellcheck disable=SC2016 # Literal production source invariant.
+grep -F 'remote_assert_pid_namespace_hides_compositor Sunshine "$sunshine_pid" "$sway_pid"' "$GATE" >/dev/null
+# shellcheck disable=SC2016 # Literal production source invariant.
+grep -F '[[ "$jq_helper" == /nix/store/*/bin/jq && -x "$jq_helper" ]]' "$GATE" >/dev/null
+grep -F 'live game unit can access an unapproved X11 socket' "$GATE" >/dev/null
+# shellcheck disable=SC2016 # Literal production source invariant.
+grep -F '"$subject PID namespace exposes the compositor process"' "$GATE" >/dev/null
+# shellcheck disable=SC2016 # Literal production source invariant.
+grep -F '"$subject can reach compositor control through procfs"' "$GATE" >/dev/null
+grep -F 'system-korri-compositor=active' "$GATE" >/dev/null
 
 NVENC_LOG_GATE_SOURCE="$(awk '
   /^remote_nvenc_stream_log_gate\(\) \{/ { found=1 }
@@ -784,6 +894,8 @@ NVENC_LOG_GATE_SOURCE="$(awk '
 ' "$GATE")"
 [[ "$NVENC_LOG_GATE_SOURCE" == remote_nvenc_stream_log_gate* ]]
 run_nvenc_log_gate() (
+  # shellcheck disable=SC2034 # Used by the production function loaded with eval.
+  COMPOSITOR_WAYLAND_ALIAS=korri-wayland
   eval "$NVENC_LOG_GATE_SOURCE"
   remote_nvenc_stream_log_gate "$1"
 )
@@ -793,13 +905,16 @@ expect_nvenc_log_failure() {
     return 1
   fi
 }
-nvenc_success=$'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]'
+wayland_capture=$'Found display [korri-wayland]\n-------- Start of Wayland monitor list --------\nSelected monitor [HEADLESS-1] for streaming\n'
+nvenc_success="$wayland_capture"$'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]'
 run_nvenc_log_gate "$nvenc_success"
-expect_nvenc_log_failure $'New streaming session started [active sessions: 2]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]'
-expect_nvenc_log_failure $'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [hevc_nvenc]'
-expect_nvenc_log_failure $'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_vaapi]\nCreating encoder [h264_nvenc]'
-expect_nvenc_log_failure $'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]\nCreating encoder [h264_vaapi]'
-run_nvenc_log_gate $'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_vaapi]\nNew streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]'
+expect_nvenc_log_failure $'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]'
+expect_nvenc_log_failure "$wayland_capture"$'Streaming display: HEADLESS-1 with res 1920x1080 offset by 0x0\nNew streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]'
+expect_nvenc_log_failure "$wayland_capture"$'New streaming session started [active sessions: 2]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]'
+expect_nvenc_log_failure "$wayland_capture"$'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [hevc_nvenc]'
+expect_nvenc_log_failure "$wayland_capture"$'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_vaapi]\nCreating encoder [h264_nvenc]'
+expect_nvenc_log_failure "$wayland_capture"$'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]\nCreating encoder [h264_vaapi]'
+run_nvenc_log_gate "$wayland_capture"$'New streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_vaapi]\nNew streaming session started [active sessions: 1]\nCLIENT CONNECTED\nCreating encoder [h264_nvenc]'
 # stat(1) canonicalizes 0700/0600 to 700/600; candidate calls must use the
 # canonical forms so post-chmod verification compares equal.
 # shellcheck disable=SC2016
@@ -832,7 +947,7 @@ run_production_group_policy() (
   remote_process_group_policy "$unit" "$$" "$primary_gid" \
     "$input_gid" "$uinput_gid" "$control_gid" "$sunshine_gid"
 )
-for credential_unit in korrid.service x11-headless.service sunshine.service \
+for credential_unit in korrid.service korri-compositor.service sunshine.service \
   korri-inputd.service korri-game-harness.service 'gameplay user manager'; do
   assert_fails_with "forbidden input primary group leaked to $credential_unit" \
     run_production_group_policy "$credential_unit" 10
@@ -1664,7 +1779,7 @@ run_failure_model same-name-raw HARNESS_TOPOLOGY_FIXTURE \
 run_failure_model delegate HARNESS_DELEGATE no 'inputd Delegate is not enabled'
 run_failure_model delegate-controllers HARNESS_DELEGATE_CONTROLLERS cpu 'DelegateControllers does not contain pids'
 run_failure_model stale-manager HARNESS_STALE_MANAGER_CREDENTIALS yes 'fresh gameplay user manager retains forbidden group: input'
-for credential_failure in korrid-input x11-headless-uinput sunshine-control inputd-input game-control korrid-sunshine-uinput inputd-control-primary; do
+for credential_failure in korrid-input korri-compositor-uinput sunshine-control inputd-input game-control korrid-sunshine-uinput inputd-control-primary; do
   run_failure_model "credentials-$credential_failure" HARNESS_CREDENTIAL_FAILURE "$credential_failure" \
     'modeled /proc Groups credential rejection'
 done

@@ -21,8 +21,12 @@ ATTEMPT_UNIT='korri-device-gate-attempt.service'
 NORMALIZED_NAME='Microsoft X-Box 360 pad'
 SUPPORTED_PRODUCTION_PROFILE='korri-60-xbox_one_gamepad.yaml'
 OLD_USER_UNITS=(korrid.service sunshine.service x11-headless.service)
-CANDIDATE_SYSTEM_UNITS=(korrid.service sunshine.service x11-headless.service)
+PREDICATE_SYSTEM_UNITS=(korrid.service sunshine.service x11-headless.service korri-compositor.service)
 SUNSHINE_UINPUT_GROUP='korri-sunshine-uinput'
+COMPOSITOR_CONTROL_DIRECTORY='/run/korri-compositor'
+COMPOSITOR_CONTROL_SOCKET='/run/korri-compositor/sway-ipc.sock'
+COMPOSITOR_WAYLAND_ALIAS='korri-wayland'
+COMPOSITOR_OUTPUT='HEADLESS-1'
 EXPECTED_SUNSHINE_FORMAT='1'
 EXPECTED_SUNSHINE_BASE_VERSION='2025.924.154138'
 EXPECTED_SUNSHINE_BASE_SOURCE_HASH='sha256-QrPfZqd9pgufohUjxlTpO6V0v7B41UrXHZaESsFjZ48='
@@ -229,7 +233,7 @@ clear_bundle_selector_root() {
 remote_clear_orphan_bundle_selector() {
   local unit
   remote_bundle_selector_service_loaded && return 0
-  for unit in korri-inputd.service korrid.service x11-headless.service sunshine.service; do
+  for unit in korri-inputd.service korrid.service x11-headless.service korri-compositor.service sunshine.service; do
     ! systemctl is-active --quiet "$unit" \
       || fail "orphan bundle selector cleanup found an active candidate service: $unit"
   done
@@ -752,7 +756,7 @@ remote_candidate_credentials() {
   done
   remote_process_group_policy 'gameplay user manager' "$manager_pid" "$manager_primary_gid" \
     "$input_gid" "$uinput_gid" "$control_gid" "$sunshine_gid"
-  for unit in korrid.service x11-headless.service sunshine.service korri-inputd.service; do
+  for unit in korrid.service korri-compositor.service sunshine.service korri-inputd.service; do
     remote_service_credentials "$unit"
     remote_process_group_policy "$unit" "$REMOTE_SERVICE_PID" "$REMOTE_SERVICE_GID" \
       "$input_gid" "$uinput_gid" "$control_gid" "$sunshine_gid"
@@ -769,15 +773,235 @@ remote_candidate_credentials() {
     inaccessible="$(systemctl show "$unit" -p InaccessiblePaths --value 2>/dev/null || true)"
     [[ " $inaccessible " == *" $sunshine_private "* ]] \
       || fail "Sunshine private state is visible to game unit: $unit"
+    [[ " $inaccessible " == *" $COMPOSITOR_CONTROL_DIRECTORY "* ]] \
+      || fail "compositor control is visible to game unit: $unit"
     remote_process_group_policy "$unit" "$pid" "$primary_gid" \
       "$input_gid" "$uinput_gid" "$control_gid" "$sunshine_gid"
   done <<<"$game_units"
   printf 'candidate-credentials=pass gameplay-broad-groups=none service-groups=least-privilege sunshine-uinput=exclusive\n'
 }
 
+remote_namespace_test() {
+  local pid="$1" include_pid_namespace="$2" nsenter
+  shift 2
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || fail 'namespace inspection PID is invalid'
+  [[ "$include_pid_namespace" == yes || "$include_pid_namespace" == no ]] \
+    || fail 'namespace inspection mode is invalid'
+  nsenter="$(readlink -f -- "$(command -v nsenter)" 2>/dev/null)" \
+    || fail 'namespace inspection helper is unavailable'
+  [[ "$nsenter" == /nix/store/*/bin/nsenter && -x "$nsenter" ]] \
+    || fail 'namespace inspection helper is not immutable'
+  if [[ "$include_pid_namespace" == yes ]]; then
+    "$nsenter" --mount="/proc/$pid/ns/mnt" --pid="/proc/$pid/ns/pid" --fork -- "$@"
+  else
+    "$nsenter" --mount="/proc/$pid/ns/mnt" -- "$@"
+  fi
+}
+
+remote_namespace_first_extra_x11_socket() {
+  local pid="$1" find_helper
+  find_helper="$(readlink -f -- "$(command -v find)" 2>/dev/null)" \
+    || fail 'Xwayland socket enumeration helper is unavailable'
+  [[ "$find_helper" == /nix/store/*/bin/find && -x "$find_helper" ]] \
+    || fail 'Xwayland socket enumeration helper is not immutable'
+  remote_namespace_test "$pid" no "$find_helper" /tmp/.X11-unix \
+    -mindepth 1 -maxdepth 1 -type s ! -name X0 -print -quit
+}
+
+remote_assert_pid_namespace_hides_compositor() {
+  local subject="$1" pid="$2" sway_pid="$3"
+  if remote_namespace_test "$pid" yes test -e "/proc/$sway_pid"; then
+    fail "$subject PID namespace exposes the compositor process"
+  fi
+  if remote_namespace_test "$pid" yes \
+    test -e "/proc/$sway_pid/root$COMPOSITOR_CONTROL_SOCKET"; then
+    fail "$subject can reach compositor control through procfs"
+  fi
+}
+
+remote_assert_game_display_namespace() {
+  local pid="$1" runtime="$2" extra_x11_socket
+  remote_namespace_test "$pid" no test -S /tmp/.X11-unix/X0 \
+    || fail 'Xwayland display is not visible inside the live game unit'
+  extra_x11_socket="$(remote_namespace_first_extra_x11_socket "$pid")" \
+    || fail 'Xwayland socket enumeration failed inside the live game unit'
+  [[ -z "$extra_x11_socket" ]] || fail 'live game unit can access an unapproved X11 socket'
+  if remote_namespace_test "$pid" no test -e "$runtime"; then
+    fail 'native Wayland runtime is visible inside the live game unit'
+  fi
+  if remote_namespace_test "$pid" no test -e "$COMPOSITOR_CONTROL_SOCKET"; then
+    fail 'compositor control is visible inside the live game unit'
+  fi
+}
+
+remote_compositor_gate() {
+  local gameplay_user="$1" uid gid runtime stable target control_metadata directory_metadata
+  local compositor_environment sunshine_environment sunshine_inaccessible korrid_environment
+  local execstart running declared declared_real package_root swaymsg outputs render_device render_real render_driver token dev_sys dev_stat jq_helper
+  local sunshine_pid sunshine_private_pids sway_pid
+  local -a sway_execs=() render_devices=()
+  uid="$(id -u "$gameplay_user")" || fail 'gameplay user is unavailable for compositor validation'
+  gid="$(id -g "$gameplay_user")" || fail 'gameplay group is unavailable for compositor validation'
+  runtime="/run/user/$uid"
+  stable="$runtime/$COMPOSITOR_WAYLAND_ALIAS"
+  [[ -d "$COMPOSITOR_CONTROL_DIRECTORY" && ! -L "$COMPOSITOR_CONTROL_DIRECTORY" ]] \
+    || fail 'compositor control directory is absent or linked'
+  directory_metadata="$(stat -Lc '%u:%g:%a' -- "$COMPOSITOR_CONTROL_DIRECTORY" 2>/dev/null)" \
+    || fail 'compositor control directory metadata is unavailable'
+  [[ "$directory_metadata" == "$uid:$gid:700" ]] \
+    || fail 'compositor control directory ownership or mode is invalid'
+  [[ -S "$COMPOSITOR_CONTROL_SOCKET" && ! -L "$COMPOSITOR_CONTROL_SOCKET" ]] \
+    || fail 'compositor control socket is absent or linked'
+  control_metadata="$(stat -Lc '%u:%g:%a' -- "$COMPOSITOR_CONTROL_SOCKET" 2>/dev/null)" \
+    || fail 'compositor control socket metadata is unavailable'
+  [[ "$control_metadata" == "$uid:$gid:600" ]] \
+    || fail 'compositor control socket ownership or mode is invalid'
+  [[ -L "$stable" ]] || fail 'stable Wayland display alias is absent'
+  target="$(readlink -- "$stable")" || fail 'stable Wayland display alias target is unavailable'
+  [[ "$target" =~ ^wayland-[0-9]+$ && -S "$runtime/$target" ]] \
+    || fail 'stable Wayland display alias does not name a live numeric socket'
+  [[ -S /tmp/.X11-unix/X0 ]] || fail 'Xwayland display :0 is absent'
+
+  compositor_environment="$(systemctl show korri-compositor.service -p Environment --value 2>/dev/null)" \
+    || fail 'compositor environment is unavailable'
+  for expected in \
+    'WLR_BACKENDS=headless' \
+    'WLR_RENDERER=vulkan' \
+    "SWAYSOCK=$COMPOSITOR_CONTROL_SOCKET"; do
+    [[ " $compositor_environment " == *" $expected "* ]] \
+      || fail "compositor environment lacks $expected"
+  done
+  [[ " $compositor_environment " != *' WAYLAND_DISPLAY='* ]] \
+    || fail 'compositor service must not receive WAYLAND_DISPLAY'
+  for token in $compositor_environment; do
+    case "$token" in
+      WLR_RENDER_DRM_DEVICE=*) render_devices+=("${token#WLR_RENDER_DRM_DEVICE=}") ;;
+    esac
+  done
+  [[ "${#render_devices[@]}" -eq 1 ]] || fail 'compositor does not declare one DRM render device'
+  render_device="${render_devices[0]}"
+  [[ "$render_device" == /dev/dri/by-path/*-render && -L "$render_device" ]] \
+    || fail 'compositor DRM render device is not a stable by-path link'
+  render_real="$(realpath -e -- "$render_device" 2>/dev/null)" \
+    || fail 'compositor DRM render device target is unavailable'
+  [[ "$render_real" == /dev/dri/renderD* && -c "$render_device" ]] \
+    || fail 'compositor DRM render device target is not a character device'
+  dev_sys="$(<"/sys/class/drm/${render_real##*/}/dev")"
+  dev_stat="$(stat -Lc '%t:%T' "$render_device" 2>/dev/null)" \
+    || fail 'compositor DRM render device number is unavailable'
+  [[ "$dev_stat" =~ ^[0-9a-fA-F]+:[0-9a-fA-F]+$ \
+    && "$dev_sys" == "$((16#${dev_stat%:*})):$((16#${dev_stat#*:}))" ]] \
+    || fail 'compositor DRM render device number does not match sysfs'
+  render_driver="$(basename "$(readlink -f "/sys/class/drm/${render_real##*/}/device/driver" 2>/dev/null)")"
+  [[ "$render_driver" == nvidia ]] || fail 'compositor DRM render device is not NVIDIA'
+  sudo -n -u "$gameplay_user" test -r "$render_device" \
+    || fail 'gameplay identity cannot read the compositor DRM render device'
+
+  sunshine_environment="$(systemctl show sunshine.service -p Environment --value 2>/dev/null)" \
+    || fail 'Sunshine environment is unavailable'
+  [[ " $sunshine_environment " == *" WAYLAND_DISPLAY=$COMPOSITOR_WAYLAND_ALIAS "* \
+    && " $sunshine_environment " == *" XDG_RUNTIME_DIR=$runtime "* \
+    && " $sunshine_environment " == *' XDG_SESSION_TYPE=wayland '* ]] \
+    || fail 'Sunshine lacks the exact Wayland capture environment'
+  sunshine_inaccessible="$(systemctl show sunshine.service -p InaccessiblePaths --value 2>/dev/null)" \
+    || fail 'Sunshine inaccessible paths are unavailable'
+  [[ " $sunshine_inaccessible " == *" $COMPOSITOR_CONTROL_DIRECTORY "* ]] \
+    || fail 'Sunshine can access compositor control'
+  sunshine_private_pids="$(systemctl show sunshine.service -p PrivatePIDs --value 2>/dev/null)" \
+    || fail 'Sunshine PID namespace state is unavailable'
+  [[ "$sunshine_private_pids" == yes ]] || fail 'Sunshine does not have a private PID namespace'
+  korrid_environment="$(systemctl show korrid.service -p Environment --value 2>/dev/null)" \
+    || fail 'korrid environment is unavailable'
+  [[ " $korrid_environment " == *" KORRID_COMPOSITOR_CONTROL_DIRECTORY=$COMPOSITOR_CONTROL_DIRECTORY "* ]] \
+    || fail 'korrid lacks the compositor game-isolation path'
+
+  execstart="$(systemctl show korri-compositor.service -p ExecStart --value 2>/dev/null)" \
+    || fail 'compositor executable declaration is unavailable'
+  mapfile -t sway_execs < <(grep -oE '/nix/store/[^ ;{}"]+/bin/sway' <<<"$execstart" | sort -u)
+  [[ "${#sway_execs[@]}" -eq 1 ]] || fail 'compositor unit does not declare one exact Sway executable'
+  declared="${sway_execs[0]}"
+  package_root="${declared%/bin/sway}"
+  swaymsg="$package_root/bin/swaymsg"
+  [[ "$declared" == /nix/store/*/bin/sway && -x "$declared" && -x "$swaymsg" ]] \
+    || fail 'compositor command package is invalid'
+  declared_real="$package_root/bin/.sway-wrapped"
+  [[ -f "$declared" && -x "$declared" && ! -L "$declared" \
+    && -f "$declared_real" && -x "$declared_real" && ! -L "$declared_real" ]] \
+    || fail 'declared compositor wrapper or target is invalid'
+  grep -F "\"$declared_real\"" "$declared" >/dev/null \
+    || fail 'declared compositor wrapper does not execute its same-package target'
+  sway_pid="$(systemctl show korri-compositor.service -p MainPID --value 2>/dev/null)" \
+    || fail 'running compositor PID is unavailable'
+  [[ "$sway_pid" =~ ^[1-9][0-9]*$ ]] || fail 'running compositor PID is invalid'
+  running="$(readlink -f -- "/proc/$sway_pid/exe" 2>/dev/null)" \
+    || fail 'running compositor executable is unavailable'
+  [[ "$running" == "$declared_real" ]] || fail 'running compositor executable differs from the candidate unit'
+  sunshine_pid="$(systemctl show sunshine.service -p MainPID --value 2>/dev/null)" \
+    || fail 'Sunshine PID is unavailable for compositor isolation validation'
+  [[ "$sunshine_pid" =~ ^[1-9][0-9]*$ ]] || fail 'Sunshine PID is invalid for compositor isolation validation'
+  remote_assert_pid_namespace_hides_compositor Sunshine "$sunshine_pid" "$sway_pid"
+  outputs="$(sudo -n -u "$gameplay_user" "$swaymsg" -s "$COMPOSITOR_CONTROL_SOCKET" -t get_outputs -r)" \
+    || fail 'compositor output query failed'
+  jq_helper="$(readlink -f -- "$(command -v jq)" 2>/dev/null)" \
+    || fail 'compositor output validation helper is unavailable'
+  [[ "$jq_helper" == /nix/store/*/bin/jq && -x "$jq_helper" ]] \
+    || fail 'compositor output validation helper is not immutable'
+  # shellcheck disable=SC2016 # The jq program reads the named --arg value.
+  "$jq_helper" -e --arg output "$COMPOSITOR_OUTPUT" \
+    '.[] | select(.name == $output and .active == true and .current_mode.width == 1920 and .current_mode.height == 1080 and .current_mode.refresh == 60000)' \
+    <<<"$outputs" >/dev/null || fail 'compositor output is not active at 1920x1080 and 60 Hz'
+  printf 'compositor-gate=pass renderer=vulkan output=%s mode=1920x1080@60 wayland=stable xwayland=:0 sunshine-control=denied\n' "$COMPOSITOR_OUTPUT"
+}
+
+remote_compositor_game_gate() {
+  local gameplay_user="$1" uid game_units unit pid process_uid inaccessible runtime private_pids sway_pid game_environment bind_paths
+  uid="$(id -u "$gameplay_user")" || fail 'gameplay user is unavailable for game compositor validation'
+  runtime="/run/user/$uid"
+  game_units="$(systemctl list-units --type=service --state=activating,active,reloading,deactivating \
+    --no-legend --plain 'korri-game-*.service')" || fail 'Korri game units are unavailable for compositor validation'
+  [[ "$(awk 'NF { count += 1 } END { print count + 0 }' <<<"$game_units")" -eq 1 ]] \
+    || fail 'direct-action compositor validation requires exactly one live game unit'
+  unit="$(awk 'NF { print $1 }' <<<"$game_units")"
+  [[ "$unit" =~ ^korri-game-[0-9a-f]{32}\.service$ ]] || fail 'live game unit name is invalid'
+  pid="$(systemctl show "$unit" -p MainPID --value 2>/dev/null)" \
+    || fail 'live game unit PID is unavailable'
+  [[ "$pid" =~ ^[1-9][0-9]*$ && -r "/proc/$pid/status" ]] || fail 'live game unit PID is invalid'
+  process_uid="$(awk '/^Uid:/ {print $2}' "/proc/$pid/status")" \
+    || fail 'live game unit UID is unavailable'
+  [[ "$process_uid" == "$uid" ]] || fail 'live game unit does not use the gameplay identity'
+  inaccessible="$(systemctl show "$unit" -p InaccessiblePaths --value 2>/dev/null)" \
+    || fail 'live game unit inaccessible paths are unavailable'
+  [[ " $inaccessible " == *" $COMPOSITOR_CONTROL_DIRECTORY "* ]] \
+    || fail 'live game unit lacks the compositor control denial path'
+  [[ " $inaccessible " == *" $runtime "* ]] \
+    || fail 'live game unit lacks the gameplay runtime denial path'
+  game_environment="$(systemctl show "$unit" -p Environment --value 2>/dev/null)" \
+    || fail 'live game unit environment is unavailable'
+  [[ " $game_environment " == *' DISPLAY=:0 '* && " $game_environment " == *' XDG_SESSION_TYPE=x11 '* ]] \
+    || fail 'live game unit lacks the exact Xwayland environment'
+  [[ " $game_environment " != *' WAYLAND_DISPLAY='* && " $game_environment " != *' SWAYSOCK='* \
+    && " $game_environment " != *' XDG_RUNTIME_DIR='* ]] \
+    || fail 'live game unit received native compositor access environment'
+  bind_paths="$(systemctl show "$unit" -p BindReadOnlyPaths --value 2>/dev/null)" \
+    || fail 'live game unit Xwayland bind state is unavailable'
+  [[ " $bind_paths " == *" /tmp/.X11-unix/X0 "* ]] \
+    || fail 'live game unit lacks the read-only Xwayland X0 socket bind'
+  [[ " $bind_paths " != *" /tmp/.X11-unix "* ]] \
+    || fail 'live game unit binds the complete X11 socket directory'
+  private_pids="$(systemctl show "$unit" -p PrivatePIDs --value 2>/dev/null)" \
+    || fail 'live game unit PID namespace state is unavailable'
+  [[ "$private_pids" == yes ]] || fail 'live game unit does not have a private PID namespace'
+  remote_assert_game_display_namespace "$pid" "$runtime"
+  sway_pid="$(systemctl show korri-compositor.service -p MainPID --value 2>/dev/null)" \
+    || fail 'compositor PID is unavailable for game namespace validation'
+  [[ "$sway_pid" =~ ^[1-9][0-9]*$ ]] || fail 'compositor PID is invalid for game namespace validation'
+  remote_assert_pid_namespace_hides_compositor game "$pid" "$sway_pid"
+  printf 'game-compositor-gate=pass xwayland=visible wayland=hidden control=hidden procfs=isolated unit=one\n'
+}
+
 remote_start_candidate_services() {
   local gameplay_user="$1" unit
-  for unit in x11-headless.service korrid.service sunshine.service; do
+  for unit in korri-compositor.service korrid.service sunshine.service; do
     systemctl start "$unit"
     remote_wait_unit "$unit"
   done
@@ -786,7 +1010,7 @@ remote_start_candidate_services() {
 
 remote_stop_candidate_services() {
   local unit
-  for unit in sunshine.service korrid.service x11-headless.service; do
+  for unit in sunshine.service korrid.service korri-compositor.service; do
     systemctl stop "$unit" >/dev/null
     ! systemctl is-active --quiet "$unit" || fail "candidate system service remained active: $unit"
   done
@@ -942,7 +1166,7 @@ remote_predicates() {
     printf 'old-user.%s.active=%s\n' "$stem" "$active"
     printf 'old-user.%s.enabled=%s\n' "$stem" "$enabled"
   done
-  for unit in "${CANDIDATE_SYSTEM_UNITS[@]}"; do
+  for unit in "${PREDICATE_SYSTEM_UNITS[@]}"; do
     stem="${unit%.service}"
     printf 'system.%s.active=%s\n' "$stem" "$(remote_unit_value system '' "$unit" ActiveState)"
     printf 'system.%s.enabled=%s\n' "$stem" "$(remote_unit_value system '' "$unit" UnitFileState)"
@@ -987,6 +1211,7 @@ remote_inspect() {
   remote_unit_snapshot system '' korrid.service
   remote_unit_snapshot system '' sunshine.service
   remote_unit_snapshot system '' x11-headless.service
+  remote_unit_snapshot system '' korri-compositor.service
   remote_unit_snapshot user "$gameplay_user" korrid.service
   remote_unit_snapshot user "$gameplay_user" sunshine.service
   remote_unit_snapshot user "$gameplay_user" x11-headless.service
@@ -1136,7 +1361,7 @@ remote_automated_gates() {
   remote_wait_unit inputplumber.service
   remote_wait_unit korri-inputd.service Ready
   remote_wait_unit korrid.service
-  remote_wait_unit x11-headless.service
+  remote_wait_unit korri-compositor.service
   remote_wait_unit sunshine.service
   for unit in "${OLD_USER_UNITS[@]}"; do
     active="$(remote_user_unit_active "$gameplay_user" "$unit")" \
@@ -1147,6 +1372,7 @@ remote_automated_gates() {
     [[ "$enabled" == false ]] || fail "old user service is enabled beside its system replacement: $unit"
   done
   remote_candidate_credentials "$gameplay_user"
+  remote_compositor_gate "$gameplay_user"
   local sunshine_provenance
   sunshine_provenance="$(remote_sunshine_package_provenance)" \
     || fail 'running sunshine-korri provenance validation failed'
@@ -1189,7 +1415,7 @@ remote_automated_gates() {
   [[ "$(remote_catalog_health)" == Ok ]] || fail 'korrid catalog is unhealthy'
   acceptance="$(remote_acceptance_fingerprint "$gameplay_user" "$expected_identity" "$profile" "$require_physical")" \
     || fail 'acceptance fingerprint could not be captured'
-  printf 'automated-gates=pass raw-readable=0 inputd-status=Ready system-korrid=active system-x11-headless=active system-sunshine=active pairing-state=present credentials=service-specific sunshine-package=attested catalog=Ok delegate=yes controllers=pids\n'
+  printf 'automated-gates=pass raw-readable=0 inputd-status=Ready system-korrid=active system-korri-compositor=active system-sunshine=active pairing-state=present credentials=service-specific sunshine-package=attested catalog=Ok delegate=yes controllers=pids\n'
   printf '%s\n' "$sunshine_provenance"
   printf 'sunshine-private-state=protected digest=%s\n' "$sunshine_private_state"
   printf 'normalized-fingerprint=%s\n' "$fingerprint"
@@ -1301,6 +1527,14 @@ remote_attempt_reconcile_root() {
 
 remote_nvenc_stream_log_gate() {
   local log="$1" latest_start session_log first_h264
+  grep -F "Found display [$COMPOSITOR_WAYLAND_ALIAS]" <<<"$log" >/dev/null \
+    || { printf 'current Sunshine invocation did not connect to the stable Wayland display\n' >&2; return 1; }
+  grep -F -- '-------- Start of Wayland monitor list --------' <<<"$log" >/dev/null \
+    || { printf 'current Sunshine invocation did not enumerate Wayland outputs\n' >&2; return 1; }
+  grep -F 'Selected monitor [' <<<"$log" >/dev/null \
+    || { printf 'current Sunshine invocation did not select a Wayland monitor\n' >&2; return 1; }
+  ! grep -F 'Streaming display:' <<<"$log" >/dev/null \
+    || { printf 'current Sunshine invocation used X11 capture\n' >&2; return 1; }
   latest_start="$(grep -F 'New streaming session started' <<<"$log" | tail -n 1)"
   [[ "$latest_start" == *'[active sessions: 1]'* ]] \
     || { printf 'latest NVENC stream is absent or concurrent\n' >&2; return 1; }
@@ -1337,7 +1571,7 @@ remote_nvenc_stream_gate() {
   log="$(journalctl -b --no-pager -o cat -n 2000 \
     _SYSTEMD_UNIT=sunshine.service _SYSTEMD_INVOCATION_ID="$invocation")" || return 1
   remote_nvenc_stream_log_gate "$log" || return 1
-  printf 'nvenc-stream-gate=pass encoder=h264_nvenc strict=yes invocation=current\n'
+  printf 'nvenc-stream-gate=pass encoder=h264_nvenc strict=yes capture=wayland invocation=current\n'
 }
 
 remote_attempt_execute_root() {
@@ -1353,6 +1587,7 @@ remote_attempt_execute_root() {
     current-generation) remote_generation ;;
     acceptance-fingerprint) remote_acceptance_fingerprint "${1:?}" "${2:-}" "${3:-}" "${4:?}" ;;
     automated-gates) remote_automated_gates "${1:?}" "${2:-}" "${3:-}" "${4:?}" ;;
+    compositor-game-gate) remote_compositor_game_gate "${1:?}" ;;
     nvenc-stream-gate) remote_nvenc_stream_gate ;;
     rollback-gates) remote_rollback_gates ;;
     activate-test) remote_activate_test "${1:?}" "${2:?}" ;;
@@ -2015,6 +2250,9 @@ require_hitl() {
     printf '%s\n' "$consumed_key" >>"$LEDGER/consumed-gates"
     chmod 0600 "$LEDGER/consumed-gates"
     sync -f "$LEDGER/consumed-gates"
+    if [[ "$gate" == direct-action-isolation ]]; then
+      run_remote_attempt compositor-game-gate "$GAMEPLAY_USER"
+    fi
   done
 }
 
