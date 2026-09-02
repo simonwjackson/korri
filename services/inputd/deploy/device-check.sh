@@ -808,6 +808,16 @@ remote_namespace_first_extra_x11_socket() {
     -mindepth 1 -maxdepth 1 -type s ! -name X0 -print -quit
 }
 
+remote_namespace_first_wayland_socket() {
+  local pid="$1" runtime="$2" find_helper
+  find_helper="$(readlink -f -- "$(command -v find)" 2>/dev/null)" \
+    || fail 'Wayland socket enumeration helper is unavailable'
+  [[ "$find_helper" == /nix/store/*/bin/find && -x "$find_helper" ]] \
+    || fail 'Wayland socket enumeration helper is not immutable'
+  remote_namespace_test "$pid" no "$find_helper" "$runtime" \
+    -maxdepth 1 -type s -name 'wayland-[0-9]*' -print -quit
+}
+
 remote_assert_pid_namespace_hides_compositor() {
   local subject="$1" pid="$2" sway_pid="$3"
   if remote_namespace_test "$pid" yes test -e "/proc/$sway_pid"; then
@@ -820,15 +830,18 @@ remote_assert_pid_namespace_hides_compositor() {
 }
 
 remote_assert_game_display_namespace() {
-  local pid="$1" runtime="$2" extra_x11_socket
+  local pid="$1" runtime="$2" extra_x11_socket wayland_socket
   remote_namespace_test "$pid" no test -S /tmp/.X11-unix/X0 \
     || fail 'Xwayland display is not visible inside the live game unit'
   extra_x11_socket="$(remote_namespace_first_extra_x11_socket "$pid")" \
     || fail 'Xwayland socket enumeration failed inside the live game unit'
   [[ -z "$extra_x11_socket" ]] || fail 'live game unit can access an unapproved X11 socket'
-  if remote_namespace_test "$pid" no test -e "$runtime"; then
-    fail 'native Wayland runtime is visible inside the live game unit'
+  if remote_namespace_test "$pid" no test -e "$runtime/$COMPOSITOR_WAYLAND_ALIAS"; then
+    fail 'stable Wayland socket is visible inside the live game unit'
   fi
+  wayland_socket="$(remote_namespace_first_wayland_socket "$pid" "$runtime")" \
+    || fail 'Wayland socket enumeration failed inside the live game unit'
+  [[ -z "$wayland_socket" ]] || fail 'numeric Wayland socket is visible inside the live game unit'
   if remote_namespace_test "$pid" no test -e "$COMPOSITOR_CONTROL_SOCKET"; then
     fail 'compositor control is visible inside the live game unit'
   fi

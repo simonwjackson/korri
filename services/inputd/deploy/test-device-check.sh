@@ -685,7 +685,7 @@ modeled_namespace_test() {
   shift 2
   case "$*" in
     'test -S /tmp/.X11-unix/X0') [[ "${MODEL_X0_VISIBLE:-yes}" == yes ]] ;;
-    "test -e /run/user/${MODEL_UID:-1000}") [[ "${MODEL_RUNTIME_VISIBLE:-no}" == yes ]] ;;
+    "test -e /run/user/${MODEL_UID:-1000}/korri-wayland") [[ "${MODEL_WAYLAND_ALIAS_VISIBLE:-no}" == yes ]] ;;
     'test -e /run/korri-compositor/sway-ipc.sock') [[ "${MODEL_CONTROL_VISIBLE:-no}" == yes ]] ;;
     "test -e /proc/${MODEL_SWAY_PID:-222}")
       [[ "$include_pid_namespace" == yes && "${MODEL_SWAY_PROCESS_VISIBLE:-no}" == yes ]]
@@ -704,7 +704,12 @@ run_modeled_game_namespace_gate() (
   remote_namespace_test() { modeled_namespace_test "$@"; }
   # shellcheck disable=SC2329 # The extracted production functions call these test doubles indirectly.
   remote_namespace_first_extra_x11_socket() { printf '%s' "${MODEL_EXTRA_X11_SOCKET:-}"; }
+  # shellcheck disable=SC2329 # The extracted production functions call these test doubles indirectly.
+  remote_namespace_first_wayland_socket() { printf '%s' "${MODEL_WAYLAND_SOCKET:-}"; }
+  # shellcheck disable=SC2034 # The extracted production function reads this global indirectly.
   COMPOSITOR_CONTROL_SOCKET=/run/korri-compositor/sway-ipc.sock
+  # shellcheck disable=SC2034 # The extracted production function reads this global indirectly.
+  COMPOSITOR_WAYLAND_ALIAS=korri-wayland
   remote_assert_game_display_namespace 111 "/run/user/${MODEL_UID:-1000}"
   remote_assert_pid_namespace_hides_compositor game 111 "${MODEL_SWAY_PID:-222}"
 )
@@ -736,8 +741,10 @@ MODEL_X0_VISIBLE=no assert_modeled_namespace_fails \
   'Xwayland display is not visible inside the live game unit' run_modeled_game_namespace_gate
 MODEL_EXTRA_X11_SOCKET=/tmp/.X11-unix/X1 assert_modeled_namespace_fails \
   'live game unit can access an unapproved X11 socket' run_modeled_game_namespace_gate
-MODEL_RUNTIME_VISIBLE=yes assert_modeled_namespace_fails \
-  'native Wayland runtime is visible inside the live game unit' run_modeled_game_namespace_gate
+MODEL_WAYLAND_ALIAS_VISIBLE=yes assert_modeled_namespace_fails \
+  'stable Wayland socket is visible inside the live game unit' run_modeled_game_namespace_gate
+MODEL_WAYLAND_SOCKET=/run/user/1000/wayland-1 assert_modeled_namespace_fails \
+  'numeric Wayland socket is visible inside the live game unit' run_modeled_game_namespace_gate
 MODEL_CONTROL_VISIBLE=yes assert_modeled_namespace_fails \
   'compositor control is visible inside the live game unit' run_modeled_game_namespace_gate
 MODEL_SWAY_PROCESS_VISIBLE=yes assert_modeled_namespace_fails \
