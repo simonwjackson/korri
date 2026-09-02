@@ -184,6 +184,7 @@ assert sunshine.environment.XDG_CONFIG_HOME == "/home/gameplay/.config";
 assert
   sunshine.serviceConfig.ExecStart
   == "${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf log_path=/dev/null";
+assert sunshine.serviceConfig.PrivatePIDs;
 assert sunshine.serviceConfig.ProtectSystem == "strict";
 assert sunshine.serviceConfig.ProtectHome == "read-only";
 assert builtins.elem "/home/gameplay/.config/sunshine" sunshine.serviceConfig.ReadWritePaths;
@@ -248,13 +249,14 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     grep -F '/bin/mpv' ${deviceConfig} >/dev/null
     grep -F -- '--hwdec=auto-copy-safe' ${deviceConfig} >/dev/null
     grep -F -- '--vf=fps=60' ${deviceConfig} >/dev/null
-    grep -F -- '--gpu-context=wayland' ${deviceConfig} >/dev/null
+    grep -F -- '--gpu-context=x11egl' ${deviceConfig} >/dev/null
     ! grep -F 'LD_LIBRARY_PATH=/run/opengl-driver/lib' ${deviceConfig} >/dev/null
     grep -F 'LD_LIBRARY_PATH=/run/opengl-driver/lib' ${nvencDeviceConfig} >/dev/null
     grep -F '/share/korri-streaming-validation/video.mp4' ${deviceConfig} >/dev/null
     grep -F 'DISPLAY = ":0"' ${deviceConfig} >/dev/null
-    grep -F 'WAYLAND_DISPLAY = "korri-wayland"' ${deviceConfig} >/dev/null
-    grep -F 'XDG_RUNTIME_DIR = "/run/user/1001"' ${deviceConfig} >/dev/null
+    grep -F 'XDG_SESSION_TYPE = "x11"' ${deviceConfig} >/dev/null
+    ! grep -F 'WAYLAND_DISPLAY' ${deviceConfig} >/dev/null
+    ! grep -F 'XDG_RUNTIME_DIR' ${deviceConfig} >/dev/null
     ! grep -F 'SWAYSOCK' ${deviceConfig} >/dev/null
     grep -F -- '--config /nix/store/' ${compositorExec} >/dev/null
     grep -Fx '${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf log_path=/dev/null' ${sunshineExec} >/dev/null
@@ -317,10 +319,10 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
       >/dev/null
     test -S /tmp/.X11-unix/X0
 
-    XDG_RUNTIME_DIR="$runtime" WAYLAND_DISPLAY="$wayland_display" \
+    DISPLAY=:0 XDG_SESSION_TYPE=x11 \
       ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=1s 8 \
       ${lib.getExe pkgs.mpv-unwrapped} --no-config --quiet --no-audio --loop-file=inf \
-      --no-fullscreen --vo=wlshm --hwdec=no --vf=fps=60 \
+      --no-fullscreen --vo=x11 --hwdec=no --vf=fps=60 \
       --title='Korri action gate' "$media" >"$TMPDIR/mpv.log" 2>&1 &
     player_pid=$!
     attempt=0

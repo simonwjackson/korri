@@ -45,9 +45,7 @@ let
 
     [environment]
     DISPLAY = "${xwaylandDisplay}"
-    WAYLAND_DISPLAY = "${waylandDisplay}"
-    XDG_RUNTIME_DIR = "${gameplayRuntimeDir}"
-    XDG_SESSION_TYPE = "wayland"
+    XDG_SESSION_TYPE = "x11"
 
     ${lib.optionalString cfg.validation.enable ''
       [[games]]
@@ -69,7 +67,7 @@ let
         "--loop-file=inf",
         "--fullscreen",
         "--vo=gpu-next",
-        "--gpu-context=wayland",
+        "--gpu-context=x11egl",
         "--hwdec=auto-copy-safe",
         "--vf=fps=60",
         "--title=Korri streaming gate",
@@ -638,6 +636,7 @@ in
         CapabilityBoundingSet = [ ];
         AmbientCapabilities = [ ];
         PrivateTmp = false;
+        PrivatePIDs = true;
         PrivateDevices = false;
         ProtectSystem = "strict";
         ProtectHome = "read-only";

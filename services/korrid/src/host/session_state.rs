@@ -763,7 +763,15 @@ mod tests {
             .launch_arguments(
                 id,
                 &["/games/retroarch".into(), "rom.gba".into()],
-                &BTreeMap::from([("SAVE_ROOT".into(), "/saves".into())]),
+                &BTreeMap::from([
+                    ("SAVE_ROOT".into(), "/saves".into()),
+                    ("WAYLAND_DISPLAY".into(), "korri-wayland".into()),
+                    (
+                        "SWAYSOCK".into(),
+                        "/run/korri-compositor/sway-ipc.sock".into(),
+                    ),
+                    ("XDG_RUNTIME_DIR".into(), "/run/user/1001".into()),
+                ]),
             )
             .unwrap();
         for expected in [
@@ -775,15 +783,25 @@ mod tests {
             "--property=CapabilityBoundingSet=".into(),
             "--property=AmbientCapabilities=".into(),
             "--property=PrivateTmp=yes".into(),
+            "--property=PrivatePIDs=yes".into(),
+            "--property=BindReadOnlyPaths=/tmp/.X11-unix/X0".into(),
             "--property=ProtectKernelTunables=yes".into(),
             "--property=ProtectKernelModules=yes".into(),
             "--property=ProtectControlGroups=yes".into(),
-            "--property=InaccessiblePaths=/var/lib/korrid /run/korrid /run/korrid-control/control.sock /run/korrid-control /home/gameplay/.config/sunshine /run/korri-compositor /dev/uinput /dev/inputplumber/sources".into(),
+            "--property=InaccessiblePaths=/var/lib/korrid /run/korrid /run/korrid-control/control.sock /run/korrid-control /home/gameplay/.config/sunshine /run/korri-compositor /run/user/1001 /dev/uinput /dev/inputplumber/sources".into(),
             "--property=RestrictSUIDSGID=yes".into(),
         ] {
             assert!(
                 launch.contains(&expected),
                 "missing {expected:?} from {launch:?}"
+            );
+        }
+        for withheld in ["WAYLAND_DISPLAY", "SWAYSOCK", "XDG_RUNTIME_DIR"] {
+            assert!(
+                !launch
+                    .iter()
+                    .any(|argument| argument.starts_with(&format!("--setenv={withheld}="))),
+                "game launch exposed {withheld}: {launch:?}"
             );
         }
         assert_eq!(
@@ -819,7 +837,7 @@ mod tests {
             )
             .unwrap();
         assert!(launch.contains(
-            &"--property=InaccessiblePaths=/srv/korri-test/private-recovery /run/korrid /run/korri-test/control/device.sock /run/korri-test/control /home/gameplay/.config/sunshine /run/korri-test/compositor-control /dev/uinput /dev/inputplumber/sources".into()
+            &"--property=InaccessiblePaths=/srv/korri-test/private-recovery /run/korrid /run/korri-test/control/device.sock /run/korri-test/control /home/gameplay/.config/sunshine /run/korri-test/compositor-control /run/user/1001 /dev/uinput /dev/inputplumber/sources".into()
         ));
     }
 

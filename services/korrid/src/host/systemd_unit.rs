@@ -255,7 +255,10 @@ impl SystemdLaunchUnitBackend {
             ("control socket", &control_socket),
             ("control directory", &control_directory),
             ("Sunshine private state root", &sunshine_private_state_root),
-            ("compositor control directory", &compositor_control_directory),
+            (
+                "compositor control directory",
+                &compositor_control_directory,
+            ),
         ] {
             if !valid_protected_path(path) {
                 return Err(LaunchUnitError::new(
@@ -579,24 +582,33 @@ impl SystemdLaunchUnitBackend {
             "--property=CapabilityBoundingSet=".into(),
             "--property=AmbientCapabilities=".into(),
             "--property=PrivateTmp=yes".into(),
+            "--property=PrivatePIDs=yes".into(),
+            "--property=BindReadOnlyPaths=/tmp/.X11-unix/X0".into(),
             "--property=ProtectKernelTunables=yes".into(),
             "--property=ProtectKernelModules=yes".into(),
             "--property=ProtectControlGroups=yes".into(),
             "--property=ProtectProc=invisible".into(),
             "--property=ProcSubset=pid".into(),
             format!(
-                "--property=InaccessiblePaths={} /run/korrid {} {} {} {} /dev/uinput /dev/inputplumber/sources",
+                "--property=InaccessiblePaths={} /run/korrid {} {} {} {} /run/user/{} /dev/uinput /dev/inputplumber/sources",
                 self.private_state_root.display(),
                 self.control_socket.display(),
                 self.control_directory.display(),
                 self.sunshine_private_state_root.display(),
-                self.compositor_control_directory.display()
+                self.compositor_control_directory.display(),
+                self.gameplay_uid
             ),
             "--property=RestrictSUIDSGID=yes".into(),
         ];
         arguments.extend(
             environment
                 .iter()
+                .filter(|(key, _)| {
+                    !matches!(
+                        key.as_str(),
+                        "WAYLAND_DISPLAY" | "SWAYSOCK" | "XDG_RUNTIME_DIR"
+                    )
+                })
                 .map(|(key, value)| format!("--setenv={key}={value}")),
         );
         arguments.push("--".into());
