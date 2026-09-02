@@ -1,0 +1,13 @@
+--- a/src/platform/linux/wlgrab.cpp
++++ b/src/platform/linux/wlgrab.cpp
+@@ -156,7 +156,9 @@
+ 
+         next_frame += delay;
+         if (next_frame < now) {  // some major slowdown happened; we couldn't keep up
+-          next_frame = now + delay;
++          // The screencopy request already waits for the next output frame.
++          // Resume now instead of adding another full frame of idle time.
++          next_frame = now;
+         }
+ 
+         std::shared_ptr<platf::img_t> img_out;

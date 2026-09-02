@@ -30,3 +30,13 @@ No physical action or visual confirmation was used to capture this baseline.
 ## Candidate iteration 1
 
 Candidate `/nix/store/a7575ikx8nmf25d2jq3a7nsqzwvgbnm1-nixos-system-zao-26.05.20260313.c06b4ae` activated with `HEADLESS-1` at 120 Hz. The automated compositor gate still required 60 Hz, so it rejected the candidate before streaming. The guarded cleanup restored the exact baseline generation and bundle. The attempt marker and lease were removed. This failure identified a gate defect, not a 120 Hz compositor failure.
+
+## Candidate iteration 2
+
+Candidate `/nix/store/42ws5zbngcm319g1gwyhqkfzsdn1n9ya-nixos-system-zao-26.05.20260313.c06b4ae` passed the dynamic compositor gate at 1920x1080@120. Bandai streamed the native 120 FPS validation source with H.264.
+
+Five primary incoming-FPS samples were `115.81`, `117.50`, `114.26`, `111.33`, and `115.52`. Their mean was `114.884`. Eight final decoder work-rate samples averaged `114.168`. Network loss stayed at `0.00%`. NVIDIA encoder utilization stayed between `23%` and `32%`, so NVENC was not saturated.
+
+A live diagnostic raised only the Sway output to 125 Hz while the stream remained 120 FPS. Incoming rates remained near the same range. The diagnostic restored 120 Hz. This result rejects exact output-phase alignment as the main limit.
+
+The accepted threshold was not met. Bandai returned to its exact saved settings. Zao returned to the exact 1080p60 generation and bundle with no game, marker, or lease.
