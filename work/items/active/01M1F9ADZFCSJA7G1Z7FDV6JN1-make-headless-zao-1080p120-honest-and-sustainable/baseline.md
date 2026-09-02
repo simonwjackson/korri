@@ -40,3 +40,9 @@ Five primary incoming-FPS samples were `115.81`, `117.50`, `114.26`, `111.33`, a
 A live diagnostic raised only the Sway output to 125 Hz while the stream remained 120 FPS. Incoming rates remained near the same range. The diagnostic restored 120 Hz. This result rejects exact output-phase alignment as the main limit.
 
 The accepted threshold was not met. Bandai returned to its exact saved settings. Zao returned to the exact 1080p60 generation and bundle with no game, marker, or lease.
+
+## Candidate iteration 3
+
+A candidate tested patch `0018`, which changed missed-deadline recovery in Sunshine's Wayland RAM capture scheduler. The candidate regressed the stream. Five incoming-FPS samples were `105.42`, `109.28`, `118.03`, `108.07`, and `107.27`. Their mean was `109.614`. Eight final decoder work-rate samples averaged `107.963`.
+
+The experiment failed and the patch was removed. Bandai returned to its saved settings. Zao returned to the exact 1080p60 generation and bundle with no game, marker, or lease.

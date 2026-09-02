@@ -67,8 +67,7 @@ let
       && sunshinePackage.korriBaseSunshineVersion == approved.baseSunshineVersion
       && sunshinePackage.korriApprovedBaseSunshineSourceHash == approved.approvedBaseSourceHash
       && builtins.elem sunshinePackage.korriBaseSunshineDerivation approved.approvedBaseDerivations
-      &&
-        sunshinePackage.korriApprovedBaseSunshineDerivation == sunshinePackage.korriBaseSunshineDerivation
+      && sunshinePackage.korriApprovedBaseSunshineDerivation == sunshinePackage.korriBaseSunshineDerivation
       && pkgs.sunshine.src.outputHash == approved.approvedBaseSourceHash
       && sunshinePackage.korriReviewedLibavcodecVersion == approved.reviewedLibavcodecVersion
       && sunshinePackage.korriReviewedFfmpegCommit == approved.reviewedFfmpegCommit
@@ -84,14 +83,6 @@ let
       && patchContains "DRM_FORMAT_BGR888"
       && patchContains "destination[0] = source[2];"
       && patchContains "destination[2] = source[0];"
-    ))
-    (check "Wayland RAM capture recovers missed deadlines without another idle frame" (
-      builtins.elem "0018-clock-wayland-ram-capture-from-screencopy.patch" sunshinePackage.korriPatchNames
-      && patchContains "The screencopy request already waits for the next output frame"
-      && patchContains "Resume now instead of adding another full frame of idle time"
-      && patchContains "-          next_frame = now + delay;"
-      && patchContains "+          next_frame = now;"
-      && !(patchContains "-          std::this_thread::sleep_for(next_frame - now);")
     ))
     (check "runtime settings packet IDs remain stable" (
       patchContains "RUNTIME_SETTINGS_REQUEST_PACKET = 0x5504"
@@ -212,42 +203,42 @@ let
     ))
     (check "every fresh NVENC encoder resets the circuit before capability publication" (
       patchContains ''
-        +                    if (runtime_settings_supports_nvenc_h264(encoder, updated_config)) {
-        +                      last_runtime_nvenc_bitrate = std::chrono::steady_clock::time_point {};
-        +                      runtime_nvenc_bitrate_blocked = false;
-        +                    }
-        +                    runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_h264_dynamic(encoder, updated_config));
-        +                    runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(session.get()));
-      ''
++                    if (runtime_settings_supports_nvenc_h264(encoder, updated_config)) {
++                      last_runtime_nvenc_bitrate = std::chrono::steady_clock::time_point {};
++                      runtime_nvenc_bitrate_blocked = false;
++                    }
++                    runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_h264_dynamic(encoder, updated_config));
++                    runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(session.get()));
+''
       && patchContains ''
-        +    if (raise_runtime_state) {
-        +      if (runtime_settings_supports_nvenc_h264(encoder, ctx.config)) {
-        +        ctx.last_runtime_nvenc_bitrate = std::chrono::steady_clock::time_point {};
-        +        ctx.runtime_nvenc_bitrate_blocked = false;
-        +      }
-        +      ctx.runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_h264_dynamic(encoder, ctx.config));
-        +      ctx.runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(session.get()));
-        +    }
-      ''
++    if (raise_runtime_state) {
++      if (runtime_settings_supports_nvenc_h264(encoder, ctx.config)) {
++        ctx.last_runtime_nvenc_bitrate = std::chrono::steady_clock::time_point {};
++        ctx.runtime_nvenc_bitrate_blocked = false;
++      }
++      ctx.runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_h264_dynamic(encoder, ctx.config));
++      ctx.runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(session.get()));
++    }
+''
       && patchContains ''
-        +                    if (runtime_settings_supports_nvenc_h264(encoder, ctx->config)) {
-        +                      ctx->last_runtime_nvenc_bitrate = std::chrono::steady_clock::time_point {};
-        +                      ctx->runtime_nvenc_bitrate_blocked = false;
-        +                    }
-        +                    ctx->runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_h264_dynamic(encoder, ctx->config));
-        +                    ctx->runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(pos->session.get()));
-      ''
++                    if (runtime_settings_supports_nvenc_h264(encoder, ctx->config)) {
++                      ctx->last_runtime_nvenc_bitrate = std::chrono::steady_clock::time_point {};
++                      ctx->runtime_nvenc_bitrate_blocked = false;
++                    }
++                    ctx->runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_h264_dynamic(encoder, ctx->config));
++                    ctx->runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(pos->session.get()));
+''
     ))
     (check "explicit strict encoder selection refuses automatic fallback" (
       patchContains ''std::getenv("SUNSHINE_STRICT_ENCODER")''
       && patchContains "value[0] == '1' && value[1] == '\\0'"
       && patchContains "Strict encoder selection refuses automatic fallback"
       && patchContains ''
-        +        if (strict_encoder_selection_enabled()) {
-        +          BOOST_LOG(error) << "Strict encoder selection refuses automatic fallback"sv;
-        +          return -1;
-        +        }
-      ''
++        if (strict_encoder_selection_enabled()) {
++          BOOST_LOG(error) << "Strict encoder selection refuses automatic fallback"sv;
++          return -1;
++        }
+''
     ))
     (check "runtime FPS and resolution support is limited to H.264 VAAPI or NVENC" (
       patchContains "runtime_settings_supports_h264_dynamic"
@@ -408,8 +399,7 @@ let
         sunshinePackage.korriBaseSunshineDerivation
         == builtins.unsafeDiscardStringContext (pkgs.sunshine.override { cudaSupport = true; }).drvPath
       && builtins.elem sunshinePackage.korriBaseSunshineDerivation approved.approvedBaseDerivations
-      &&
-        sunshinePackage.korriApprovedBaseSunshineDerivation == sunshinePackage.korriBaseSunshineDerivation
+      && sunshinePackage.korriApprovedBaseSunshineDerivation == sunshinePackage.korriBaseSunshineDerivation
       && contains "Package provenance" readme
     ))
   ];
@@ -421,51 +411,45 @@ if failures != [ ] then
   }"
 else
   pkgs.runCommand "sunshine-korri-runtime-settings-check"
-    {
-      nativeBuildInputs = [
-        pkgs.gcc
-        pkgs.boost
-      ];
-    }
-    ''
-      test -x ${sunshinePackage}/bin/sunshine
-      c++ -std=c++20 -O2 -Wall -Wextra -Werror -pthread \
-        ${./test-runtime-settings-host.cpp} -o host-runtime-settings-test
-      ./host-runtime-settings-test
+    { nativeBuildInputs = [ pkgs.gcc pkgs.boost ]; } ''
+    test -x ${sunshinePackage}/bin/sunshine
+    c++ -std=c++20 -O2 -Wall -Wextra -Werror -pthread \
+      ${./test-runtime-settings-host.cpp} -o host-runtime-settings-test
+    ./host-runtime-settings-test
 
-      bundled=${pkgs.sunshine.src}/third-party/build-deps/dist/Linux-x86_64/include
-      grep -Fx '#define FFMPEG_VERSION "61c5040"' "$bundled/libavutil/ffversion.h" >/dev/null
-      grep -Fx '#define NVENCAPI_MAJOR_VERSION 12' "$bundled/ffnvcodec/nvEncodeAPI.h" >/dev/null
-      grep -Fx '#define NVENCAPI_MINOR_VERSION 0' "$bundled/ffnvcodec/nvEncodeAPI.h" >/dev/null
-      c++ -std=c++20 -O2 -Wall -Wextra -Werror \
-        -I"$bundled" \
-        -I${ffmpegLayoutSource} \
-        -I${ffmpegLayoutSource}/libavcodec \
-        -I${patchedSunshineSource}/src \
-        ${./test-nvenc-layout.cpp} -o nvenc-layout-test
-      ./nvenc-layout-test
+    bundled=${pkgs.sunshine.src}/third-party/build-deps/dist/Linux-x86_64/include
+    grep -Fx '#define FFMPEG_VERSION "61c5040"' "$bundled/libavutil/ffversion.h" >/dev/null
+    grep -Fx '#define NVENCAPI_MAJOR_VERSION 12' "$bundled/ffnvcodec/nvEncodeAPI.h" >/dev/null
+    grep -Fx '#define NVENCAPI_MINOR_VERSION 0' "$bundled/ffnvcodec/nvEncodeAPI.h" >/dev/null
+    c++ -std=c++20 -O2 -Wall -Wextra -Werror \
+      -I"$bundled" \
+      -I${ffmpegLayoutSource} \
+      -I${ffmpegLayoutSource}/libavcodec \
+      -I${patchedSunshineSource}/src \
+      ${./test-nvenc-layout.cpp} -o nvenc-layout-test
+    ./nvenc-layout-test
 
-      finalVideo=${patchedSunshineSource}/src/video.cpp
-      grep -F 'runtime_settings_supports_h264_dynamic' "$finalVideo" >/dev/null
-      grep -F 'NVENC runtime bitrate reconfigured without encoder restart' "$finalVideo" >/dev/null
-      grep -F 'runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(session.get()))' "$finalVideo" >/dev/null
-      grep -F 'ctx.runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(session.get()))' "$finalVideo" >/dev/null
-      test "$(grep -Fc 'ctx->runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(pos->session.get()))' "$finalVideo")" = 1
-      grep -F 'RUNTIME_NVENC_BITRATE_MIN_INTERVAL' "$finalVideo" >/dev/null
-      grep -F 'if (runtime_settings_supports_vaapi_h264(encoder, config))' "$finalVideo" >/dev/null
-      if grep -F 'seamless_vaapi=1' "$finalVideo" >/dev/null; then
-        echo 'final applied source retained a superseded VAAPI-only success marker' >&2
-        exit 1
-      fi
+    finalVideo=${patchedSunshineSource}/src/video.cpp
+    grep -F 'runtime_settings_supports_h264_dynamic' "$finalVideo" >/dev/null
+    grep -F 'NVENC runtime bitrate reconfigured without encoder restart' "$finalVideo" >/dev/null
+    grep -F 'runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(session.get()))' "$finalVideo" >/dev/null
+    grep -F 'ctx.runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(session.get()))' "$finalVideo" >/dev/null
+    test "$(grep -Fc 'ctx->runtime_settings_supports_bitrate->raise(runtime_h264_bitrate_supported(pos->session.get()))' "$finalVideo")" = 1
+    grep -F 'RUNTIME_NVENC_BITRATE_MIN_INTERVAL' "$finalVideo" >/dev/null
+    grep -F 'if (runtime_settings_supports_vaapi_h264(encoder, config))' "$finalVideo" >/dev/null
+    if grep -F 'seamless_vaapi=1' "$finalVideo" >/dev/null; then
+      echo 'final applied source retained a superseded VAAPI-only success marker' >&2
+      exit 1
+    fi
 
-      provenance=${sunshinePackage}/${sunshinePackage.korriProvenanceRelativePath}
-      test -f "$provenance"
-      test "$(stat -c '%a' "$provenance")" = 444
+    provenance=${sunshinePackage}/${sunshinePackage.korriProvenanceRelativePath}
+    test -f "$provenance"
+    test "$(stat -c '%a' "$provenance")" = 444
 
-      cat > expected-provenance <<'EOF'
-      ${expectedProvenance}EOF
-      cmp expected-provenance "$provenance"
+    cat > expected-provenance <<'EOF'
+    ${expectedProvenance}EOF
+    cmp expected-provenance "$provenance"
 
-      mkdir -p "$out"
-      printf '%s\n' '${approved.patchSetSha256}' > "$out/patch-set-sha256"
-    ''
+    mkdir -p "$out"
+    printf '%s\n' '${approved.patchSetSha256}' > "$out/patch-set-sha256"
+  ''
