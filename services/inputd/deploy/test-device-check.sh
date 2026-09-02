@@ -882,6 +882,20 @@ grep -F 'PREDICATE_SYSTEM_UNITS=(korrid.service sunshine.service x11-headless.se
 grep -F 'remote_wait_unit korri-compositor.service' "$GATE" >/dev/null
 # shellcheck disable=SC2016 # Literal production source invariant.
 grep -F 'remote_compositor_gate "$gameplay_user"' "$GATE" >/dev/null
+COMPOSITOR_MODE_SOURCE="$(awk '
+  /^remote_parse_compositor_mode\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$COMPOSITOR_MODE_SOURCE" == remote_parse_compositor_mode* ]]
+run_compositor_mode_parser() (
+  eval "$COMPOSITOR_MODE_SOURCE"
+  remote_parse_compositor_mode "$1"
+)
+[[ "$(run_compositor_mode_parser '1920x1080@60Hz')" == '1920 1080 60000 1920x1080@60Hz' ]]
+[[ "$(run_compositor_mode_parser '1920x1080@120Hz')" == '1920 1080 120000 1920x1080@120Hz' ]]
+assert_fails_with 'invalid compositor mode' run_compositor_mode_parser '1920x1080@0Hz'
+assert_fails_with 'invalid compositor mode' run_compositor_mode_parser '1920x1080@120'
 # shellcheck disable=SC2016 # Literal production source invariant.
 grep -F 'run_remote_attempt compositor-game-gate "$GAMEPLAY_USER"' "$GATE" >/dev/null
 grep -F -- '--property=PrivatePIDs=yes' "$HERE/../../korrid/src/host/systemd_unit.rs" >/dev/null

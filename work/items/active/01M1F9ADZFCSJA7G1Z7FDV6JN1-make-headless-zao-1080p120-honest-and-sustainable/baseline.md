@@ -26,3 +26,7 @@ A guarded live probe changed `HEADLESS-1` from 60 Hz to 120 Hz. Sway reported `1
 - Korri stream baseline: 1280x720 at 60 FPS, codec `auto`, unlocked FPS disabled, performance overlay disabled
 
 No physical action or visual confirmation was used to capture this baseline.
+
+## Candidate iteration 1
+
+Candidate `/nix/store/a7575ikx8nmf25d2jq3a7nsqzwvgbnm1-nixos-system-zao-26.05.20260313.c06b4ae` activated with `HEADLESS-1` at 120 Hz. The automated compositor gate still required 60 Hz, so it rejected the candidate before streaming. The guarded cleanup restored the exact baseline generation and bundle. The attempt marker and lease were removed. This failure identified a gate defect, not a 120 Hz compositor failure.

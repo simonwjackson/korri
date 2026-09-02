@@ -888,12 +888,26 @@ remote_assert_game_display_namespace() {
   fi
 }
 
+remote_parse_compositor_mode() {
+  local mode="$1" width height refresh_hz
+  if [[ "$mode" =~ ^([1-9][0-9]*)x([1-9][0-9]*)@([1-9][0-9]*)Hz$ ]]; then
+    width="${BASH_REMATCH[1]}"
+    height="${BASH_REMATCH[2]}"
+    refresh_hz="${BASH_REMATCH[3]}"
+  else
+    printf 'invalid compositor mode: %s\n' "$mode" >&2
+    return 1
+  fi
+  printf '%s %s %s %s\n' "$width" "$height" "$((10#$refresh_hz * 1000))" "$mode"
+}
+
 remote_compositor_gate() {
   local gameplay_user="$1" uid gid runtime stable target control_metadata directory_metadata
   local compositor_environment sunshine_environment sunshine_inaccessible korrid_environment
   local execstart running declared declared_link declared_real running_target package_root swaymsg outputs render_device render_real render_driver token dev_sys dev_stat jq_helper
-  local sunshine_pid sunshine_private_pids sway_pid
-  local -a sway_execs=() wrapped_targets=() render_devices=()
+  local sunshine_pid sunshine_private_pids sway_pid compositor_config compositor_config_metadata configured_mode
+  local expected_width expected_height expected_refresh expected_mode
+  local -a sway_execs=() wrapped_targets=() render_devices=() compositor_configs=() configured_modes=()
   uid="$(id -u "$gameplay_user")" || fail 'gameplay user is unavailable for compositor validation'
   gid="$(id -g "$gameplay_user")" || fail 'gameplay group is unavailable for compositor validation'
   runtime="/run/user/$uid"
@@ -973,6 +987,21 @@ remote_compositor_gate() {
     || fail 'compositor executable declaration is unavailable'
   mapfile -t sway_execs < <(grep -oE '/nix/store/[^ ;{}"]+/bin/sway' <<<"$execstart" | sort -u)
   [[ "${#sway_execs[@]}" -eq 1 ]] || fail 'compositor unit does not declare one exact Sway executable'
+  mapfile -t compositor_configs < <(grep -oE -- '--config /nix/store/[^ ;{}"]+-korri-sway\.conf' <<<"$execstart" | awk '{ print $2 }' | sort -u)
+  [[ "${#compositor_configs[@]}" -eq 1 ]] || fail 'compositor unit does not declare one exact Sway configuration'
+  compositor_config="${compositor_configs[0]}"
+  compositor_config_metadata="$(stat -Lc '%u:%g:%a' -- "$compositor_config" 2>/dev/null)" \
+    || fail 'compositor configuration metadata is unavailable'
+  [[ "$compositor_config" == /nix/store/*-korri-sway.conf \
+    && -f "$compositor_config" && ! -L "$compositor_config" \
+    && "$compositor_config_metadata" == 0:0:444 ]] \
+    || fail 'compositor configuration is not immutable store content'
+  mapfile -t configured_modes < <(grep -E "^output $COMPOSITOR_OUTPUT mode [1-9][0-9]*x[1-9][0-9]*@[1-9][0-9]*Hz$" "$compositor_config")
+  [[ "${#configured_modes[@]}" -eq 1 ]] || fail 'compositor configuration does not declare one exact output mode'
+  configured_mode="${configured_modes[0]##* mode }"
+  read -r expected_width expected_height expected_refresh expected_mode \
+    < <(remote_parse_compositor_mode "$configured_mode") \
+    || fail 'compositor configuration mode is invalid'
   declared="${sway_execs[0]}"
   package_root="${declared%/bin/sway}"
   swaymsg="$package_root/bin/swaymsg"
@@ -1012,11 +1041,16 @@ remote_compositor_gate() {
     || fail 'compositor output validation helper is unavailable'
   [[ "$jq_helper" == /nix/store/*/bin/jq && -x "$jq_helper" ]] \
     || fail 'compositor output validation helper is not immutable'
-  # shellcheck disable=SC2016 # The jq program reads the named --arg value.
-  "$jq_helper" -e --arg output "$COMPOSITOR_OUTPUT" \
-    '.[] | select(.name == $output and .active == true and .current_mode.width == 1920 and .current_mode.height == 1080 and .current_mode.refresh == 60000)' \
-    <<<"$outputs" >/dev/null || fail 'compositor output is not active at 1920x1080 and 60 Hz'
-  printf 'compositor-gate=pass renderer=gles2 output=%s mode=1920x1080@60 wayland=stable xwayland=:0 sunshine-control=denied\n' "$COMPOSITOR_OUTPUT"
+  # shellcheck disable=SC2016 # The jq program reads the named --arg values.
+  "$jq_helper" -e \
+    --arg output "$COMPOSITOR_OUTPUT" \
+    --argjson width "$expected_width" \
+    --argjson height "$expected_height" \
+    --argjson refresh "$expected_refresh" \
+    '.[] | select(.name == $output and .active == true and .current_mode.width == $width and .current_mode.height == $height and .current_mode.refresh == $refresh)' \
+    <<<"$outputs" >/dev/null || fail "compositor output is not active at $expected_mode"
+  printf 'compositor-gate=pass renderer=gles2 output=%s mode=%s wayland=stable xwayland=:0 sunshine-control=denied\n' \
+    "$COMPOSITOR_OUTPUT" "$expected_mode"
 }
 
 remote_compositor_game_gate() {
