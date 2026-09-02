@@ -191,7 +191,7 @@ assert builtins.elem "/home/gameplay/.config/sunshine" sunshine.serviceConfig.Re
 assert !(cfg.systemd.services ? x11-headless);
 assert compositor.serviceConfig.User == "gameplay";
 assert compositor.environment.WLR_BACKENDS == "headless";
-assert compositor.environment.WLR_RENDERER == "vulkan";
+assert compositor.environment.WLR_RENDERER == "gles2";
 assert compositor.environment.WLR_RENDER_DRM_DEVICE == "/dev/dri/renderD128";
 assert (compositor.environment.WAYLAND_DISPLAY or null) == null;
 assert compositor.environment.SWAYSOCK == "/run/korri-compositor/sway-ipc.sock";

@@ -883,7 +883,7 @@ remote_compositor_gate() {
     || fail 'compositor environment is unavailable'
   for expected in \
     'WLR_BACKENDS=headless' \
-    'WLR_RENDERER=vulkan' \
+    'WLR_RENDERER=gles2' \
     "SWAYSOCK=$COMPOSITOR_CONTROL_SOCKET"; do
     [[ " $compositor_environment " == *" $expected "* ]] \
       || fail "compositor environment lacks $expected"
@@ -979,7 +979,7 @@ remote_compositor_gate() {
   "$jq_helper" -e --arg output "$COMPOSITOR_OUTPUT" \
     '.[] | select(.name == $output and .active == true and .current_mode.width == 1920 and .current_mode.height == 1080 and .current_mode.refresh == 60000)' \
     <<<"$outputs" >/dev/null || fail 'compositor output is not active at 1920x1080 and 60 Hz'
-  printf 'compositor-gate=pass renderer=vulkan output=%s mode=1920x1080@60 wayland=stable xwayland=:0 sunshine-control=denied\n' "$COMPOSITOR_OUTPUT"
+  printf 'compositor-gate=pass renderer=gles2 output=%s mode=1920x1080@60 wayland=stable xwayland=:0 sunshine-control=denied\n' "$COMPOSITOR_OUTPUT"
 }
 
 remote_compositor_game_gate() {

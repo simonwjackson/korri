@@ -539,7 +539,7 @@ in
         SWAYSOCK = compositorControlSocket;
         WLR_BACKENDS = "headless";
         WLR_LIBINPUT_NO_DEVICES = "1";
-        WLR_RENDERER = "vulkan";
+        WLR_RENDERER = "gles2";
         WLR_RENDER_DRM_DEVICE = cfg.compositor.renderDevice;
         WLR_NO_HARDWARE_CURSORS = "1";
       }
