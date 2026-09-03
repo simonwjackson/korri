@@ -98,38 +98,27 @@ public class KorriMoonlightParityInventoryTest {
     }
 
     @Test
-    public void runtimeSettingsMutexIsRetiredBeforePlatformCleanup() throws Exception {
+    public void runtimeSettingsMutexLivesForTheProcessAndPreservesTerminalState() throws Exception {
         String controlStream = read("src/main/jni/moonlight-core/moonlight-common-c/src/ControlStream.c");
-        String destroy = between(controlStream,
-                "static void destroyRuntimeSettingsSupport(void)",
-                "void connectionRuntimeSettingsStreamEnded(void)");
-        int unpublish = destroy.indexOf(
-                "atomic_store_explicit(&runtimeSettingsPublished, false, memory_order_release);");
-        int drain = destroy.indexOf(
-                "while (atomic_load_explicit(&runtimeSettingsReaders, memory_order_acquire) != 0)");
-        int delete = destroy.indexOf("PltDeleteMutex(&runtimeSettingsMutex);");
 
-        assertTrue(controlStream.contains("static atomic_uint runtimeSettingsReaders"));
-        assertTrue(unpublish >= 0);
-        assertTrue(drain > unpublish);
-        assertTrue(delete > drain);
         assertTrue(controlStream.contains(
-                "result = SsRuntimeSettingsDispatchRequest(&runtimeSettingsDispatch,"));
+                "static atomic_flag runtimeSettingsLockFlag = ATOMIC_FLAG_INIT;"));
         assertTrue(controlStream.contains(
-                "releaseRuntimeSettingsSupport();\n    return result;"));
+                "atomic_flag_test_and_set_explicit(&runtimeSettingsLockFlag, memory_order_acquire)"));
         assertTrue(controlStream.contains(
-                "SsRuntimeSettingsDispatchGetSnapshot(&runtimeSettingsDispatch, snapshot);\n"
-                        + "    releaseRuntimeSettingsSupport();"));
+                "atomic_flag_clear_explicit(&runtimeSettingsLockFlag, memory_order_release)"));
+        assertFalse(controlStream.contains("PltCreateMutex(&runtimeSettingsMutex);"));
+        assertFalse(controlStream.contains("PltDeleteMutex(&runtimeSettingsMutex);"));
         assertTrue(controlStream.contains(
-                "destroyRuntimeSettingsSupport();\n    PltDeleteMutex(&enetMutex);"));
-    }
-
-    private static String between(String source, String start, String end) {
-        int startIndex = source.indexOf(start);
-        int endIndex = source.indexOf(end, startIndex + start.length());
-        assertTrue(startIndex >= 0);
-        assertTrue(endIndex > startIndex);
-        return source.substring(startIndex, endIndex);
+                "if (atomic_load_explicit(&runtimeSettingsPublished, memory_order_acquire)) {\n"
+                        + "        SsRuntimeSettingsDispatchEndSession(&runtimeSettingsDispatch);\n"
+                        + "    }"));
+        assertTrue(controlStream.contains(
+                "endRuntimeSettingsSession();\n    PltDeleteMutex(&enetMutex);"));
+        assertTrue(controlStream.contains(
+                "return SsRuntimeSettingsDispatchRequest(&runtimeSettingsDispatch,"));
+        assertTrue(controlStream.contains(
+                "SsRuntimeSettingsDispatchGetSnapshot(&runtimeSettingsDispatch, snapshot);"));
     }
 
     private static String read(String path) throws Exception {

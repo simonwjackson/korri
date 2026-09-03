@@ -92,11 +92,10 @@ static SOCKET ctlSock = INVALID_SOCKET;
 static ENetHost* client;
 static ENetPeer* peer;
 static PLT_MUTEX enetMutex;
-static PLT_MUTEX runtimeSettingsMutex;
+static atomic_flag runtimeSettingsLockFlag = ATOMIC_FLAG_INIT;
 static SS_RUNTIME_SETTINGS_STATE runtimeSettingsState;
 static SS_RUNTIME_SETTINGS_DISPATCH runtimeSettingsDispatch;
 static atomic_bool runtimeSettingsPublished = ATOMIC_VAR_INIT(false);
-static atomic_uint runtimeSettingsReaders = ATOMIC_VAR_INIT(0);
 static uint64_t runtimeSettingsSessionEpoch;
 static bool usePeriodicPing;
 
@@ -331,12 +330,14 @@ static bool sendMessageAndForget(short ptype, short paylen, const void* payload,
 
 static void runtimeSettingsLock(void* context) {
     (void)context;
-    PltLockMutex(&runtimeSettingsMutex);
+    while (atomic_flag_test_and_set_explicit(&runtimeSettingsLockFlag, memory_order_acquire)) {
+        PltSleepMs(1);
+    }
 }
 
 static void runtimeSettingsUnlock(void* context) {
     (void)context;
-    PltUnlockMutex(&runtimeSettingsMutex);
+    atomic_flag_clear_explicit(&runtimeSettingsLockFlag, memory_order_release);
 }
 
 static uint64_t runtimeSettingsClock(void* context) {
@@ -372,28 +373,8 @@ static bool runtimeSettingsSend(void* context, const uint8_t* payload, size_t pa
                                 false);
 }
 
-static bool retainRuntimeSettingsSupport(void) {
-    for (;;) {
-        if (!atomic_load_explicit(&runtimeSettingsPublished, memory_order_acquire)) {
-            return false;
-        }
-
-        atomic_fetch_add_explicit(&runtimeSettingsReaders, 1, memory_order_acq_rel);
-        if (atomic_load_explicit(&runtimeSettingsPublished, memory_order_acquire)) {
-            return true;
-        }
-        atomic_fetch_sub_explicit(&runtimeSettingsReaders, 1, memory_order_acq_rel);
-    }
-}
-
-static void releaseRuntimeSettingsSupport(void) {
-    LC_ASSERT(atomic_load_explicit(&runtimeSettingsReaders, memory_order_acquire) > 0);
-    atomic_fetch_sub_explicit(&runtimeSettingsReaders, 1, memory_order_acq_rel);
-}
-
 static void initializeRuntimeSettingsSupport(void) {
     if (!atomic_load_explicit(&runtimeSettingsPublished, memory_order_acquire)) {
-        PltCreateMutex(&runtimeSettingsMutex);
         SsRuntimeSettingsInitialize(&runtimeSettingsState);
         SsRuntimeSettingsDispatchInitialize(&runtimeSettingsDispatch,
                                             &runtimeSettingsState,
@@ -414,23 +395,9 @@ static void beginRuntimeSettingsSession(void) {
 }
 
 static void endRuntimeSettingsSession(void) {
-    if (retainRuntimeSettingsSupport()) {
+    if (atomic_load_explicit(&runtimeSettingsPublished, memory_order_acquire)) {
         SsRuntimeSettingsDispatchEndSession(&runtimeSettingsDispatch);
-        releaseRuntimeSettingsSupport();
     }
-}
-
-static void destroyRuntimeSettingsSupport(void) {
-    if (!atomic_load_explicit(&runtimeSettingsPublished, memory_order_acquire)) {
-        return;
-    }
-
-    SsRuntimeSettingsDispatchEndSession(&runtimeSettingsDispatch);
-    atomic_store_explicit(&runtimeSettingsPublished, false, memory_order_release);
-    while (atomic_load_explicit(&runtimeSettingsReaders, memory_order_acquire) != 0) {
-        PltSleepMs(1);
-    }
-    PltDeleteMutex(&runtimeSettingsMutex);
 }
 
 void connectionRuntimeSettingsStreamEnded(void) {
@@ -526,7 +493,7 @@ void destroyControlStream(void) {
     freeBasicLbqList(LbqDestroyLinkedBlockingQueue(&frameFecStatusQueue));
     freeBasicLbqList(LbqDestroyLinkedBlockingQueue(&asyncCallbackQueue));
 
-    destroyRuntimeSettingsSupport();
+    endRuntimeSettingsSession();
     PltDeleteMutex(&enetMutex);
 }
 
@@ -987,19 +954,15 @@ static int sendRuntimeSettingsRequest(uint64_t expectedSessionEpoch,
                                       uint16_t operation,
                                       uint32_t value,
                                       uint32_t secondaryValue) {
-    int result;
-
-    if (!retainRuntimeSettingsSupport()) {
+    if (!atomic_load_explicit(&runtimeSettingsPublished, memory_order_acquire)) {
         return LI_RUNTIME_SETTINGS_ERROR_CONTROL_NOT_READY;
     }
-    result = SsRuntimeSettingsDispatchRequest(&runtimeSettingsDispatch,
-                                              expectedSessionEpoch,
-                                              requestId,
-                                              operation,
-                                              value,
-                                              secondaryValue);
-    releaseRuntimeSettingsSupport();
-    return result;
+    return SsRuntimeSettingsDispatchRequest(&runtimeSettingsDispatch,
+                                            expectedSessionEpoch,
+                                            requestId,
+                                            operation,
+                                            value,
+                                            secondaryValue);
 }
 
 int LiQuerySunshineRuntimeSettingsCapabilities(uint64_t expectedSessionEpoch, uint32_t requestId) {
@@ -1034,13 +997,12 @@ void LiGetSunshineRuntimeSettingsSnapshot(PSS_RUNTIME_SETTINGS_SNAPSHOT snapshot
     if (snapshot == NULL) {
         return;
     }
-    if (!retainRuntimeSettingsSupport()) {
+    if (!atomic_load_explicit(&runtimeSettingsPublished, memory_order_acquire)) {
         memset(snapshot, 0, sizeof(*snapshot));
         snapshot->version = SS_RUNTIME_SETTINGS_SNAPSHOT_VERSION;
         return;
     }
     SsRuntimeSettingsDispatchGetSnapshot(&runtimeSettingsDispatch, snapshot);
-    releaseRuntimeSettingsSupport();
 }
 
 static bool sendMessageAndDiscardReply(short ptype, short paylen, const void* payload, uint8_t channelId, uint32_t flags, bool moreData) {

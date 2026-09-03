@@ -118,11 +118,16 @@ let
     ))
     (check "control lifecycle is process-safe and preserves terminal state" (
       contains "atomic_bool runtimeSettingsPublished" control
+      && contains "atomic_flag runtimeSettingsLockFlag = ATOMIC_FLAG_INIT" control
+      && contains "atomic_flag_test_and_set_explicit(&runtimeSettingsLockFlag, memory_order_acquire)" control
+      && contains "atomic_flag_clear_explicit(&runtimeSettingsLockFlag, memory_order_release)" control
       && contains "memory_order_release" control
       && contains "memory_order_acquire" control
       && contains "endRuntimeSettingsSession();" control
       && contains "terminateControlConnection" control
       && contains "connectionRuntimeSettingsStreamEnded();" connection
+      && !(contains "PLT_MUTEX runtimeSettingsMutex" control)
+      && !(contains "PltCreateMutex(&runtimeSettingsMutex)" control)
       && !(contains "PltDeleteMutex(&runtimeSettingsMutex)" control)
       && !(contains "SsRuntimeSettingsReset" control)
     ))
