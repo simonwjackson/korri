@@ -189,4 +189,10 @@ One cached frame copy did not sustain the target. The next candidate kept the co
 
 The non-temporal copy candidate measured `113.891` host video datagrams per second. It did not improve the cached pinned-copy result and is not retained.
 
-The remaining acceptance workload decodes and presents a full 1920x1080 software video frame 120 times per second under Pixman. The next candidate retains the best pinned Sunshine path but replaces that stress workload with a Korri-owned X11 validation program. The program advances moving geometry on an absolute 120 Hz clock and derives all positions from its actual window dimensions.
+The remaining acceptance workload decodes and presents a full 1920x1080 software video frame 120 times per second under Pixman. The next candidate retained the best pinned Sunshine path but replaced that stress workload with a Korri-owned X11 validation program. The program advanced moving geometry on an absolute 120 Hz clock and derived all positions from its actual window dimensions.
+
+## Candidate iteration 26
+
+The Korri-owned motion program logged steady producer rates from `119.987` through `120.014 FPS`. An initial host packet capture measured `117.553` datagrams per second. Three later balanced-profile captures averaged `115.874`, but a fresh run fell to `113.293` as Zao resumed active package thermal throttling.
+
+A temporary high-refresh profile wrote the observed Zao controls to `performance`, `min_perf_pct=40`, and `max_perf_pct=60`. Three consecutive captures with a fresh moving producer measured `126.054`, `126.195`, and `126.117` datagrams per second. The candidate now owns this reversible profile while 120 Hz is active and restores `balanced`, `16`, and `100` when the profile service stops.

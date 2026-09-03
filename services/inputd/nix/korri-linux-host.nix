@@ -22,6 +22,7 @@ let
   compositorWidth = builtins.elemAt compositorMode 0;
   compositorHeight = builtins.elemAt compositorMode 1;
   compositorRefreshRate = builtins.elemAt compositorMode 2;
+  highRefreshPerformance = lib.toInt compositorRefreshRate >= 120;
   sunshineConfig =
     if cfg.sunshine.configDirectory == null then
       "${gameplayHome}/.config/sunshine"
@@ -48,6 +49,42 @@ let
       runHook postInstall
     '';
   };
+  streamingPerformanceProfile = pkgs.writeShellScript "korri-streaming-performance-profile" ''
+    set -eu
+    profile=/sys/firmware/acpi/platform_profile
+    choices=/sys/firmware/acpi/platform_profile_choices
+    min_perf=/sys/devices/system/cpu/intel_pstate/min_perf_pct
+    max_perf=/sys/devices/system/cpu/intel_pstate/max_perf_pct
+    for path in "$profile" "$choices" "$min_perf" "$max_perf"; do
+      [ -f "$path" ] || {
+        echo "required streaming performance control is absent: $path" >&2
+        exit 1
+      }
+    done
+    case "''${1-}" in
+      start)
+        ${pkgs.gnugrep}/bin/grep -qw performance "$choices"
+        printf 'performance\n' >"$profile"
+        printf '60\n' >"$max_perf"
+        printf '40\n' >"$min_perf"
+        [ "$(cat "$profile")" = performance ]
+        [ "$(cat "$max_perf")" = 60 ]
+        [ "$(cat "$min_perf")" = 40 ]
+        ;;
+      stop)
+        printf '100\n' >"$max_perf"
+        printf '16\n' >"$min_perf"
+        printf 'balanced\n' >"$profile"
+        [ "$(cat "$profile")" = balanced ]
+        [ "$(cat "$max_perf")" = 100 ]
+        [ "$(cat "$min_perf")" = 16 ]
+        ;;
+      *)
+        echo 'expected start or stop' >&2
+        exit 2
+        ;;
+    esac
+  '';
   generatedDeviceConfig = pkgs.writeText "korrid-${cfg.label}-host.toml" ''
     label = "${cfg.label}"
 
@@ -521,6 +558,18 @@ in
       allowedTCPPorts = [ cfg.apiPort ];
     });
 
+    systemd.services.korri-streaming-performance-profile = lib.mkIf highRefreshPerformance {
+      description = "Korri high-refresh streaming performance profile";
+      wantedBy = [ "multi-user.target" ];
+      before = [ "korri-compositor.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "+${streamingPerformanceProfile} start";
+        ExecStop = "+${streamingPerformanceProfile} stop";
+      };
+    };
+
     systemd.services.korri-compositor = {
       description = "Korri headless Sway compositor";
       wantedBy = [ "multi-user.target" ];
@@ -531,12 +580,12 @@ in
       requires = [
         "user-runtime-dir@${toString cfg.gameplayUid}.service"
         "user@${toString cfg.gameplayUid}.service"
-      ];
+      ] ++ lib.optional highRefreshPerformance "korri-streaming-performance-profile.service";
       after = [
         "systemd-tmpfiles-setup.service"
         "user-runtime-dir@${toString cfg.gameplayUid}.service"
         "user@${toString cfg.gameplayUid}.service"
-      ];
+      ] ++ lib.optional highRefreshPerformance "korri-streaming-performance-profile.service";
       before = [
         "korrid.service"
         "sunshine.service"

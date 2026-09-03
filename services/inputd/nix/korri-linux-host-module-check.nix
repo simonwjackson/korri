@@ -121,6 +121,9 @@ let
   sunshineExec = pkgs.writeText "korri-linux-host-sunshine-exec" sunshine.serviceConfig.ExecStart;
   compositorExec = pkgs.writeText "korri-linux-host-compositor-exec" compositor.serviceConfig.ExecStart;
   highRefreshCompositorExec = pkgs.writeText "korri-linux-host-high-refresh-compositor-exec" highRefresh.config.systemd.services.korri-compositor.serviceConfig.ExecStart;
+  highRefreshPerformance = highRefresh.config.systemd.services.korri-streaming-performance-profile;
+  highRefreshPerformanceExec = pkgs.writeText "korri-linux-host-high-refresh-performance-exec" highRefreshPerformance.serviceConfig.ExecStart;
+  highRefreshPerformanceStop = pkgs.writeText "korri-linux-host-high-refresh-performance-stop" highRefreshPerformance.serviceConfig.ExecStop;
   validationAction = cfg.services.korriLinuxInput.inputd.actions.workspace-next.command;
   udevRules = pkgs.writeText "korri-linux-host-udev-rules" cfg.services.udev.extraRules;
 in
@@ -140,6 +143,11 @@ assert cfg.services.korriLinuxHost.sunshine.encoder == "auto";
 assert sunshine.environment.SUNSHINE_LIVE_SETTINGS_MVP == "1";
 assert allAssertionsPass nvenc;
 assert allAssertionsPass vaapi;
+assert !(builtins.hasAttr "korri-streaming-performance-profile" cfg.systemd.services);
+assert builtins.elem "korri-streaming-performance-profile.service" highRefresh.config.systemd.services.korri-compositor.requires;
+assert builtins.elem "korri-streaming-performance-profile.service" highRefresh.config.systemd.services.korri-compositor.after;
+assert highRefreshPerformance.serviceConfig.Type == "oneshot";
+assert highRefreshPerformance.serviceConfig.RemainAfterExit;
 assert
   nvenc.config.systemd.services.sunshine.environment.LD_LIBRARY_PATH == "/run/opengl-driver/lib";
 assert nvenc.config.systemd.services.sunshine.environment.SUNSHINE_STRICT_ENCODER == "1";
@@ -287,6 +295,16 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     grep -F -- '--config /nix/store/' ${compositorExec} >/dev/null
     high_refresh_compositor_config="$(${pkgs.gnugrep}/bin/grep -oE '/nix/store/[^ ]+-korri-sway\.conf' ${highRefreshCompositorExec} | head -n1)"
     grep -F 'output HEADLESS-1 mode 1920x1080@120Hz' "$high_refresh_compositor_config" >/dev/null
+    performance_script="$(${pkgs.gnugrep}/bin/grep -oE '/nix/store/[^ ]+-korri-streaming-performance-profile' ${highRefreshPerformanceExec} | head -n1)"
+    test -x "$performance_script"
+    grep -F 'performance' "$performance_script" >/dev/null
+    grep -F "printf '60\\n'" "$performance_script" >/dev/null
+    grep -F "printf '40\\n'" "$performance_script" >/dev/null
+    grep -F "printf '100\\n'" "$performance_script" >/dev/null
+    grep -F "printf '16\\n'" "$performance_script" >/dev/null
+    grep -F 'balanced' "$performance_script" >/dev/null
+    grep -F ' start' ${highRefreshPerformanceExec} >/dev/null
+    grep -F ' stop' ${highRefreshPerformanceStop} >/dev/null
     grep -Fx '${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf log_path=/dev/null' ${sunshineExec} >/dev/null
     grep -F 'TAG-="uaccess"' ${udevRules} >/dev/null
 

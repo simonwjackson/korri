@@ -908,7 +908,7 @@ remote_compositor_gate() {
   local compositor_environment sunshine_environment sunshine_inaccessible korrid_environment
   local execstart running declared declared_link declared_real running_target package_root swaymsg outputs render_device render_real render_driver token dev_sys dev_stat jq_helper
   local sunshine_pid sunshine_private_pids sway_pid compositor_config compositor_config_metadata configured_mode
-  local expected_width expected_height expected_refresh expected_mode renderer candidate_renderer renderer_count=0
+  local expected_width expected_height expected_refresh expected_mode renderer candidate_renderer renderer_count=0 performance_state=not-required
   local -a sway_execs=() wrapped_targets=() render_devices=() compositor_configs=() configured_modes=()
   uid="$(id -u "$gameplay_user")" || fail 'gameplay user is unavailable for compositor validation'
   gid="$(id -g "$gameplay_user")" || fail 'gameplay group is unavailable for compositor validation'
@@ -1010,6 +1010,11 @@ remote_compositor_gate() {
   read -r expected_width expected_height expected_refresh expected_mode \
     < <(remote_parse_compositor_mode "$configured_mode") \
     || fail 'compositor configuration mode is invalid'
+  if (( expected_refresh >= 120000 )); then
+    systemctl is-active --quiet korri-streaming-performance-profile.service \
+      || fail 'high-refresh streaming performance profile is inactive'
+    performance_state=active
+  fi
   declared="${sway_execs[0]}"
   package_root="${declared%/bin/sway}"
   swaymsg="$package_root/bin/swaymsg"
@@ -1057,8 +1062,8 @@ remote_compositor_gate() {
     --argjson refresh "$expected_refresh" \
     '.[] | select(.name == $output and .active == true and .current_mode.width == $width and .current_mode.height == $height and .current_mode.refresh == $refresh)' \
     <<<"$outputs" >/dev/null || fail "compositor output is not active at $expected_mode"
-  printf 'compositor-gate=pass renderer=%s output=%s mode=%s wayland=stable xwayland=:0 sunshine-control=denied\n' \
-    "$renderer" "$COMPOSITOR_OUTPUT" "$expected_mode"
+  printf 'compositor-gate=pass renderer=%s output=%s mode=%s performance=%s wayland=stable xwayland=:0 sunshine-control=denied\n' \
+    "$renderer" "$COMPOSITOR_OUTPUT" "$expected_mode" "$performance_state"
 }
 
 remote_compositor_game_gate() {
