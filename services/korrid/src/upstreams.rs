@@ -3,7 +3,8 @@
 use crate::{
     upstream::{UpstreamClient, UpstreamConfig, UpstreamSessionStatus, UpstreamSessionStop},
     upstream_native::NativeClient,
-    CatalogHostFailure, CatalogSnapshot, Game, SessionPrepared,
+    CatalogHostFailure, CatalogSnapshot, Game, MoonlightCertificateProvisioned,
+    MoonlightCertificateRevoked, SessionPrepared,
 };
 use futures::future::join_all;
 use serde::Deserialize;
@@ -31,6 +32,20 @@ pub enum UpstreamError {
     Tagged { code: String, message: String },
     #[error("upstream call failed: {0}")]
     Failure(String),
+    #[error("certificate peer is unavailable")]
+    MoonlightCertificatePeerUnavailable,
+    #[error("certificate peer returned an invalid response")]
+    MoonlightCertificatePeerProtocol,
+    #[error("certificate peer rejected the request")]
+    MoonlightCertificateRejected,
+    #[error("certificate control is busy")]
+    MoonlightCertificateBusy,
+    #[error("Sunshine host UUID changed during certificate control")]
+    MoonlightHostChanged,
+    #[error("no configured native peer owns the requested Sunshine host UUID")]
+    MoonlightHostNotFound,
+    #[error("more than one configured native peer owns the requested Sunshine host UUID")]
+    MoonlightHostAmbiguous,
 }
 
 impl UpstreamError {
@@ -41,6 +56,13 @@ impl UpstreamError {
             Self::Wire(_) => "UpstreamWire",
             Self::Tagged { code, .. } => code,
             Self::Failure(_) => "UpstreamFailure",
+            Self::MoonlightCertificatePeerUnavailable => "MoonlightCertificatePeerUnavailable",
+            Self::MoonlightCertificatePeerProtocol => "MoonlightCertificatePeerProtocol",
+            Self::MoonlightCertificateRejected => "MoonlightCertificateRejected",
+            Self::MoonlightCertificateBusy => "MoonlightCertificateBusy",
+            Self::MoonlightHostChanged => "MoonlightHostChanged",
+            Self::MoonlightHostNotFound => "MoonlightHostNotFound",
+            Self::MoonlightHostAmbiguous => "MoonlightHostAmbiguous",
         }
     }
 }
@@ -300,6 +322,66 @@ impl UpstreamRegistry {
             games,
             failures: (!failures.is_empty()).then_some(failures),
         })
+    }
+
+    async fn moonlight_native_peer(&self, host_uuid: &str) -> Result<NativeClient, UpstreamError> {
+        let registry = self.resolved();
+        let native: Vec<NativeClient> = registry
+            .hosts
+            .iter()
+            .filter_map(|host| match &host.client {
+                RegisteredClient::Native(client) => Some(client.clone()),
+                RegisteredClient::Legacy(_) => None,
+            })
+            .collect();
+        let results = join_all(
+            native
+                .iter()
+                .map(|client| client.moonlight_certificate_attest(host_uuid)),
+        )
+        .await;
+        let mut matched = Vec::new();
+        for (client, result) in native.into_iter().zip(results) {
+            if result?.matched {
+                matched.push(client);
+            }
+        }
+        match matched.len() {
+            0 => Err(UpstreamError::MoonlightHostNotFound),
+            1 => Ok(matched.remove(0)),
+            _ => Err(UpstreamError::MoonlightHostAmbiguous),
+        }
+    }
+
+    pub async fn moonlight_certificate_attest(
+        &self,
+        host_uuid: &str,
+    ) -> Result<crate::MoonlightCertificateAttested, UpstreamError> {
+        self.moonlight_native_peer(host_uuid)
+            .await
+            .map(|_| crate::MoonlightCertificateAttested { matched: true })
+    }
+
+    pub async fn moonlight_certificate_provision(
+        &self,
+        host_uuid: &str,
+        client_certificate: &str,
+    ) -> Result<MoonlightCertificateProvisioned, UpstreamError> {
+        self.moonlight_native_peer(host_uuid)
+            .await?
+            .moonlight_certificate_provision(host_uuid, client_certificate)
+            .await
+    }
+
+    pub async fn moonlight_certificate_revoke(
+        &self,
+        host_uuid: &str,
+        client_certificate: &str,
+    ) -> Result<MoonlightCertificateRevoked, UpstreamError> {
+        self.moonlight_native_peer(host_uuid)
+            .await?
+            .moonlight_certificate_revoke(host_uuid, client_certificate)
+            .await
     }
 
     pub async fn prepare_stream(

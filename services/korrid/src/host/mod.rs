@@ -2,6 +2,7 @@ mod config;
 pub(crate) mod control;
 mod identity;
 mod input_seat;
+pub(crate) mod moonlight_certificate;
 mod prepare;
 mod session_state;
 mod systemd_unit;
@@ -15,13 +16,13 @@ use crate::{
     plugin_policy, CatalogSnapshot, Game, GameIdentity, RpcFailure, SessionPrepared,
 };
 use config::{HostConfig, HostConfigError};
+use moonlight_certificate::MoonlightCertificateAdapter;
 use prepare::HostLauncher;
 use session_state::{HostSessionControl, HostSessionStatus, HostSessionStop};
-#[cfg(test)]
-use std::sync::Arc;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 #[cfg(test)]
 use systemd_unit::LaunchUnitBackend;
@@ -94,11 +95,15 @@ impl DynamicHostRuntime {
     }
 }
 
+const MAX_CONCURRENT_CERTIFICATE_CONTROLS: usize = 4;
+
 #[derive(Clone)]
 pub struct HostRuntime {
     config: Result<HostConfig, HostConfigError>,
     launcher: Option<HostLauncher>,
     dynamic: Option<Result<DynamicHostRuntime, RpcFailure>>,
+    moonlight_certificate: Arc<dyn MoonlightCertificateAdapter>,
+    moonlight_certificate_permits: Arc<tokio::sync::Semaphore>,
 }
 
 impl HostRuntime {
@@ -125,6 +130,10 @@ impl HostRuntime {
             config,
             launcher,
             dynamic,
+            moonlight_certificate: moonlight_certificate::production_adapter(),
+            moonlight_certificate_permits: Arc::new(tokio::sync::Semaphore::new(
+                MAX_CONCURRENT_CERTIFICATE_CONTROLS,
+            )),
         }
     }
 
@@ -145,7 +154,25 @@ impl HostRuntime {
             config,
             launcher,
             dynamic,
+            moonlight_certificate: moonlight_certificate::production_adapter(),
+            moonlight_certificate_permits: Arc::new(tokio::sync::Semaphore::new(
+                MAX_CONCURRENT_CERTIFICATE_CONTROLS,
+            )),
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_paths_with_backends(
+        path: &Path,
+        storage_root: Option<PathBuf>,
+        private_state_root: PathBuf,
+        backend: Arc<dyn LaunchUnitBackend>,
+        moonlight_certificate: Arc<dyn MoonlightCertificateAdapter>,
+    ) -> Self {
+        let mut runtime =
+            Self::from_paths_with_backend(path, storage_root, private_state_root, backend);
+        runtime.moonlight_certificate = moonlight_certificate;
+        runtime
     }
 
     pub fn catalog_snapshot(&self) -> Result<CatalogSnapshot, RpcFailure> {
@@ -228,6 +255,68 @@ impl HostRuntime {
             .await
             .map_err(host_worker_failure)?
     }
+
+    fn certificate_control_permit(&self) -> Result<tokio::sync::OwnedSemaphorePermit, RpcFailure> {
+        Arc::clone(&self.moonlight_certificate_permits)
+            .try_acquire_owned()
+            .map_err(|_| RpcFailure {
+                code: "SunshineCertificateControlBusy".into(),
+                message: "Sunshine certificate control is busy".into(),
+            })
+    }
+
+    pub async fn moonlight_certificate_attest(&self, host_uuid: &str) -> Result<bool, RpcFailure> {
+        let permit = self.certificate_control_permit()?;
+        let adapter = Arc::clone(&self.moonlight_certificate);
+        let host_uuid = host_uuid.to_owned();
+        tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            adapter.attest(&host_uuid)
+        })
+        .await
+        .map_err(certificate_worker_failure)?
+    }
+
+    pub async fn moonlight_certificate_provision(
+        &self,
+        host_uuid: &str,
+        client_certificate: &str,
+    ) -> Result<crate::MoonlightCertificateProvisioned, RpcFailure> {
+        let permit = self.certificate_control_permit()?;
+        let adapter = Arc::clone(&self.moonlight_certificate);
+        let host_uuid = host_uuid.to_owned();
+        let client_certificate = client_certificate.to_owned();
+        tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            adapter.provision(&host_uuid, &client_certificate)
+        })
+        .await
+        .map_err(certificate_worker_failure)?
+    }
+
+    pub async fn moonlight_certificate_revoke(
+        &self,
+        host_uuid: &str,
+        client_certificate: &str,
+    ) -> Result<bool, RpcFailure> {
+        let permit = self.certificate_control_permit()?;
+        let adapter = Arc::clone(&self.moonlight_certificate);
+        let host_uuid = host_uuid.to_owned();
+        let client_certificate = client_certificate.to_owned();
+        tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            adapter.revoke(&host_uuid, &client_certificate)
+        })
+        .await
+        .map_err(certificate_worker_failure)?
+    }
+}
+
+fn certificate_worker_failure(_error: tokio::task::JoinError) -> RpcFailure {
+    RpcFailure {
+        code: "SunshineCertificateControlFailed".into(),
+        message: "Sunshine certificate control worker failed".into(),
+    }
 }
 
 fn host_worker_failure(error: tokio::task::JoinError) -> RpcFailure {
@@ -259,7 +348,7 @@ mod tests {
         collections::{BTreeMap, HashMap},
         fs,
         sync::{
-            atomic::{AtomicBool, Ordering},
+            atomic::{AtomicBool, AtomicUsize, Ordering},
             Condvar, Mutex,
         },
         thread,
@@ -336,6 +425,76 @@ mod tests {
         assert_eq!(status.await.unwrap().unwrap(), HostSessionStatus::NoActive);
         release.join().unwrap();
         assert!(observed_progress.load(Ordering::SeqCst));
+    }
+
+    struct BlockingCertificateAdapter {
+        entered: AtomicUsize,
+        released: (Mutex<bool>, Condvar),
+    }
+
+    impl MoonlightCertificateAdapter for BlockingCertificateAdapter {
+        fn attest(&self, _host_uuid: &str) -> Result<bool, RpcFailure> {
+            self.entered.fetch_add(1, Ordering::SeqCst);
+            let (lock, changed) = &self.released;
+            let mut released = lock.lock().unwrap();
+            while !*released {
+                released = changed.wait(released).unwrap();
+            }
+            Ok(true)
+        }
+
+        fn provision(
+            &self,
+            _host_uuid: &str,
+            _client_certificate: &str,
+        ) -> Result<crate::MoonlightCertificateProvisioned, RpcFailure> {
+            unreachable!()
+        }
+
+        fn revoke(&self, _host_uuid: &str, _client_certificate: &str) -> Result<bool, RpcFailure> {
+            unreachable!()
+        }
+    }
+
+    #[tokio::test]
+    async fn certificate_blocking_work_rejects_saturation_without_queueing() {
+        let root = tempfile::tempdir().unwrap();
+        let config = root.path().join("host.toml");
+        fs::write(&config, "label = \"zao\"\n").unwrap();
+        let adapter = Arc::new(BlockingCertificateAdapter {
+            entered: AtomicUsize::new(0),
+            released: (Mutex::new(false), Condvar::new()),
+        });
+        let mut runtime = HostRuntime::from_paths(&config, None);
+        runtime.moonlight_certificate = adapter.clone();
+
+        let mut active = Vec::new();
+        for _ in 0..MAX_CONCURRENT_CERTIFICATE_CONTROLS {
+            let runtime = runtime.clone();
+            active.push(tokio::spawn(async move {
+                runtime.moonlight_certificate_attest("sunshine-host").await
+            }));
+        }
+        while adapter.entered.load(Ordering::SeqCst) < MAX_CONCURRENT_CERTIFICATE_CONTROLS {
+            tokio::task::yield_now().await;
+        }
+
+        let busy = runtime
+            .moonlight_certificate_attest("sunshine-host")
+            .await
+            .unwrap_err();
+        assert_eq!(busy.code, "SunshineCertificateControlBusy");
+        assert_eq!(
+            adapter.entered.load(Ordering::SeqCst),
+            MAX_CONCURRENT_CERTIFICATE_CONTROLS
+        );
+
+        let (lock, changed) = &adapter.released;
+        *lock.lock().unwrap() = true;
+        changed.notify_all();
+        for task in active {
+            assert!(task.await.unwrap().unwrap());
+        }
     }
 
     #[test]

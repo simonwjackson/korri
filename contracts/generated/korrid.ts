@@ -193,6 +193,32 @@ export interface LocalGames {
 export interface LocalGamesListRequest {
 }
 
+export interface MoonlightCertificateAttestRequest {
+	hostUuid: string;
+}
+
+export interface MoonlightCertificateAttested {
+	matched: boolean;
+}
+
+export interface MoonlightCertificateProvisionRequest {
+	hostUuid: string;
+	clientCertificate: string;
+}
+
+export interface MoonlightCertificateProvisioned {
+	serverCertificate: string;
+}
+
+export interface MoonlightCertificateRevokeRequest {
+	hostUuid: string;
+	clientCertificate: string;
+}
+
+export interface MoonlightCertificateRevoked {
+	removed: boolean;
+}
+
 export interface MoonlightLaunchCancelRequest {
 	launchId: string;
 }
@@ -459,6 +485,18 @@ export type LocalGamesListOutcome =
 	| { _tag: "Ok", payload: LocalGames }
 	| { _tag: "Err", payload: RpcFailure };
 
+export type MoonlightCertificateAttestOutcome =
+	| { _tag: "Ok", payload: MoonlightCertificateAttested }
+	| { _tag: "Err", payload: RpcFailure };
+
+export type MoonlightCertificateProvisionOutcome =
+	| { _tag: "Ok", payload: MoonlightCertificateProvisioned }
+	| { _tag: "Err", payload: RpcFailure };
+
+export type MoonlightCertificateRevokeOutcome =
+	| { _tag: "Ok", payload: MoonlightCertificateRevoked }
+	| { _tag: "Err", payload: RpcFailure };
+
 export type MoonlightLaunchCancelOutcome =
 	| { _tag: "Ok", payload: MoonlightLaunchCancelled }
 	| { _tag: "Err", payload: RpcFailure };
@@ -476,6 +514,9 @@ export type RpcRequest =
 	| { _tag: "app.moonlight.resolve", payload: MoonlightResolveRequest }
 	| { _tag: "app.moonlight.launch.prepare", payload: MoonlightLaunchPrepareRequest }
 	| { _tag: "app.moonlight.launch.cancel", payload: MoonlightLaunchCancelRequest }
+	| { _tag: "app.moonlight.certificate.attest", payload: MoonlightCertificateAttestRequest }
+	| { _tag: "app.moonlight.certificate.provision", payload: MoonlightCertificateProvisionRequest }
+	| { _tag: "app.moonlight.certificate.revoke", payload: MoonlightCertificateRevokeRequest }
 	| { _tag: "app.session.prepare", payload: SessionPrepareRequest }
 	| { _tag: "app.session.status", payload: SessionStatusRequest }
 	| { _tag: "app.session.stop", payload: SessionStopRequest }
@@ -498,6 +539,9 @@ export type RpcResponse =
 	| { _tag: "app.moonlight.resolve", outcome: MoonlightResolveOutcome }
 	| { _tag: "app.moonlight.launch.prepare", outcome: MoonlightLaunchPrepareOutcome }
 	| { _tag: "app.moonlight.launch.cancel", outcome: MoonlightLaunchCancelOutcome }
+	| { _tag: "app.moonlight.certificate.attest", outcome: MoonlightCertificateAttestOutcome }
+	| { _tag: "app.moonlight.certificate.provision", outcome: MoonlightCertificateProvisionOutcome }
+	| { _tag: "app.moonlight.certificate.revoke", outcome: MoonlightCertificateRevokeOutcome }
 	| { _tag: "app.session.prepare", outcome: SessionPrepareOutcome }
 	| { _tag: "app.session.status", outcome: SessionStatusOutcome }
 	| { _tag: "app.session.stop", outcome: SessionStopOutcome }

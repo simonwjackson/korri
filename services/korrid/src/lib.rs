@@ -120,6 +120,103 @@ pub struct MoonlightLaunchCancelled {
 }
 
 #[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MoonlightCertificateAttestRequest {
+    pub host_uuid: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MoonlightCertificateAttested {
+    pub matched: bool,
+}
+
+#[typeshare]
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MoonlightCertificateProvisionRequest {
+    pub host_uuid: String,
+    pub client_certificate: String,
+}
+
+impl std::fmt::Debug for MoonlightCertificateProvisionRequest {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("MoonlightCertificateProvisionRequest")
+            .field("host_uuid", &self.host_uuid)
+            .field("client_certificate", &"[redacted]")
+            .finish()
+    }
+}
+
+#[typeshare]
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MoonlightCertificateProvisioned {
+    pub server_certificate: String,
+}
+
+impl std::fmt::Debug for MoonlightCertificateProvisioned {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("MoonlightCertificateProvisioned")
+            .field("server_certificate", &"[redacted]")
+            .finish()
+    }
+}
+
+#[typeshare]
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MoonlightCertificateRevokeRequest {
+    pub host_uuid: String,
+    pub client_certificate: String,
+}
+
+impl std::fmt::Debug for MoonlightCertificateRevokeRequest {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("MoonlightCertificateRevokeRequest")
+            .field("host_uuid", &self.host_uuid)
+            .field("client_certificate", &"[redacted]")
+            .finish()
+    }
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MoonlightCertificateRevoked {
+    pub removed: bool,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
+pub enum MoonlightCertificateAttestOutcome {
+    Ok(MoonlightCertificateAttested),
+    Err(RpcFailure),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
+pub enum MoonlightCertificateProvisionOutcome {
+    Ok(MoonlightCertificateProvisioned),
+    Err(RpcFailure),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
+pub enum MoonlightCertificateRevokeOutcome {
+    Ok(MoonlightCertificateRevoked),
+    Err(RpcFailure),
+}
+
+#[typeshare]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum MoonlightImplementation {
@@ -912,6 +1009,12 @@ pub enum RpcRequest {
     MoonlightLaunchPrepare(MoonlightLaunchPrepareRequest),
     #[serde(rename = "app.moonlight.launch.cancel")]
     MoonlightLaunchCancel(MoonlightLaunchCancelRequest),
+    #[serde(rename = "app.moonlight.certificate.attest")]
+    MoonlightCertificateAttest(MoonlightCertificateAttestRequest),
+    #[serde(rename = "app.moonlight.certificate.provision")]
+    MoonlightCertificateProvision(MoonlightCertificateProvisionRequest),
+    #[serde(rename = "app.moonlight.certificate.revoke")]
+    MoonlightCertificateRevoke(MoonlightCertificateRevokeRequest),
     #[serde(rename = "app.session.prepare")]
     SessionPrepare(SessionPrepareRequest),
     #[serde(rename = "app.session.status")]
@@ -958,6 +1061,12 @@ pub enum RpcResponse {
     MoonlightLaunchPrepare(MoonlightLaunchPrepareOutcome),
     #[serde(rename = "app.moonlight.launch.cancel")]
     MoonlightLaunchCancel(MoonlightLaunchCancelOutcome),
+    #[serde(rename = "app.moonlight.certificate.attest")]
+    MoonlightCertificateAttest(MoonlightCertificateAttestOutcome),
+    #[serde(rename = "app.moonlight.certificate.provision")]
+    MoonlightCertificateProvision(MoonlightCertificateProvisionOutcome),
+    #[serde(rename = "app.moonlight.certificate.revoke")]
+    MoonlightCertificateRevoke(MoonlightCertificateRevokeOutcome),
     #[serde(rename = "app.session.prepare")]
     SessionPrepare(SessionPrepareOutcome),
     #[serde(rename = "app.session.status")]
@@ -1900,6 +2009,118 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                 }),
             };
             RpcResponse::MoonlightLaunchCancel(outcome)
+        }
+        RpcRequest::MoonlightCertificateAttest(request) => {
+            let outcome = match host::moonlight_certificate::validate_host_uuid(&request.host_uuid)
+            {
+                Err(failure) => MoonlightCertificateAttestOutcome::Err(failure),
+                Ok(()) => match (&state.mode, state.rpc_surface) {
+                    (ServerMode::Brain(brain), RpcSurface::Lan) => brain
+                        .upstream
+                        .moonlight_certificate_attest(&request.host_uuid)
+                        .await
+                        .map(MoonlightCertificateAttestOutcome::Ok)
+                        .unwrap_or_else(|error| {
+                            MoonlightCertificateAttestOutcome::Err(upstream_failure(error))
+                        }),
+                    (ServerMode::Host(host), RpcSurface::Lan) => host
+                        .moonlight_certificate_attest(&request.host_uuid)
+                        .await
+                        .map(|matched| {
+                            MoonlightCertificateAttestOutcome::Ok(MoonlightCertificateAttested {
+                                matched,
+                            })
+                        })
+                        .unwrap_or_else(MoonlightCertificateAttestOutcome::Err),
+                    (_, RpcSurface::LocalControl) => {
+                        MoonlightCertificateAttestOutcome::Err(RpcFailure {
+                            code: "OperationUnsupported".into(),
+                            message: "certificate attestation is unavailable on the local control listener".into(),
+                        })
+                    }
+                },
+            };
+            RpcResponse::MoonlightCertificateAttest(outcome)
+        }
+        RpcRequest::MoonlightCertificateProvision(request) => {
+            let outcome = match host::moonlight_certificate::validate_host_uuid(&request.host_uuid)
+                .and_then(|()| {
+                    host::moonlight_certificate::validate_single_pem(&request.client_certificate)
+                }) {
+                Err(failure) => MoonlightCertificateProvisionOutcome::Err(failure),
+                Ok(()) => match (&state.mode, state.rpc_surface) {
+                    (ServerMode::Brain(brain), RpcSurface::Lan) => brain
+                        .upstream
+                        .moonlight_certificate_provision(
+                            &request.host_uuid,
+                            &request.client_certificate,
+                        )
+                        .await
+                        .map(MoonlightCertificateProvisionOutcome::Ok)
+                        .unwrap_or_else(|error| {
+                            MoonlightCertificateProvisionOutcome::Err(upstream_failure(error))
+                        }),
+                    (ServerMode::Host(host), RpcSurface::Lan) => host
+                        .moonlight_certificate_provision(
+                            &request.host_uuid,
+                            &request.client_certificate,
+                        )
+                        .await
+                        .map(MoonlightCertificateProvisionOutcome::Ok)
+                        .unwrap_or_else(MoonlightCertificateProvisionOutcome::Err),
+                    (_, RpcSurface::LocalControl) => {
+                        MoonlightCertificateProvisionOutcome::Err(RpcFailure {
+                            code: "OperationUnsupported".into(),
+                            message:
+                                "certificate provision is unavailable on the local control listener"
+                                    .into(),
+                        })
+                    }
+                },
+            };
+            RpcResponse::MoonlightCertificateProvision(outcome)
+        }
+        RpcRequest::MoonlightCertificateRevoke(request) => {
+            let outcome = match host::moonlight_certificate::validate_host_uuid(&request.host_uuid)
+                .and_then(|()| {
+                    host::moonlight_certificate::validate_single_pem(&request.client_certificate)
+                }) {
+                Err(failure) => MoonlightCertificateRevokeOutcome::Err(failure),
+                Ok(()) => match (&state.mode, state.rpc_surface) {
+                    (ServerMode::Brain(brain), RpcSurface::Lan) => brain
+                        .upstream
+                        .moonlight_certificate_revoke(
+                            &request.host_uuid,
+                            &request.client_certificate,
+                        )
+                        .await
+                        .map(MoonlightCertificateRevokeOutcome::Ok)
+                        .unwrap_or_else(|error| {
+                            MoonlightCertificateRevokeOutcome::Err(upstream_failure(error))
+                        }),
+                    (ServerMode::Host(host), RpcSurface::Lan) => host
+                        .moonlight_certificate_revoke(
+                            &request.host_uuid,
+                            &request.client_certificate,
+                        )
+                        .await
+                        .map(|removed| {
+                            MoonlightCertificateRevokeOutcome::Ok(MoonlightCertificateRevoked {
+                                removed,
+                            })
+                        })
+                        .unwrap_or_else(MoonlightCertificateRevokeOutcome::Err),
+                    (_, RpcSurface::LocalControl) => {
+                        MoonlightCertificateRevokeOutcome::Err(RpcFailure {
+                            code: "OperationUnsupported".into(),
+                            message:
+                                "certificate revoke is unavailable on the local control listener"
+                                    .into(),
+                        })
+                    }
+                },
+            };
+            RpcResponse::MoonlightCertificateRevoke(outcome)
         }
         RpcRequest::SessionPrepare(request) => {
             let outcome = match (&state.mode, state.rpc_surface) {
@@ -6756,5 +6977,407 @@ command = ["game-two"]
             panic!("expected Err");
         };
         assert_eq!(failure.code, "ConfirmationRequired");
+    }
+    #[derive(Default)]
+    struct RecordingMoonlightCertificates {
+        expected_host_uuid: String,
+        calls: Mutex<Vec<String>>,
+    }
+
+    impl RecordingMoonlightCertificates {
+        fn matching(expected_host_uuid: &str) -> Arc<Self> {
+            Arc::new(Self {
+                expected_host_uuid: expected_host_uuid.into(),
+                calls: Mutex::new(Vec::new()),
+            })
+        }
+
+        fn calls(&self) -> Vec<String> {
+            self.calls.lock().unwrap().clone()
+        }
+    }
+
+    impl host::moonlight_certificate::MoonlightCertificateAdapter for RecordingMoonlightCertificates {
+        fn attest(&self, host_uuid: &str) -> Result<bool, RpcFailure> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("attest:{host_uuid}"));
+            Ok(host_uuid == self.expected_host_uuid)
+        }
+
+        fn provision(
+            &self,
+            host_uuid: &str,
+            _client_certificate: &str,
+        ) -> Result<MoonlightCertificateProvisioned, RpcFailure> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("provision:{host_uuid}"));
+            if host_uuid != self.expected_host_uuid {
+                return Err(RpcFailure {
+                    code: "HostMismatch".into(),
+                    message: "Sunshine host UUID does not match".into(),
+                });
+            }
+            Ok(MoonlightCertificateProvisioned {
+                server_certificate:
+                    "-----BEGIN CERTIFICATE-----\nserver\n-----END CERTIFICATE-----\n".into(),
+            })
+        }
+
+        fn revoke(&self, host_uuid: &str, _client_certificate: &str) -> Result<bool, RpcFailure> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("revoke:{host_uuid}"));
+            Ok(host_uuid == self.expected_host_uuid)
+        }
+    }
+
+    #[derive(Default)]
+    struct ChangingMoonlightCertificates {
+        calls: Mutex<Vec<String>>,
+    }
+
+    impl host::moonlight_certificate::MoonlightCertificateAdapter for ChangingMoonlightCertificates {
+        fn attest(&self, host_uuid: &str) -> Result<bool, RpcFailure> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("attest:{host_uuid}"));
+            Ok(true)
+        }
+
+        fn provision(
+            &self,
+            host_uuid: &str,
+            _client_certificate: &str,
+        ) -> Result<MoonlightCertificateProvisioned, RpcFailure> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("provision:{host_uuid}"));
+            Err(RpcFailure {
+                code: "HostMismatch".into(),
+                message: "peer-controlled host mismatch text".into(),
+            })
+        }
+
+        fn revoke(&self, host_uuid: &str, _client_certificate: &str) -> Result<bool, RpcFailure> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("revoke:{host_uuid}"));
+            Err(RpcFailure {
+                code: "HostMismatch".into(),
+                message: "peer-controlled host mismatch text".into(),
+            })
+        }
+    }
+
+    fn host_routers_with_certificate_adapter(
+        config_path: &Path,
+        adapter: Arc<dyn host::moonlight_certificate::MoonlightCertificateAdapter>,
+    ) -> (Router, Router) {
+        let private = tempfile::tempdir().expect("private host state").keep();
+        let runtime = host::HostRuntime::from_paths_with_backends(
+            config_path,
+            None,
+            private,
+            Arc::new(host::control::InMemoryLaunchUnitBackend::default()),
+            adapter,
+        );
+        host_routers(runtime)
+    }
+
+    async fn serve_router(app: Router) -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        format!("http://{address}")
+    }
+
+    const TEST_CLIENT_PEM: &str =
+        "-----BEGIN CERTIFICATE-----\nclient\n-----END CERTIFICATE-----\n";
+
+    #[tokio::test]
+    async fn host_certificate_rpc_delegates_only_on_lan_and_rejects_invalid_pem() {
+        let root = tempfile::tempdir().unwrap();
+        let config = root.path().join("host.toml");
+        std::fs::write(&config, "label = \"zao\"\n").unwrap();
+        let adapter = RecordingMoonlightCertificates::matching("sunshine-host");
+        let (lan, local) = host_routers_with_certificate_adapter(&config, adapter.clone());
+
+        let attest = rpc_body(
+            lan.clone(),
+            r#"{"_tag":"app.moonlight.certificate.attest","payload":{"hostUuid":"sunshine-host"}}"#,
+        )
+        .await;
+        assert_eq!(attest["outcome"]["_tag"], "Ok");
+        assert_eq!(attest["outcome"]["payload"]["matched"], true);
+
+        let provision = rpc_body(
+            lan.clone(),
+            &serde_json::json!({
+                "_tag": "app.moonlight.certificate.provision",
+                "payload": {"hostUuid": "sunshine-host", "clientCertificate": TEST_CLIENT_PEM}
+            })
+            .to_string(),
+        )
+        .await;
+        assert_eq!(provision["outcome"]["_tag"], "Ok");
+        assert!(provision["outcome"]["payload"]["serverCertificate"]
+            .as_str()
+            .unwrap()
+            .contains("BEGIN CERTIFICATE"));
+
+        let revoke = rpc_body(
+            lan.clone(),
+            &serde_json::json!({
+                "_tag": "app.moonlight.certificate.revoke",
+                "payload": {"hostUuid": "sunshine-host", "clientCertificate": TEST_CLIENT_PEM}
+            })
+            .to_string(),
+        )
+        .await;
+        assert_eq!(revoke["outcome"]["payload"]["removed"], true);
+
+        let before_invalid = adapter.calls();
+        let invalid = rpc_body(
+            lan,
+            r#"{"_tag":"app.moonlight.certificate.provision","payload":{"hostUuid":"sunshine-host","clientCertificate":"secret-pem-body"}}"#,
+        )
+        .await;
+        assert_eq!(
+            invalid["outcome"]["payload"]["code"],
+            "InvalidMoonlightClientCertificate"
+        );
+        assert_eq!(adapter.calls(), before_invalid);
+        assert!(!invalid.to_string().contains("secret-pem-body"));
+
+        for request in [
+            r#"{"_tag":"app.moonlight.certificate.attest","payload":{"hostUuid":"sunshine-host"}}"#
+                .to_owned(),
+            serde_json::json!({
+                "_tag": "app.moonlight.certificate.provision",
+                "payload": {"hostUuid": "sunshine-host", "clientCertificate": TEST_CLIENT_PEM}
+            })
+            .to_string(),
+            serde_json::json!({
+                "_tag": "app.moonlight.certificate.revoke",
+                "payload": {"hostUuid": "sunshine-host", "clientCertificate": TEST_CLIENT_PEM}
+            })
+            .to_string(),
+        ] {
+            let body = rpc_body(local.clone(), &request).await;
+            assert_eq!(body["outcome"]["payload"]["code"], "OperationUnsupported");
+        }
+    }
+
+    #[tokio::test]
+    async fn brain_routes_certificate_mutation_to_one_attested_native_peer_only() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("config.yaml"), "{}\n").unwrap();
+        std::fs::write(root.path().join("library.yaml"), "{}\n").unwrap();
+
+        let first_config = root.path().join("first.toml");
+        let second_config = root.path().join("second.toml");
+        std::fs::write(&first_config, "label = \"first\"\n").unwrap();
+        std::fs::write(&second_config, "label = \"second\"\n").unwrap();
+        let first = RecordingMoonlightCertificates::matching("other-host");
+        let second = RecordingMoonlightCertificates::matching("sunshine-host");
+        let first_url =
+            serve_router(host_routers_with_certificate_adapter(&first_config, first.clone()).0)
+                .await;
+        let second_url =
+            serve_router(host_routers_with_certificate_adapter(&second_config, second.clone()).0)
+                .await;
+        let legacy_contacts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let contacts = legacy_contacts.clone();
+        let legacy = Router::new().fallback(move || {
+            let contacts = contacts.clone();
+            async move {
+                contacts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                StatusCode::NOT_FOUND
+            }
+        });
+        let legacy_url = serve_router(legacy).await;
+        std::fs::write(
+            root.path().join("upstreams.json"),
+            serde_json::json!([
+                {"label":"legacy","kind":"legacy","baseUrl":legacy_url},
+                {"label":"first","kind":"native","baseUrl":first_url},
+                {"label":"second","kind":"native","baseUrl":second_url}
+            ])
+            .to_string(),
+        )
+        .unwrap();
+        let brain = router_with_capability_and_local_root(
+            "right-token",
+            "https://portal.example",
+            root.path(),
+        );
+        let provision = rpc_body_authorized(
+            brain,
+            &serde_json::json!({
+                "_tag": "app.moonlight.certificate.provision",
+                "payload": {"hostUuid": "sunshine-host", "clientCertificate": TEST_CLIENT_PEM}
+            })
+            .to_string(),
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(provision["outcome"]["_tag"], "Ok");
+        assert_eq!(first.calls(), vec!["attest:sunshine-host"]);
+        assert_eq!(
+            second.calls(),
+            vec!["attest:sunshine-host", "provision:sunshine-host"]
+        );
+        assert_eq!(legacy_contacts.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn brain_fails_closed_when_an_attestation_peer_is_unavailable() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("config.yaml"), "{}\n").unwrap();
+        std::fs::write(root.path().join("library.yaml"), "{}\n").unwrap();
+        let config = root.path().join("live.toml");
+        std::fs::write(&config, "label = \"live\"\n").unwrap();
+        let live = RecordingMoonlightCertificates::matching("sunshine-host");
+        let live_url =
+            serve_router(host_routers_with_certificate_adapter(&config, live.clone()).0).await;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let unavailable_url = format!("http://{}", listener.local_addr().unwrap());
+        drop(listener);
+        std::fs::write(
+            root.path().join("upstreams.json"),
+            serde_json::json!([
+                {"label":"unavailable","kind":"native","baseUrl":unavailable_url},
+                {"label":"live","kind":"native","baseUrl":live_url}
+            ])
+            .to_string(),
+        )
+        .unwrap();
+        let brain = router_with_capability_and_local_root(
+            "right-token",
+            "https://portal.example",
+            root.path(),
+        );
+        let body = rpc_body_authorized(
+            brain,
+            &serde_json::json!({
+                "_tag": "app.moonlight.certificate.provision",
+                "payload": {"hostUuid": "sunshine-host", "clientCertificate": TEST_CLIENT_PEM}
+            })
+            .to_string(),
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(
+            body["outcome"]["payload"]["code"],
+            "MoonlightCertificatePeerUnavailable"
+        );
+        assert_eq!(live.calls(), vec!["attest:sunshine-host"]);
+        assert!(!body.to_string().contains(&unavailable_url));
+    }
+
+    #[tokio::test]
+    async fn brain_rejects_a_host_uuid_change_between_attest_and_mutation() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("config.yaml"), "{}\n").unwrap();
+        std::fs::write(root.path().join("library.yaml"), "{}\n").unwrap();
+        let config = root.path().join("changing.toml");
+        std::fs::write(&config, "label = \"changing\"\n").unwrap();
+        let changing = Arc::new(ChangingMoonlightCertificates::default());
+        let peer_url =
+            serve_router(host_routers_with_certificate_adapter(&config, changing.clone()).0).await;
+        std::fs::write(
+            root.path().join("upstreams.json"),
+            serde_json::json!([
+                {"label":"changing","kind":"native","baseUrl":peer_url}
+            ])
+            .to_string(),
+        )
+        .unwrap();
+        let brain = router_with_capability_and_local_root(
+            "right-token",
+            "https://portal.example",
+            root.path(),
+        );
+        let body = rpc_body_authorized(
+            brain,
+            &serde_json::json!({
+                "_tag": "app.moonlight.certificate.provision",
+                "payload": {"hostUuid": "sunshine-host", "clientCertificate": TEST_CLIENT_PEM}
+            })
+            .to_string(),
+            Some("right-token"),
+        )
+        .await;
+        assert_eq!(body["outcome"]["payload"]["code"], "MoonlightHostChanged");
+        assert!(!body.to_string().contains("peer-controlled"));
+        assert_eq!(
+            changing.calls.lock().unwrap().as_slice(),
+            ["attest:sunshine-host", "provision:sunshine-host"]
+        );
+    }
+
+    #[tokio::test]
+    async fn brain_rejects_zero_or_ambiguous_certificate_routes_without_mutation() {
+        for expected in ["none", "sunshine-host"] {
+            let root = tempfile::tempdir().unwrap();
+            std::fs::write(root.path().join("config.yaml"), "{}\n").unwrap();
+            std::fs::write(root.path().join("library.yaml"), "{}\n").unwrap();
+            let mut urls = Vec::new();
+            let mut adapters = Vec::new();
+            for index in 0..2 {
+                let config = root.path().join(format!("host-{index}.toml"));
+                std::fs::write(&config, format!("label = \"host-{index}\"\n")).unwrap();
+                let adapter = RecordingMoonlightCertificates::matching(expected);
+                urls.push(
+                    serve_router(host_routers_with_certificate_adapter(&config, adapter.clone()).0)
+                        .await,
+                );
+                adapters.push(adapter);
+            }
+            std::fs::write(
+                root.path().join("upstreams.json"),
+                serde_json::json!([
+                    {"label":"one","kind":"native","baseUrl":urls[0]},
+                    {"label":"two","kind":"native","baseUrl":urls[1]}
+                ])
+                .to_string(),
+            )
+            .unwrap();
+            let brain = router_with_capability_and_local_root(
+                "right-token",
+                "https://portal.example",
+                root.path(),
+            );
+            let body = rpc_body_authorized(
+                brain,
+                &serde_json::json!({
+                    "_tag": "app.moonlight.certificate.provision",
+                    "payload": {"hostUuid": "sunshine-host", "clientCertificate": TEST_CLIENT_PEM}
+                })
+                .to_string(),
+                Some("right-token"),
+            )
+            .await;
+            let expected_code = if expected == "none" {
+                "MoonlightHostNotFound"
+            } else {
+                "MoonlightHostAmbiguous"
+            };
+            assert_eq!(body["outcome"]["payload"]["code"], expected_code);
+            for adapter in adapters {
+                assert!(adapter
+                    .calls()
+                    .iter()
+                    .all(|call| call.starts_with("attest:")));
+            }
+        }
     }
 }

@@ -1,10 +1,16 @@
 use crate::{
-    CatalogSnapshot, CatalogSnapshotOutcome, RpcFailure, RpcRequest, RpcResponse,
-    SessionPrepareOutcome, SessionPrepareRequest, SessionPrepared,
+    CatalogSnapshot, CatalogSnapshotOutcome, MoonlightCertificateAttestOutcome,
+    MoonlightCertificateAttestRequest, MoonlightCertificateAttested,
+    MoonlightCertificateProvisionOutcome, MoonlightCertificateProvisionRequest,
+    MoonlightCertificateProvisioned, MoonlightCertificateRevokeOutcome,
+    MoonlightCertificateRevokeRequest, MoonlightCertificateRevoked, RpcFailure, RpcRequest,
+    RpcResponse, SessionPrepareOutcome, SessionPrepareRequest, SessionPrepared,
 };
 use std::time::Duration;
 
 use crate::upstreams::UpstreamError;
+
+const MAX_NATIVE_RPC_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 
 #[derive(Clone)]
 pub struct NativeClient {
@@ -16,6 +22,7 @@ impl NativeClient {
     pub fn new(base_url: String) -> Self {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(5))
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .expect("construct native upstream client");
         Self {
@@ -28,6 +35,30 @@ impl NativeClient {
         UpstreamError::Tagged {
             code: failure.code,
             message: failure.message,
+        }
+    }
+
+    fn certificate_failure(error: UpstreamError) -> UpstreamError {
+        match error {
+            UpstreamError::Tagged { code, .. } if code == "HostMismatch" => {
+                UpstreamError::MoonlightHostChanged
+            }
+            UpstreamError::Tagged { code, .. } if code == "SunshineCertificateControlBusy" => {
+                UpstreamError::MoonlightCertificateBusy
+            }
+            UpstreamError::Tagged { .. } => UpstreamError::MoonlightCertificateRejected,
+            UpstreamError::Unreachable(_) | UpstreamError::Http(_) => {
+                UpstreamError::MoonlightCertificatePeerUnavailable
+            }
+            UpstreamError::Wire(_) => UpstreamError::MoonlightCertificatePeerProtocol,
+            UpstreamError::Failure(_)
+            | UpstreamError::MoonlightCertificatePeerUnavailable
+            | UpstreamError::MoonlightCertificatePeerProtocol
+            | UpstreamError::MoonlightCertificateRejected
+            | UpstreamError::MoonlightCertificateBusy
+            | UpstreamError::MoonlightHostChanged
+            | UpstreamError::MoonlightHostNotFound
+            | UpstreamError::MoonlightHostAmbiguous => error,
         }
     }
 
@@ -45,6 +76,79 @@ impl NativeClient {
             response => Err(UpstreamError::Wire(format!(
                 "native catalog returned {response:?}"
             ))),
+        }
+    }
+
+    pub async fn moonlight_certificate_attest(
+        &self,
+        host_uuid: &str,
+    ) -> Result<MoonlightCertificateAttested, UpstreamError> {
+        match self
+            .call(RpcRequest::MoonlightCertificateAttest(
+                MoonlightCertificateAttestRequest {
+                    host_uuid: host_uuid.into(),
+                },
+            ))
+            .await
+            .map_err(Self::certificate_failure)?
+        {
+            RpcResponse::MoonlightCertificateAttest(MoonlightCertificateAttestOutcome::Ok(
+                attested,
+            )) => Ok(attested),
+            RpcResponse::MoonlightCertificateAttest(MoonlightCertificateAttestOutcome::Err(
+                failure,
+            )) => Err(Self::certificate_failure(Self::tagged_failure(failure))),
+            _ => Err(UpstreamError::MoonlightCertificatePeerProtocol),
+        }
+    }
+
+    pub async fn moonlight_certificate_provision(
+        &self,
+        host_uuid: &str,
+        client_certificate: &str,
+    ) -> Result<MoonlightCertificateProvisioned, UpstreamError> {
+        match self
+            .call(RpcRequest::MoonlightCertificateProvision(
+                MoonlightCertificateProvisionRequest {
+                    host_uuid: host_uuid.into(),
+                    client_certificate: client_certificate.into(),
+                },
+            ))
+            .await
+            .map_err(Self::certificate_failure)?
+        {
+            RpcResponse::MoonlightCertificateProvision(
+                MoonlightCertificateProvisionOutcome::Ok(provisioned),
+            ) => Ok(provisioned),
+            RpcResponse::MoonlightCertificateProvision(
+                MoonlightCertificateProvisionOutcome::Err(failure),
+            ) => Err(Self::certificate_failure(Self::tagged_failure(failure))),
+            _ => Err(UpstreamError::MoonlightCertificatePeerProtocol),
+        }
+    }
+
+    pub async fn moonlight_certificate_revoke(
+        &self,
+        host_uuid: &str,
+        client_certificate: &str,
+    ) -> Result<MoonlightCertificateRevoked, UpstreamError> {
+        match self
+            .call(RpcRequest::MoonlightCertificateRevoke(
+                MoonlightCertificateRevokeRequest {
+                    host_uuid: host_uuid.into(),
+                    client_certificate: client_certificate.into(),
+                },
+            ))
+            .await
+            .map_err(Self::certificate_failure)?
+        {
+            RpcResponse::MoonlightCertificateRevoke(MoonlightCertificateRevokeOutcome::Ok(
+                revoked,
+            )) => Ok(revoked),
+            RpcResponse::MoonlightCertificateRevoke(MoonlightCertificateRevokeOutcome::Err(
+                failure,
+            )) => Err(Self::certificate_failure(Self::tagged_failure(failure))),
+            _ => Err(UpstreamError::MoonlightCertificatePeerProtocol),
         }
     }
 
@@ -78,10 +182,30 @@ impl NativeClient {
         if !status.is_success() {
             return Err(UpstreamError::Http(status.as_u16()));
         }
-        response
-            .json()
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_NATIVE_RPC_RESPONSE_BYTES as u64)
+        {
+            return Err(UpstreamError::Wire(
+                "native response exceeds the size limit".into(),
+            ));
+        }
+        let mut response = response;
+        let mut body = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
             .await
-            .map_err(|error| UpstreamError::Wire(error.to_string()))
+            .map_err(|_| UpstreamError::Wire("native response body could not be read".into()))?
+        {
+            if body.len().saturating_add(chunk.len()) > MAX_NATIVE_RPC_RESPONSE_BYTES {
+                return Err(UpstreamError::Wire(
+                    "native response exceeds the size limit".into(),
+                ));
+            }
+            body.extend_from_slice(&chunk);
+        }
+        serde_json::from_slice(&body)
+            .map_err(|_| UpstreamError::Wire("native response is invalid JSON".into()))
     }
 }
 
@@ -91,6 +215,10 @@ mod tests {
 
     async fn serve(app: axum::Router) -> String {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        serve_listener(listener, app).await
+    }
+
+    async fn serve_listener(listener: tokio::net::TcpListener, app: axum::Router) -> String {
         let address = listener.local_addr().unwrap();
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         format!("http://{address}")
@@ -168,5 +296,223 @@ command = ["neverball"]
 
         let prepared = client.prepare_stream("neverball").await.unwrap();
         assert_eq!(prepared.game_id, "neverball");
+    }
+
+    #[test]
+    fn native_client_preserves_configured_ipv6_and_non_default_ports() {
+        let client = NativeClient::new("http://[2001:db8::1]:49231/".into());
+        assert_eq!(client.rpc_url, "http://[2001:db8::1]:49231/rpc");
+    }
+
+    #[tokio::test]
+    async fn native_certificate_client_requires_exact_tags_and_redacts_certificates() {
+        let server_pem = "-----BEGIN CERTIFICATE-----\nserver-secret\n-----END CERTIFICATE-----\n";
+        let body = serde_json::json!({
+            "_tag": "app.moonlight.certificate.provision",
+            "outcome": {"_tag":"Ok", "payload":{"serverCertificate":server_pem}}
+        })
+        .to_string();
+        let leaked: &'static str = Box::leak(body.into_boxed_str());
+        let client = NativeClient::new(serve_response(axum::http::StatusCode::OK, leaked).await);
+        let provisioned = client
+            .moonlight_certificate_provision(
+                "sunshine-host",
+                "-----BEGIN CERTIFICATE-----\nclient-secret\n-----END CERTIFICATE-----\n",
+            )
+            .await
+            .unwrap();
+        assert_eq!(provisioned.server_certificate, server_pem);
+        assert!(!format!("{provisioned:?}").contains("server-secret"));
+
+        let wrong = NativeClient::new(
+            serve_response(
+                axum::http::StatusCode::OK,
+                r#"{"_tag":"system.health","outcome":{"_tag":"Ok","payload":{"version":"test"}}}"#,
+            )
+            .await,
+        )
+        .moonlight_certificate_provision(
+            "sunshine-host",
+            "-----BEGIN CERTIFICATE-----\nclient-secret\n-----END CERTIFICATE-----\n",
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(
+            wrong,
+            UpstreamError::MoonlightCertificatePeerProtocol
+        ));
+        assert!(!wrong.to_string().contains("client-secret"));
+    }
+
+    #[tokio::test]
+    async fn native_client_refuses_temporary_and_permanent_post_redirects() {
+        for status in [
+            axum::http::StatusCode::TEMPORARY_REDIRECT,
+            axum::http::StatusCode::PERMANENT_REDIRECT,
+        ] {
+            let contacted = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let target_contacts = contacted.clone();
+            let target = serve(axum::Router::new().route(
+                "/rpc",
+                axum::routing::post(move || {
+                    let target_contacts = target_contacts.clone();
+                    async move {
+                        target_contacts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        r#"{"_tag":"app.moonlight.certificate.attest","outcome":{"_tag":"Ok","payload":{"matched":true}}}"#
+                    }
+                }),
+            ))
+            .await;
+            let redirect_target = format!("{target}/rpc");
+            let redirect = serve(axum::Router::new().route(
+                "/rpc",
+                axum::routing::post(move || {
+                    let redirect_target = redirect_target.clone();
+                    async move {
+                        axum::http::Response::builder()
+                            .status(status)
+                            .header(axum::http::header::LOCATION, redirect_target)
+                            .body(axum::body::Body::empty())
+                            .unwrap()
+                    }
+                }),
+            ))
+            .await;
+
+            let error = NativeClient::new(redirect)
+                .moonlight_certificate_attest("sunshine-host")
+                .await
+                .unwrap_err();
+            assert!(matches!(
+                error,
+                UpstreamError::MoonlightCertificatePeerUnavailable
+            ));
+            assert_eq!(contacted.load(std::sync::atomic::Ordering::SeqCst), 0);
+        }
+    }
+
+    #[tokio::test]
+    async fn native_client_bounds_declared_and_chunked_response_bodies() {
+        let declared = serve(axum::Router::new().route(
+            "/rpc",
+            axum::routing::post(|| async {
+                axum::http::Response::builder()
+                    .status(axum::http::StatusCode::OK)
+                    .header(
+                        axum::http::header::CONTENT_LENGTH,
+                        (MAX_NATIVE_RPC_RESPONSE_BYTES + 1).to_string(),
+                    )
+                    .body(axum::body::Body::empty())
+                    .unwrap()
+            }),
+        ))
+        .await;
+        let declared_error = NativeClient::new(declared)
+            .moonlight_certificate_attest("sunshine-host")
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            declared_error,
+            UpstreamError::MoonlightCertificatePeerProtocol
+        ));
+
+        let chunks = vec![
+            axum::body::Bytes::from(vec![b'x'; MAX_NATIVE_RPC_RESPONSE_BYTES / 2 + 1]),
+            axum::body::Bytes::from(vec![b'y'; MAX_NATIVE_RPC_RESPONSE_BYTES / 2 + 1]),
+        ];
+        let chunked = serve(axum::Router::new().route(
+            "/rpc",
+            axum::routing::post(move || {
+                let stream = futures::stream::iter(
+                    chunks
+                        .clone()
+                        .into_iter()
+                        .map(Ok::<_, std::convert::Infallible>),
+                );
+                async move {
+                    axum::http::Response::builder()
+                        .status(axum::http::StatusCode::OK)
+                        .body(axum::body::Body::from_stream(stream))
+                        .unwrap()
+                }
+            }),
+        ))
+        .await;
+        let chunked_error = NativeClient::new(chunked)
+            .moonlight_certificate_attest("sunshine-host")
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            chunked_error,
+            UpstreamError::MoonlightCertificatePeerProtocol
+        ));
+    }
+
+    #[tokio::test]
+    async fn native_certificate_failures_are_stable_and_redacted() {
+        let certificate = "-----BEGIN CERTIFICATE-----\nclient-secret\n-----END CERTIFICATE-----\n";
+        for body in [
+            "not json".to_owned(),
+            serde_json::json!({
+                "_tag": "app.moonlight.certificate.provision",
+                "outcome": {
+                    "_tag": "Err",
+                    "payload": {
+                        "code": "AnythingThePeerChooses",
+                        "message": format!("echo {certificate} from http://secret-peer.invalid")
+                    }
+                }
+            })
+            .to_string(),
+        ] {
+            let body: &'static str = Box::leak(body.into_boxed_str());
+            let error = NativeClient::new(serve_response(axum::http::StatusCode::OK, body).await)
+                .moonlight_certificate_provision("sunshine-host", certificate)
+                .await
+                .unwrap_err();
+            let text = error.to_string();
+            assert!(!text.contains("client-secret"));
+            assert!(!text.contains("secret-peer"));
+            assert!(matches!(
+                error,
+                UpstreamError::MoonlightCertificatePeerProtocol
+                    | UpstreamError::MoonlightCertificateRejected
+            ));
+        }
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let unavailable_url = format!("http://{}", listener.local_addr().unwrap());
+        drop(listener);
+        let error = NativeClient::new(unavailable_url.clone())
+            .moonlight_certificate_provision("sunshine-host", certificate)
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            UpstreamError::MoonlightCertificatePeerUnavailable
+        ));
+        assert!(!error.to_string().contains(&unavailable_url));
+    }
+
+    #[tokio::test]
+    async fn native_client_executes_a_real_ipv6_request_when_loopback_is_available() {
+        let listener = match tokio::net::TcpListener::bind("[::1]:0").await {
+            Ok(listener) => listener,
+            Err(_) => return,
+        };
+        let app = axum::Router::new().route(
+            "/rpc",
+            axum::routing::post(|| async {
+                r#"{"_tag":"app.moonlight.certificate.attest","outcome":{"_tag":"Ok","payload":{"matched":true}}}"#
+            }),
+        );
+        let client = NativeClient::new(serve_listener(listener, app).await);
+        assert!(
+            client
+                .moonlight_certificate_attest("sunshine-host")
+                .await
+                .unwrap()
+                .matched
+        );
     }
 }
