@@ -94,3 +94,9 @@ The compositor-clock experiment did not remove the limit. It showed that high-ra
 Sunshine replaced the scalar BGR888-to-BGRA loop with FFmpeg swscale. The first Bandai sample improved to `112.16 FPS`. A 10-second host packet capture improved from `107.910` to `109.522` video datagrams per second.
 
 The conversion change helped, but it did not meet the target. The remaining long frame gaps still centered near `11.25 ms`, which points to the serial screencopy and conversion path rather than NVENC or network loss.
+
+## Candidate iteration 12
+
+A Pixman compositor candidate started and passed the dynamic renderer gate. Neverball reached `115.10 FPS`, but the native 120 FPS validation workload rendered black. The moving-content requirement therefore failed.
+
+Pixman cannot replace GLES2 for this Xwayland OpenGL workload. Zao returned to the exact 1080p60 generation and bundle with no game, marker, or lease.

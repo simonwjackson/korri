@@ -117,6 +117,7 @@ let
   deviceConfig = cfg.services.korridLinuxDevice.deviceConfig;
   nvencDeviceConfig = nvenc.config.services.korridLinuxDevice.deviceConfig;
   highRefreshDeviceConfig = highRefresh.config.services.korridLinuxDevice.deviceConfig;
+  pixmanDeviceConfig = pixman.config.services.korridLinuxDevice.deviceConfig;
   sunshineExec = pkgs.writeText "korri-linux-host-sunshine-exec" sunshine.serviceConfig.ExecStart;
   compositorExec = pkgs.writeText "korri-linux-host-compositor-exec" compositor.serviceConfig.ExecStart;
   highRefreshCompositorExec = pkgs.writeText "korri-linux-host-high-refresh-compositor-exec" highRefresh.config.systemd.services.korri-compositor.serviceConfig.ExecStart;
@@ -270,6 +271,9 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     ! grep -F -- '--demuxer-lavf-format=lavfi' ${highRefreshDeviceConfig} >/dev/null
     ! grep -F 'av://lavfi:' ${highRefreshDeviceConfig} >/dev/null
     grep -F -- '--gpu-context=x11egl' ${deviceConfig} >/dev/null
+    grep -F -- '--vo=x11' ${pixmanDeviceConfig} >/dev/null
+    grep -F -- '--hwdec=no' ${pixmanDeviceConfig} >/dev/null
+    ! grep -F -- '--gpu-context=x11egl' ${pixmanDeviceConfig} >/dev/null
     ! grep -F 'LD_LIBRARY_PATH=/run/opengl-driver/lib' ${deviceConfig} >/dev/null
     grep -F 'LD_LIBRARY_PATH=/run/opengl-driver/lib' ${nvencDeviceConfig} >/dev/null
     media60="$(${pkgs.gnugrep}/bin/grep -oE '/nix/store/[^\"]+/share/korri-streaming-validation/video\.mp4' ${deviceConfig} | head -n1)"

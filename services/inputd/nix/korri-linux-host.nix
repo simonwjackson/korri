@@ -74,9 +74,11 @@ let
         "--no-audio",
         "--loop-file=inf",
         "--fullscreen",
-        "--vo=gpu-next",
-        "--gpu-context=x11egl",
-        "--hwdec=auto-copy-safe",
+        ${lib.optionalString (cfg.compositor.renderer == "gles2") ''"--vo=gpu-next",''}
+        ${lib.optionalString (cfg.compositor.renderer == "gles2") ''"--gpu-context=x11egl",''}
+        ${lib.optionalString (cfg.compositor.renderer == "gles2") ''"--hwdec=auto-copy-safe",''}
+        ${lib.optionalString (cfg.compositor.renderer == "pixman") ''"--vo=x11",''}
+        ${lib.optionalString (cfg.compositor.renderer == "pixman") ''"--hwdec=no",''}
         "--title=Korri streaming gate",
         "${streamingValidationMedia}/share/korri-streaming-validation/video.mp4"
       ]
