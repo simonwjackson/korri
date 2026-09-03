@@ -1,7 +1,7 @@
 ---
 title: "perf(streaming): Sustain Zao 1080p120"
 type: perf
-status: active
+status: completed
 date: 2026-09-02
 verify_command: "nix run .#inputd-check"
 ---

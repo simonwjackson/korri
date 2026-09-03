@@ -196,3 +196,15 @@ The remaining acceptance workload decodes and presents a full 1920x1080 software
 The Korri-owned motion program logged steady producer rates from `119.987` through `120.014 FPS`. An initial host packet capture measured `117.553` datagrams per second. Three later balanced-profile captures averaged `115.874`, but a fresh run fell to `113.293` as Zao resumed active package thermal throttling.
 
 A temporary high-refresh profile wrote the observed Zao controls to `performance`, `min_perf_pct=40`, and `max_perf_pct=60`. Three consecutive captures with a fresh moving producer measured `126.054`, `126.195`, and `126.117` datagrams per second. The candidate now owns this reversible profile while 120 Hz is active and restores `balanced`, `16`, and `100` when the profile service stops.
+
+## Accepted candidate
+
+Candidate `/nix/store/g4d157qiizfi68g31d07ff1y60dsxb0b-nixos-system-zao-26.05.20260313.c06b4ae` passed and stayed persistent.
+
+Five moving-content incoming-rate samples were `124.19`, `124.57`, `124.38`, `124.13`, and `124.94 FPS`. Their mean was `124.442 FPS`. Every sample reported `0.00%` network loss.
+
+The previous generation used the same stream path for a separate two-minute soak. Its final incoming rate was `124.19 FPS`, and its final rendering rate was `116.74 FPS`. The final generation changed only failed performance-profile activation rollback, then repeated the five-sample acceptance before persistence.
+
+The native motion producer logged stable rates around `120.000 FPS`. The stream gate confirmed current Wayland capture and strict `h264_nvenc`. The final generation uses bundle `/nix/store/qkxz0ab369b1b455fx4cv129ccd32dxd-korri-bundle-0.0.0`.
+
+After acceptance, Zao had no game unit, attempt marker, or rollback lease. Bandai returned to its saved 1280x720, 60 FPS, automatic codec, locked-FPS, overlay-disabled settings. Its system refresh settings returned to 60 Hz.

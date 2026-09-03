@@ -3,7 +3,7 @@ id: 01M1F9ADZFCSJA7G1Z7FDV6JN1
 slug: make-headless-zao-1080p120-honest-and-sustainable
 title: Make headless Zao 1080p120 honest and sustainable
 origin: parked
-status: In Progress
+status: Done
 priority: medium
 labels:
   - streaming
@@ -22,12 +22,12 @@ The earlier Xvfb path accepted 1920x1080@120 but did not sustain it. The new Swa
 
 ## Acceptance criteria
 
-- [ ] A native moving 1920x1080@120 workload sustains at least 115 incoming FPS over a bounded soak with zero network drops.
-- [ ] Sway reports the intended 1920x1080@120 output mode during the accepted stream.
-- [ ] Sunshine uses Wayland capture and H.264 NVENC without X11, VAAPI, or software fallback.
-- [ ] The accepted generation and bundle become Zao's current and persistent configuration.
-- [ ] Failure restores the prior verified generation and bundle without leaving a game, marker, or rollback lease.
-- [ ] No physical action or visual confirmation is required.
+- [x] A native moving 1920x1080@120 workload sustains at least 115 incoming FPS over a bounded soak with zero network drops.
+- [x] Sway reports the intended 1920x1080@120 output mode during the accepted stream.
+- [x] Sunshine uses Wayland capture and H.264 NVENC without X11, VAAPI, or software fallback.
+- [x] The accepted generation and bundle become Zao's current and persistent configuration.
+- [x] Failure restores the prior verified generation and bundle without leaving a game, marker, or rollback lease.
+- [x] No physical action or visual confirmation is required.
 
 ## Related
 

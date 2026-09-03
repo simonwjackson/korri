@@ -1,7 +1,7 @@
 ---
 id: 01M1F9ADZFCSJA7G1Z7FDV6JN1
 title: Make headless Zao 1080p120 honest and sustainable
-status: active
+status: completed
 created: 2026-09-01
 source: backlog
 ---
