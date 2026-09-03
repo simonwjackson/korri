@@ -64,3 +64,15 @@ The client setting improved rendered FPS relative to incoming FPS, but it reduce
 A client-only diagnostic reduced Bandai's requested bitrate from the automatic value to 10,000 Kbps. Bandwidth fell from about `3.3 MB/s` to `1.08 MB/s`, but the first steady incoming rate was `104.63 FPS`. Network loss remained `0.00%`.
 
 The lower bitrate did not remove the frame-rate limit, so the test stopped before a full soak. Bandai returned to its saved settings. Zao returned to the exact 1080p60 generation and bundle with no game, marker, or lease.
+
+## Candidate iteration 7
+
+A native 120 FPS H.264 validation video replaced the runtime-generated source. MPV CPU use fell from about `58%` to `42%`, but Bandai received about `103 FPS`. A two-minute soak without intermediate screenshots averaged `106.117 FPS` in the decoder work-rate samples.
+
+Live output probes at 144 Hz and Odin performance mode `2` did not reach the target. The validation source remained 120 FPS throughout those probes.
+
+## Candidate iteration 8
+
+A debug client build stopped overriding the selected `latency` frame-pacing mode with `balanced`. The first connected sample was `103.57 FPS`. The change did not remove the limit and was rejected.
+
+Bandai returned to its saved settings and APK. Zao returned to the exact 1080p60 generation and bundle with no game, marker, or lease.

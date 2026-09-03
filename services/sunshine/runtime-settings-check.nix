@@ -84,6 +84,12 @@ let
       && patchContains "destination[0] = source[2];"
       && patchContains "destination[2] = source[0];"
     ))
+    (check "high-rate Wayland RAM capture reserves measured processing headroom" (
+      builtins.elem "0018-add-headroom-to-high-rate-wayland-ram-capture.patch" sunshinePackage.korriPatchNames
+      && patchContains "auto capture_delay = delay <= 10ms ? delay * 95 / 100 : delay;"
+      && patchContains "next_frame += capture_delay;"
+      && patchContains "next_frame = now + capture_delay;"
+    ))
     (check "runtime settings packet IDs remain stable" (
       patchContains "RUNTIME_SETTINGS_REQUEST_PACKET = 0x5504"
       && patchContains "RUNTIME_SETTINGS_ACK_PACKET = 0x5505"

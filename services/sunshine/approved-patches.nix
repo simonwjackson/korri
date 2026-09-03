@@ -13,7 +13,7 @@
   reviewedFfmpegSourceHash = "sha256-LKQUfHb9/Z4uvPx4vrtAOPL95Un9/C26lvCbQZ51avk=";
   reviewedNvencApiMajor = 12;
   reviewedNvencApiMinor = 0;
-  patchSetSha256 = "81c4c0f0b160a64d88cc139725b4698d180d5620c44ebf252dfc621a4b0cda47";
+  patchSetSha256 = "9bc668dfcba3d5c17db376acfdf8cf96d1d6fb59ec49931867308c39ac0de3fa";
   patches = [
     {
       name = "0001-add-runtime-settings-protocol-surface.patch";
@@ -74,6 +74,11 @@
       name = "0017-use-wayland-ram-capture-for-cuda.patch";
       path = ./patches/0017-use-wayland-ram-capture-for-cuda.patch;
       sha256 = "a87aefc6eb5f71a4d413d751eefb87743745a2fab126dded5b66b23b949f66b2";
+    }
+    {
+      name = "0018-add-headroom-to-high-rate-wayland-ram-capture.patch";
+      path = ./patches/0018-add-headroom-to-high-rate-wayland-ram-capture.patch;
+      sha256 = "742a081e1eae1d5e9016408aa15c6d7c0b453b11198d748fa19aba550f277acc";
     }
   ];
 }
