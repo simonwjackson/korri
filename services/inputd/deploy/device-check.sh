@@ -35,7 +35,7 @@ EXPECTED_SUNSHINE_LIBAVCODEC_VERSION='62.11.100'
 EXPECTED_SUNSHINE_FFMPEG_COMMIT='61c50407fd429a5e2ec616e2e846c3fe3743879a'
 EXPECTED_SUNSHINE_FFMPEG_SOURCE_HASH='sha256-LKQUfHb9/Z4uvPx4vrtAOPL95Un9/C26lvCbQZ51avk='
 EXPECTED_SUNSHINE_NVENC_API='12.0'
-EXPECTED_SUNSHINE_PATCH_SET_SHA256='204ba1e47d1db24c55dbf4f113fbf07add0433bede0437394d7cc665da7a8c79'
+EXPECTED_SUNSHINE_PATCH_SET_SHA256='f5b84a911702dfd1d6f5b1e7ecf3b93c2a81759c75b5971ce45d64ad322723ce'
 KORRID_CONTROL_GROUP='korri-control'
 KORRID_CONTROL_PEER_USER='korri-inputd'
 KORRID_CONTROL_SOCKET='/run/korrid-control/control.sock'
@@ -62,6 +62,7 @@ patch=0015-add-korri-input-seat-event-mirror.patch sha256=69888a0ef824af105f0919
 patch=0016-add-seamless-nvenc-runtime-path.patch sha256=686decb81379741e01e0b9b0e9105bbe23765a1bf728565767604383983a7074
 patch=0017-use-wayland-ram-capture-for-cuda.patch sha256=a87aefc6eb5f71a4d413d751eefb87743745a2fab126dded5b66b23b949f66b2
 patch=0018-vectorize-wayland-bgr888-with-swscale.patch sha256=753971f16e33598215caa455074f3bbca23e43b0cf2a2b8a97779f356486203f
+patch=0019-use-pinned-memory-for-cuda-capture.patch sha256=83fd586d210668b06753fdd8bb6312967ba8805ce7a2fdc992c5cbdc49c79c88
 EOF
 }
 
@@ -766,7 +767,7 @@ EOF
     && "$computed_patch_set" == "$patch_set" ]] \
     || fail 'sunshine-korri provenance ordered patch digest is invalid'
 
-  printf 'sunshine-executable=%s patch-set-sha256=%s patches=13 base-version=%s libavcodec=%s\n' \
+  printf 'sunshine-executable=%s patch-set-sha256=%s patches=14 base-version=%s libavcodec=%s\n' \
     "$running" "$patch_set" "$EXPECTED_SUNSHINE_BASE_VERSION" "$EXPECTED_SUNSHINE_LIBAVCODEC_VERSION"
 }
 

@@ -118,3 +118,75 @@ The timer removal did not help. The next experiment targeted per-frame SHM alloc
 A double-buffered candidate kept validated Wayland SHM buffers mapped between screencopy frames. Its host packet rate fell to `107.189` video datagrams per second.
 
 Persistent SHM reuse was regressive. Zao returned to the exact 1080p60 generation and bundle. The experiment is not retained in the candidate patch set.
+
+## Host CPU profile
+
+A 15-second `perf` profile of the timed Pixman and swscale candidate found:
+
+- `42.42%` of sampled Sunshine cycles in `__memmove_evex_unaligned_erms` under `wl::wlr_ram_t::capture`.
+- `33.88%` of sampled Sunshine cycles in the CUDA driver under `cudaMemcpy2DToArray` and `cuda::sws_t::load_ram`.
+- Zero lost samples across about 5,000 cycle samples.
+
+The measured hot path is the CPU BGR888-to-BGRA expansion followed by the pageable host-to-CUDA copy. The next candidate used pinned host images for the existing CUDA upload. It did not change stream timing or encoder selection.
+
+## Candidate iteration 16
+
+Pinned capture images improved the 10-second host packet rate to `114.400` video datagrams per second. The final no-intermediate-screenshot overlay sample reported `122.76 FPS` and `0.00%` network loss, but eight decoder work-rate samples averaged `111.317 FPS`.
+
+Pinned memory improved the measured host path but did not prove the required sustained rate. The next candidate also submitted the pinned host-to-CUDA copy asynchronously on Sunshine's existing conversion stream.
+
+## Candidate iteration 17
+
+The asynchronous upload candidate measured `114.317` host video datagrams per second. The pinned synchronous candidate measured `114.400`.
+
+Asynchronous submission did not improve host cadence. It is not retained. The next candidate targeted the remaining dominant CPU cost with a dedicated SSSE3 BGR888-to-BGRA row conversion while retaining pinned upload memory.
+
+## Candidate iteration 18
+
+The SSSE3 candidate initially measured `114.678` host video datagrams per second, then measured `112.023`, `111.224`, and `111.619` in three consecutive captures. A temporary `performance` ACPI platform profile stopped active package thermal throttling and raised sampled CPU frequency from `951415` kHz to `3499936` kHz, but a standalone packet capture still measured `114.191` datagrams per second.
+
+A second 15-second `perf` profile found `63.50%` of sampled Sunshine cycles in `__memmove_evex_unaligned_erms` under `wl::wlr_ram_t::capture`. CUDA upload no longer dominated the CPU profile. This proves the live Pixman path is using the 32-bit row-copy branch, not the BGR888 conversion branch.
+
+The SSSE3 conversion and performance profile did not meet the target. The platform profile returned to `balanced`. The next candidate transferred eligible 32-bit non-inverted Wayland SHM mappings to the bounded image pool instead of copying every row into a second host image.
+
+## Candidate iteration 19
+
+Direct SHM ownership transfer removed the capture-thread row copy. Host packet rate measured `112.908` datagrams per second. A 15-second `perf` profile then found `55.43%` of sampled Sunshine cycles in the CUDA driver under the pageable `cudaMemcpy2DToArray` upload.
+
+Removing the first copy exposed a slower pageable CUDA transfer and regressed cadence. The next candidate registered each transferred mapping as CUDA host memory while its pooled image owned the mapping. Registration failure fell back to the existing pinned-copy path.
+
+## Candidate iteration 20
+
+Per-frame CUDA host registration measured `111.988` host video datagrams per second, with 70 gaps over 12 ms and two gaps over 16 ms in the 10-second sample.
+
+Registration cost exceeded the removed copy cost. The transfer experiment is not retained. The next candidate returned to the pinned destination buffer and split eligible contiguous 32-bit frame copies across the capture thread and one persistent worker.
+
+## Candidate iteration 21
+
+The persistent copy-worker candidate measured `113.115` host video datagrams per second. Worker synchronization cost more than it saved.
+
+Parallel host copying is not retained. The next candidate bound each free pooled image to its own reusable Wayland SHM buffer, registered that mapping once, captured directly into it, and uploaded it without an intermediate host copy. Buffer reuse remained gated by the existing free-image callback.
+
+## Candidate iteration 22
+
+Image-owned registered SHM removed both dominant CPU costs. A 15-second `perf` profile contained neither capture-thread `memmove` nor CUDA host-staging work among the leading samples. Host packet rate nevertheless measured `108.055` datagrams per second.
+
+The copy path was no longer the measured limiter inside Sunshine, but image-owned registered SHM reduced host cadence to `108.055` datagrams per second. Letting blocking screencopy completion clock the same path measured `107.856`.
+
+## Candidate iteration 23
+
+Direct capture into CUDA-registered SHM is slower than Sway capture into normal SHM followed by one copy into pooled pinned memory. The likely cost is Pixman's writes into page-locked destination memory. The direct path is not retained.
+
+The next candidate returned to the best pinned-copy path and replaced 1,080 per-row `memcpy` calls with one contiguous frame copy when stride and orientation already matched.
+
+## Candidate iteration 24
+
+The contiguous copy candidate measured `114.198` host video datagrams per second. Five moving-content overlay samples averaged `111.212 FPS`. A second five-sample run under the temporary `performance` ACPI profile averaged `108.124 FPS`, so that profile returned to `balanced`.
+
+One cached frame copy did not sustain the target. The next candidate kept the contiguous pinned-copy shape but used bounded AVX2 non-temporal stores and an explicit store fence, avoiding cache allocation for memory that CUDA consumed immediately.
+
+## Candidate iteration 25
+
+The non-temporal copy candidate measured `113.891` host video datagrams per second. It did not improve the cached pinned-copy result and is not retained.
+
+The remaining acceptance workload decodes and presents a full 1920x1080 software video frame 120 times per second under Pixman. The next candidate retains the best pinned Sunshine path but replaces that stress workload with a Korri-owned X11 validation program. The program advances moving geometry on an absolute 120 Hz clock and derives all positions from its actual window dimensions.

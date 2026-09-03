@@ -264,27 +264,18 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     grep -F '/bin/tini' ${deviceConfig} >/dev/null
     grep -F '/bin/timeout' ${deviceConfig} >/dev/null
     grep -F -- '--kill-after=5s' ${deviceConfig} >/dev/null
-    grep -F '/bin/mpv' ${deviceConfig} >/dev/null
-    grep -F -- '--hwdec=auto-copy-safe' ${deviceConfig} >/dev/null
-    grep -F -- '--loop-file=inf' ${deviceConfig} >/dev/null
-    grep -F -- '--loop-file=inf' ${highRefreshDeviceConfig} >/dev/null
-    ! grep -F -- '--demuxer-lavf-format=lavfi' ${highRefreshDeviceConfig} >/dev/null
-    ! grep -F 'av://lavfi:' ${highRefreshDeviceConfig} >/dev/null
-    grep -F -- '--gpu-context=x11egl' ${deviceConfig} >/dev/null
-    grep -F -- '--vo=x11' ${pixmanDeviceConfig} >/dev/null
-    grep -F -- '--hwdec=no' ${pixmanDeviceConfig} >/dev/null
-    ! grep -F -- '--gpu-context=x11egl' ${pixmanDeviceConfig} >/dev/null
-    ! grep -F 'LD_LIBRARY_PATH=/run/opengl-driver/lib' ${deviceConfig} >/dev/null
-    grep -F 'LD_LIBRARY_PATH=/run/opengl-driver/lib' ${nvencDeviceConfig} >/dev/null
-    media60="$(${pkgs.gnugrep}/bin/grep -oE '/nix/store/[^\"]+/share/korri-streaming-validation/video\.mp4' ${deviceConfig} | head -n1)"
-    media120="$(${pkgs.gnugrep}/bin/grep -oE '/nix/store/[^\"]+/share/korri-streaming-validation/video\.mp4' ${highRefreshDeviceConfig} | head -n1)"
-    test -f "$media60"
-    test -f "$media120"
-    test "$media60" != "$media120"
-    probe60="$(${lib.getExe' pkgs.ffmpeg "ffprobe"} -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate -of csv=p=0 "$media60")"
-    probe120="$(${lib.getExe' pkgs.ffmpeg "ffprobe"} -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate -of csv=p=0 "$media120")"
-    test "$probe60" = '1920,1080,60/1'
-    test "$probe120" = '1920,1080,120/1'
+    grep -F '/bin/korri-streaming-validation-motion' ${deviceConfig} >/dev/null
+    grep -F '/bin/korri-streaming-validation-motion' ${highRefreshDeviceConfig} >/dev/null
+    grep -F '/bin/korri-streaming-validation-motion' ${pixmanDeviceConfig} >/dev/null
+    ! grep -F '/bin/mpv' ${deviceConfig} >/dev/null
+    ! grep -F -- '--loop-file=inf' ${highRefreshDeviceConfig} >/dev/null
+    ! grep -F 'LD_LIBRARY_PATH=/run/opengl-driver/lib' ${nvencDeviceConfig} >/dev/null
+    validation_motion="$(${pkgs.gnugrep}/bin/grep -oE '/nix/store/[^\"]+/bin/korri-streaming-validation-motion' ${deviceConfig} | head -n1)"
+    high_refresh_validation_motion="$(${pkgs.gnugrep}/bin/grep -oE '/nix/store/[^\"]+/bin/korri-streaming-validation-motion' ${highRefreshDeviceConfig} | head -n1)"
+    test -x "$validation_motion"
+    test "$validation_motion" = "$high_refresh_validation_motion"
+    ${pkgs.gnugrep}/bin/grep -A4 -F "$validation_motion" ${deviceConfig} | ${pkgs.gnugrep}/bin/grep -F '"60"' >/dev/null
+    ${pkgs.gnugrep}/bin/grep -A4 -F "$validation_motion" ${highRefreshDeviceConfig} | ${pkgs.gnugrep}/bin/grep -F '"120"' >/dev/null
     grep -F 'id = "neverball"' ${deviceConfig} >/dev/null
     grep -F 'title = "Neverball (consumer)"' ${deviceConfig} >/dev/null
     grep -F '${pkgs.neverball}/bin/neverball' ${deviceConfig} >/dev/null
@@ -325,7 +316,7 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
       ${pkgs.sway-unwrapped}/bin/sway --unsupported-gpu --config "$compositor_config" \
       >"$TMPDIR/sway.log" 2>&1 &
     sway_pid=$!
-    trap '${pkgs.coreutils}/bin/cat "$TMPDIR/sway.log" >&2 2>/dev/null || true; ${pkgs.coreutils}/bin/cat "$TMPDIR/mpv.log" >&2 2>/dev/null || true; ${pkgs.coreutils}/bin/kill "$sway_pid" 2>/dev/null || true' EXIT
+    trap '${pkgs.coreutils}/bin/cat "$TMPDIR/sway.log" >&2 2>/dev/null || true; ${pkgs.coreutils}/bin/cat "$TMPDIR/motion.log" >&2 2>/dev/null || true; ${pkgs.coreutils}/bin/kill "$sway_pid" 2>/dev/null || true' EXIT
     attempt=0
     while [ "$attempt" -lt 80 ]; do
       raw_wayland_display="$(${pkgs.findutils}/bin/find "$runtime" -maxdepth 1 -type s -name 'wayland-[0-9]*' -printf '%f\n' | head -n1)"
@@ -352,14 +343,12 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
 
     DISPLAY=:0 XDG_SESSION_TYPE=x11 \
       ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=1s 8 \
-      ${lib.getExe pkgs.mpv-unwrapped} --no-config --quiet --no-audio \
-      --no-fullscreen --vo=x11 --hwdec=no \
-      --title='Korri action gate' "$media60" >"$TMPDIR/mpv.log" 2>&1 &
+      "$validation_motion" 1920 1080 60 >"$TMPDIR/motion.log" 2>&1 &
     player_pid=$!
     attempt=0
     while [ "$attempt" -lt 80 ]; do
       if ${pkgs.sway}/bin/swaymsg -s "$control/sway-ipc.sock" -t get_tree -r \
-        | ${pkgs.jq}/bin/jq -e '.. | objects | select(.name? == "Korri action gate" and .fullscreen_mode == 0)' \
+        | ${pkgs.jq}/bin/jq -e '.. | objects | select(.name? == "Korri streaming gate" and .fullscreen_mode == 0)' \
         >/dev/null 2>&1; then
         break
       fi
@@ -368,15 +357,15 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
       ${pkgs.coreutils}/bin/sleep 0.1
     done
     ${pkgs.sway}/bin/swaymsg -s "$control/sway-ipc.sock" -t get_tree -r \
-      | ${pkgs.jq}/bin/jq -e '.. | objects | select(.name? == "Korri action gate" and .fullscreen_mode == 0)' \
+      | ${pkgs.jq}/bin/jq -e '.. | objects | select(.name? == "Korri streaming gate" and .fullscreen_mode == 0)' \
       >/dev/null
-    ${pkgs.sway}/bin/swaymsg -s "$control/sway-ipc.sock" '[title="Korri action gate"] floating enable' >/dev/null
+    ${pkgs.sway}/bin/swaymsg -s "$control/sway-ipc.sock" '[title="Korri streaming gate"] floating enable' >/dev/null
     ${pkgs.sway}/bin/swaymsg -s "$control/sway-ipc.sock" -t get_tree -r \
-      | ${pkgs.jq}/bin/jq -e '.. | objects | select(.name? == "Korri action gate" and .floating == "user_on" and .fullscreen_mode == 0)' \
+      | ${pkgs.jq}/bin/jq -e '.. | objects | select(.name? == "Korri streaming gate" and .floating == "user_on" and .fullscreen_mode == 0)' \
       >/dev/null
     ${pkgs.sway}/bin/swaymsg -s "$control/sway-ipc.sock" ${lib.escapeShellArg (builtins.elemAt validationAction 3)} >/dev/null
     ${pkgs.sway}/bin/swaymsg -s "$control/sway-ipc.sock" -t get_tree -r \
-      | ${pkgs.jq}/bin/jq -e '.. | objects | select(.name? == "Korri action gate" and .fullscreen_mode > 0)' \
+      | ${pkgs.jq}/bin/jq -e '.. | objects | select(.name? == "Korri streaming gate" and .fullscreen_mode > 0)' \
       >/dev/null
 
     XDG_RUNTIME_DIR="$runtime" WAYLAND_DISPLAY="$wayland_display" \
@@ -390,6 +379,8 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     compare_status=$?
     set -e
     test "$compare_status" -eq 1
+    ${pkgs.coreutils}/bin/sleep 0.6
+    ${pkgs.gnugrep}/bin/grep -E 'korri-validation-fps=(5[5-9]|6[0-5])\.' "$TMPDIR/motion.log" >/dev/null
 
     ${pkgs.coreutils}/bin/kill "$player_pid"
     wait "$player_pid" || true

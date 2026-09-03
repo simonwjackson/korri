@@ -13,7 +13,7 @@
   reviewedFfmpegSourceHash = "sha256-LKQUfHb9/Z4uvPx4vrtAOPL95Un9/C26lvCbQZ51avk=";
   reviewedNvencApiMajor = 12;
   reviewedNvencApiMinor = 0;
-  patchSetSha256 = "204ba1e47d1db24c55dbf4f113fbf07add0433bede0437394d7cc665da7a8c79";
+  patchSetSha256 = "f5b84a911702dfd1d6f5b1e7ecf3b93c2a81759c75b5971ce45d64ad322723ce";
   patches = [
     {
       name = "0001-add-runtime-settings-protocol-surface.patch";
@@ -79,6 +79,11 @@
       name = "0018-vectorize-wayland-bgr888-with-swscale.patch";
       path = ./patches/0018-vectorize-wayland-bgr888-with-swscale.patch;
       sha256 = "753971f16e33598215caa455074f3bbca23e43b0cf2a2b8a97779f356486203f";
+    }
+    {
+      name = "0019-use-pinned-memory-for-cuda-capture.patch";
+      path = ./patches/0019-use-pinned-memory-for-cuda-capture.patch;
+      sha256 = "83fd586d210668b06753fdd8bb6312967ba8805ce7a2fdc992c5cbdc49c79c88";
     }
   ];
 }

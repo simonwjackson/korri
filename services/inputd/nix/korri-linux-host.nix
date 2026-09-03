@@ -27,25 +27,27 @@ let
       "${gameplayHome}/.config/sunshine"
     else
       cfg.sunshine.configDirectory;
-  streamingValidationMedia = pkgs.runCommand "korri-streaming-validation-${compositorWidth}x${compositorHeight}-${compositorRefreshRate}fps" {
-    nativeBuildInputs = [ pkgs.ffmpeg ];
-  } ''
-    mkdir -p "$out/share/korri-streaming-validation"
-    ffmpeg -hide_banner -loglevel error \
-      -f lavfi \
-      -i 'testsrc2=size=${compositorWidth}x${compositorHeight}:rate=${compositorRefreshRate}' \
-      -t 8 \
-      -an \
-      -c:v libx264 \
-      -preset ultrafast \
-      -tune zerolatency \
-      -crf 18 \
-      -pix_fmt yuv420p \
-      -g ${compositorRefreshRate} \
-      -keyint_min ${compositorRefreshRate} \
-      -sc_threshold 0 \
-      "$out/share/korri-streaming-validation/video.mp4"
-  '';
+  streamingValidationMotion = pkgs.stdenv.mkDerivation {
+    pname = "korri-streaming-validation-motion";
+    version = "0.0.0";
+    src = ../validation/x11-native-motion.c;
+    dontUnpack = true;
+    nativeBuildInputs = [ pkgs.pkg-config ];
+    buildInputs = [ pkgs.xorg.libX11 ];
+    buildPhase = ''
+      runHook preBuild
+      $CC -std=c11 -O2 -Wall -Wextra -Werror "$src" \
+        $(${pkgs.pkg-config}/bin/pkg-config --cflags --libs x11) \
+        -o korri-streaming-validation-motion
+      runHook postBuild
+    '';
+    installPhase = ''
+      runHook preInstall
+      install -Dm755 korri-streaming-validation-motion \
+        "$out/bin/korri-streaming-validation-motion"
+      runHook postInstall
+    '';
+  };
   generatedDeviceConfig = pkgs.writeText "korrid-${cfg.label}-host.toml" ''
     label = "${cfg.label}"
 
@@ -64,23 +66,11 @@ let
         "--signal=TERM",
         "--kill-after=5s",
         "600",
-        "${lib.getExe' pkgs.coreutils "env"}",
-        ${lib.optionalString (
-          cfg.sunshine.encoder == "nvenc"
-        ) ''"LD_LIBRARY_PATH=/run/opengl-driver/lib",''}
-        "${lib.getExe pkgs.mpv-unwrapped}",
-        "--no-config",
-        "--quiet",
-        "--no-audio",
-        "--loop-file=inf",
-        "--fullscreen",
-        ${lib.optionalString (cfg.compositor.renderer == "gles2") ''"--vo=gpu-next",''}
-        ${lib.optionalString (cfg.compositor.renderer == "gles2") ''"--gpu-context=x11egl",''}
-        ${lib.optionalString (cfg.compositor.renderer == "gles2") ''"--hwdec=auto-copy-safe",''}
-        ${lib.optionalString (cfg.compositor.renderer == "pixman") ''"--vo=x11",''}
-        ${lib.optionalString (cfg.compositor.renderer == "pixman") ''"--hwdec=no",''}
-        "--title=Korri streaming gate",
-        "${streamingValidationMedia}/share/korri-streaming-validation/video.mp4"
+        "${lib.getExe streamingValidationMotion}",
+        "${compositorWidth}",
+        "${compositorHeight}",
+        "${compositorRefreshRate}",
+        "--fullscreen"
       ]
 
       [[games]]

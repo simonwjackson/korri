@@ -92,6 +92,12 @@ let
       && patchContains "sws_scale("
       && patchContains "source_linesize[0] = -source_linesize[0];"
     ))
+    (check "CUDA Wayland conversion uses reusable pinned host images" (
+      builtins.elem "0019-use-pinned-memory-for-cuda-capture.patch" sunshinePackage.korriPatchNames
+      && patchContains "cudaMallocHost(&data, size)"
+      && patchContains "cudaFreeHost(data)"
+      && patchContains "img->cuda_pinned = img->data != nullptr;"
+    ))
     (check "runtime settings packet IDs remain stable" (
       patchContains "RUNTIME_SETTINGS_REQUEST_PACKET = 0x5504"
       && patchContains "RUNTIME_SETTINGS_ACK_PACKET = 0x5505"
