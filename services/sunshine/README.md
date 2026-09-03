@@ -122,6 +122,14 @@ Korrid uses one private local control lease that is derived from the legacy pre-
 
 The mirror remains inert when the protected receiver or either stable environment value is absent. A missing sidecar also disables the mirror. Socket connection and write failures do not stop Sunshine controller handling. The mirror token is private local authority. It must not appear in public status, network RPC, logs, or committed evidence. Physical device acceptance remains separate from the repository implementation.
 
+## Korrid certificate control
+
+Patch `0020` adds an opt-in private adapter for Korrid-managed Moonlight trust. Sunshine consumes exactly one root-created systemd `SOCK_SEQPACKET` socket named `korri-certificate-control`. Sunshine verifies the configured absolute pathname, root ownership, and exact narrow mode before it serves requests. It does not create a TCP, HTTP, or web user interface. The adapter remains inactive when any socket-activation value or the exact expected Korrid UID and GID are absent.
+
+Each accepted connection carries one JSON frame of at most 16384 bytes. The non-mutating `attest` operation compares an expected Sunshine UUID and returns only whether it matches. Provision and revoke also check `SO_PEERCRED`, the exact Sunshine host UUID, and one valid public X.509 PEM certificate. Provision is idempotent by the certificate's SHA-256 fingerprint. Revoke removes only entries with that fingerprint. Sunshine preserves its existing `root.named_devices` schema, replaces its state file atomically, and proves that the replacement live TLS verifier accepts every current client certificate before it reports success. If a failed mutation cannot restore the prior durable state, Sunshine terminates instead of serving HTTPS or certificate-control requests with uncertain authorization. Mutation replies contain only status, whether state changed, and Sunshine's public server certificate. Certificate bodies and state contents do not enter logs.
+
+The adapter does not replace TLS. It replaces only the manual GameStream pairing ceremony. The Moonlight private key remains on the Android device, and Sunshine's private key remains in Sunshine's existing state directory. The NixOS socket unit and namespace isolation are supplied by the Linux host module in the consuming slice. Physical device acceptance remains separate.
+
 ## Package provenance
 
 The installed package contains `share/korri/sunshine-korri/provenance`. This mode-`0444` file records:

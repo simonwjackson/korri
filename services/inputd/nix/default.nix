@@ -67,7 +67,7 @@ in
       grep -F '"${sunshinePackage}/bin/.sunshine-wrapped"' ${sunshinePackage}/bin/sunshine >/dev/null
       test "${sunshinePackage.pname}" = sunshine-korri
       test "${sunshinePackage.version}" = "${pkgs.sunshine.version}-korri"
-      test "${toString (builtins.length sunshinePackage.korriPatchNames)}" = 14
+      test "${toString (builtins.length sunshinePackage.korriPatchNames)}" = 15
       test "${sunshinePackage.korriBaseSunshineVersion}" = "${sunshineApprovedPatches.baseSunshineVersion}"
       test "${sunshinePackage.korriApprovedBaseSunshineSourceHash}" = "${sunshineApprovedPatches.approvedBaseSourceHash}"
       test "${pkgs.sunshine.src.outputHash}" = "${sunshineApprovedPatches.approvedBaseSourceHash}"
@@ -111,6 +111,13 @@ in
       patchPath = ../../sunshine/patches/0015-add-korri-input-seat-event-mirror.patch;
       packagePath = ../../sunshine/package.nix;
       readmePath = ../../sunshine/README.md;
+    };
+    sunshine-korri-certificate-control = import ../../sunshine/certificate-control-check.nix {
+      inherit pkgs sunshinePackage;
+      approvedPatchesPath = ../../sunshine/approved-patches.nix;
+      patchPath = ../../sunshine/patches/0020-add-korrid-certificate-control.patch;
+      packagePath = ../../sunshine/package.nix;
+      testPath = ../../sunshine/test-certificate-control.cpp;
     };
     sunshine-korri-android-client-protocol = import ../../sunshine/android-client-protocol-check.nix {
       inherit pkgs;

@@ -483,11 +483,11 @@ case "$(basename "$0")" in
           physical="identity=$expected_identity event=event8 sysfs=/sys/devices/pci0000:00/input/input8/event8 profile=$profile"
           printf 'compositor-gate=pass renderer=gles2 output=HEADLESS-1 mode=1920x1080@60 performance=not-required wayland=stable xwayland=:0 sunshine-control=denied\n'
           printf 'automated-gates=pass raw-readable=0 inputd-status=Ready system-korrid=active system-korri-compositor=active system-sunshine=active pairing-state=present credentials=service-specific sunshine-package=attested catalog=Ok delegate=yes controllers=pids\n'
-          printf 'sunshine-executable=/nix/store/sunshine-korri/bin/sunshine-2025.924.154138-korri patch-set-sha256=%064d patches=14 base-version=2025.924.154138 libavcodec=62.11.100\n' 0
+          printf 'sunshine-executable=/nix/store/sunshine-korri/bin/sunshine-2025.924.154138-korri patch-set-sha256=%064d patches=15 base-version=2025.924.154138 libavcodec=62.11.100\n' 0
           printf 'sunshine-private-state=protected digest=%s\n' "${HARNESS_PRIVATE_STATE_DIGEST:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
           printf 'normalized-fingerprint=%s\n' "$normalized"
           [[ "$require_physical" != true ]] || printf 'controller-evidence=%s\n' "$physical"
-          sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine-2025.924.154138-korri patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=14 base-version=2025.924.154138 libavcodec=62.11.100'
+          sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine-2025.924.154138-korri patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=15 base-version=2025.924.154138 libavcodec=62.11.100'
           printf 'acceptance-fingerprint=normalized=%s sunshine=%q private-state=%s' "$normalized" "$sunshine" "${HARNESS_PRIVATE_STATE_DIGEST:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
           [[ "$require_physical" != true ]] || printf ' physical=%s' "$physical"
           printf '\n'
@@ -503,9 +503,9 @@ case "$(basename "$0")" in
             normalized="${HARNESS_FINGERPRINT:-node=/dev/input/event9 sysfs=/sys/devices/virtual/input/input9/event9 dev=13:73 inode=1:9 inputplumber=/nix/store/provider/bin/inputplumber version=0.75.2 keys=exact abs=exact ff=yes}"
           fi
           if [[ "${HARNESS_REPLACE_SUNSHINE:-no}" == yes ]]; then
-            sunshine='sunshine-executable=/nix/store/replaced-sunshine/bin/sunshine patch-set-sha256=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff patches=14 base-version=2025.924.154138 libavcodec=62.11.100'
+            sunshine='sunshine-executable=/nix/store/replaced-sunshine/bin/sunshine patch-set-sha256=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff patches=15 base-version=2025.924.154138 libavcodec=62.11.100'
           else
-            sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine-2025.924.154138-korri patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=14 base-version=2025.924.154138 libavcodec=62.11.100'
+            sunshine='sunshine-executable=/nix/store/sunshine-korri/bin/sunshine-2025.924.154138-korri patch-set-sha256=0000000000000000000000000000000000000000000000000000000000000000 patches=15 base-version=2025.924.154138 libavcodec=62.11.100'
           fi
           if [[ "${HARNESS_REPLACE_PRIVATE_STATE:-no}" == yes ]]; then
             private_state=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
@@ -628,6 +628,9 @@ esac
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GATE="$HERE/device-check.sh"
+grep -F "EXPECTED_SUNSHINE_PATCH_SET_SHA256='2399d226ef71590dadb48c913d4dffed49313cee673bb63c2277af77227e8d52'" "$GATE" >/dev/null
+grep -F 'patch=0020-add-korrid-certificate-control.patch sha256=43cd0dbc6f1911f21f4fa9e9815fe9f90912a4dfe30504677f372815b294a9d1' "$GATE" >/dev/null
+grep -F 'patches=15' "$GATE" >/dev/null
 KORRI_LEDGER_PROOF_HELPER="${KORRI_LEDGER_PROOF_HELPER:-${CARGO_TARGET_DIR:-$HERE/../target}/debug/korri-ledger-proof}"
 export KORRI_LEDGER_PROOF_HELPER
 [[ -x "$KORRI_LEDGER_PROOF_HELPER" ]] || {

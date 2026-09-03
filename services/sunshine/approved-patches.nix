@@ -13,7 +13,7 @@
   reviewedFfmpegSourceHash = "sha256-LKQUfHb9/Z4uvPx4vrtAOPL95Un9/C26lvCbQZ51avk=";
   reviewedNvencApiMajor = 12;
   reviewedNvencApiMinor = 0;
-  patchSetSha256 = "de4a70732b24664c562fe2c7679cb0f18c10055741fbf7274c83d3b31173633f";
+  patchSetSha256 = "2399d226ef71590dadb48c913d4dffed49313cee673bb63c2277af77227e8d52";
   patches = [
     {
       name = "0001-add-runtime-settings-protocol-surface.patch";
@@ -84,6 +84,11 @@
       name = "0019-use-pinned-memory-for-cuda-capture.patch";
       path = ./patches/0019-use-pinned-memory-for-cuda-capture.patch;
       sha256 = "83fd586d210668b06753fdd8bb6312967ba8805ce7a2fdc992c5cbdc49c79c88";
+    }
+    {
+      name = "0020-add-korrid-certificate-control.patch";
+      path = ./patches/0020-add-korrid-certificate-control.patch;
+      sha256 = "43cd0dbc6f1911f21f4fa9e9815fe9f90912a4dfe30504677f372815b294a9d1";
     }
   ];
 }
