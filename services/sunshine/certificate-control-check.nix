@@ -40,10 +40,13 @@ let
       && contains "accept4" patch
       && contains "KORRI_CERTIFICATE_CONTROL_UID" patch
       && contains "KORRI_CERTIFICATE_CONTROL_GID" patch
+      && contains "KORRI_CERTIFICATE_CONTROL_OWNER_GID" patch
       && contains "KORRI_CERTIFICATE_CONTROL_PATH" patch
       && contains "KORRI_CERTIFICATE_CONTROL_MODE" patch
       && contains "select_systemd_descriptor" patch
-      && contains "expected_path, 0" patch
+      && contains "socket_state.st_gid != expected_owner_gid" patch
+      && contains "expected_path," patch
+      && contains "static_cast<gid_t>(*expected_owner_gid)" patch
       && !(contains "AF_INET" patch)
       && !(contains "AF_INET6" patch)
     ))

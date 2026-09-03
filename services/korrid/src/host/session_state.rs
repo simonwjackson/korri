@@ -962,7 +962,8 @@ mod tests {
     }
 
     #[test]
-    fn systemd_game_units_hide_configured_recovery_and_control_paths() {
+    fn systemd_game_units_hide_configured_recovery_and_control_paths_for_fresh_and_resumed_launches(
+    ) {
         let backend = SystemdLaunchUnitBackend::with_protected_paths(
             PathBuf::from("/nix/store/systemd/bin/systemd-run"),
             PathBuf::from("/nix/store/systemd/bin/systemctl"),
@@ -983,7 +984,7 @@ mod tests {
             )
             .unwrap();
         assert!(launch.contains(
-            &"--property=InaccessiblePaths=/srv/korri-test/private-recovery /run/korrid /run/korri-test/control/device.sock /run/korri-test/control /home/gameplay/.config/sunshine /run/korri-test/compositor-control /run/user/1001 -/run/korri-input-seat /dev/uinput /dev/inputplumber/sources".into()
+            &"--property=InaccessiblePaths=/srv/korri-test/private-recovery /run/korrid /run/korri-test/control/device.sock /run/korri-test/control /home/gameplay/.config/sunshine /run/korri-test/compositor-control /run/korri-certificate-control /run/user/1001 -/run/korri-input-seat /dev/uinput /dev/inputplumber/sources".into()
         ));
     }
 

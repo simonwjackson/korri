@@ -69,6 +69,11 @@ in
       default = "/run/korri-compositor";
       description = "Exact compositor control directory hidden from every game unit.";
     };
+    certificateControlDirectory = lib.mkOption {
+      type = lib.types.str;
+      default = "/run/korri-certificate-control";
+      description = "Exact Sunshine certificate-control directory hidden from every game unit.";
+    };
     controlSocket = lib.mkOption {
       type = lib.types.str;
       default = "/run/korrid-control/control.sock";
@@ -111,14 +116,19 @@ in
         message = "korrid compositorControlDirectory must be a normalized absolute path.";
       }
       {
+        assertion = validAbsolutePath cfg.certificateControlDirectory;
+        message = "korrid certificateControlDirectory must be a normalized absolute path.";
+      }
+      {
         assertion =
           let
             user = config.users.users.${cfg.gameplayUser} or { };
           in
           !(builtins.elem "input" (user.extraGroups or [ ]))
           && !(builtins.elem "uinput" (user.extraGroups or [ ]))
-          && !(builtins.elem controlGroup (user.extraGroups or [ ]));
-        message = "the gameplay user must not hold raw input, uinput, or local-control groups.";
+          && !(builtins.elem controlGroup (user.extraGroups or [ ]))
+          && !(builtins.elem serviceGroup (user.extraGroups or [ ]));
+        message = "the gameplay user must not hold raw input, uinput, local-control, or korrid service groups.";
       }
     ];
 
@@ -185,6 +195,7 @@ in
         KORRID_CONTROL_SOCKET = cfg.controlSocket;
         KORRID_CONTROL_DIRECTORY = controlDirectory;
         KORRID_COMPOSITOR_CONTROL_DIRECTORY = cfg.compositorControlDirectory;
+        KORRID_CERTIFICATE_CONTROL_DIRECTORY = cfg.certificateControlDirectory;
         KORRID_CONTROL_PEER_UID = toString cfg.inputdUid;
         KORRID_CONTROL_PEER_GID = toString cfg.controlGid;
         KORRID_GAMEPLAY_UID = toString cfg.gameplayUid;
@@ -235,6 +246,7 @@ in
         InaccessiblePaths = [
           "/dev/uinput"
           "-/dev/inputplumber/sources"
+          cfg.sunshinePrivateStateRoot
         ];
       };
     };

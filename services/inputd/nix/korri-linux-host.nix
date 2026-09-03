@@ -21,6 +21,9 @@ let
   inputSeatRuntimeDirectory = "/run/korri-input-seat";
   inputSeatControlSocket = "${inputSeatRuntimeDirectory}/control.sock";
   inputSeatMirrorSocket = "${inputSeatRuntimeDirectory}/sunshine-input-seat.sock";
+  certificateControlDirectory = "/run/korri-certificate-control";
+  certificateControlSocket = "${certificateControlDirectory}/control.sock";
+  certificateControlMode = "0660";
   compositorMode = builtins.match "^([1-9][0-9]*)x([1-9][0-9]*)@([1-9][0-9]*)Hz$" cfg.compositor.mode;
   compositorWidth = builtins.elemAt compositorMode 0;
   compositorHeight = builtins.elemAt compositorMode 1;
@@ -506,6 +509,9 @@ in
           )
           && builtins.elem "0016-add-seamless-nvenc-runtime-path.patch" (
             cfg.sunshine.package.korriPatchNames or [ ]
+          )
+          && builtins.elem "0020-add-korrid-certificate-control.patch" (
+            cfg.sunshine.package.korriPatchNames or [ ]
           );
         message = "services.korriLinuxHost must use the exact approved sunshine-korri package and provenance contract.";
       }
@@ -518,6 +524,19 @@ in
           cfg.compositor.renderDevice
         ];
         message = "services.korriLinuxHost paths must be normalized absolute paths without whitespace.";
+      }
+      {
+        assertion =
+          let
+            socketConfig = config.systemd.sockets.korri-certificate-control.socketConfig or { };
+            sunshineEnvironment = config.systemd.services.sunshine.environment or { };
+          in
+          (socketConfig.SocketUser or null) == "root"
+          && (socketConfig.SocketGroup or null) == "korrid"
+          &&
+            (sunshineEnvironment.KORRI_CERTIFICATE_CONTROL_OWNER_GID or null)
+            == toString cfg.serviceIdentities.korridGid;
+        message = "services.korriLinuxHost certificate-control socket inode ownership must remain exact root:korrid.";
       }
       {
         assertion = lib.hasPrefix "/dev/dri/" cfg.compositor.renderDevice;
@@ -569,7 +588,7 @@ in
       storageRoot = cfg.storageRoot;
       privateStateRoot = cfg.privateStateRoot;
       sunshinePrivateStateRoot = sunshineConfig;
-      inherit compositorControlDirectory;
+      inherit compositorControlDirectory certificateControlDirectory;
     };
 
     services.sunshine = {
@@ -596,7 +615,31 @@ in
 
     systemd.tmpfiles.rules = [
       "d ${cfg.storageRoot} 0700 korrid korrid -"
+      "d ${certificateControlDirectory} 0751 root korrid -"
     ];
+
+    systemd.sockets.korri-certificate-control = {
+      description = "Private Korri Sunshine certificate control socket";
+      wantedBy = [ "sockets.target" ];
+      before = [ "sunshine.service" ];
+      requires = [ "systemd-tmpfiles-setup.service" ];
+      after = [
+        "systemd-tmpfiles-setup.service"
+        "systemd-tmpfiles-resetup.service"
+      ];
+      socketConfig = {
+        Accept = false;
+        ListenSequentialPacket = certificateControlSocket;
+        FileDescriptorName = "korri-certificate-control";
+        SocketUser = "root";
+        SocketGroup = "korrid";
+        SocketMode = certificateControlMode;
+        DirectoryMode = "0751";
+        RemoveOnStop = true;
+        NonBlocking = true;
+        Service = "sunshine.service";
+      };
+    };
 
     networking.firewall.interfaces = lib.genAttrs cfg.firewallInterfaces (_: {
       allowedTCPPorts = [ cfg.apiPort ];
@@ -761,7 +804,14 @@ in
       bindsTo = lib.mkAfter [ "korri-compositor.service" ];
       requires = lib.mkAfter ([ "korri-compositor.service" ] ++ lib.optional cfg.sunshine.inputSeats.enable "korri-input-seat-receiver.service");
       after = lib.mkAfter ([ "korri-compositor.service" ] ++ lib.optional cfg.sunshine.inputSeats.enable "korri-input-seat-receiver.service");
-      environment = lib.mkIf cfg.sunshine.inputSeats.enable {
+      environment = {
+        KORRID_SUNSHINE_CERTIFICATE_CONTROL_SOCKET = certificateControlSocket;
+        KORRID_SUNSHINE_CERTIFICATE_CONTROL_GID = toString cfg.serviceIdentities.korridGid;
+        KORRID_SUNSHINE_CERTIFICATE_CONTROL_PEER_UID = toString cfg.gameplayUid;
+        KORRID_SUNSHINE_CERTIFICATE_CONTROL_PEER_GID = toString (
+          if cfg.sunshine.inputSeats.enable then cfg.serviceIdentities.inputSeatGid else cfg.gameplayGid
+        );
+      } // lib.optionalAttrs cfg.sunshine.inputSeats.enable {
         KORRID_INPUT_SEAT_CONTROL_SOCKET = inputSeatControlSocket;
       };
     };
@@ -771,16 +821,23 @@ in
       wantedBy = [ "multi-user.target" ];
       bindsTo = [ "korri-compositor.service" ];
       requires = [
+        "korri-certificate-control.socket"
         "korri-input-source-guard.service"
         "korri-compositor.service"
       ] ++ lib.optional cfg.sunshine.inputSeats.enable "korri-input-seat-receiver.service";
       after = [
+        "korri-certificate-control.socket"
         "korri-input-source-guard.service"
         "korri-compositor.service"
         "network-online.target"
       ] ++ lib.optional cfg.sunshine.inputSeats.enable "korri-input-seat-receiver.service";
       wants = [ "network-online.target" ];
       environment = {
+        KORRI_CERTIFICATE_CONTROL_UID = toString cfg.serviceIdentities.korridUid;
+        KORRI_CERTIFICATE_CONTROL_GID = toString cfg.serviceIdentities.korridGid;
+        KORRI_CERTIFICATE_CONTROL_OWNER_GID = toString cfg.serviceIdentities.korridGid;
+        KORRI_CERTIFICATE_CONTROL_MODE = certificateControlMode;
+        KORRI_CERTIFICATE_CONTROL_PATH = certificateControlSocket;
         DISPLAY = xwaylandDisplay;
         WAYLAND_DISPLAY = waylandDisplay;
         XDG_RUNTIME_DIR = gameplayRuntimeDir;
@@ -810,6 +867,7 @@ in
         WorkingDirectory = gameplayHome;
         ExecCondition = lib.optional (cfg.sunshine.encoder == "nvenc") requireNvencRuntime;
         ExecStartPre = waitForCompositor;
+        Sockets = [ "korri-certificate-control.socket" ];
         ExecStart = "${lib.getExe cfg.sunshine.package} ${sunshineConfig}/sunshine.conf log_path=/dev/null${
           lib.optionalString (cfg.sunshine.encoder != "auto") " encoder=${cfg.sunshine.encoder}"
         }";

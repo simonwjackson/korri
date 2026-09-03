@@ -37,10 +37,10 @@ index 5fad47b..fc2fc72 100644
    /**
 diff --git a/src/korri_certificate_control.cpp b/src/korri_certificate_control.cpp
 new file mode 100644
-index 0000000..1e0c766
+index 0000000..eb7b1eb
 --- /dev/null
 +++ b/src/korri_certificate_control.cpp
-@@ -0,0 +1,518 @@
+@@ -0,0 +1,519 @@
 +#include "korri_certificate_control.h"
 +
 +#include <openssl/pem.h>
@@ -515,6 +515,7 @@ index 0000000..1e0c766
 +      const int fd,
 +      const std::string_view expected_path,
 +      const uid_t expected_owner,
++      const gid_t expected_owner_gid,
 +      const mode_t expected_mode) {
 +    if (expected_path.empty() || expected_path.front() != '/' ||
 +        expected_path.size() >= sizeof(((sockaddr_un *) nullptr)->sun_path) ||
@@ -546,7 +547,7 @@ index 0000000..1e0c766
 +    }
 +    struct stat socket_state {};
 +    if (::lstat(address.sun_path, &socket_state) != 0 || !S_ISSOCK(socket_state.st_mode) ||
-+        socket_state.st_uid != expected_owner ||
++        socket_state.st_uid != expected_owner || socket_state.st_gid != expected_owner_gid ||
 +        (socket_state.st_mode & 0777U) != expected_mode) {
 +      return false;
 +    }
@@ -561,10 +562,10 @@ index 0000000..1e0c766
 +}  // namespace korri_certificate_control
 diff --git a/src/korri_certificate_control.h b/src/korri_certificate_control.h
 new file mode 100644
-index 0000000..3cd9705
+index 0000000..fbb4481
 --- /dev/null
 +++ b/src/korri_certificate_control.h
-@@ -0,0 +1,290 @@
+@@ -0,0 +1,291 @@
 +#pragma once
 +
 +#include <openssl/x509.h>
@@ -789,6 +790,7 @@ index 0000000..3cd9705
 +      int fd,
 +      std::string_view expected_path,
 +      uid_t expected_owner,
++      gid_t expected_owner_gid,
 +      mode_t expected_mode);
 +
 +  template<typename Handler>
@@ -856,7 +858,7 @@ index 0000000..3cd9705
 +
 +}  // namespace korri_certificate_control
 diff --git a/src/nvhttp.cpp b/src/nvhttp.cpp
-index c1d9401..aee7bad 100644
+index c1d9401..0ae83ac 100644
 --- a/src/nvhttp.cpp
 +++ b/src/nvhttp.cpp
 @@ -6,11 +6,32 @@
@@ -1027,7 +1029,7 @@ index c1d9401..aee7bad 100644
      if (!fs::exists(config::nvhttp.file_state)) {
        BOOST_LOG(info) << "File "sv << config::nvhttp.file_state << " doesn't exist"sv;
        http::unique_id = uuid_util::uuid_t::generate().string();
-@@ -212,71 +284,179 @@ namespace nvhttp {
+@@ -212,71 +284,186 @@ namespace nvhttp {
        pt::read_json(config::nvhttp.file_state, tree);
      } catch (std::exception &e) {
        BOOST_LOG(error) << "Couldn't read "sv << config::nvhttp.file_state << ": "sv << e.what();
@@ -1192,27 +1194,34 @@ index c1d9401..aee7bad 100644
 +    const auto listen_fds = parse_unsigned_environment("LISTEN_FDS");
 +    const auto expected_uid = parse_unsigned_environment("KORRI_CERTIFICATE_CONTROL_UID");
 +    const auto expected_gid = parse_unsigned_environment("KORRI_CERTIFICATE_CONTROL_GID");
++    const auto expected_owner_gid =
++        parse_unsigned_environment("KORRI_CERTIFICATE_CONTROL_OWNER_GID");
 +    const auto expected_mode = parse_octal_environment("KORRI_CERTIFICATE_CONTROL_MODE");
 +    const char *expected_path = std::getenv("KORRI_CERTIFICATE_CONTROL_PATH");
 +    if (!fd_names && !listen_pid && !listen_fds && !expected_uid && !expected_gid &&
-+        !expected_mode && !expected_path) {
++        !expected_owner_gid && !expected_mode && !expected_path) {
 +      return std::nullopt;
 +    }
 +    const auto selected = fd_names && listen_fds
 +        ? korri_certificate_control::select_systemd_descriptor(*listen_fds, fd_names)
 +        : std::nullopt;
-+    if (!selected || !listen_pid || !expected_uid || !expected_gid || !expected_mode ||
-+        !expected_path || !*expected_path ||
++    if (!selected || !listen_pid || !expected_uid || !expected_gid || !expected_owner_gid ||
++        !expected_mode || !expected_path || !*expected_path ||
 +        *listen_pid != static_cast<unsigned long>(::getpid()) ||
 +        *expected_uid > static_cast<unsigned long>(std::numeric_limits<uid_t>::max()) ||
 +        *expected_gid > static_cast<unsigned long>(std::numeric_limits<gid_t>::max()) ||
++        *expected_owner_gid > static_cast<unsigned long>(std::numeric_limits<gid_t>::max()) ||
 +        *expected_mode > 0777UL) {
 +      BOOST_LOG(error) << "Korri certificate control socket activation is invalid"sv;
 +      return std::nullopt;
 +    }
 +
 +    if (!korri_certificate_control::validate_and_harden_listening_descriptor(
-+            *selected, expected_path, 0, static_cast<mode_t>(*expected_mode))) {
++            *selected,
++            expected_path,
++            0,
++            static_cast<gid_t>(*expected_owner_gid),
++            static_cast<mode_t>(*expected_mode))) {
 +      BOOST_LOG(error) << "Korri certificate control descriptor does not match the protected socket unit"sv;
 +      return std::nullopt;
 +    }
@@ -1242,7 +1251,7 @@ index c1d9401..aee7bad 100644
    std::shared_ptr<rtsp_stream::launch_session_t> make_launch_session(bool host_audio, const args_t &args) {
      auto launch_session = std::make_shared<rtsp_stream::launch_session_t>();
  
-@@ -442,6 +622,7 @@ namespace nvhttp {
+@@ -442,6 +629,7 @@ namespace nvhttp {
    }
  
    void clientpairingsecret(pair_session_t &sess, std::shared_ptr<safe::queue_t<crypto::x509_t>> &add_cert, pt::ptree &tree, const std::string &client_pairing_secret) {
@@ -1250,7 +1259,7 @@ index c1d9401..aee7bad 100644
      if (sess.last_phase != PAIR_PHASE::SERVERCHALLENGERESP) {
        fail_pair(sess, tree, "Out of order call to clientpairingsecret");
        return;
-@@ -477,12 +658,8 @@ namespace nvhttp {
+@@ -477,12 +665,8 @@ namespace nvhttp {
      // if hash not correct, probably MITM
      bool same_hash = hash.size() == sess.clienthash.size() && std::equal(hash.begin(), hash.end(), sess.clienthash.begin());
      auto verify = crypto::verify256(crypto::x509(client.cert), secret, sign);
@@ -1264,7 +1273,7 @@ index c1d9401..aee7bad 100644
      } else {
        tree.put("root.paired", 0);
      }
-@@ -767,9 +944,10 @@ namespace nvhttp {
+@@ -767,9 +951,10 @@ namespace nvhttp {
    }
  
    nlohmann::json get_all_clients() {
@@ -1277,7 +1286,7 @@ index c1d9401..aee7bad 100644
        nlohmann::json named_cert_node;
        named_cert_node["name"] = named_cert.name;
        named_cert_node["uuid"] = named_cert.uuid;
-@@ -1061,6 +1239,16 @@ namespace nvhttp {
+@@ -1061,6 +1246,16 @@ namespace nvhttp {
      auto cert = file_handler::read_file(config::nvhttp.cert.c_str());
      setup(pkey, cert);
  
@@ -1294,7 +1303,7 @@ index c1d9401..aee7bad 100644
      auto add_cert = std::make_shared<safe::queue_t<crypto::x509_t>>(30);
  
      // resume doesn't always get the parameter "localAudioPlayMode"
-@@ -1094,13 +1282,9 @@ namespace nvhttp {
+@@ -1094,13 +1289,9 @@ namespace nvhttp {
          BOOST_LOG(debug) << subject_name << " -- "sv << (verified ? "verified"sv : "denied"sv);
        });
  
@@ -1309,7 +1318,7 @@ index c1d9401..aee7bad 100644
          cert_chain.add(std::move(cert));
        }
  
-@@ -1185,29 +1369,29 @@ namespace nvhttp {
+@@ -1185,29 +1376,29 @@ namespace nvhttp {
  
      ssl.join();
      tcp.join();

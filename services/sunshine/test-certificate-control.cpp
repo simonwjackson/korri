@@ -493,23 +493,25 @@ int main(int argc, char **argv) {
   assert(!kc::select_systemd_descriptor(1, ""));
   assert(!kc::select_systemd_descriptor(1, "wrong"));
   assert(kc::validate_and_harden_listening_descriptor(
-      listener, path_string, ::getuid(), 0600));
+      listener, path_string, ::getuid(), ::getgid(), 0600));
   assert(!kc::validate_and_harden_listening_descriptor(
-      listener, (directory / "wrong.sock").string(), ::getuid(), 0600));
+      listener, (directory / "wrong.sock").string(), ::getuid(), ::getgid(), 0600));
   assert(!kc::validate_and_harden_listening_descriptor(
-      listener, path_string, static_cast<uid_t>(::getuid() + 1), 0600));
+      listener, path_string, static_cast<uid_t>(::getuid() + 1), ::getgid(), 0600));
   assert(!kc::validate_and_harden_listening_descriptor(
-      listener, path_string, ::getuid(), 0660));
+      listener, path_string, ::getuid(), static_cast<gid_t>(::getgid() + 1), 0600));
+  assert(!kc::validate_and_harden_listening_descriptor(
+      listener, path_string, ::getuid(), ::getgid(), 0660));
 
   assert(::socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0, sockets) == 0);
   assert(!kc::validate_and_harden_listening_descriptor(
-      sockets[0], path_string, ::getuid(), 0600));
+      sockets[0], path_string, ::getuid(), ::getgid(), 0600));
   ::close(sockets[0]);
   ::close(sockets[1]);
   const int stream_listener = ::socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
   assert(stream_listener >= 0);
   assert(!kc::validate_and_harden_listening_descriptor(
-      stream_listener, path_string, ::getuid(), 0600));
+      stream_listener, path_string, ::getuid(), ::getgid(), 0600));
   ::close(stream_listener);
 
   const int abstract_listener = ::socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
@@ -524,7 +526,7 @@ int main(int argc, char **argv) {
                 abstract_size) == 0);
   assert(::listen(abstract_listener, 4) == 0);
   assert(!kc::validate_and_harden_listening_descriptor(
-      abstract_listener, path_string, ::getuid(), 0600));
+      abstract_listener, path_string, ::getuid(), ::getgid(), 0600));
   ::close(abstract_listener);
 
   std::atomic<bool> stop {false};

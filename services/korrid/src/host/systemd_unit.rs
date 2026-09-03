@@ -20,6 +20,7 @@ const DEFAULT_PRIVATE_STATE_ROOT: &str = "/var/lib/korrid";
 const DEFAULT_CONTROL_SOCKET: &str = "/run/korrid-control/control.sock";
 const DEFAULT_CONTROL_DIRECTORY: &str = "/run/korrid-control";
 const DEFAULT_COMPOSITOR_CONTROL_DIRECTORY: &str = "/run/korri-compositor";
+const DEFAULT_CERTIFICATE_CONTROL_DIRECTORY: &str = "/run/korri-certificate-control";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LaunchUnitState {
@@ -72,6 +73,7 @@ struct ProtectedPaths {
     control_directory: PathBuf,
     sunshine_private_state_root: PathBuf,
     compositor_control_directory: PathBuf,
+    certificate_control_directory: PathBuf,
 }
 
 #[derive(Clone, Debug)]
@@ -85,6 +87,7 @@ pub struct SystemdLaunchUnitBackend {
     control_directory: PathBuf,
     sunshine_private_state_root: PathBuf,
     compositor_control_directory: PathBuf,
+    certificate_control_directory: PathBuf,
     helper_timeout: Duration,
 }
 
@@ -166,6 +169,7 @@ impl SystemdLaunchUnitBackend {
         )
     }
 
+    #[cfg(test)]
     pub fn with_protected_paths(
         systemd_run: PathBuf,
         systemctl: PathBuf,
@@ -188,6 +192,7 @@ impl SystemdLaunchUnitBackend {
                 control_directory,
                 sunshine_private_state_root,
                 compositor_control_directory,
+                certificate_control_directory: PathBuf::from(DEFAULT_CERTIFICATE_CONTROL_DIRECTORY),
             },
             DEFAULT_HELPER_TIMEOUT,
         )
@@ -212,6 +217,7 @@ impl SystemdLaunchUnitBackend {
                 control_directory: PathBuf::from(DEFAULT_CONTROL_DIRECTORY),
                 sunshine_private_state_root: PathBuf::from("/home/gameplay/.config/sunshine"),
                 compositor_control_directory: PathBuf::from(DEFAULT_COMPOSITOR_CONTROL_DIRECTORY),
+                certificate_control_directory: PathBuf::from(DEFAULT_CERTIFICATE_CONTROL_DIRECTORY),
             },
             helper_timeout,
         )
@@ -231,6 +237,7 @@ impl SystemdLaunchUnitBackend {
             control_directory,
             sunshine_private_state_root,
             compositor_control_directory,
+            certificate_control_directory,
         } = paths;
         if !systemd_run.is_absolute() || !systemctl.is_absolute() {
             return Err(LaunchUnitError::new(
@@ -259,6 +266,10 @@ impl SystemdLaunchUnitBackend {
                 "compositor control directory",
                 &compositor_control_directory,
             ),
+            (
+                "certificate control directory",
+                &certificate_control_directory,
+            ),
         ] {
             if !valid_protected_path(path) {
                 return Err(LaunchUnitError::new(
@@ -283,6 +294,7 @@ impl SystemdLaunchUnitBackend {
             control_directory,
             sunshine_private_state_root,
             compositor_control_directory,
+            certificate_control_directory,
             helper_timeout,
         })
     }
@@ -310,16 +322,24 @@ impl SystemdLaunchUnitBackend {
             "KORRID_COMPOSITOR_CONTROL_DIRECTORY",
             DEFAULT_COMPOSITOR_CONTROL_DIRECTORY,
         );
-        Self::with_protected_paths(
+        let certificate_control_directory = configured_path(
+            "KORRID_CERTIFICATE_CONTROL_DIRECTORY",
+            DEFAULT_CERTIFICATE_CONTROL_DIRECTORY,
+        );
+        Self::with_timeout_and_paths(
             systemd_run.clone(),
             systemctl.clone(),
             gameplay_uid,
             gameplay_gid,
-            private_state_root.clone(),
-            control_socket.clone(),
-            control_directory.clone(),
-            sunshine_private_state_root.clone(),
-            compositor_control_directory.clone(),
+            ProtectedPaths {
+                private_state_root: private_state_root.clone(),
+                control_socket: control_socket.clone(),
+                control_directory: control_directory.clone(),
+                sunshine_private_state_root: sunshine_private_state_root.clone(),
+                compositor_control_directory: compositor_control_directory.clone(),
+                certificate_control_directory: certificate_control_directory.clone(),
+            },
+            DEFAULT_HELPER_TIMEOUT,
         )
         .unwrap_or(Self {
             systemd_run,
@@ -331,6 +351,7 @@ impl SystemdLaunchUnitBackend {
             control_directory,
             sunshine_private_state_root,
             compositor_control_directory,
+            certificate_control_directory,
             helper_timeout: DEFAULT_HELPER_TIMEOUT,
         })
     }
@@ -347,6 +368,7 @@ impl SystemdLaunchUnitBackend {
                 control_directory: self.control_directory.clone(),
                 sunshine_private_state_root: self.sunshine_private_state_root.clone(),
                 compositor_control_directory: self.compositor_control_directory.clone(),
+                certificate_control_directory: self.certificate_control_directory.clone(),
             },
             self.helper_timeout,
         )
@@ -590,12 +612,13 @@ impl SystemdLaunchUnitBackend {
             "--property=ProtectProc=invisible".into(),
             "--property=ProcSubset=pid".into(),
             format!(
-                "--property=InaccessiblePaths={} /run/korrid {} {} {} {} /run/user/{} -/run/korri-input-seat /dev/uinput /dev/inputplumber/sources",
+                "--property=InaccessiblePaths={} /run/korrid {} {} {} {} {} /run/user/{} -/run/korri-input-seat /dev/uinput /dev/inputplumber/sources",
                 self.private_state_root.display(),
                 self.control_socket.display(),
                 self.control_directory.display(),
                 self.sunshine_private_state_root.display(),
                 self.compositor_control_directory.display(),
+                self.certificate_control_directory.display(),
                 self.gameplay_uid
             ),
             "--property=RestrictSUIDSGID=yes".into(),

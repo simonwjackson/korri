@@ -13,7 +13,7 @@
   reviewedFfmpegSourceHash = "sha256-LKQUfHb9/Z4uvPx4vrtAOPL95Un9/C26lvCbQZ51avk=";
   reviewedNvencApiMajor = 12;
   reviewedNvencApiMinor = 0;
-  patchSetSha256 = "2399d226ef71590dadb48c913d4dffed49313cee673bb63c2277af77227e8d52";
+  patchSetSha256 = "e330647511163d07c252901908e7c29c435b36459246201162be58bb2eb007d5";
   patches = [
     {
       name = "0001-add-runtime-settings-protocol-surface.patch";
@@ -88,7 +88,7 @@
     {
       name = "0020-add-korrid-certificate-control.patch";
       path = ./patches/0020-add-korrid-certificate-control.patch;
-      sha256 = "43cd0dbc6f1911f21f4fa9e9815fe9f90912a4dfe30504677f372815b294a9d1";
+      sha256 = "5ab5b2b5a464c4839f18aa1fc0f304b42b5b8c941fbc4ad5605b34eeaff525e0";
     }
   ];
 }

@@ -65,6 +65,7 @@ let
       privateStateRoot = "/srv/korri-test/recovery";
       controlSocket = "/run/korri-test/control/device.sock";
       compositorControlDirectory = "/run/korri-test/compositor-control";
+      certificateControlDirectory = "/run/korri-test/certificate-control";
     };
   };
   sameUid = evaluate {
@@ -77,6 +78,10 @@ let
     services.korridLinuxDevice.enable = true;
     users.users.gameplay.extraGroups = [ "input" ];
   };
+  certificateControlGame = evaluate {
+    services.korridLinuxDevice.enable = true;
+    users.users.gameplay.extraGroups = [ "korrid" ];
+  };
   invalidPrivatePath = evaluate {
     services.korridLinuxDevice = {
       enable = true;
@@ -87,6 +92,12 @@ let
     services.korridLinuxDevice = {
       enable = true;
       controlSocket = "relative/control.sock";
+    };
+  };
+  invalidCertificateControlPath = evaluate {
+    services.korridLinuxDevice = {
+      enable = true;
+      certificateControlDirectory = "relative/certificate-control";
     };
   };
   invalidCompositorControlPath = evaluate {
@@ -125,6 +136,7 @@ assert service.environment.KORRID_SUNSHINE_PRIVATE_STATE_ROOT == "/home/gameplay
 assert service.environment.KORRID_CONTROL_SOCKET == "/run/korrid-control/control.sock";
 assert service.environment.KORRID_CONTROL_DIRECTORY == "/run/korrid-control";
 assert service.environment.KORRID_COMPOSITOR_CONTROL_DIRECTORY == "/run/korri-compositor";
+assert service.environment.KORRID_CERTIFICATE_CONTROL_DIRECTORY == "/run/korri-certificate-control";
 assert builtins.elem "korrid-control.socket" service.requires;
 assert socket.socketConfig.ListenStream == "/run/korrid-control/control.sock";
 assert socket.socketConfig.SocketUser == "root";
@@ -141,8 +153,10 @@ assert builtins.elem "systemd-tmpfiles-setup-dev.service" service.after;
 assert builtins.elem "systemd-tmpfiles-resetup.service" service.after;
 assert builtins.elem "korri-input-source-guard.service" service.after;
 assert builtins.elem "-/dev/inputplumber/sources" service.serviceConfig.InaccessiblePaths;
+assert builtins.elem "/home/gameplay/.config/sunshine" service.serviceConfig.InaccessiblePaths;
 assert enabled.config.users.groups.korri-control.gid == 977;
 assert !(builtins.elem "korri-control" enabled.config.users.users.gameplay.extraGroups);
+assert !(builtins.elem "korrid" enabled.config.users.users.gameplay.extraGroups);
 assert builtins.elem "AF_UNIX" service.serviceConfig.RestrictAddressFamilies;
 assert builtins.elem "AF_INET" service.serviceConfig.RestrictAddressFamilies;
 assert service.serviceConfig.ProtectProc == "invisible";
@@ -163,19 +177,25 @@ assert customService.environment.KORRID_PRIVATE_STATE_ROOT == "/srv/korri-test/r
 assert customService.environment.KORRID_CONTROL_SOCKET == "/run/korri-test/control/device.sock";
 assert customService.environment.KORRID_CONTROL_DIRECTORY == "/run/korri-test/control";
 assert customService.environment.KORRID_COMPOSITOR_CONTROL_DIRECTORY == "/run/korri-test/compositor-control";
+assert customService.environment.KORRID_CERTIFICATE_CONTROL_DIRECTORY == "/run/korri-test/certificate-control";
 assert builtins.elem "d /run/korri-test/control 0750 root korri-control -" customTmpfiles;
 assert hasFailedAssertion "service UID must differ" sameUid;
 assert hasFailedAssertion "gameplay user must not hold raw input" broadGame;
+assert hasFailedAssertion "korrid service groups" certificateControlGame;
 assert hasFailedAssertion "privateStateRoot and sunshinePrivateStateRoot must be normalized absolute paths" invalidPrivatePath;
 assert hasFailedAssertion "controlSocket and its directory must be normalized absolute paths"
   invalidControlPath;
 assert hasFailedAssertion "compositorControlDirectory must be a normalized absolute path"
   invalidCompositorControlPath;
+assert hasFailedAssertion "certificateControlDirectory must be a normalized absolute path"
+  invalidCertificateControlPath;
 assert evaluationRejected sameUid;
 assert evaluationRejected broadGame;
+assert evaluationRejected certificateControlGame;
 assert evaluationRejected invalidPrivatePath;
 assert evaluationRejected invalidControlPath;
 assert evaluationRejected invalidCompositorControlPath;
+assert evaluationRejected invalidCertificateControlPath;
 pkgs.runCommand "korrid-linux-device-module-check" { } ''
   touch "$out"
 ''

@@ -110,10 +110,14 @@ let
   invalidLabel = evaluate {
     services.korriLinuxHost.label = "bad label";
   };
+  wrongCertificateSocketGroup = evaluate {
+    systemd.sockets.korri-certificate-control.socketConfig.SocketGroup = lib.mkForce "games";
+  };
   cfg = valid.config;
   inputd = cfg.systemd.services.korri-inputd;
   korrid = cfg.systemd.services.korrid;
   sunshine = cfg.systemd.services.sunshine;
+  certificateSocket = cfg.systemd.sockets.korri-certificate-control;
   compositor = cfg.systemd.services.korri-compositor;
   inputSeatReceiver = inputSeats.config.systemd.services.korri-input-seat-receiver;
   inputSeatKorrid = inputSeats.config.systemd.services.korrid;
@@ -145,6 +149,7 @@ assert cfg.services.sunshine.enable;
 assert !cfg.services.sunshine.autoStart;
 assert !cfg.systemd.user.services.sunshine.enable;
 assert cfg.services.sunshine.package == sunshinePackage;
+assert builtins.elem "0020-add-korrid-certificate-control.patch" sunshinePackage.korriPatchNames;
 assert cfg.services.korriLinuxHost.sunshine.runtimeSettings.enable;
 assert !cfg.services.korriLinuxHost.sunshine.inputSeats.enable;
 assert !(builtins.hasAttr "korri-input-seat-receiver" cfg.systemd.services);
@@ -176,6 +181,11 @@ assert inputSeatKorrid.environment.KORRID_INPUT_SEAT_CONTROL_SOCKET == "/run/kor
 assert inputSeatSunshine.environment.KORRI_INPUT_SEAT_MIRROR_SOCKET == "/run/korri-input-seat/sunshine-input-seat.sock";
 assert inputSeatSunshine.environment.KORRI_INPUT_SEAT_RUNTIME_DIR == "/run/korri-input-seat";
 assert inputSeatSunshine.serviceConfig.Group == "korri-sunshine-input-seat";
+assert inputSeatSunshine.environment.KORRI_CERTIFICATE_CONTROL_UID == "976";
+assert inputSeatSunshine.environment.KORRI_CERTIFICATE_CONTROL_GID == "976";
+assert inputSeatSunshine.environment.KORRI_CERTIFICATE_CONTROL_OWNER_GID == "976";
+assert inputSeatKorrid.environment.KORRID_SUNSHINE_CERTIFICATE_CONTROL_PEER_UID == "1001";
+assert inputSeatKorrid.environment.KORRID_SUNSHINE_CERTIFICATE_CONTROL_PEER_GID == "980";
 assert builtins.elem "korri-sunshine-uinput" inputSeatSunshine.serviceConfig.SupplementaryGroups;
 assert builtins.elem "korri-input-seat-receiver.service" inputSeatKorrid.requires;
 assert builtins.elem "korri-input-seat-receiver.service" inputSeatKorrid.after;
@@ -233,6 +243,10 @@ assert !(builtins.elem "uinput" cfg.users.users.gameplay.extraGroups);
 assert inputd.serviceConfig.User == "korri-inputd";
 assert korrid.serviceConfig.User == "korrid";
 assert korrid.environment.KORRID_SUNSHINE_PRIVATE_STATE_ROOT == "/home/gameplay/.config/sunshine";
+assert korrid.environment.KORRID_SUNSHINE_CERTIFICATE_CONTROL_SOCKET == "/run/korri-certificate-control/control.sock";
+assert korrid.environment.KORRID_SUNSHINE_CERTIFICATE_CONTROL_GID == "976";
+assert korrid.environment.KORRID_SUNSHINE_CERTIFICATE_CONTROL_PEER_UID == "1001";
+assert korrid.environment.KORRID_SUNSHINE_CERTIFICATE_CONTROL_PEER_GID == "1001";
 assert cfg.services.korridLinuxDevice.sunshinePrivateStateRoot == "/home/gameplay/.config/sunshine";
 assert sunshine.serviceConfig.User == "gameplay";
 assert sunshine.serviceConfig.WorkingDirectory == "/home/gameplay";
@@ -241,6 +255,28 @@ assert sunshine.environment.WAYLAND_DISPLAY == "korri-wayland";
 assert sunshine.environment.XDG_RUNTIME_DIR == "/run/user/1001";
 assert sunshine.environment.HOME == "/home/gameplay";
 assert sunshine.environment.XDG_CONFIG_HOME == "/home/gameplay/.config";
+assert sunshine.environment.KORRI_CERTIFICATE_CONTROL_UID == "976";
+assert sunshine.environment.KORRI_CERTIFICATE_CONTROL_GID == "976";
+assert sunshine.environment.KORRI_CERTIFICATE_CONTROL_OWNER_GID == "976";
+assert sunshine.environment.KORRI_CERTIFICATE_CONTROL_MODE == "0660";
+assert sunshine.environment.KORRI_CERTIFICATE_CONTROL_PATH == "/run/korri-certificate-control/control.sock";
+assert certificateSocket.socketConfig.Accept == false;
+assert certificateSocket.socketConfig.ListenSequentialPacket == "/run/korri-certificate-control/control.sock";
+assert certificateSocket.socketConfig.FileDescriptorName == "korri-certificate-control";
+assert certificateSocket.socketConfig.SocketUser == "root";
+assert certificateSocket.socketConfig.SocketGroup == "korrid";
+assert certificateSocket.socketConfig.SocketMode == "0660";
+assert certificateSocket.socketConfig.DirectoryMode == "0751";
+assert certificateSocket.socketConfig.RemoveOnStop;
+assert certificateSocket.socketConfig.NonBlocking;
+assert certificateSocket.socketConfig.Service == "sunshine.service";
+assert builtins.elem "sockets.target" certificateSocket.wantedBy;
+assert builtins.elem "systemd-tmpfiles-setup.service" certificateSocket.requires;
+assert builtins.elem "systemd-tmpfiles-setup.service" certificateSocket.after;
+assert builtins.elem "korri-certificate-control.socket" sunshine.requires;
+assert builtins.elem "korri-certificate-control.socket" sunshine.after;
+assert sunshine.serviceConfig.Sockets == [ "korri-certificate-control.socket" ];
+assert builtins.elem "d /run/korri-certificate-control 0751 root korrid -" cfg.systemd.tmpfiles.rules;
 assert
   sunshine.serviceConfig.ExecStart
   == "${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf log_path=/dev/null";
@@ -309,6 +345,8 @@ assert hasFailedAssertion "exact approved sunshine-korri" strippedApprovedSunshi
 assert evaluationRejected strippedApprovedSunshine;
 assert hasFailedAssertion "differ from the gameplay identity" collidingIdentity;
 assert evaluationRejected invalidLabel;
+assert hasFailedAssertion "certificate-control socket inode ownership" wrongCertificateSocketGroup;
+assert evaluationRejected wrongCertificateSocketGroup;
 pkgs.runCommand "korri-linux-host-module-check" { } ''
     grep -F 'id = "inputd-gate"' ${deviceConfig} >/dev/null
     grep -F 'title = "Streaming gate"' ${deviceConfig} >/dev/null
