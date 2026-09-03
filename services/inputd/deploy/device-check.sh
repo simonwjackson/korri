@@ -35,7 +35,7 @@ EXPECTED_SUNSHINE_LIBAVCODEC_VERSION='62.11.100'
 EXPECTED_SUNSHINE_FFMPEG_COMMIT='61c50407fd429a5e2ec616e2e846c3fe3743879a'
 EXPECTED_SUNSHINE_FFMPEG_SOURCE_HASH='sha256-LKQUfHb9/Z4uvPx4vrtAOPL95Un9/C26lvCbQZ51avk='
 EXPECTED_SUNSHINE_NVENC_API='12.0'
-EXPECTED_SUNSHINE_PATCH_SET_SHA256='5c5b130cf86c6263c9f7ac7c268873f03a7377c3037f98562f2c055299666412'
+EXPECTED_SUNSHINE_PATCH_SET_SHA256='204ba1e47d1db24c55dbf4f113fbf07add0433bede0437394d7cc665da7a8c79'
 KORRID_CONTROL_GROUP='korri-control'
 KORRID_CONTROL_PEER_USER='korri-inputd'
 KORRID_CONTROL_SOCKET='/run/korrid-control/control.sock'
@@ -61,7 +61,7 @@ patch=0014-skip-runtime-vaapi-destructor-flush.patch sha256=59eedaf576f99223bd80
 patch=0015-add-korri-input-seat-event-mirror.patch sha256=69888a0ef824af105f0919ad354876b52ca0d003b0c46be619e732bc1cdbe726
 patch=0016-add-seamless-nvenc-runtime-path.patch sha256=686decb81379741e01e0b9b0e9105bbe23765a1bf728565767604383983a7074
 patch=0017-use-wayland-ram-capture-for-cuda.patch sha256=a87aefc6eb5f71a4d413d751eefb87743745a2fab126dded5b66b23b949f66b2
-patch=0018-clock-high-rate-wayland-ram-capture-from-screencopy.patch sha256=7bc7c11a2d6f0815649dc1c53170568816a29dbe013096ca0fbd93146a125ba2
+patch=0018-vectorize-wayland-bgr888-with-swscale.patch sha256=753971f16e33598215caa455074f3bbca23e43b0cf2a2b8a97779f356486203f
 EOF
 }
 

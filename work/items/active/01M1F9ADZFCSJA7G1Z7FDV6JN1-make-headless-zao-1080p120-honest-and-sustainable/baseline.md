@@ -82,3 +82,9 @@ Bandai returned to its saved settings and APK. Zao returned to the exact 1080p60
 A Sunshine candidate requested high-rate Wayland RAM frames five percent early. A 10-second host packet capture measured `107.444` video datagrams per second. The prior unmodified capture measured `107.910` video datagrams per second under the same filter.
 
 The headroom did not change the rate and was replaced. The packet cadence showed that the host path, not Bandai's network receive path, produced the limit.
+
+## Candidate iteration 10
+
+A candidate removed Sunshine's second high-rate timer and let blocking screencopy events clock the capture loop. A 10-second host packet capture measured `105.899` video datagrams per second. This was lower than the unmodified `107.910` result.
+
+The compositor-clock experiment did not remove the limit. It showed that high-rate capture remains processing-bound after each screencopy frame.

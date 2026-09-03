@@ -13,7 +13,7 @@
   reviewedFfmpegSourceHash = "sha256-LKQUfHb9/Z4uvPx4vrtAOPL95Un9/C26lvCbQZ51avk=";
   reviewedNvencApiMajor = 12;
   reviewedNvencApiMinor = 0;
-  patchSetSha256 = "5c5b130cf86c6263c9f7ac7c268873f03a7377c3037f98562f2c055299666412";
+  patchSetSha256 = "204ba1e47d1db24c55dbf4f113fbf07add0433bede0437394d7cc665da7a8c79";
   patches = [
     {
       name = "0001-add-runtime-settings-protocol-surface.patch";
@@ -76,9 +76,9 @@
       sha256 = "a87aefc6eb5f71a4d413d751eefb87743745a2fab126dded5b66b23b949f66b2";
     }
     {
-      name = "0018-clock-high-rate-wayland-ram-capture-from-screencopy.patch";
-      path = ./patches/0018-clock-high-rate-wayland-ram-capture-from-screencopy.patch;
-      sha256 = "7bc7c11a2d6f0815649dc1c53170568816a29dbe013096ca0fbd93146a125ba2";
+      name = "0018-vectorize-wayland-bgr888-with-swscale.patch";
+      path = ./patches/0018-vectorize-wayland-bgr888-with-swscale.patch;
+      sha256 = "753971f16e33598215caa455074f3bbca23e43b0cf2a2b8a97779f356486203f";
     }
   ];
 }

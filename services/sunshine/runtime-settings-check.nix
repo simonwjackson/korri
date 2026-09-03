@@ -84,12 +84,13 @@ let
       && patchContains "destination[0] = source[2];"
       && patchContains "destination[2] = source[0];"
     ))
-    (check "high-rate Wayland RAM capture uses the compositor frame clock" (
-      builtins.elem "0018-clock-high-rate-wayland-ram-capture-from-screencopy.patch" sunshinePackage.korriPatchNames
-      && patchContains "auto compositor_clocked = delay <= 10ms;"
-      && patchContains "if (!compositor_clocked && next_frame > now)"
-      && patchContains "if (!compositor_clocked) {"
-      && patchContains "screencopy already blocks until the next output"
+    (check "Wayland BGR888 conversion uses the reviewed swscale path" (
+      builtins.elem "0018-vectorize-wayland-bgr888-with-swscale.patch" sunshinePackage.korriPatchNames
+      && patchContains "sws_getContext("
+      && patchContains "AV_PIX_FMT_RGB24"
+      && patchContains "AV_PIX_FMT_BGRA"
+      && patchContains "sws_scale("
+      && patchContains "source_linesize[0] = -source_linesize[0];"
     ))
     (check "runtime settings packet IDs remain stable" (
       patchContains "RUNTIME_SETTINGS_REQUEST_PACKET = 0x5504"
