@@ -99,4 +99,22 @@ The conversion change helped, but it did not meet the target. The remaining long
 
 A Pixman compositor candidate started and passed the dynamic renderer gate. Neverball reached `115.10 FPS`, but the native 120 FPS validation workload rendered black. The moving-content requirement therefore failed.
 
-Pixman cannot replace GLES2 for this Xwayland OpenGL workload. Zao returned to the exact 1080p60 generation and bundle with no game, marker, or lease.
+Pixman cannot use the existing MPV GPU validation command. Zao returned to the exact 1080p60 generation and bundle with no game, marker, or lease.
+
+## Candidate iteration 13
+
+The Pixman candidate used MPV's X11 software output. The native 120 FPS validation video became visible and moved correctly. A 10-second host packet capture measured `112.881` video datagrams per second. Eight final decoder samples averaged `110.318 FPS`.
+
+Pixman removed most BGR conversion cost but the serial timer and screencopy cadence still missed the target.
+
+## Candidate iteration 14
+
+A format-aware candidate removed the timer only after a high-rate 32-bit SHM frame. Its host packet rate was `112.365` video datagrams per second, compared with `112.881` for the timed Pixman path.
+
+The timer removal did not help. The next experiment targeted per-frame SHM allocation and mapping, which remained inside the serial capture loop.
+
+## Candidate iteration 15
+
+A double-buffered candidate kept validated Wayland SHM buffers mapped between screencopy frames. Its host packet rate fell to `107.189` video datagrams per second.
+
+Persistent SHM reuse was regressive. Zao returned to the exact 1080p60 generation and bundle. The experiment is not retained in the candidate patch set.
