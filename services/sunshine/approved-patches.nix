@@ -13,7 +13,7 @@
   reviewedFfmpegSourceHash = "sha256-LKQUfHb9/Z4uvPx4vrtAOPL95Un9/C26lvCbQZ51avk=";
   reviewedNvencApiMajor = 12;
   reviewedNvencApiMinor = 0;
-  patchSetSha256 = "f5b84a911702dfd1d6f5b1e7ecf3b93c2a81759c75b5971ce45d64ad322723ce";
+  patchSetSha256 = "de4a70732b24664c562fe2c7679cb0f18c10055741fbf7274c83d3b31173633f";
   patches = [
     {
       name = "0001-add-runtime-settings-protocol-surface.patch";
@@ -63,7 +63,7 @@
     {
       name = "0015-add-korri-input-seat-event-mirror.patch";
       path = ./patches/0015-add-korri-input-seat-event-mirror.patch;
-      sha256 = "69888a0ef824af105f0919ad354876b52ca0d003b0c46be619e732bc1cdbe726";
+      sha256 = "c0eab65a69c17b2f3f5b6c9c69fabaaf51519da26a81f9e57dbd714ab5ca92db";
     }
     {
       name = "0016-add-seamless-nvenc-runtime-path.patch";

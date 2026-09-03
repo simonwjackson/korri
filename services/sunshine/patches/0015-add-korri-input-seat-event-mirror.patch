@@ -1,5 +1,3 @@
-diff --git a/src/input.cpp b/src/input.cpp
-index 768ddece..7a26b273 100644
 --- a/src/input.cpp
 +++ b/src/input.cpp
 @@ -3,21 +3,37 @@
@@ -40,7 +38,7 @@ index 768ddece..7a26b273 100644
  
  // local includes
  #include "config.h"
-@@ -57,6 +73,291 @@ namespace input {
+@@ -57,6 +73,313 @@
      UP  ///< Button is up
    };
  
@@ -120,6 +118,15 @@ index 768ddece..7a26b273 100644
 +      return nullptr;
 +    }
 +    return runtime_dir;
++  }
++
++  bool korri_input_seat_receiver_configured() {
++    auto socket_path = korri_input_seat_socket_path();
++    auto runtime_dir = korri_input_seat_runtime_dir();
++    return socket_path != nullptr && socket_path[0] == '/' &&
++           std::strlen(socket_path) < sizeof(sockaddr_un::sun_path) &&
++           runtime_dir != nullptr && runtime_dir[0] == '/' &&
++           std::strchr(runtime_dir, '%') == nullptr;
 +  }
 +
 +  korri_input_seat_active_launch_t korri_input_seat_active_launch() {
@@ -230,10 +237,10 @@ index 768ddece..7a26b273 100644
 +    return true;
 +  }
 +
-+  void korri_input_seat_emit_json(std::string_view json, const korri_input_seat_active_launch_t &active) {
++  bool korri_input_seat_emit_json(std::string_view json, const korri_input_seat_active_launch_t &active) {
 +    auto socket_path = korri_input_seat_socket_path();
 +    if (!korri_input_seat_mirror_ready(socket_path, active)) {
-+      return;
++      return false;
 +    }
 +
 +    std::string frame;
@@ -248,7 +255,7 @@ index 768ddece..7a26b273 100644
 +      if (!korri_input_seat_logged_oversized_frame.exchange(true)) {
 +        BOOST_LOG(warning) << "input seat mirror frame exceeded maximum size"sv;
 +      }
-+      return;
++      return true;
 +    }
 +
 +    auto fd = ::socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
@@ -256,7 +263,7 @@ index 768ddece..7a26b273 100644
 +      if (!korri_input_seat_logged_socket_failure.exchange(true)) {
 +        BOOST_LOG(warning) << "failed to create input seat mirror socket"sv;
 +      }
-+      return;
++      return true;
 +    }
 +
 +    sockaddr_un addr {};
@@ -270,7 +277,7 @@ index 768ddece..7a26b273 100644
 +          !korri_input_seat_logged_socket_failure.exchange(true)) {
 +        BOOST_LOG(warning) << "failed to connect input seat mirror socket"sv;
 +      }
-+      return;
++      return true;
 +    }
 +
 +#ifdef MSG_NOSIGNAL
@@ -284,6 +291,7 @@ index 768ddece..7a26b273 100644
 +    if (incomplete_send && !korri_input_seat_logged_write_failure.exchange(true)) {
 +      BOOST_LOG(warning) << "failed to write complete input seat mirror message"sv;
 +    }
++    return true;
 +  }
 +
 +  std::ostringstream korri_input_seat_frame_prefix(std::string_view kind, std::int32_t controller_number, std::string_view launch_id) {
@@ -294,21 +302,32 @@ index 768ddece..7a26b273 100644
 +    return out;
 +  }
 +
-+  void korri_input_seat_emit_source_connected(std::int32_t controller_number) {
++  bool korri_input_seat_emit_source_connected(std::int32_t controller_number) {
++    if (!korri_input_seat_receiver_configured()) {
++      return false;
++    }
 +    auto active = korri_input_seat_active_launch();
 +    auto out = korri_input_seat_frame_prefix("source-connected"sv, controller_number, active.launch_id);
 +    out << '}';
 +    korri_input_seat_emit_json(out.str(), active);
++    return true;
 +  }
 +
-+  void korri_input_seat_emit_source_disconnected(std::int32_t controller_number, std::string_view reason) {
++  bool korri_input_seat_emit_source_disconnected(std::int32_t controller_number, std::string_view reason) {
++    if (!korri_input_seat_receiver_configured()) {
++      return false;
++    }
 +    auto active = korri_input_seat_active_launch();
 +    auto out = korri_input_seat_frame_prefix("source-disconnected"sv, controller_number, active.launch_id);
 +    out << ",\"reason\":\"" << korri_input_seat_json_escape(reason) << "\"}";
 +    korri_input_seat_emit_json(out.str(), active);
++    return true;
 +  }
 +
-+  void korri_input_seat_emit_source_state(PNV_MULTI_CONTROLLER_PACKET packet) {
++  bool korri_input_seat_emit_source_state(PNV_MULTI_CONTROLLER_PACKET packet) {
++    if (!korri_input_seat_receiver_configured()) {
++      return false;
++    }
 +    auto active = korri_input_seat_active_launch();
 +    const auto buttons = static_cast<std::uint32_t>(static_cast<std::uint16_t>(packet->buttonFlags)) |
 +                         (static_cast<std::uint32_t>(static_cast<std::uint16_t>(packet->buttonFlags2)) << 16);
@@ -322,49 +341,57 @@ index 768ddece..7a26b273 100644
 +        << ",\"rightStickY\":" << static_cast<std::int32_t>(packet->rightStickY)
 +        << '}';
 +    korri_input_seat_emit_json(out.str(), active);
++    return true;
 +  }
 +#else
-+  void korri_input_seat_emit_source_connected(std::int32_t) {}
-+  void korri_input_seat_emit_source_disconnected(std::int32_t, std::string_view) {}
-+  void korri_input_seat_emit_source_state(PNV_MULTI_CONTROLLER_PACKET) {}
++  bool korri_input_seat_emit_source_connected(std::int32_t) { return false; }
++  bool korri_input_seat_emit_source_disconnected(std::int32_t, std::string_view) { return false; }
++  bool korri_input_seat_emit_source_state(PNV_MULTI_CONTROLLER_PACKET) { return false; }
 +#endif
 +
    template<std::size_t N>
    int alloc_id(std::bitset<N> &gamepad_mask) {
      for (int x = 0; x < gamepad_mask.size(); ++x) {
-@@ -849,6 +1150,8 @@ namespace input {
+@@ -844,7 +1167,16 @@
        return;
      }
  
-+    korri_input_seat_emit_source_connected(packet->controllerNumber);
+-    if (input->gamepads[packet->controllerNumber].id >= 0) {
++    auto &gamepad = input->gamepads[packet->controllerNumber];
++    if (korri_input_seat_emit_source_connected(packet->controllerNumber)) {
++      if (gamepad.id >= 0) {
++        free_gamepad(platf_input, gamepad.id);
++        gamepad.id = -1;
++      }
++      return;
++    }
 +
-     platf::gamepad_arrival_t arrival {
-       packet->type,
-       util::endian::little(packet->capabilities),
-@@ -1094,6 +1397,8 @@ namespace input {
++    if (gamepad.id >= 0) {
+       BOOST_LOG(warning) << "ControllerNumber already allocated ["sv << packet->controllerNumber << ']';
+       return;
+     }
+@@ -1091,6 +1423,24 @@
+ 
+     auto &gamepad = input->gamepads[packet->controllerNumber];
+ 
++    // If the protected receiver is active, it owns controller seats. Sunshine
++    // remains the controller event source and does not create a second gamepad.
++    if (packet->activeGamepadMask & (1 << packet->controllerNumber)) {
++      if (korri_input_seat_emit_source_state(packet)) {
++        if (gamepad.id >= 0) {
++          free_gamepad(platf_input, gamepad.id);
++          gamepad.id = -1;
++        }
++        return;
++      }
++    } else if (korri_input_seat_emit_source_disconnected(packet->controllerNumber, "active-gamepad-mask-cleared"sv)) {
++      if (gamepad.id >= 0) {
++        free_gamepad(platf_input, gamepad.id);
++        gamepad.id = -1;
++      }
++      return;
++    }
++
      // If this is an event for a new gamepad, create the gamepad now. Ideally, the client would
      // send a controller arrival instead of this but it's still supported for legacy clients.
      if ((packet->activeGamepadMask & (1 << packet->controllerNumber)) && gamepad.id < 0) {
-+      korri_input_seat_emit_source_connected(packet->controllerNumber);
-+
-       auto id = alloc_id(gamepadMask);
-       if (id < 0) {
-         return;
-@@ -1107,11 +1412,17 @@ namespace input {
-       gamepad.id = id;
-     } else if (!(packet->activeGamepadMask & (1 << packet->controllerNumber)) && gamepad.id >= 0) {
-       // If this is the final event for a gamepad being removed, free the gamepad and return.
-+      korri_input_seat_emit_source_disconnected(packet->controllerNumber, "active-gamepad-mask-cleared"sv);
-       free_gamepad(platf_input, gamepad.id);
-       gamepad.id = -1;
-       return;
-+    } else if (!(packet->activeGamepadMask & (1 << packet->controllerNumber))) {
-+      korri_input_seat_emit_source_disconnected(packet->controllerNumber, "active-gamepad-mask-cleared"sv);
-+      return;
-     }
- 
-+    korri_input_seat_emit_source_state(packet);
-+
-     // If this gamepad has not been initialized, ignore it.
-     // This could happen when platf::alloc_gamepad fails
-     if (gamepad.id < 0) {

@@ -10,6 +10,7 @@ pub const INPUT_PROFILE_NAME: &str = "korri-60-xbox_one_gamepad.yaml";
 pub enum Component {
     InputPlumber,
     Inputd,
+    InputSeatReceiver,
     Korrid,
 }
 
@@ -18,9 +19,10 @@ impl Component {
         match value {
             "inputplumber" => Ok(Self::InputPlumber),
             "inputd" => Ok(Self::Inputd),
+            "input-seat-receiver" => Ok(Self::InputSeatReceiver),
             "korrid" => Ok(Self::Korrid),
             other => Err(format!(
-                "component must be inputplumber, inputd, or korrid, got {other:?}"
+                "component must be inputplumber, inputd, input-seat-receiver, or korrid, got {other:?}"
             )),
         }
     }
@@ -29,6 +31,7 @@ impl Component {
         match self {
             Self::InputPlumber => "bin/inputplumber",
             Self::Inputd => "bin/korri-inputd",
+            Self::InputSeatReceiver => "bin/korri-input-seat-receiver",
             Self::Korrid => "bin/korrid",
         }
     }
@@ -46,6 +49,7 @@ pub fn resolve_bundle(selector: &Path, store_root: &Path) -> Result<PathBuf, Str
     for component in [
         Component::InputPlumber,
         Component::Inputd,
+        Component::InputSeatReceiver,
         Component::Korrid,
     ] {
         resolve_component_in_bundle(&bundle, component, store_root)?;
@@ -170,7 +174,12 @@ mod tests {
         std::fs::create_dir_all(bundle.join("share")).unwrap();
         std::fs::create_dir_all(package.join("bin")).unwrap();
         std::fs::create_dir_all(package.join("share/inputplumber/profiles")).unwrap();
-        for name in ["inputplumber", "korri-inputd", "korrid"] {
+        for name in [
+            "inputplumber",
+            "korri-inputd",
+            "korri-input-seat-receiver",
+            "korrid",
+        ] {
             let executable = package.join("bin").join(name);
             std::fs::write(&executable, b"fixture").unwrap();
             let mut permissions = std::fs::metadata(&executable).unwrap().permissions();

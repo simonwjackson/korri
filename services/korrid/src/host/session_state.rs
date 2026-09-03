@@ -13,6 +13,9 @@ use std::fs;
 use super::identity::{
     clear_crash_temporary_identity, clear_identity, persist_identity, read_identity,
 };
+#[cfg(test)]
+use super::input_seat::DisabledInputSeats;
+use super::input_seat::{InputSeatLease, InputSeatManager};
 use super::systemd_unit::{LaunchUnitBackend, LaunchUnitState};
 #[cfg(test)]
 use super::systemd_unit::{LaunchUnitError, LaunchUnitErrorKind, SystemdLaunchUnitBackend};
@@ -55,17 +58,85 @@ enum ActiveState {
 #[derive(Clone)]
 pub struct HostSessionControl {
     backend: Arc<dyn LaunchUnitBackend>,
+    input_seats: Arc<dyn InputSeatManager>,
     identity_root: PathBuf,
     state: Arc<Mutex<ActiveState>>,
+    seat_lease: Arc<Mutex<Option<(String, Box<dyn InputSeatLease>)>>>,
 }
 
 impl HostSessionControl {
+    #[cfg(test)]
     pub fn new(private_state_root: &Path, backend: Arc<dyn LaunchUnitBackend>) -> Self {
+        Self::with_input_seats(private_state_root, backend, Arc::new(DisabledInputSeats))
+    }
+
+    pub fn with_input_seats(
+        private_state_root: &Path,
+        backend: Arc<dyn LaunchUnitBackend>,
+        input_seats: Arc<dyn InputSeatManager>,
+    ) -> Self {
         let identity_root = private_state_root.join("host-session");
         Self {
             backend,
+            input_seats,
             identity_root,
             state: Arc::new(Mutex::new(ActiveState::RecoveryPending)),
+            seat_lease: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    fn ensure_seats(&self, launch_id: &str) -> Result<(), String> {
+        let mut current = self.seat_lease.lock().expect("input-seat mutex poisoned");
+        if let Some((active, lease)) = current.as_ref() {
+            if active != launch_id {
+                return Err("input-seat lease belongs to a different launch".into());
+            }
+            if lease.alive() {
+                return Ok(());
+            }
+            current.take();
+        }
+        let lease = self.input_seats.start(launch_id)?;
+        *current = Some((launch_id.to_owned(), lease));
+        Ok(())
+    }
+
+    fn stop_seats(&self, launch_id: &str) -> Result<(), String> {
+        let lease = self
+            .seat_lease
+            .lock()
+            .expect("input-seat mutex poisoned")
+            .take();
+        match lease {
+            Some((active, lease)) if active == launch_id => lease.stop(launch_id),
+            Some((_active, _lease)) => Err("input-seat lease belongs to a different launch".into()),
+            None => Ok(()),
+        }
+    }
+
+    fn stop_game_after_seat_failure(&self, state: &mut ActiveState, launch_id: &str) {
+        let _ = self.stop_seats(launch_id);
+        if self.backend.stop(launch_id).is_err()
+            && !matches!(
+                self.backend.state(launch_id),
+                Ok(LaunchUnitState::Completed)
+            )
+        {
+            *state = ActiveState::RecoveryBlocked;
+            return;
+        }
+        match self.backend.state(launch_id) {
+            Ok(LaunchUnitState::Completed) if clear_identity(&self.identity_root).is_ok() => {
+                *state = ActiveState::Completed {
+                    launch_id: launch_id.to_owned(),
+                };
+            }
+            Ok(LaunchUnitState::Running | LaunchUnitState::Stopping) => {
+                *state = ActiveState::Stopping {
+                    launch_id: launch_id.to_owned(),
+                };
+            }
+            _ => *state = ActiveState::RecoveryBlocked,
         }
     }
 
@@ -75,6 +146,12 @@ impl HostSessionControl {
             ActiveState::RecoveryPending | ActiveState::RecoveryBlocked
         ) {
             *state = recover(&self.identity_root, self.backend.as_ref());
+            if let ActiveState::Running { launch_id, .. } = &*state {
+                let launch_id = launch_id.clone();
+                if self.ensure_seats(&launch_id).is_err() {
+                    self.stop_game_after_seat_failure(state, &launch_id);
+                }
+            }
         }
     }
 
@@ -91,6 +168,14 @@ impl HostSessionControl {
                 launch_id,
                 game_id: Some(active_game_id),
             } if active_game_id == game_id => {
+                if self.ensure_seats(launch_id).is_err() {
+                    let launch_id = launch_id.clone();
+                    self.stop_game_after_seat_failure(&mut state, &launch_id);
+                    return Err(failure(
+                        "InputSeatUnavailable",
+                        "input seats failed and the active game was stopped",
+                    ));
+                }
                 return Ok(SessionPrepared {
                     game_id: game_id.into(),
                     launch_id: launch_id.clone(),
@@ -119,10 +204,19 @@ impl HostSessionControl {
             *state = ActiveState::RecoveryBlocked;
             failure("HostRecoveryBlocked", message)
         })?;
+        let seat_lease = match self.input_seats.start(&launch_id) {
+            Ok(lease) => lease,
+            Err(message) => {
+                let _ = clear_identity(&self.identity_root);
+                *state = ActiveState::NoActive;
+                return Err(failure("InputSeatUnavailable", message));
+            }
+        };
         if let Err(error) = self
             .backend
             .launch(&launch_id, configured_command, environment)
         {
+            let _ = seat_lease.stop(&launch_id);
             match self.backend.live_launch_ids() {
                 Ok(live) if !live.iter().any(|id| id == &launch_id) => {
                     if let Err(message) = clear_identity(&self.identity_root) {
@@ -140,6 +234,8 @@ impl HostSessionControl {
         }
         match self.backend.state(&launch_id) {
             Ok(LaunchUnitState::Running) => {
+                *self.seat_lease.lock().expect("input-seat mutex poisoned") =
+                    Some((launch_id.clone(), seat_lease));
                 *state = ActiveState::Running {
                     launch_id: launch_id.clone(),
                     game_id: Some(game_id.into()),
@@ -150,6 +246,7 @@ impl HostSessionControl {
                 })
             }
             Ok(LaunchUnitState::Stopping | LaunchUnitState::Completed) => {
+                let _ = seat_lease.stop(&launch_id);
                 if clear_identity(&self.identity_root).is_err() {
                     *state = ActiveState::RecoveryBlocked;
                     return Err(recovery_blocked_failure());
@@ -161,6 +258,7 @@ impl HostSessionControl {
                 ))
             }
             Err(_) => {
+                let _ = seat_lease.stop(&launch_id);
                 *state = ActiveState::RecoveryBlocked;
                 Err(recovery_blocked_failure())
             }
@@ -181,14 +279,21 @@ impl HostSessionControl {
         };
         if let Some(launch_id) = tracked {
             match self.backend.state(&launch_id) {
-                Ok(LaunchUnitState::Running) => {}
+                Ok(LaunchUnitState::Running) => {
+                    if self.ensure_seats(&launch_id).is_err() {
+                        self.stop_game_after_seat_failure(&mut state, &launch_id);
+                    }
+                }
                 Ok(LaunchUnitState::Stopping) => {
+                    let _ = self.stop_seats(&launch_id);
                     *state = ActiveState::Stopping {
                         launch_id: launch_id.clone(),
                     };
                 }
                 Ok(LaunchUnitState::Completed) => {
-                    if clear_identity(&self.identity_root).is_ok() {
+                    if self.stop_seats(&launch_id).is_ok()
+                        && clear_identity(&self.identity_root).is_ok()
+                    {
                         *state = ActiveState::Completed {
                             launch_id: launch_id.clone(),
                         };
@@ -243,12 +348,14 @@ impl HostSessionControl {
             }
         };
 
+        let seat_stop_failed = self.stop_seats(&launch_id).is_err();
         if self.backend.stop(&launch_id).is_err() {
             let mut state = self.state.lock().expect("host session mutex poisoned");
             if matches!(
                 self.backend.state(&launch_id),
                 Ok(LaunchUnitState::Completed)
-            ) {
+            ) && !seat_stop_failed
+            {
                 return complete_stop(&self.identity_root, &mut state, launch_id);
             }
             *state = ActiveState::RecoveryBlocked;
@@ -256,6 +363,10 @@ impl HostSessionControl {
         }
 
         let mut state = self.state.lock().expect("host session mutex poisoned");
+        if seat_stop_failed {
+            *state = ActiveState::RecoveryBlocked;
+            return HostSessionStop::RecoveryBlocked;
+        }
         match self.backend.state(&launch_id) {
             Ok(LaunchUnitState::Completed) => {
                 complete_stop(&self.identity_root, &mut state, launch_id)
@@ -368,7 +479,10 @@ mod tests {
     use super::*;
     use std::{
         os::unix::fs::PermissionsExt,
-        sync::Condvar,
+        sync::{
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+            Condvar,
+        },
         thread,
         time::{Duration, Instant},
     };
@@ -469,6 +583,38 @@ mod tests {
 
     fn control(root: &Path, backend: Arc<DeterministicBackend>) -> HostSessionControl {
         HostSessionControl::new(root, backend)
+    }
+
+    struct TestSeatManager {
+        starts: AtomicUsize,
+        alive: Arc<AtomicBool>,
+    }
+    struct TestSeatLease {
+        alive: Arc<AtomicBool>,
+    }
+    struct FailingSeatManager;
+    impl InputSeatManager for TestSeatManager {
+        fn start(&self, _launch_id: &str) -> Result<Box<dyn InputSeatLease>, String> {
+            self.starts.fetch_add(1, Ordering::SeqCst);
+            self.alive.store(true, Ordering::SeqCst);
+            Ok(Box::new(TestSeatLease {
+                alive: self.alive.clone(),
+            }))
+        }
+    }
+    impl InputSeatManager for FailingSeatManager {
+        fn start(&self, _launch_id: &str) -> Result<Box<dyn InputSeatLease>, String> {
+            Err("seat receiver unavailable".into())
+        }
+    }
+    impl InputSeatLease for TestSeatLease {
+        fn alive(&self) -> bool {
+            self.alive.load(Ordering::SeqCst)
+        }
+        fn stop(self: Box<Self>, _launch_id: &str) -> Result<(), String> {
+            self.alive.store(false, Ordering::SeqCst);
+            Ok(())
+        }
     }
 
     fn prepare(control: &HostSessionControl, game: &str) -> SessionPrepared {
@@ -788,7 +934,7 @@ mod tests {
             "--property=ProtectKernelTunables=yes".into(),
             "--property=ProtectKernelModules=yes".into(),
             "--property=ProtectControlGroups=yes".into(),
-            "--property=InaccessiblePaths=/var/lib/korrid /run/korrid /run/korrid-control/control.sock /run/korrid-control /home/gameplay/.config/sunshine /run/korri-compositor /run/user/1001 /dev/uinput /dev/inputplumber/sources".into(),
+            "--property=InaccessiblePaths=/var/lib/korrid /run/korrid /run/korrid-control/control.sock /run/korrid-control /home/gameplay/.config/sunshine /run/korri-compositor /run/user/1001 -/run/korri-input-seat /dev/uinput /dev/inputplumber/sources".into(),
             "--property=RestrictSUIDSGID=yes".into(),
         ] {
             assert!(
@@ -837,7 +983,7 @@ mod tests {
             )
             .unwrap();
         assert!(launch.contains(
-            &"--property=InaccessiblePaths=/srv/korri-test/private-recovery /run/korrid /run/korri-test/control/device.sock /run/korri-test/control /home/gameplay/.config/sunshine /run/korri-test/compositor-control /run/user/1001 /dev/uinput /dev/inputplumber/sources".into()
+            &"--property=InaccessiblePaths=/srv/korri-test/private-recovery /run/korrid /run/korri-test/control/device.sock /run/korri-test/control /home/gameplay/.config/sunshine /run/korri-test/compositor-control /run/user/1001 -/run/korri-input-seat /dev/uinput /dev/inputplumber/sources".into()
         ));
     }
 
@@ -994,5 +1140,101 @@ mod tests {
             std::io::Error::last_os_error().raw_os_error(),
             Some(libc::ESRCH)
         );
+    }
+
+    #[test]
+    fn recovery_reacquires_input_seats_and_replaces_a_dead_lease() {
+        let root = tempfile::tempdir().unwrap();
+        let backend = Arc::new(DeterministicBackend::default());
+        let id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        persist_identity(&root.path().join("host-session"), id).unwrap();
+        backend.insert(id, LaunchUnitState::Running);
+        let alive = Arc::new(AtomicBool::new(true));
+        let manager = Arc::new(TestSeatManager {
+            starts: AtomicUsize::new(0),
+            alive: alive.clone(),
+        });
+        let control = HostSessionControl::with_input_seats(root.path(), backend, manager.clone());
+        assert_eq!(manager.starts.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            control.status(),
+            HostSessionStatus::Running {
+                launch_id: id.into()
+            }
+        );
+        alive.store(false, Ordering::SeqCst);
+        assert_eq!(
+            control.status(),
+            HostSessionStatus::Running {
+                launch_id: id.into()
+            }
+        );
+        assert_eq!(manager.starts.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn failed_seat_recovery_stops_the_known_game_without_losing_stop_identity() {
+        let root = tempfile::tempdir().unwrap();
+        let backend = Arc::new(DeterministicBackend::default());
+        let id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        persist_identity(&root.path().join("host-session"), id).unwrap();
+        backend.insert(id, LaunchUnitState::Running);
+        let control = HostSessionControl::with_input_seats(
+            root.path(),
+            backend.clone(),
+            Arc::new(FailingSeatManager),
+        );
+
+        assert_eq!(
+            control.status(),
+            HostSessionStatus::Completed {
+                launch_id: id.into()
+            }
+        );
+        assert_eq!(backend.state.lock().unwrap().stopped, [id]);
+        assert_eq!(
+            control.stop(id),
+            HostSessionStop::Completed {
+                launch_id: id.into()
+            }
+        );
+    }
+
+    #[test]
+    fn stopping_recovery_does_not_recreate_input_seats() {
+        let root = tempfile::tempdir().unwrap();
+        let backend = Arc::new(DeterministicBackend::default());
+        let id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        persist_identity(&root.path().join("host-session"), id).unwrap();
+        backend.insert(id, LaunchUnitState::Stopping);
+        let manager = Arc::new(TestSeatManager {
+            starts: AtomicUsize::new(0),
+            alive: Arc::new(AtomicBool::new(true)),
+        });
+        let control = HostSessionControl::with_input_seats(root.path(), backend, manager.clone());
+
+        assert_eq!(
+            control.status(),
+            HostSessionStatus::Stopping {
+                launch_id: id.into()
+            }
+        );
+        assert_eq!(manager.starts.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn ambiguous_recovery_does_not_create_input_seats() {
+        let root = tempfile::tempdir().unwrap();
+        let backend = Arc::new(DeterministicBackend::default());
+        backend.insert("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", LaunchUnitState::Running);
+        backend.insert("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", LaunchUnitState::Running);
+        let manager = Arc::new(TestSeatManager {
+            starts: AtomicUsize::new(0),
+            alive: Arc::new(AtomicBool::new(true)),
+        });
+        let control = HostSessionControl::with_input_seats(root.path(), backend, manager.clone());
+        assert_eq!(manager.starts.load(Ordering::SeqCst), 0);
+        assert_eq!(control.status(), HostSessionStatus::RecoveryBlocked);
+        assert_eq!(manager.starts.load(Ordering::SeqCst), 0);
     }
 }

@@ -8,3 +8,6 @@ pub mod direct_runner;
 pub mod health;
 pub mod korrid_client;
 pub mod runtime;
+
+pub mod input_seat;
+pub mod input_seat_uinput;

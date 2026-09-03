@@ -124,6 +124,7 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
     private final SensorManager deviceSensorManager;
     private final SceManager sceManager;
     private final Handler mainThreadHandler;
+    private final ControllerHeartbeat controllerHeartbeat;
     private final HandlerThread backgroundHandlerThread;
     private final Handler backgroundThreadHandler;
     private boolean hasGameController;
@@ -141,6 +142,23 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
         this.deviceSensorManager = (SensorManager) activityContext.getSystemService(Context.SENSOR_SERVICE);
         this.inputManager = (InputManager) activityContext.getSystemService(Context.INPUT_SERVICE);
         this.mainThreadHandler = new Handler(Looper.getMainLooper());
+        this.controllerHeartbeat = new ControllerHeartbeat(
+                new ControllerHeartbeat.Scheduler() {
+                    @Override
+                    public void postDelayed(Runnable action, long delayMs) {
+                        mainThreadHandler.postDelayed(action, delayMs);
+                    }
+
+                    @Override
+                    public void remove(Runnable action) {
+                        mainThreadHandler.removeCallbacks(action);
+                    }
+                },
+                state -> conn.sendControllerInput(
+                        state.controllerNumber, state.activeMask, state.buttons,
+                        state.leftTrigger, state.rightTrigger,
+                        state.leftStickX, state.leftStickY,
+                        state.rightStickX, state.rightStickY));
 
         // Create a HandlerThread to process battery state updates. These can be slow enough
         // that they lead to ANRs if we do them on the main thread.
@@ -209,6 +227,7 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
 
         // Register ourselves for input device notifications
         inputManager.registerInputDeviceListener(this, null);
+        controllerHeartbeat.start();
     }
 
     private static InputDevice.MotionRange getMotionRangeForJoystickAxis(InputDevice dev, int axis) {
@@ -274,6 +293,7 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
 
         // Stop new device contexts from being created or used
         stopped = true;
+        controllerHeartbeat.close();
 
         // Unregister our input device callbacks
         inputManager.unregisterInputDeviceListener(this);
@@ -413,9 +433,8 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
         // We must do this after clearing the currentControllers entry so this
         // causes the device to be removed on the server PC.
         if (context.assignedControllerNumber) {
-            conn.sendControllerInput(context.controllerNumber, getActiveControllerMask(),
-                    (short) 0,
-                    (byte) 0, (byte) 0,
+            sendAndRecordControllerState(context.controllerNumber, getActiveControllerMask(),
+                    0, (byte) 0, (byte) 0,
                     (short) 0, (short) 0,
                     (short) 0, (short) 0);
         }
@@ -1206,6 +1225,19 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
         }
     }
 
+    private void sendAndRecordControllerState(short controllerNumber, short activeMask,
+                                              int inputMap, byte leftTrigger, byte rightTrigger,
+                                              short leftStickX, short leftStickY,
+                                              short rightStickX, short rightStickY) {
+        controllerHeartbeat.record(new ControllerHeartbeat.State(
+                controllerNumber, activeMask, inputMap,
+                leftTrigger, rightTrigger,
+                leftStickX, leftStickY, rightStickX, rightStickY));
+        conn.sendControllerInput(controllerNumber, activeMask, inputMap,
+                leftTrigger, rightTrigger,
+                leftStickX, leftStickY, rightStickX, rightStickY);
+    }
+
     private void sendControllerInputPacket(GenericControllerContext originalContext) {
         assignControllerNumberIfNeeded(originalContext);
 
@@ -1338,15 +1370,13 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
                 }
             }
 
-            conn.sendControllerInput(controllerNumber, getActiveControllerMask(),
-                    (short)0, (byte)0, (byte)0, (short)0, (short)0, (short)0, (short)0);
+            sendAndRecordControllerState(controllerNumber, getActiveControllerMask(),
+                    0, (byte)0, (byte)0, (short)0, (short)0, (short)0, (short)0);
         }
         else {
-            conn.sendControllerInput(controllerNumber, getActiveControllerMask(),
-                    inputMap,
-                    leftTrigger, rightTrigger,
-                    leftStickX, leftStickY,
-                    rightStickX, rightStickY);
+            sendAndRecordControllerState(controllerNumber, getActiveControllerMask(),
+                    inputMap, leftTrigger, rightTrigger,
+                    leftStickX, leftStickY, rightStickX, rightStickY);
         }
     }
 

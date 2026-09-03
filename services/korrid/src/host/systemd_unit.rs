@@ -590,7 +590,7 @@ impl SystemdLaunchUnitBackend {
             "--property=ProtectProc=invisible".into(),
             "--property=ProcSubset=pid".into(),
             format!(
-                "--property=InaccessiblePaths={} /run/korrid {} {} {} {} /run/user/{} /dev/uinput /dev/inputplumber/sources",
+                "--property=InaccessiblePaths={} /run/korrid {} {} {} {} /run/user/{} -/run/korri-input-seat /dev/uinput /dev/inputplumber/sources",
                 self.private_state_root.display(),
                 self.control_socket.display(),
                 self.control_directory.display(),

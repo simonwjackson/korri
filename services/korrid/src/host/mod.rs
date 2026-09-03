@@ -1,6 +1,7 @@
 mod config;
 pub(crate) mod control;
 mod identity;
+mod input_seat;
 mod prepare;
 mod session_state;
 mod systemd_unit;

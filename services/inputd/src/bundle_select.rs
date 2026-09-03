@@ -20,6 +20,7 @@ const UNITS: [&str; 3] = [
     "korri-inputd.service",
     "korrid.service",
 ];
+const OPTIONAL_INPUT_SEAT_UNIT: &str = "korri-input-seat-receiver.service";
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -241,9 +242,20 @@ async fn restart_and_wait_with(
     health_timeout: Duration,
     health_poll: Duration,
 ) -> Result<(), String> {
+    let mut units = UNITS.to_vec();
+    if run_systemctl(
+        systemctl,
+        ["is-enabled", "--quiet", OPTIONAL_INPUT_SEAT_UNIT],
+    )
+    .await?
+    {
+        units.push(OPTIONAL_INPUT_SEAT_UNIT);
+    }
     run_systemctl(
         systemctl,
-        ["--no-block", "restart"].into_iter().chain(UNITS),
+        ["--no-block", "restart"]
+            .into_iter()
+            .chain(units.iter().copied()),
     )
     .await
     .and_then(|success| {
@@ -254,7 +266,7 @@ async fn restart_and_wait_with(
     let deadline = Instant::now() + health_timeout;
     loop {
         let mut all_active = true;
-        for unit in UNITS {
+        for unit in &units {
             if !run_systemctl(systemctl, ["is-active", "--quiet", unit]).await? {
                 all_active = false;
                 break;
@@ -331,7 +343,12 @@ mod tests {
         fs::create_dir_all(bundle.join("share")).unwrap();
         fs::create_dir_all(package.join("bin")).unwrap();
         fs::create_dir_all(package.join("share/inputplumber/profiles")).unwrap();
-        for component in ["inputplumber", "korri-inputd", "korrid"] {
+        for component in [
+            "inputplumber",
+            "korri-inputd",
+            "korri-input-seat-receiver",
+            "korrid",
+        ] {
             let executable = package.join("bin").join(component);
             fs::write(&executable, b"fixture").unwrap();
             fs::set_permissions(&executable, fs::Permissions::from_mode(0o555)).unwrap();

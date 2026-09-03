@@ -69,6 +69,9 @@ let
   noRuntimeSettings = evaluate {
     services.korriLinuxHost.sunshine.runtimeSettings.enable = false;
   };
+  inputSeats = evaluate {
+    services.korriLinuxHost.sunshine.inputSeats.enable = true;
+  };
   nvenc = evaluate {
     services.korriLinuxHost.sunshine.encoder = "nvenc";
   };
@@ -112,6 +115,9 @@ let
   korrid = cfg.systemd.services.korrid;
   sunshine = cfg.systemd.services.sunshine;
   compositor = cfg.systemd.services.korri-compositor;
+  inputSeatReceiver = inputSeats.config.systemd.services.korri-input-seat-receiver;
+  inputSeatKorrid = inputSeats.config.systemd.services.korrid;
+  inputSeatSunshine = inputSeats.config.systemd.services.sunshine;
   nvencCompositor = nvenc.config.systemd.services.korri-compositor;
   vaapiCompositor = vaapi.config.systemd.services.korri-compositor;
   deviceConfig = cfg.services.korridLinuxDevice.deviceConfig;
@@ -126,6 +132,7 @@ let
   highRefreshPerformanceStop = pkgs.writeText "korri-linux-host-high-refresh-performance-stop" highRefreshPerformance.serviceConfig.ExecStop;
   validationAction = cfg.services.korriLinuxInput.inputd.actions.workspace-next.command;
   udevRules = pkgs.writeText "korri-linux-host-udev-rules" cfg.services.udev.extraRules;
+  inputSeatUdevRules = pkgs.writeText "korri-linux-host-input-seat-udev-rules" inputSeats.config.services.udev.extraRules;
 in
 assert allAssertionsPass valid;
 assert cfg.services.korriBundle.enable;
@@ -139,6 +146,42 @@ assert !cfg.services.sunshine.autoStart;
 assert !cfg.systemd.user.services.sunshine.enable;
 assert cfg.services.sunshine.package == sunshinePackage;
 assert cfg.services.korriLinuxHost.sunshine.runtimeSettings.enable;
+assert !cfg.services.korriLinuxHost.sunshine.inputSeats.enable;
+assert !(builtins.hasAttr "korri-input-seat-receiver" cfg.systemd.services);
+assert allAssertionsPass inputSeats;
+assert inputSeatReceiver.serviceConfig.User == "root";
+assert inputSeatReceiver.serviceConfig.Group == "root";
+assert inputSeatReceiver.serviceConfig.RuntimeDirectory == "korri-input-seat";
+assert inputSeatReceiver.serviceConfig.RuntimeDirectoryMode == "0711";
+assert inputSeatReceiver.serviceConfig.NoNewPrivileges;
+assert inputSeatReceiver.serviceConfig.CapabilityBoundingSet == [ "CAP_CHOWN" ];
+assert inputSeatReceiver.serviceConfig.AmbientCapabilities == [ ];
+assert inputSeatReceiver.serviceConfig.RestrictAddressFamilies == [ "AF_UNIX" ];
+assert inputSeatReceiver.serviceConfig.DevicePolicy == "closed";
+assert inputSeatReceiver.serviceConfig.DeviceAllow == [ "/dev/uinput rw" ];
+assert inputSeatReceiver.serviceConfig.PrivatePIDs;
+assert inputSeatReceiver.serviceConfig.ProtectSystem == "strict";
+assert inputSeatReceiver.serviceConfig.ProtectHome;
+assert inputSeatReceiver.serviceConfig.ProtectProc == "invisible";
+assert inputSeatReceiver.serviceConfig.ProcSubset == "pid";
+assert inputSeatReceiver.serviceConfig.ReadWritePaths == [ "/run/korri-input-seat" ];
+assert inputSeatReceiver.serviceConfig.SupplementaryGroups == [ ];
+assert lib.hasInfix "/bin/korri-bundle-launch input-seat-receiver" inputSeatReceiver.serviceConfig.ExecStart;
+assert lib.hasInfix "--control-uid 976" inputSeatReceiver.serviceConfig.ExecStart;
+assert lib.hasInfix "--control-gid 976" inputSeatReceiver.serviceConfig.ExecStart;
+assert lib.hasInfix "--sunshine-uid 1001" inputSeatReceiver.serviceConfig.ExecStart;
+assert lib.hasInfix "--sunshine-gid 980" inputSeatReceiver.serviceConfig.ExecStart;
+assert inputSeats.config.users.groups.korri-sunshine-input-seat.gid == 980;
+assert inputSeatKorrid.environment.KORRID_INPUT_SEAT_CONTROL_SOCKET == "/run/korri-input-seat/control.sock";
+assert inputSeatSunshine.environment.KORRI_INPUT_SEAT_MIRROR_SOCKET == "/run/korri-input-seat/sunshine-input-seat.sock";
+assert inputSeatSunshine.environment.KORRI_INPUT_SEAT_RUNTIME_DIR == "/run/korri-input-seat";
+assert inputSeatSunshine.serviceConfig.Group == "korri-sunshine-input-seat";
+assert builtins.elem "korri-sunshine-uinput" inputSeatSunshine.serviceConfig.SupplementaryGroups;
+assert builtins.elem "korri-input-seat-receiver.service" inputSeatKorrid.requires;
+assert builtins.elem "korri-input-seat-receiver.service" inputSeatKorrid.after;
+assert builtins.elem "korri-input-seat-receiver.service" inputSeatSunshine.requires;
+assert builtins.elem "korri-input-seat-receiver.service" inputSeatSunshine.after;
+assert builtins.elem "-/run/korri-input-seat" inputSeats.config.systemd.services.korri-inputd.serviceConfig.InaccessiblePaths;
 assert cfg.services.korriLinuxHost.sunshine.encoder == "auto";
 assert sunshine.environment.SUNSHINE_LIVE_SETTINGS_MVP == "1";
 assert allAssertionsPass nvenc;
@@ -348,6 +391,9 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     test "$(cat "$profile_test/max")" = 100
     grep -Fx '${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf log_path=/dev/null' ${sunshineExec} >/dev/null
     grep -F 'TAG-="uaccess"' ${udevRules} >/dev/null
+    grep -F 'ATTRS{name}=="Korri Seat P[1-4]"' ${inputSeatUdevRules} >/dev/null
+    grep -F 'GROUP="games"' ${inputSeatUdevRules} >/dev/null
+    grep -F 'MODE="0660"' ${inputSeatUdevRules} >/dev/null
 
     compositor_config="$(${pkgs.gnugrep}/bin/grep -oE '/nix/store/[^ ]+-korri-sway\.conf' ${compositorExec} | head -n1)"
     test -f "$compositor_config"

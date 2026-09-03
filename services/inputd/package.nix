@@ -24,7 +24,7 @@ craneLib.buildPackage (
   commonArgs
   // {
     inherit cargoArtifacts;
-    cargoBuildExtraArgs = "--bin korri-inputd --bin korri-bundle-launch --bin korri-bundle-select --bin korri-virtual-target-acl --bin korri-sunshine-state-digest --bin korri-ledger-proof --lib";
+    cargoBuildExtraArgs = "--bin korri-inputd --bin korri-bundle-launch --bin korri-bundle-select --bin korri-virtual-target-acl --bin korri-sunshine-state-digest --bin korri-ledger-proof --bin korri-input-seat-receiver --lib";
     postInstall = ''
       # Keep this byte-for-byte identical to the repository gate. The rollout
       # verifies the candidate closure helper against the local source digest.

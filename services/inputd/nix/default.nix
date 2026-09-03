@@ -67,7 +67,7 @@ in
       grep -F '"${sunshinePackage}/bin/.sunshine-wrapped"' ${sunshinePackage}/bin/sunshine >/dev/null
       test "${sunshinePackage.pname}" = sunshine-korri
       test "${sunshinePackage.version}" = "${pkgs.sunshine.version}-korri"
-      test "${toString (builtins.length sunshinePackage.korriPatchNames)}" = 12
+      test "${toString (builtins.length sunshinePackage.korriPatchNames)}" = 14
       test "${sunshinePackage.korriBaseSunshineVersion}" = "${sunshineApprovedPatches.baseSunshineVersion}"
       test "${sunshinePackage.korriApprovedBaseSunshineSourceHash}" = "${sunshineApprovedPatches.approvedBaseSourceHash}"
       test "${pkgs.sunshine.src.outputHash}" = "${sunshineApprovedPatches.approvedBaseSourceHash}"
@@ -124,6 +124,9 @@ in
       clientJniPath = ../../../clients/android/app/src/main/jni/moonlight-core/simplejni.c;
       clientJavaPath = ../../../clients/android/app/src/main/java/com/limelight/nvstream/jni/MoonBridge.java;
       clientSnapshotJavaPath = ../../../clients/android/app/src/main/java/com/limelight/nvstream/jni/SunshineRuntimeSettingsSnapshot.java;
+      clientControllerHandlerPath = ../../../clients/android/app/src/main/java/com/limelight/binding/input/ControllerHandler.java;
+      clientControllerHeartbeatPath = ../../../clients/android/app/src/main/java/com/limelight/binding/input/ControllerHeartbeat.java;
+      clientControllerHeartbeatTestPath = ../../../clients/android/app/src/test/java/com/limelight/binding/input/ControllerHeartbeatTest.java;
       nativeTestPath = ../../../clients/android/app/src/test-native/sunshine-runtime-settings-test.c;
     };
     inputplumber-korri-package = import ./inputplumber-package-check.nix {
@@ -134,8 +137,12 @@ in
         retroarchInputplumberAutoconfig
         ;
     };
+    korri-input-seat-receiver = import ./korri-input-seat-receiver-check.nix {
+      inherit pkgs inputdPackage;
+    };
     korri-inputd-package = pkgs.runCommand "korri-inputd-package-check" { } ''
       test -x ${inputdPackage}/bin/korri-inputd
+      test -x ${inputdPackage}/bin/korri-input-seat-receiver
       test -x ${inputdPackage}/bin/korri-bundle-launch
       test -x ${inputdPackage}/bin/korri-bundle-select
       test -x ${inputdPackage}/bin/korri-device-gate
@@ -157,9 +164,12 @@ in
       # Linux resolves /proc/PID/exe through the bin/sunshine symlink. Exercise
       # the gate's exact resolver against the shipped versioned target.
       declared=${sunshinePackage}/bin/sunshine
-      test -L "$declared"
-      running="$(readlink -f -- "$declared")"
-      test "$running" != "$declared"
+      wrapped=${sunshinePackage}/bin/.sunshine-wrapped
+      test -f "$declared"
+      test ! -L "$declared"
+      test -L "$wrapped"
+      grep -F 'bin/.sunshine-wrapped' "$declared" >/dev/null
+      running="$(readlink -f -- "$wrapped")"
       case "$running" in
         ${sunshinePackage}/bin/sunshine-*) ;;
         *) echo "Sunshine did not resolve to its versioned package target" >&2; exit 1 ;;

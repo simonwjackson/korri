@@ -432,6 +432,7 @@ in
           ReadWritePaths = [ "/run/korri-inputd" ];
           InaccessiblePaths = [
             "/dev/uinput"
+            "-/run/korri-input-seat"
             "/dev/inputplumber/sources"
             "/var/lib/korrid"
           ];

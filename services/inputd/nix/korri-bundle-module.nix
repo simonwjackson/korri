@@ -40,6 +40,7 @@ in
       before = [
         "inputplumber.service"
         "korri-inputd.service"
+        "korri-input-seat-receiver.service"
         "korrid.service"
       ];
       serviceConfig = {

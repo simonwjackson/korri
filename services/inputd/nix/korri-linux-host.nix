@@ -18,6 +18,9 @@ let
   xwaylandDisplay = ":0";
   xwaylandSocket = "/tmp/.X11-unix/X0";
   xwaylandLock = "/tmp/.X0-lock";
+  inputSeatRuntimeDirectory = "/run/korri-input-seat";
+  inputSeatControlSocket = "${inputSeatRuntimeDirectory}/control.sock";
+  inputSeatMirrorSocket = "${inputSeatRuntimeDirectory}/sunshine-input-seat.sock";
   compositorMode = builtins.match "^([1-9][0-9]*)x([1-9][0-9]*)@([1-9][0-9]*)Hz$" cfg.compositor.mode;
   compositorWidth = builtins.elemAt compositorMode 0;
   compositorHeight = builtins.elemAt compositorMode 1;
@@ -381,6 +384,10 @@ in
         type = lib.types.ints.positive;
         default = 979;
       };
+      inputSeatGid = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 980;
+      };
     };
 
     sunshine = {
@@ -413,6 +420,11 @@ in
         default = true;
         description = "Enable the Korri Sunshine live runtime-settings protocol.";
       };
+      inputSeats.enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Enable protected launch-scoped Sunshine controller seats.";
+      };
     };
 
     validation.enable = lib.mkOption {
@@ -443,6 +455,7 @@ in
           cfg.serviceIdentities.korridUid
           cfg.serviceIdentities.korridGid
           cfg.serviceIdentities.sunshineGid
+          cfg.serviceIdentities.inputSeatGid
         ];
         message = "Korri service identities must differ from the gameplay identity.";
       }
@@ -451,7 +464,12 @@ in
           cfg.serviceIdentities.inputdUid != cfg.serviceIdentities.korridUid
           && cfg.serviceIdentities.controlGid != cfg.serviceIdentities.korridGid
           && cfg.serviceIdentities.controlGid != cfg.serviceIdentities.sunshineGid
-          && cfg.serviceIdentities.korridGid != cfg.serviceIdentities.sunshineGid;
+          && cfg.serviceIdentities.korridGid != cfg.serviceIdentities.sunshineGid
+          && cfg.serviceIdentities.inputSeatGid != cfg.serviceIdentities.inputdUid
+          && cfg.serviceIdentities.inputSeatGid != cfg.serviceIdentities.controlGid
+          && cfg.serviceIdentities.inputSeatGid != cfg.serviceIdentities.korridUid
+          && cfg.serviceIdentities.inputSeatGid != cfg.serviceIdentities.korridGid
+          && cfg.serviceIdentities.inputSeatGid != cfg.serviceIdentities.sunshineGid;
         message = "Korri service identities must remain distinct.";
       }
       {
@@ -584,6 +602,61 @@ in
       allowedTCPPorts = [ cfg.apiPort ];
     });
 
+    users.groups.korri-sunshine-input-seat = lib.mkIf cfg.sunshine.inputSeats.enable {
+      gid = cfg.serviceIdentities.inputSeatGid;
+    };
+
+    systemd.services.korri-input-seat-receiver = lib.mkIf cfg.sunshine.inputSeats.enable {
+      description = "Protected Korri Sunshine input-seat receiver";
+      wantedBy = [ "multi-user.target" ];
+      requires = [ "korri-bundle-selector.service" ];
+      after = [
+        "systemd-tmpfiles-setup-dev.service"
+        "systemd-tmpfiles-resetup.service"
+        "korri-bundle-selector.service"
+      ];
+      before = [
+        "korrid.service"
+        "sunshine.service"
+      ];
+      serviceConfig = {
+        Type = "simple";
+        User = "root";
+        Group = "root";
+        SupplementaryGroups = [ ];
+        RuntimeDirectory = "korri-input-seat";
+        RuntimeDirectoryMode = "0711";
+        ExecStart = "${config.services.korriBundle.launcherPackage}/bin/korri-bundle-launch input-seat-receiver --runtime-dir ${inputSeatRuntimeDirectory} --control-uid ${toString cfg.serviceIdentities.korridUid} --control-gid ${toString cfg.serviceIdentities.korridGid} --sunshine-uid ${toString cfg.gameplayUid} --sunshine-gid ${toString cfg.serviceIdentities.inputSeatGid} --event-gid ${toString cfg.gameplayGid}";
+        Restart = "on-failure";
+        RestartSec = 1;
+        UMask = "0077";
+        NoNewPrivileges = true;
+        CapabilityBoundingSet = [ "CAP_CHOWN" ];
+        AmbientCapabilities = [ ];
+        RestrictAddressFamilies = [ "AF_UNIX" ];
+        PrivateTmp = true;
+        PrivatePIDs = true;
+        PrivateDevices = false;
+        DevicePolicy = "closed";
+        DeviceAllow = [ "/dev/uinput rw" ];
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        ProtectProc = "invisible";
+        ProcSubset = "pid";
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectKernelLogs = true;
+        ProtectControlGroups = true;
+        ProtectClock = true;
+        ProtectHostname = true;
+        RestrictSUIDSGID = true;
+        LockPersonality = true;
+        MemoryDenyWriteExecute = true;
+        SystemCallArchitectures = "native";
+        ReadWritePaths = [ inputSeatRuntimeDirectory ];
+      };
+    };
+
     systemd.services.korri-streaming-performance-profile = lib.mkIf highRefreshPerformance {
       description = "Korri high-refresh streaming performance profile";
       wantedBy = [ "multi-user.target" ];
@@ -686,8 +759,11 @@ in
 
     systemd.services.korrid = {
       bindsTo = lib.mkAfter [ "korri-compositor.service" ];
-      requires = lib.mkAfter [ "korri-compositor.service" ];
-      after = lib.mkAfter [ "korri-compositor.service" ];
+      requires = lib.mkAfter ([ "korri-compositor.service" ] ++ lib.optional cfg.sunshine.inputSeats.enable "korri-input-seat-receiver.service");
+      after = lib.mkAfter ([ "korri-compositor.service" ] ++ lib.optional cfg.sunshine.inputSeats.enable "korri-input-seat-receiver.service");
+      environment = lib.mkIf cfg.sunshine.inputSeats.enable {
+        KORRID_INPUT_SEAT_CONTROL_SOCKET = inputSeatControlSocket;
+      };
     };
 
     systemd.services.sunshine = {
@@ -697,12 +773,12 @@ in
       requires = [
         "korri-input-source-guard.service"
         "korri-compositor.service"
-      ];
+      ] ++ lib.optional cfg.sunshine.inputSeats.enable "korri-input-seat-receiver.service";
       after = [
         "korri-input-source-guard.service"
         "korri-compositor.service"
         "network-online.target"
-      ];
+      ] ++ lib.optional cfg.sunshine.inputSeats.enable "korri-input-seat-receiver.service";
       wants = [ "network-online.target" ];
       environment = {
         DISPLAY = xwaylandDisplay;
@@ -711,6 +787,10 @@ in
         XDG_SESSION_TYPE = "wayland";
         HOME = gameplayHome;
         XDG_CONFIG_HOME = "${gameplayHome}/.config";
+      }
+      // lib.optionalAttrs cfg.sunshine.inputSeats.enable {
+        KORRI_INPUT_SEAT_MIRROR_SOCKET = inputSeatMirrorSocket;
+        KORRI_INPUT_SEAT_RUNTIME_DIR = inputSeatRuntimeDirectory;
       }
       // lib.optionalAttrs cfg.sunshine.runtimeSettings.enable {
         SUNSHINE_LIVE_SETTINGS_MVP = "1";
@@ -722,7 +802,7 @@ in
       serviceConfig = {
         Type = "simple";
         User = cfg.gameplayUser;
-        Group = cfg.gameplayGroup;
+        Group = if cfg.sunshine.inputSeats.enable then "korri-sunshine-input-seat" else cfg.gameplayGroup;
         SupplementaryGroups = [
           "video"
           "render"
@@ -763,8 +843,10 @@ in
       };
     };
 
-    services.udev.extraRules = lib.mkAfter ''
+    services.udev.extraRules = lib.mkAfter (''
       KERNEL=="uinput", SUBSYSTEM=="misc", TAG-="uaccess", OWNER="root", GROUP="korri-sunshine-uinput", MODE="0660", OPTIONS+="static_node=uinput"
-    '';
+    '' + lib.optionalString cfg.sunshine.inputSeats.enable ''
+      SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Korri Seat P[1-4]", GROUP="${cfg.gameplayGroup}", MODE="0660"
+    '');
   };
 }

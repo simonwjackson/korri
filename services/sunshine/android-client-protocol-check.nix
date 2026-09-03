@@ -10,6 +10,9 @@
   clientJniPath,
   clientJavaPath,
   clientSnapshotJavaPath,
+  clientControllerHandlerPath,
+  clientControllerHeartbeatPath,
+  clientControllerHeartbeatTestPath,
   nativeTestPath,
 }:
 
@@ -24,6 +27,8 @@ let
   jni = builtins.readFile clientJniPath;
   java = builtins.readFile clientJavaPath;
   snapshotJava = builtins.readFile clientSnapshotJavaPath;
+  controllerHeartbeat = builtins.readFile clientControllerHeartbeatPath;
+  controllerHeartbeatTest = builtins.readFile clientControllerHeartbeatTestPath;
   contains = needle: haystack: lib.hasInfix needle haystack;
   check = message: assertion: { inherit message assertion; };
   values = [
@@ -150,6 +155,12 @@ let
       && !(contains "RUNTIME_SETTINGS_SNAPSHOT_TOKEN" java)
       && !(contains "RUNTIME_SETTINGS_SNAPSHOT_ADDRESS" java)
     ))
+    (check "the supported client supplies bounded controller heartbeats" (
+      contains "INTERVAL_MS = 250" controllerHeartbeat
+      && contains "DISCONNECT_REPEATS = 4" controllerHeartbeat
+      && contains "activeStateRepeatsAtTheFixedInterval" controllerHeartbeatTest
+      && contains "disconnectStateRepeatsFourTimesThenStops" controllerHeartbeatTest
+    ))
     (check "native tests prove deterministic lifecycle and readiness ordering" (
       !(contains "usleep(" (builtins.readFile nativeTestPath))
       && contains "lockAttempts" (builtins.readFile nativeTestPath)
@@ -188,5 +199,8 @@ else
       -pthread \
       -o runtime-settings-test
     ./runtime-settings-test
+    grep -F 'controllerHeartbeat.start()' ${clientControllerHandlerPath} >/dev/null
+    grep -F 'controllerHeartbeat.record' ${clientControllerHandlerPath} >/dev/null
+    grep -F 'controllerHeartbeat.close()' ${clientControllerHandlerPath} >/dev/null
     touch "$out"
   ''

@@ -48,3 +48,7 @@ zbus = { version = "5.18.0", default-features = false, features = ["tokio"] }
 
 [dev-dependencies]
 tempfile = "3"
+
+[[bin]]
+name = "korri-input-seat-receiver"
+path = "src/input_seat_receiver.rs"

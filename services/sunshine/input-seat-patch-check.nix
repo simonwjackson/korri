@@ -93,6 +93,16 @@ let
       && contains "rightStickX" patch
       && contains "rightStickY" patch
     ))
+    (check "an active receiver replaces Sunshine native gamepad allocation" (
+      contains "bool korri_input_seat_emit_json" patch
+      && contains "bool korri_input_seat_receiver_configured()" patch
+      && contains "if (!korri_input_seat_receiver_configured())" patch
+      && contains "if (korri_input_seat_emit_source_connected(packet->controllerNumber))" patch
+      && contains "if (korri_input_seat_emit_source_state(packet))" patch
+      && contains "korri_input_seat_emit_source_disconnected" patch
+      && contains "free_gamepad(platf_input, gamepad.id)" patch
+      && contains "does not create a second gamepad" patch
+    ))
     (check "the mirror forwards no non-controller packet domain" (
       !(contains "passthrough(PNV_KEYBOARD_PACKET" patch)
       && !(contains "passthrough(PNV_REL_MOUSE_MOVE_PACKET" patch)
@@ -108,13 +118,16 @@ let
       && !(contains "BOOST_LOG(warning) << buffer" patch)
       && !(contains "BOOST_LOG(debug) << buffer" patch)
     ))
-    (check "the hardened delta and inert default are documented" (
+    (check "the hardened delta and protected receiver activation are documented" (
       contains "Input-seat event mirror patch" readme
       && contains "hardened from the legacy patch" readme
       && contains "openat" readme
       && contains "SOCK_SEQPACKET" readme
-      && contains "transport model/source-invariant check" readme
+      && contains "Sunshine-source transport check" readme
+      && contains "korri-input-seat-receiver" readme
+      && contains "services.korriLinuxHost.sunshine.inputSeats.enable" readme
       && contains "remains inert" readme
+      && contains "Physical device acceptance remains separate" readme
     ))
   ];
   failures = builtins.filter (candidate: !candidate.assertion) checks;
