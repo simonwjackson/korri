@@ -1264,12 +1264,12 @@ static void controlReceiveThreadFunc(void* context) {
         uint32_t runtimeSettingsWaitMs;
         uint64_t nowMs = PltGetMillis();
 
-        PltLockMutex(&runtimeSettingsMutex);
+        runtimeSettingsLock(NULL);
         SsRuntimeSettingsCheckTimeouts(&runtimeSettingsState, nowMs);
         runtimeSettingsWaitMs = SsRuntimeSettingsNextTimeoutMs(&runtimeSettingsState,
                                                                nowMs,
                                                                SS_RUNTIME_SETTINGS_TIMEOUT_MS);
-        PltUnlockMutex(&runtimeSettingsMutex);
+        runtimeSettingsUnlock(NULL);
 
         PltLockMutex(&enetMutex);
 
@@ -1425,11 +1425,11 @@ static void controlReceiveThreadFunc(void* context) {
 
             if (ctlHdr->type == SS_RUNTIME_SETTINGS_ACK_PACKET) {
                 int result;
-                PltLockMutex(&runtimeSettingsMutex);
+                runtimeSettingsLock(NULL);
                 result = SsRuntimeSettingsProcessAck(&runtimeSettingsState,
                                                      (const uint8_t*)(ctlHdr + 1),
                                                      packetLength - sizeof(*ctlHdr));
-                PltUnlockMutex(&runtimeSettingsMutex);
+                runtimeSettingsUnlock(NULL);
                 if (result == LI_RUNTIME_SETTINGS_ERROR_MALFORMED_ACK) {
                     Limelog("Discarding malformed Sunshine runtime-settings acknowledgement\n");
                 }
