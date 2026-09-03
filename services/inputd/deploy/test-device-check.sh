@@ -896,6 +896,39 @@ run_compositor_mode_parser() (
 [[ "$(run_compositor_mode_parser '1920x1080@120Hz')" == '1920 1080 120000 1920x1080@120Hz' ]]
 assert_fails_with 'invalid compositor mode' run_compositor_mode_parser '1920x1080@0Hz'
 assert_fails_with 'invalid compositor mode' run_compositor_mode_parser '1920x1080@120'
+HIGH_REFRESH_PERFORMANCE_SOURCE="$(awk '
+  /^remote_high_refresh_performance_gate\(\) \{/ { found=1 }
+  found { print }
+  found && /^}$/ { exit }
+' "$GATE")"
+[[ "$HIGH_REFRESH_PERFORMANCE_SOURCE" == remote_high_refresh_performance_gate* ]]
+performance_root="$TMP/performance-gate"
+mkdir -p "$performance_root/sys/firmware/acpi" "$performance_root/sys/devices/system/cpu/intel_pstate"
+printf 'performance\n' >"$performance_root/sys/firmware/acpi/platform_profile"
+printf '40\n' >"$performance_root/sys/devices/system/cpu/intel_pstate/min_perf_pct"
+printf '60\n' >"$performance_root/sys/devices/system/cpu/intel_pstate/max_perf_pct"
+run_high_refresh_performance_gate() (
+  model="$1"
+  refresh="$2"
+  root="$3"
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  fail() { printf 'device gate: %s\n' "$*" >&2; exit 1; }
+  # shellcheck disable=SC2329 # Invoked by the production function loaded below.
+  systemctl() { [[ "$model" == active ]]; }
+  eval "$HIGH_REFRESH_PERFORMANCE_SOURCE"
+  remote_high_refresh_performance_gate "$refresh" "$root"
+)
+run_high_refresh_performance_gate inactive 60000 "$performance_root"
+run_high_refresh_performance_gate active 120000 "$performance_root"
+assert_fails_with 'performance profile is inactive' run_high_refresh_performance_gate inactive 120000 "$performance_root"
+printf 'balanced\n' >"$performance_root/sys/firmware/acpi/platform_profile"
+assert_fails_with 'platform profile is not performance' run_high_refresh_performance_gate active 120000 "$performance_root"
+printf 'performance\n' >"$performance_root/sys/firmware/acpi/platform_profile"
+printf '39\n' >"$performance_root/sys/devices/system/cpu/intel_pstate/min_perf_pct"
+assert_fails_with 'minimum Intel pstate bound is not 40' run_high_refresh_performance_gate active 120000 "$performance_root"
+printf '40\n' >"$performance_root/sys/devices/system/cpu/intel_pstate/min_perf_pct"
+printf '61\n' >"$performance_root/sys/devices/system/cpu/intel_pstate/max_perf_pct"
+assert_fails_with 'maximum Intel pstate bound is not 60' run_high_refresh_performance_gate active 120000 "$performance_root"
 # shellcheck disable=SC2016 # Literal production source invariant.
 grep -F 'run_remote_attempt compositor-game-gate "$GAMEPLAY_USER"' "$GATE" >/dev/null
 grep -F -- '--property=PrivatePIDs=yes' "$HERE/../../korrid/src/host/systemd_unit.rs" >/dev/null

@@ -322,6 +322,16 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     test "$(cat "$profile_test/profile")" = performance
     test "$(cat "$profile_test/min")" = 40
     test "$(cat "$profile_test/max")" = 60
+    chmod 400 "$profile_test/profile"
+    set +e
+    run_profile stop >/dev/null 2>&1
+    failed_stop_status=$?
+    set -e
+    chmod 600 "$profile_test/profile"
+    test "$failed_stop_status" -ne 0
+    test "$(cat "$profile_test/profile")" = performance
+    test "$(cat "$profile_test/min")" = 40
+    test "$(cat "$profile_test/max")" = 60
     run_profile stop
     test "$(cat "$profile_test/profile")" = balanced
     test "$(cat "$profile_test/min")" = 16

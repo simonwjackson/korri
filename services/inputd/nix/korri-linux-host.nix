@@ -62,23 +62,30 @@ let
         exit 1
       }
     done
+    restore_on_failure() {
+      status=$?
+      trap - EXIT
+      if [ "$committed" != true ]; then
+        printf '%s\n' "$original_min" >"$min_perf" || status=1
+        printf '%s\n' "$original_max" >"$max_perf" || status=1
+        printf '%s\n' "$original_profile" >"$profile" || status=1
+      fi
+      exit "$status"
+    }
+    begin_transaction() {
+      original_profile="$(cat "$profile")"
+      original_max="$(cat "$max_perf")"
+      original_min="$(cat "$min_perf")"
+      committed=false
+      trap restore_on_failure EXIT
+    }
+    commit_transaction() {
+      committed=true
+      trap - EXIT
+    }
     case "''${1-}" in
       start)
-        original_profile="$(cat "$profile")"
-        original_max="$(cat "$max_perf")"
-        original_min="$(cat "$min_perf")"
-        committed=false
-        restore_on_failure() {
-          status=$?
-          trap - EXIT
-          if [ "$committed" != true ]; then
-            printf '%s\n' "$original_min" >"$min_perf" || status=1
-            printf '%s\n' "$original_max" >"$max_perf" || status=1
-            printf '%s\n' "$original_profile" >"$profile" || status=1
-          fi
-          exit "$status"
-        }
-        trap restore_on_failure EXIT
+        begin_transaction
         ${pkgs.gnugrep}/bin/grep -qw performance "$choices"
         printf 'performance\n' >"$profile"
         printf '60\n' >"$max_perf"
@@ -86,16 +93,17 @@ let
         [ "$(cat "$profile")" = performance ]
         [ "$(cat "$max_perf")" = 60 ]
         [ "$(cat "$min_perf")" = 40 ]
-        committed=true
-        trap - EXIT
+        commit_transaction
         ;;
       stop)
+        begin_transaction
         printf '100\n' >"$max_perf"
         printf '16\n' >"$min_perf"
         printf 'balanced\n' >"$profile"
         [ "$(cat "$profile")" = balanced ]
         [ "$(cat "$max_perf")" = 100 ]
         [ "$(cat "$min_perf")" = 16 ]
+        commit_transaction
         ;;
       *)
         echo 'expected start or stop' >&2

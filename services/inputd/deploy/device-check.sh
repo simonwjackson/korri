@@ -903,6 +903,22 @@ remote_parse_compositor_mode() {
   printf '%s %s %s %s\n' "$width" "$height" "$((10#$refresh_hz * 1000))" "$mode"
 }
 
+remote_high_refresh_performance_gate() {
+  local expected_refresh="$1" root="${2:-}"
+  local profile="$root/sys/firmware/acpi/platform_profile"
+  local min_perf="$root/sys/devices/system/cpu/intel_pstate/min_perf_pct"
+  local max_perf="$root/sys/devices/system/cpu/intel_pstate/max_perf_pct"
+  (( expected_refresh >= 120000 )) || return 0
+  systemctl is-active --quiet korri-streaming-performance-profile.service \
+    || fail 'high-refresh streaming performance profile is inactive'
+  [[ -f "$profile" && "$(cat "$profile")" == performance ]] \
+    || fail 'high-refresh ACPI platform profile is not performance'
+  [[ -f "$min_perf" && "$(cat "$min_perf")" == 40 ]] \
+    || fail 'high-refresh minimum Intel pstate bound is not 40'
+  [[ -f "$max_perf" && "$(cat "$max_perf")" == 60 ]] \
+    || fail 'high-refresh maximum Intel pstate bound is not 60'
+}
+
 remote_compositor_gate() {
   local gameplay_user="$1" uid gid runtime stable target control_metadata directory_metadata
   local compositor_environment sunshine_environment sunshine_inaccessible korrid_environment
@@ -1011,8 +1027,7 @@ remote_compositor_gate() {
     < <(remote_parse_compositor_mode "$configured_mode") \
     || fail 'compositor configuration mode is invalid'
   if (( expected_refresh >= 120000 )); then
-    systemctl is-active --quiet korri-streaming-performance-profile.service \
-      || fail 'high-refresh streaming performance profile is inactive'
+    remote_high_refresh_performance_gate "$expected_refresh"
     performance_state=active
   fi
   declared="${sway_execs[0]}"
