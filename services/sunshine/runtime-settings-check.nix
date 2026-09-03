@@ -84,11 +84,12 @@ let
       && patchContains "destination[0] = source[2];"
       && patchContains "destination[2] = source[0];"
     ))
-    (check "high-rate Wayland RAM capture reserves measured processing headroom" (
-      builtins.elem "0018-add-headroom-to-high-rate-wayland-ram-capture.patch" sunshinePackage.korriPatchNames
-      && patchContains "auto capture_delay = delay <= 10ms ? delay * 95 / 100 : delay;"
-      && patchContains "next_frame += capture_delay;"
-      && patchContains "next_frame = now + capture_delay;"
+    (check "high-rate Wayland RAM capture uses the compositor frame clock" (
+      builtins.elem "0018-clock-high-rate-wayland-ram-capture-from-screencopy.patch" sunshinePackage.korriPatchNames
+      && patchContains "auto compositor_clocked = delay <= 10ms;"
+      && patchContains "if (!compositor_clocked && next_frame > now)"
+      && patchContains "if (!compositor_clocked) {"
+      && patchContains "screencopy already blocks until the next output"
     ))
     (check "runtime settings packet IDs remain stable" (
       patchContains "RUNTIME_SETTINGS_REQUEST_PACKET = 0x5504"

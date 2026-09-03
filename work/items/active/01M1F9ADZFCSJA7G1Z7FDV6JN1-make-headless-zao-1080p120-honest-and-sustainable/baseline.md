@@ -76,3 +76,9 @@ Live output probes at 144 Hz and Odin performance mode `2` did not reach the tar
 A debug client build stopped overriding the selected `latency` frame-pacing mode with `balanced`. The first connected sample was `103.57 FPS`. The change did not remove the limit and was rejected.
 
 Bandai returned to its saved settings and APK. Zao returned to the exact 1080p60 generation and bundle with no game, marker, or lease.
+
+## Candidate iteration 9
+
+A Sunshine candidate requested high-rate Wayland RAM frames five percent early. A 10-second host packet capture measured `107.444` video datagrams per second. The prior unmodified capture measured `107.910` video datagrams per second under the same filter.
+
+The headroom did not change the rate and was replaced. The packet cadence showed that the host path, not Bandai's network receive path, produced the limit.
