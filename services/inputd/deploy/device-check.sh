@@ -907,7 +907,7 @@ remote_compositor_gate() {
   local compositor_environment sunshine_environment sunshine_inaccessible korrid_environment
   local execstart running declared declared_link declared_real running_target package_root swaymsg outputs render_device render_real render_driver token dev_sys dev_stat jq_helper
   local sunshine_pid sunshine_private_pids sway_pid compositor_config compositor_config_metadata configured_mode
-  local expected_width expected_height expected_refresh expected_mode
+  local expected_width expected_height expected_refresh expected_mode renderer candidate_renderer renderer_count=0
   local -a sway_execs=() wrapped_targets=() render_devices=() compositor_configs=() configured_modes=()
   uid="$(id -u "$gameplay_user")" || fail 'gameplay user is unavailable for compositor validation'
   gid="$(id -g "$gameplay_user")" || fail 'gameplay group is unavailable for compositor validation'
@@ -935,11 +935,17 @@ remote_compositor_gate() {
     || fail 'compositor environment is unavailable'
   for expected in \
     'WLR_BACKENDS=headless' \
-    'WLR_RENDERER=gles2' \
     "SWAYSOCK=$COMPOSITOR_CONTROL_SOCKET"; do
     [[ " $compositor_environment " == *" $expected "* ]] \
       || fail "compositor environment lacks $expected"
   done
+  for candidate_renderer in gles2 pixman; do
+    if [[ " $compositor_environment " == *" WLR_RENDERER=$candidate_renderer "* ]]; then
+      renderer="$candidate_renderer"
+      renderer_count=$((renderer_count + 1))
+    fi
+  done
+  [[ "$renderer_count" -eq 1 ]] || fail 'compositor does not declare one approved renderer'
   [[ " $compositor_environment " != *' WAYLAND_DISPLAY='* ]] \
     || fail 'compositor service must not receive WAYLAND_DISPLAY'
   for token in $compositor_environment; do
@@ -1050,8 +1056,8 @@ remote_compositor_gate() {
     --argjson refresh "$expected_refresh" \
     '.[] | select(.name == $output and .active == true and .current_mode.width == $width and .current_mode.height == $height and .current_mode.refresh == $refresh)' \
     <<<"$outputs" >/dev/null || fail "compositor output is not active at $expected_mode"
-  printf 'compositor-gate=pass renderer=gles2 output=%s mode=%s wayland=stable xwayland=:0 sunshine-control=denied\n' \
-    "$COMPOSITOR_OUTPUT" "$expected_mode"
+  printf 'compositor-gate=pass renderer=%s output=%s mode=%s wayland=stable xwayland=:0 sunshine-control=denied\n' \
+    "$renderer" "$COMPOSITOR_OUTPUT" "$expected_mode"
 }
 
 remote_compositor_game_gate() {

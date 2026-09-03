@@ -88,3 +88,9 @@ The headroom did not change the rate and was replaced. The packet cadence showed
 A candidate removed Sunshine's second high-rate timer and let blocking screencopy events clock the capture loop. A 10-second host packet capture measured `105.899` video datagrams per second. This was lower than the unmodified `107.910` result.
 
 The compositor-clock experiment did not remove the limit. It showed that high-rate capture remains processing-bound after each screencopy frame.
+
+## Candidate iteration 11
+
+Sunshine replaced the scalar BGR888-to-BGRA loop with FFmpeg swscale. The first Bandai sample improved to `112.16 FPS`. A 10-second host packet capture improved from `107.910` to `109.522` video datagrams per second.
+
+The conversion change helped, but it did not meet the target. The remaining long frame gaps still centered near `11.25 ms`, which points to the serial screencopy and conversion path rather than NVENC or network loss.

@@ -75,6 +75,9 @@ let
   highRefresh = evaluate {
     services.korriLinuxHost.compositor.mode = "1920x1080@120Hz";
   };
+  pixman = evaluate {
+    services.korriLinuxHost.compositor.renderer = "pixman";
+  };
   vaapi = evaluate {
     services.korriLinuxHost.sunshine.encoder = "vaapi";
   };
@@ -197,6 +200,7 @@ assert !(cfg.systemd.services ? x11-headless);
 assert compositor.serviceConfig.User == "gameplay";
 assert compositor.environment.WLR_BACKENDS == "headless";
 assert compositor.environment.WLR_RENDERER == "gles2";
+assert pixman.config.systemd.services.korri-compositor.environment.WLR_RENDERER == "pixman";
 assert compositor.environment.WLR_RENDER_DRM_DEVICE == "/dev/dri/renderD128";
 assert (compositor.environment.WAYLAND_DISPLAY or null) == null;
 assert compositor.environment.SWAYSOCK == "/run/korri-compositor/sway-ipc.sock";

@@ -295,6 +295,14 @@ in
         type = lib.types.strMatching "^[1-9][0-9]*x[1-9][0-9]*@[1-9][0-9]*Hz$";
         default = "1920x1080@60Hz";
       };
+      renderer = lib.mkOption {
+        type = lib.types.enum [
+          "gles2"
+          "pixman"
+        ];
+        default = "gles2";
+        description = "wlroots renderer for the isolated headless compositor.";
+      };
     };
 
     serviceIdentities = {
@@ -557,7 +565,7 @@ in
         SWAYSOCK = compositorControlSocket;
         WLR_BACKENDS = "headless";
         WLR_LIBINPUT_NO_DEVICES = "1";
-        WLR_RENDERER = "gles2";
+        WLR_RENDERER = cfg.compositor.renderer;
         WLR_RENDER_DRM_DEVICE = cfg.compositor.renderDevice;
         WLR_NO_HARDWARE_CURSORS = "1";
       }
