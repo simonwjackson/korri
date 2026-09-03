@@ -305,6 +305,37 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
     grep -F 'balanced' "$performance_script" >/dev/null
     grep -F ' start' ${highRefreshPerformanceExec} >/dev/null
     grep -F ' stop' ${highRefreshPerformanceStop} >/dev/null
+    profile_test="$TMPDIR/performance-profile"
+    mkdir "$profile_test"
+    printf 'balanced\n' >"$profile_test/profile"
+    printf 'cool quiet balanced performance\n' >"$profile_test/choices"
+    printf '16\n' >"$profile_test/min"
+    printf '100\n' >"$profile_test/max"
+    run_profile() {
+      KORRI_PLATFORM_PROFILE_PATH="$profile_test/profile" \
+      KORRI_PLATFORM_PROFILE_CHOICES_PATH="$profile_test/choices" \
+      KORRI_INTEL_PSTATE_MIN_PATH="$profile_test/min" \
+      KORRI_INTEL_PSTATE_MAX_PATH="$profile_test/max" \
+        "$performance_script" "$1"
+    }
+    run_profile start
+    test "$(cat "$profile_test/profile")" = performance
+    test "$(cat "$profile_test/min")" = 40
+    test "$(cat "$profile_test/max")" = 60
+    run_profile stop
+    test "$(cat "$profile_test/profile")" = balanced
+    test "$(cat "$profile_test/min")" = 16
+    test "$(cat "$profile_test/max")" = 100
+    chmod 400 "$profile_test/min"
+    set +e
+    run_profile start >/dev/null 2>&1
+    failed_start_status=$?
+    set -e
+    chmod 600 "$profile_test/min"
+    test "$failed_start_status" -ne 0
+    test "$(cat "$profile_test/profile")" = balanced
+    test "$(cat "$profile_test/min")" = 16
+    test "$(cat "$profile_test/max")" = 100
     grep -Fx '${sunshinePackage}/bin/sunshine /home/gameplay/.config/sunshine/sunshine.conf log_path=/dev/null' ${sunshineExec} >/dev/null
     grep -F 'TAG-="uaccess"' ${udevRules} >/dev/null
 

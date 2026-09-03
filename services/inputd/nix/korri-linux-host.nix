@@ -48,13 +48,14 @@ let
         "$out/bin/korri-streaming-validation-motion"
       runHook postInstall
     '';
+    meta.mainProgram = "korri-streaming-validation-motion";
   };
   streamingPerformanceProfile = pkgs.writeShellScript "korri-streaming-performance-profile" ''
     set -eu
-    profile=/sys/firmware/acpi/platform_profile
-    choices=/sys/firmware/acpi/platform_profile_choices
-    min_perf=/sys/devices/system/cpu/intel_pstate/min_perf_pct
-    max_perf=/sys/devices/system/cpu/intel_pstate/max_perf_pct
+    profile="''${KORRI_PLATFORM_PROFILE_PATH:-/sys/firmware/acpi/platform_profile}"
+    choices="''${KORRI_PLATFORM_PROFILE_CHOICES_PATH:-/sys/firmware/acpi/platform_profile_choices}"
+    min_perf="''${KORRI_INTEL_PSTATE_MIN_PATH:-/sys/devices/system/cpu/intel_pstate/min_perf_pct}"
+    max_perf="''${KORRI_INTEL_PSTATE_MAX_PATH:-/sys/devices/system/cpu/intel_pstate/max_perf_pct}"
     for path in "$profile" "$choices" "$min_perf" "$max_perf"; do
       [ -f "$path" ] || {
         echo "required streaming performance control is absent: $path" >&2
@@ -63,6 +64,21 @@ let
     done
     case "''${1-}" in
       start)
+        original_profile="$(cat "$profile")"
+        original_max="$(cat "$max_perf")"
+        original_min="$(cat "$min_perf")"
+        committed=false
+        restore_on_failure() {
+          status=$?
+          trap - EXIT
+          if [ "$committed" != true ]; then
+            printf '%s\n' "$original_min" >"$min_perf" || status=1
+            printf '%s\n' "$original_max" >"$max_perf" || status=1
+            printf '%s\n' "$original_profile" >"$profile" || status=1
+          fi
+          exit "$status"
+        }
+        trap restore_on_failure EXIT
         ${pkgs.gnugrep}/bin/grep -qw performance "$choices"
         printf 'performance\n' >"$profile"
         printf '60\n' >"$max_perf"
@@ -70,6 +86,8 @@ let
         [ "$(cat "$profile")" = performance ]
         [ "$(cat "$max_perf")" = 60 ]
         [ "$(cat "$min_perf")" = 40 ]
+        committed=true
+        trap - EXIT
         ;;
       stop)
         printf '100\n' >"$max_perf"
