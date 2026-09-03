@@ -365,7 +365,7 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
       ${pkgs.sway-unwrapped}/bin/sway --unsupported-gpu --config "$compositor_config" \
       >"$TMPDIR/sway.log" 2>&1 &
     sway_pid=$!
-    trap '${pkgs.coreutils}/bin/cat "$TMPDIR/sway.log" >&2 2>/dev/null || true; ${pkgs.coreutils}/bin/cat "$TMPDIR/motion.log" >&2 2>/dev/null || true; ${pkgs.coreutils}/bin/kill "$sway_pid" 2>/dev/null || true' EXIT
+    trap '${pkgs.coreutils}/bin/cat "$TMPDIR/sway.log" >&2 2>/dev/null || true; ${pkgs.coreutils}/bin/cat "$TMPDIR/motion.log" >&2 2>/dev/null || true; ${pkgs.coreutils}/bin/cat "$TMPDIR/motion-120.log" >&2 2>/dev/null || true; ${pkgs.coreutils}/bin/kill "$sway_pid" 2>/dev/null || true' EXIT
     attempt=0
     while [ "$attempt" -lt 80 ]; do
       raw_wayland_display="$(${pkgs.findutils}/bin/find "$runtime" -maxdepth 1 -type s -name 'wayland-[0-9]*' -printf '%f\n' | head -n1)"
@@ -433,6 +433,16 @@ pkgs.runCommand "korri-linux-host-module-check" { } ''
 
     ${pkgs.coreutils}/bin/kill "$player_pid"
     wait "$player_pid" || true
+
+    DISPLAY=:0 XDG_SESSION_TYPE=x11 \
+      ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=1s 3 \
+      "$validation_motion" 1920 1080 120 >"$TMPDIR/motion-120.log" 2>&1 &
+    producer_120_pid=$!
+    ${pkgs.coreutils}/bin/sleep 1.5
+    ${pkgs.gnugrep}/bin/grep -E 'korri-validation-fps=(11[5-9]|12[0-5])\.' "$TMPDIR/motion-120.log" >/dev/null
+    ${pkgs.coreutils}/bin/kill "$producer_120_pid"
+    wait "$producer_120_pid" || true
+
     ${pkgs.coreutils}/bin/kill "$sway_pid"
     wait "$sway_pid" || true
     trap - EXIT
