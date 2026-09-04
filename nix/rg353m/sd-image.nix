@@ -22,14 +22,20 @@ in
     # The stock kernel builds the RG353 panel path as modules. Load the DSI
     # PHY, DSI bridge, panel, and backlight in the initrd so the framebuffer
     # console appears before the root filesystem mounts.
+    #
+    # The RG353P device tree declares the panel as "anbernic,rg353p-panel",
+    # "newvision,nv3051d". The ST7703 driver also matches that node and, when
+    # loaded first, claims it with the wrong init sequence, so the panel stays
+    # black and the kernel later disables vcc3v3_lcd0_n.
     initrd.kernelModules = [
       "mmc_block"
       "phy-rockchip-inno-dsidphy"
       "dw-mipi-dsi"
       "rockchipdrm"
-      "panel-sitronix-st7703"
+      "panel-newvision-nv3051d"
       "pwm_bl"
     ];
+    blacklistedKernelModules = [ "panel-sitronix-st7703" ];
     # Start with the stock mainline kernel. It contains the RG353P device tree
     # and the RK3566 storage, display, RK817 audio, and RTL8821CS WiFi drivers.
     kernelPackages = pkgs.linuxPackages_latest;
