@@ -181,6 +181,42 @@ public class KorriMoonlightDiscoveryTest {
     }
 
     @Test
+    public void exhaustedRetryBurstAllowsLaterQueryAfterCooldown() throws Exception {
+        ManualRetryScheduler scheduler = new ManualRetryScheduler();
+        AtomicInteger attempts = new AtomicInteger();
+        AtomicInteger completions = new AtomicInteger();
+        KorriMoonlightDiscovery discovery = new KorriMoonlightDiscovery(
+                hostUuid -> Collections.emptyList(),
+                (hostUuid, cached) -> true,
+                (hostUuid, guard) -> {
+                    if (attempts.incrementAndGet() <= 4) {
+                        throw new IllegalStateException("offline");
+                    }
+                },
+                hostUuid -> completions.incrementAndGet(),
+                Runnable::run,
+                scheduler,
+                1,
+                System::currentTimeMillis);
+
+        discovery.query("offline");
+        scheduler.runNext();
+        scheduler.runNext();
+        scheduler.runNext();
+        assertEquals(4, attempts.get());
+
+        discovery.query("offline");
+        assertEquals(4, attempts.get());
+
+        scheduler.runNext();
+        assertEquals(1, completions.get());
+        discovery.query("offline");
+        assertEquals(5, attempts.get());
+        assertEquals(2, completions.get());
+        discovery.close();
+    }
+
+    @Test
     public void saturatedQueueRetriesValidHostAfterCapacityReturns() throws Exception {
         CountDownLatch blockedEntered = new CountDownLatch(1);
         CountDownLatch releaseBlocked = new CountDownLatch(1);

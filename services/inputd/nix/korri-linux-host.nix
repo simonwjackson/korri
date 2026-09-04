@@ -807,10 +807,11 @@ in
       environment = {
         KORRID_SUNSHINE_CERTIFICATE_CONTROL_SOCKET = certificateControlSocket;
         KORRID_SUNSHINE_CERTIFICATE_CONTROL_GID = toString cfg.serviceIdentities.korridGid;
-        KORRID_SUNSHINE_CERTIFICATE_CONTROL_PEER_UID = toString cfg.gameplayUid;
-        KORRID_SUNSHINE_CERTIFICATE_CONTROL_PEER_GID = toString (
-          if cfg.sunshine.inputSeats.enable then cfg.serviceIdentities.inputSeatGid else cfg.gameplayGid
-        );
+        # systemd creates and listens on the activated socket. Linux therefore
+        # reports root, not Sunshine's later service identity, through
+        # SO_PEERCRED on the connecting side.
+        KORRID_SUNSHINE_CERTIFICATE_CONTROL_PEER_UID = "0";
+        KORRID_SUNSHINE_CERTIFICATE_CONTROL_PEER_GID = "0";
       } // lib.optionalAttrs cfg.sunshine.inputSeats.enable {
         KORRID_INPUT_SEAT_CONTROL_SOCKET = inputSeatControlSocket;
       };

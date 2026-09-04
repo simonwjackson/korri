@@ -171,19 +171,32 @@ final class KorriMoonlightDiscovery implements AutoCloseable {
     private void requestRetry(String hostUuid, long ticket) {
         if (!isCurrent(ticket)) return;
         int attempt = retryAttempts.merge(hostUuid, 1, Integer::sum);
-        if (attempt > MAX_RETRY_ATTEMPTS) return;
+        boolean burstExhausted = attempt >= MAX_RETRY_ATTEMPTS;
         long multiplier = 1L << Math.min(attempt - 1, 2);
-        long delay = Math.min(MAX_RETRY_BACKOFF_MS, retryBackoffMs * multiplier);
+        long delay = burstExhausted
+                ? MAX_RETRY_BACKOFF_MS
+                : Math.min(MAX_RETRY_BACKOFF_MS, retryBackoffMs * multiplier);
         try {
             RetryHandle handle = retryScheduler.schedule(() -> {
                 scheduledRetries.remove(hostUuid);
-                if (isCurrent(ticket)) schedule(hostUuid, ticket);
+                if (!isCurrent(ticket)) return;
+                if (burstExhausted) {
+                    // One burst is bounded, but a host that comes online later
+                    // must not stay disabled for this Activity lifetime. Wake
+                    // the portal after the cooldown so its next query starts a
+                    // fresh bounded burst.
+                    retryAttempts.remove(hostUuid);
+                    completion.appsChanged(hostUuid);
+                } else {
+                    schedule(hostUuid, ticket);
+                }
             }, delay);
             RetryHandle previous = scheduledRetries.put(hostUuid, handle);
             if (previous != null) previous.cancel();
         } catch (RuntimeException rejected) {
             // Wake the portal once so its normal discovery call can retry. The
-            // retry-attempt cap still prevents an unbounded reload loop.
+            // retry-attempt cap still prevents an unbounded immediate loop.
+            if (burstExhausted) retryAttempts.remove(hostUuid);
             if (isCurrent(ticket)) completion.appsChanged(hostUuid);
         }
     }
