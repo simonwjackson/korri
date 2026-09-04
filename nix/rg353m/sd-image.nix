@@ -23,19 +23,19 @@ in
     # PHY, DSI bridge, panel, and backlight in the initrd so the framebuffer
     # console appears before the root filesystem mounts.
     #
-    # The RG353P device tree declares the panel as "anbernic,rg353p-panel",
-    # "newvision,nv3051d". The ST7703 driver also matches that node and, when
-    # loaded first, claims it with the wrong init sequence, so the panel stays
-    # black and the kernel later disables vcc3v3_lcd0_n.
+    # U-Boot reads the panel ID over DSI and rewrites the panel compatible
+    # before Linux starts. This RG353M reports ID 0x3821, which U-Boot maps to
+    # "anbernic,rg353v-panel-v2", a Sitronix ST7703 panel. Load both panel
+    # drivers so either revision binds.
     initrd.kernelModules = [
       "mmc_block"
       "phy-rockchip-inno-dsidphy"
       "dw-mipi-dsi"
       "rockchipdrm"
+      "panel-sitronix-st7703"
       "panel-newvision-nv3051d"
       "pwm_bl"
     ];
-    blacklistedKernelModules = [ "panel-sitronix-st7703" ];
     # Start with the stock mainline kernel. It contains the RG353P device tree
     # and the RK3566 storage, display, RK817 audio, and RTL8821CS WiFi drivers.
     kernelPackages = pkgs.linuxPackages_latest;
@@ -59,6 +59,25 @@ in
       enable = true;
       filter = "rk3566-anbernic-rg353p.dtb";
       name = "rockchip/rk3566-anbernic-rg353p.dtb";
+      # The panel node names its supply "vdd" but the ST7703 driver asks for
+      # "vcc" and "iovcc". Nothing claims vcc3v3_lcd0_n, so the regulator
+      # core switches it off 30 s after boot and the panel goes dark. Keep it
+      # on until a driver owns it.
+      overlays = [
+        {
+          name = "rg353m-lcd-regulator-always-on";
+          dtsText = ''
+            /dts-v1/;
+            /plugin/;
+            / {
+              compatible = "anbernic,rg353p";
+            };
+            &{/regulator-vcc3v3-lcd0} {
+              regulator-always-on;
+            };
+          '';
+        }
+      ];
     };
     enableRedistributableFirmware = true;
   };
