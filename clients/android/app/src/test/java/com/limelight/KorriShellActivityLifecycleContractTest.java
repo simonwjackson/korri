@@ -115,7 +115,7 @@ public class KorriShellActivityLifecycleContractTest {
         assertTrue(notify.contains("if (destroyed || webView == null) return;"));
         assertTrue(notify.contains("korri-stream-apps-changed"));
         assertOrdered(onDestroy,
-                "ownedDiscovery.close()",
+                "clearMoonlightDiscovery()",
                 "unbindService(serviceConnection)",
                 "managerBinder = null");
     }
@@ -185,7 +185,7 @@ public class KorriShellActivityLifecycleContractTest {
 
         assertTrue(source.contains("private boolean computerManagerBound;"));
         assertTrue(onCreate.contains("computerManagerBound = bindService("));
-        assertTrue(onDestroy.contains("ownedDiscovery.close()"));
+        assertTrue(onDestroy.contains("clearMoonlightDiscovery()"));
         assertTrue(onDestroy.contains("if (computerManagerBound)"));
         assertOrdered(onDestroy,
                 "computerManagerBound = false;",

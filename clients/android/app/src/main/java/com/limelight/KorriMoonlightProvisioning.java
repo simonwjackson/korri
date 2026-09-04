@@ -123,7 +123,8 @@ final class KorriMoonlightProvisioning {
         HostCommit commit(
                 HostSnapshot snapshot,
                 X509Certificate serverCertificate,
-                String rawAppList) throws Exception;
+                String rawAppList,
+                KorriMoonlightDiscovery.Guard guard) throws Exception;
     }
 
     static final class AppList {
@@ -169,6 +170,7 @@ final class KorriMoonlightProvisioning {
             Context context,
             ComputerManagerService.ComputerManagerBinder binder) {
         Context application = context.getApplicationContext();
+        String uniqueId = binder.getUniqueId();
         return new KorriMoonlightProvisioning(
                 () -> {
                     byte[] pem = PlatformBinding.getCryptoProvider(application)
@@ -190,10 +192,10 @@ final class KorriMoonlightProvisioning {
                     return response.getString("serverCertificate");
                 },
                 (computer, serverCertificate) -> http(
-                        application, binder, computer, serverCertificate).getPairState()
+                        application, uniqueId, computer, serverCertificate).getPairState()
                         == PairingManager.PairState.PAIRED,
                 (computer, serverCertificate) -> {
-                    String raw = http(application, binder, computer, serverCertificate)
+                    String raw = http(application, uniqueId, computer, serverCertificate)
                             .getAppListRaw();
                     return new AppList(
                             raw, NvHTTP.getAppListByReader(new StringReader(raw)));
@@ -217,13 +219,15 @@ final class KorriMoonlightProvisioning {
                     public HostCommit commit(
                             HostSnapshot snapshot,
                             X509Certificate serverCertificate,
-                            String rawAppList) throws Exception {
+                            String rawAppList,
+                            KorriMoonlightDiscovery.Guard guard) throws Exception {
                         ComputerManagerService.ComputerManagerBinder.MoonlightHostCommit value =
                                 binder.commitMoonlightHost(
                                         snapshot.computer.uuid,
                                         snapshot.generation,
                                         serverCertificate,
-                                        rawAppList);
+                                        rawAppList,
+                                        guard::current);
                         return new HostCommit(value.committed, value.stale, value.computer);
                     }
                 });
@@ -231,7 +235,7 @@ final class KorriMoonlightProvisioning {
 
     private static NvHTTP http(
             Context context,
-            ComputerManagerService.ComputerManagerBinder binder,
+            String uniqueId,
             ComputerDetails source,
             X509Certificate serverCertificate) throws Exception {
         ComputerDetails candidate = new ComputerDetails(source);
@@ -239,7 +243,7 @@ final class KorriMoonlightProvisioning {
         return new NvHTTP(
                 ServerHelper.getCurrentAddressFromComputer(candidate),
                 candidate.httpsPort,
-                binder.getUniqueId(),
+                uniqueId,
                 serverCertificate,
                 PlatformBinding.getCryptoProvider(context));
     }
@@ -338,8 +342,13 @@ final class KorriMoonlightProvisioning {
                     throw new Failure("AppListFailed", "host returned an invalid app list");
                 }
                 if (!guard.current()) throw cancelled();
-                HostCommit committed = hostStateStore.commit(
-                        snapshot, serverCertificate, appList.raw);
+                X509Certificate exactServerCertificate = serverCertificate;
+                HostCommit committed = guard.commit(() -> hostStateStore.commit(
+                        snapshot,
+                        exactServerCertificate,
+                        appList.raw,
+                        () -> true));
+                if (committed == null) throw cancelled();
                 if (committed.committed && committed.computer != null) {
                     return new Provisioned(
                             committed.computer, serverCertificate, appList.raw, appList.apps);

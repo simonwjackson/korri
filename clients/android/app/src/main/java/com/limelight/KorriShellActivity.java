@@ -99,6 +99,7 @@ public class KorriShellActivity extends AppCompatActivity {
 
         public void onServiceDisconnected(ComponentName className) {
             managerBinder = null;
+            clearMoonlightDiscovery();
         }
     };
 
@@ -353,10 +354,7 @@ public class KorriShellActivity extends AppCompatActivity {
         // and clear our field before WebView teardown can re-enter lifecycle
         // code. The foreground brain remains owned by KorriBrainService.
         destroyed = true;
-        KorriMoonlightDiscovery ownedDiscovery = moonlightDiscovery;
-        moonlightDiscovery = null;
-        moonlightProvisioning = null;
-        if (ownedDiscovery != null) ownedDiscovery.close();
+        clearMoonlightDiscovery();
 
         final WebView ownedWebView = webView;
         webView = null;
@@ -1046,6 +1044,13 @@ public class KorriShellActivity extends AppCompatActivity {
         }
 
 
+    }
+
+    private synchronized void clearMoonlightDiscovery() {
+        KorriMoonlightDiscovery owned = moonlightDiscovery;
+        moonlightDiscovery = null;
+        moonlightProvisioning = null;
+        if (owned != null) owned.close();
     }
 
     private synchronized void installMoonlightDiscovery(

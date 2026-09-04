@@ -49,6 +49,10 @@ import android.util.AtomicFile;
 import org.xmlpull.v1.XmlPullParserException;
 
 public class ComputerManagerService extends Service {
+    public interface MoonlightCommitGuard {
+        boolean current();
+    }
+
     private static final int SERVERINFO_POLLING_PERIOD_MS = 1500;
     private static final int APPLIST_POLLING_PERIOD_MS = 30000;
     private static final int APPLIST_FAILED_POLLING_RETRY_MS = 2000;
@@ -324,7 +328,7 @@ public class ComputerManagerService extends Service {
             PollingTuple tuple = findPollingTuple(uuid);
             if (tuple == null) return null;
             synchronized (tuple.networkLock) {
-                if (!isCurrentTuple(tuple)) return null;
+                if (tuple.retired) return null;
                 return new MoonlightHostSnapshot(
                         new ComputerDetails(tuple.computer), tuple.appListGeneration);
             }
@@ -338,16 +342,20 @@ public class ComputerManagerService extends Service {
                 String uuid,
                 long expectedGeneration,
                 X509Certificate serverCertificate,
-                String rawAppList) throws IOException {
+                String rawAppList,
+                MoonlightCommitGuard guard) throws IOException {
             PollingTuple tuple = findPollingTuple(uuid);
             if (tuple == null) return new MoonlightHostCommit(false, false, null);
             synchronized (tuple.networkLock) {
-                if (!isCurrentTuple(tuple)) {
+                if (tuple.retired) {
                     return new MoonlightHostCommit(false, false, null);
                 }
                 if (tuple.appListGeneration != expectedGeneration) {
                     return new MoonlightHostCommit(
                             false, true, new ComputerDetails(tuple.computer));
+                }
+                if (!guard.current()) {
+                    return new MoonlightHostCommit(false, false, null);
                 }
                 if (!getLocalDatabaseReference()) {
                     return new MoonlightHostCommit(false, false, null);
@@ -389,16 +397,10 @@ public class ComputerManagerService extends Service {
         private PollingTuple findPollingTuple(String uuid) {
             synchronized (pollingTuples) {
                 for (PollingTuple tuple : pollingTuples) {
-                    if (uuid.equals(tuple.computer.uuid)) return tuple;
+                    if (uuid.equals(tuple.computer.uuid) && !tuple.retired) return tuple;
                 }
             }
             return null;
-        }
-
-        private boolean isCurrentTuple(PollingTuple expected) {
-            synchronized (pollingTuples) {
-                return pollingTuples.contains(expected);
-            }
         }
 
         /** Persist an exact server pin without allowing a concurrent poll to overwrite it. */
@@ -406,7 +408,7 @@ public class ComputerManagerService extends Service {
             PollingTuple tuple = findPollingTuple(uuid);
             if (tuple == null) return false;
             synchronized (tuple.networkLock) {
-                if (!isCurrentTuple(tuple) || !getLocalDatabaseReference()) return false;
+                if (tuple.retired || !getLocalDatabaseReference()) return false;
                 X509Certificate previous = tuple.computer.serverCert;
                 try {
                     tuple.computer.serverCert = serverCertificate;
@@ -422,17 +424,11 @@ public class ComputerManagerService extends Service {
         }
 
         public void invalidateStateForComputer(String uuid) {
-            synchronized (pollingTuples) {
-                for (PollingTuple tuple : pollingTuples) {
-                    if (uuid.equals(tuple.computer.uuid)) {
-                        // We need the network lock to prevent a concurrent poll
-                        // from wiping this change out
-                        synchronized (tuple.networkLock) {
-                            tuple.computer.state = ComputerDetails.State.UNKNOWN;
-                        }
-                    }
-                }
-            }
+            PollingTuple tuple = findPollingTuple(uuid);
+            if (tuple == null) return;
+            // Lock order is registry lookup, release, then tuple mutation. Code
+            // holding networkLock never reacquires pollingTuples.
+            tuple.invalidateState();
         }
     }
 
@@ -690,6 +686,9 @@ public class ComputerManagerService extends Service {
                         tuple.thread.interrupt();
                         tuple.thread = null;
                     }
+                    // Retirement is volatile, so a caller that already holds
+                    // this tuple can reject it without reacquiring pollingTuples.
+                    tuple.retire();
                     pollingTuples.remove(tuple);
                     break;
                 }
@@ -1040,24 +1039,13 @@ public class ComputerManagerService extends Service {
                         PollingTuple tuple = getPollingTuple(computer);
 
                         try {
-                            NvHTTP http = new NvHTTP(ServerHelper.getCurrentAddressFromComputer(computer), computer.httpsPort, idManager.getUniqueId(),
-                                    computer.serverCert, PlatformBinding.getCryptoProvider(ComputerManagerService.this));
-
-                            if (tuple != null) {
-                                // Fetch and publish under one exact per-computer lock. Automatic
-                                // provisioning uses the same lock and a generation CAS.
-                                synchronized (tuple.networkLock) {
-                                    emptyAppListResponses = fetchAndCommitAppList(
-                                            http, tuple, emptyAppListResponses);
-                                }
+                            PollOutcome outcome = pollAppList(
+                                    tuple, emptyAppListResponses);
+                            emptyAppListResponses = outcome.emptyResponses;
+                            if (outcome.committed && listener != null && thread != null) {
+                                listener.notifyComputerUpdated(computer);
                             }
-                            else {
-                                emptyAppListResponses = fetchAndCommitAppList(
-                                        http, null, emptyAppListResponses);
-                            }
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        } catch (XmlPullParserException e) {
+                        } catch (Exception e) {
                             e.printStackTrace();
                         }
                     } while (waitPollingDelay());
@@ -1067,29 +1055,92 @@ public class ComputerManagerService extends Service {
             thread.start();
         }
 
-        private int fetchAndCommitAppList(
-                NvHTTP http, PollingTuple tuple, int emptyResponses)
+        private final class FetchedAppList {
+            final String raw;
+            final List<NvApp> apps;
+            final int emptyResponses;
+
+            FetchedAppList(String raw, List<NvApp> apps, int emptyResponses) {
+                this.raw = raw;
+                this.apps = apps;
+                this.emptyResponses = emptyResponses;
+            }
+        }
+
+        private final class PollOutcome {
+            final int emptyResponses;
+            final boolean committed;
+
+            PollOutcome(int emptyResponses, boolean committed) {
+                this.emptyResponses = emptyResponses;
+                this.committed = committed;
+            }
+        }
+
+        private PollOutcome pollAppList(PollingTuple tuple, int emptyResponses)
+                throws Exception {
+            if (tuple == null) {
+                ComputerDetails networkComputer = new ComputerDetails(computer);
+                NvHTTP http = appListHttp(networkComputer);
+                return commitFetchedAppList(fetchAppList(http, emptyResponses), null, -1);
+            }
+            final long expectedGeneration;
+            final ComputerDetails networkComputer;
+            synchronized (tuple.networkLock) {
+                if (tuple.retired) return new PollOutcome(emptyResponses, false);
+                expectedGeneration = tuple.appListGeneration;
+                networkComputer = new ComputerDetails(tuple.computer);
+            }
+            NvHTTP http = appListHttp(networkComputer);
+            return KorriMoonlightNetworkCycle.fetchThenCommit(
+                    tuple.networkLock,
+                    () -> fetchAppList(http, emptyResponses),
+                    fetched -> commitFetchedAppList(fetched, tuple, expectedGeneration));
+        }
+
+        private NvHTTP appListHttp(ComputerDetails networkComputer) throws Exception {
+            return new NvHTTP(
+                    ServerHelper.getCurrentAddressFromComputer(networkComputer),
+                    networkComputer.httpsPort,
+                    idManager.getUniqueId(),
+                    networkComputer.serverCert,
+                    PlatformBinding.getCryptoProvider(ComputerManagerService.this));
+        }
+
+        private FetchedAppList fetchAppList(NvHTTP http, int emptyResponses)
                 throws IOException, XmlPullParserException {
             String appList = http.getAppListRaw();
             List<NvApp> list = NvHTTP.getAppListByReader(new StringReader(appList));
+            int nextEmptyResponses = emptyResponses;
             if (list.isEmpty()) {
                 LimeLog.warning("Empty app list received from " + computer.uuid);
-                emptyResponses++;
+                nextEmptyResponses++;
             }
-            if (!appList.isEmpty()
-                    && (!list.isEmpty() || emptyResponses >= EMPTY_LIST_THRESHOLD)) {
-                writeAppListCache(computer.uuid, appList);
-                if (!list.isEmpty()) emptyResponses = 0;
-                computer.rawAppList = appList;
+            return new FetchedAppList(appList, list, nextEmptyResponses);
+        }
+
+        private PollOutcome commitFetchedAppList(
+                FetchedAppList fetched, PollingTuple tuple, long expectedGeneration)
+                throws IOException {
+            if (tuple != null
+                    && (tuple.retired || tuple.appListGeneration != expectedGeneration)) {
+                return new PollOutcome(fetched.emptyResponses, false);
+            }
+            int nextEmptyResponses = fetched.emptyResponses;
+            if (!fetched.raw.isEmpty()
+                    && (!fetched.apps.isEmpty()
+                    || nextEmptyResponses >= EMPTY_LIST_THRESHOLD)) {
+                writeAppListCache(computer.uuid, fetched.raw);
+                if (!fetched.apps.isEmpty()) nextEmptyResponses = 0;
+                computer.rawAppList = fetched.raw;
                 receivedAppList = true;
                 if (tuple != null) tuple.appListGeneration++;
-                if (listener != null && thread != null) {
-                    listener.notifyComputerUpdated(computer);
-                }
-            } else if (appList.isEmpty()) {
+                return new PollOutcome(nextEmptyResponses, true);
+            }
+            if (fetched.raw.isEmpty()) {
                 LimeLog.warning("Null app list received from " + computer.uuid);
             }
-            return emptyResponses;
+            return new PollOutcome(nextEmptyResponses, false);
         }
 
         public void stop() {
@@ -1110,11 +1161,28 @@ class PollingTuple {
     public final Object networkLock;
     public long lastSuccessfulPollMs;
     public long appListGeneration;
+    public volatile boolean retired;
 
     public PollingTuple(ComputerDetails computer, Thread thread) {
         this.computer = computer;
         this.thread = thread;
         this.networkLock = new Object();
+    }
+
+    void invalidateState() {
+        synchronized (networkLock) {
+            if (!retired) computer.state = ComputerDetails.State.UNKNOWN;
+        }
+    }
+
+    void retire() {
+        retired = true;
+    }
+
+    ComputerDetails snapshotDetails() {
+        synchronized (networkLock) {
+            return retired ? null : new ComputerDetails(computer);
+        }
     }
 }
 

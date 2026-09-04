@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -158,6 +159,56 @@ public class KorriMoonlightProvisioningTest {
     }
 
     @Test
+    public void lifecycleCloseWaitsForFinalPinAndCacheCommitLease() throws Exception {
+        String pem = certificatePem();
+        MemoryStore store = new MemoryStore(computer("host-uuid"));
+        store.beforeMutation = new CountDownLatch(1);
+        store.releaseMutation = new CountDownLatch(1);
+        LeasingGuard guard = new LeasingGuard();
+        KorriMoonlightProvisioning provisioning = new KorriMoonlightProvisioning(
+                () -> pem,
+                (uuid, client) -> pem,
+                (candidate, certificate) -> true,
+                (candidate, certificate) -> new KorriMoonlightProvisioning.AppList(
+                        "<apps/>", Collections.emptyList()),
+                store);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread worker = new Thread(() -> {
+            try {
+                provisioning.repairAndLoadApps("host-uuid", guard);
+            } catch (Throwable error) {
+                failure.set(error);
+            }
+        });
+        CountDownLatch closeReturned = new CountDownLatch(1);
+        Thread closer = new Thread(() -> {
+            guard.close();
+            closeReturned.countDown();
+        });
+
+        worker.start();
+        assertTrue(store.beforeMutation.await(2, TimeUnit.SECONDS));
+        closer.start();
+        assertFalse(closeReturned.await(100, TimeUnit.MILLISECONDS));
+        store.releaseMutation.countDown();
+        assertTrue(closeReturned.await(2, TimeUnit.SECONDS));
+        worker.join(2000);
+        closer.join(2000);
+
+        assertNull(failure.get());
+        assertNotNull(store.current.serverCert);
+        assertEquals("<apps/>", store.rawApps);
+        assertEquals(1, store.commits.get());
+        try {
+            provisioning.repairAndLoadApps("host-uuid", guard);
+            fail("expected cancellation after close");
+        } catch (KorriMoonlightProvisioning.Failure expected) {
+            assertEquals("ProvisioningCancelled", expected.reason);
+        }
+        assertEquals(1, store.commits.get());
+    }
+
+    @Test
     public void invalidServerCertificateNeverCommits() throws Exception {
         String pem = certificatePem();
         MemoryStore store = new MemoryStore(computer("host-uuid"));
@@ -207,11 +258,32 @@ public class KorriMoonlightProvisioningTest {
         }
     }
 
+    private static final class LeasingGuard implements KorriMoonlightDiscovery.Guard {
+        private boolean current = true;
+
+        @Override
+        public synchronized boolean current() {
+            return current;
+        }
+
+        @Override
+        public synchronized <T> T commit(KorriMoonlightDiscovery.Commit<T> action)
+                throws Exception {
+            return current ? action.run() : null;
+        }
+
+        synchronized void close() {
+            current = false;
+        }
+    }
+
     private static final class MemoryStore implements KorriMoonlightProvisioning.HostStateStore {
         private ComputerDetails current;
         private long generation;
         private String rawApps;
         private boolean staleFirstCommit;
+        private CountDownLatch beforeMutation;
+        private CountDownLatch releaseMutation;
         private final AtomicInteger commits = new AtomicInteger();
 
         private MemoryStore(ComputerDetails initial) {
@@ -233,8 +305,21 @@ public class KorriMoonlightProvisioningTest {
         public synchronized KorriMoonlightProvisioning.HostCommit commit(
                 KorriMoonlightProvisioning.HostSnapshot snapshot,
                 X509Certificate serverCertificate,
-                String rawAppList) {
+                String rawAppList,
+                KorriMoonlightDiscovery.Guard guard) {
+            if (!guard.current()) {
+                return new KorriMoonlightProvisioning.HostCommit(false, false, null);
+            }
             commits.incrementAndGet();
+            if (beforeMutation != null) {
+                beforeMutation.countDown();
+                try {
+                    assertTrue(releaseMutation.await(2, TimeUnit.SECONDS));
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError(error);
+                }
+            }
             if (staleFirstCommit) {
                 staleFirstCommit = false;
                 rawApps = "newer-poller-apps";
