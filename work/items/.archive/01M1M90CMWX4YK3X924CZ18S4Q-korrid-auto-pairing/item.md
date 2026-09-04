@@ -3,7 +3,7 @@ id: 01M1M90CMWX4YK3X924CZ18S4Q
 slug: replace-moonlight-pairing-with-korrid-provisioned-certificat
 title: Replace Moonlight pairing with korrid-provisioned certificates
 origin: parked
-status: In Progress
+status: Complete
 priority: high
 labels:
   - streaming
@@ -29,12 +29,12 @@ Streaming from a Korri host requires the manual Moonlight PIN ceremony even thou
 
 ## Acceptance Criteria
 
-- [ ] A Korri client that has never paired with a host starts a stream on first attempt with zero pairing UI.
-- [ ] The GameStream pairing exchange (PIN generation, salted challenge dance, pairing HTTP endpoints) is never invoked in the streaming path — removed, not automated.
-- [ ] Moonlight-to-Sunshine TLS still authenticates with per-client certificates, and the input AES key (rikey) still travels only inside paired-cert HTTPS.
-- [ ] Pairing UX and pair state are removed from the Android app: doPair, doOTPPair, doUnpair, PIN dialogs, pair-state polling, and pairing menus in PcView/KorriShellActivity.
-- [ ] The host korrid can remove a provisioned client certificate (a minimal revocation path is acceptable).
-- [ ] All touched gates pass: nix run .#korrid-check (regenerates contracts), Android checks, and Sunshine patch checks if a patch is added.
+- [x] A Korri client that has never paired with a host starts a stream on first attempt with zero pairing UI.
+- [x] The GameStream pairing exchange (PIN generation, salted challenge dance, pairing HTTP endpoints) is never invoked in the streaming path — removed, not automated.
+- [x] Moonlight-to-Sunshine TLS still authenticates with per-client certificates, and the input AES key (rikey) still travels only inside paired-cert HTTPS.
+- [x] Pairing UX and pair state are removed from the Android app: doPair, doOTPPair, doUnpair, PIN dialogs, pair-state polling, and pairing menus in PcView/KorriShellActivity.
+- [x] The host korrid can remove a provisioned client certificate (a minimal revocation path is acceptable).
+- [x] All touched gates pass: nix run .#korrid-check (regenerates contracts), Android checks, and Sunshine patch checks if a patch is added.
 
 ## Related
 

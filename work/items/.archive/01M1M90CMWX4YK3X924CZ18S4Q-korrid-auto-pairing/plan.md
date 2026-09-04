@@ -1,6 +1,6 @@
 ---
 title: Replace Moonlight pairing with korrid-provisioned certificates
-status: active
+status: complete
 work_item: 01M1M90CMWX4YK3X924CZ18S4Q
 branch: feat/korrid-auto-pairing
 base: 6c6001ab
