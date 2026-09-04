@@ -33,8 +33,9 @@ import type {
 // the honest gameplay-overlay accessibility grant/settings seam. 14 adds the
 // receipt-based asynchronous game-folder picker. 15 adds opaque local cover
 // asset URL resolution. 16 adds picker single-flight Busy results. 17 removes
-// the manual Moonlight pairing surface after korrid-owned provisioning.
-export const BRIDGE_VERSION = 17
+// the obsolete Moonlight trust ceremony. 18 removes public pairing state after
+// korrid-owned provisioning becomes the only trust path.
+export const BRIDGE_VERSION = 18
 
 // ── Local launches (JS -> Kotlin) ───────────────────────────────────────
 
@@ -64,11 +65,10 @@ export type LocalGameAssetUrlResult =
 
 // ── Streaming (JS -> Kotlin) ────────────────────────────────────────────
 
-/** A paired (or once-seen) stream host known to the shell. */
+/** A stream host known to the shell. Trust is provisioned when needed. */
 export interface StreamHost {
   readonly uuid: string
   readonly name: string
-  readonly paired: boolean
 }
 
 /** Result of `KorriNative.queryStreamHosts()`. */
@@ -97,8 +97,15 @@ export type StartStreamResult =
       readonly _tag: "StreamFailed"
       readonly reason:
         | "HostUnreachable"
-        | "NotPaired"
+        | "HostCertificateRejected"
+        | "InvalidCertificate"
+        | "ProvisioningFailed"
+        | "ProvisioningCancelled"
+        | "ProvisioningChanged"
+        | "ProvisioningRepairRequired"
+        | "AppListFailed"
         | "AppNotFound"
+        | "StartInProgress"
         | "StartFailed"
       readonly message: string
     }

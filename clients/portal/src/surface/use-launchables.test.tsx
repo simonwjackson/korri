@@ -148,7 +148,7 @@ const fixture = (
   }
   const bridge = {
     ...createInMemoryLauncherBridge({
-      streamHosts: [{ uuid: "host-uuid", name: "Host", paired: true }],
+      streamHosts: [{ uuid: "host-uuid", name: "Host" }],
       streamApps: { "host-uuid": [{ id: 7, name: "Korri Stream" }] },
     }),
     ...bridgeOverrides,

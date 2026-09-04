@@ -118,7 +118,7 @@ describe("resolved Moonlight bridge path", () => {
   it("invokes native discovery and start only after successful typed resolution", async () => {
     const calls: string[] = []
     const bridge = createInMemoryLauncherBridge({
-      streamHosts: [{ uuid: "h1", name: "Office", paired: true }],
+      streamHosts: [{ uuid: "h1", name: "Office" }],
       streamApps: { h1: [{ id: 7, name: "Korri Stream" }] },
     })
     const recordingBridge = {
@@ -142,7 +142,7 @@ describe("resolved Moonlight bridge path", () => {
       resolution: available,
       streams: [
         {
-          host: { uuid: "h1", name: "Office", paired: true },
+          host: { uuid: "h1", name: "Office" },
           apps: {
             _tag: "StreamApps",
             items: [{ id: 7, name: "Korri Stream" }],
@@ -178,7 +178,7 @@ describe("resolved Moonlight bridge path", () => {
       async queryStreamHosts() {
         return {
           _tag: "StreamHosts" as const,
-          items: [{ uuid: "new-host", name: "New host", paired: false }],
+          items: [{ uuid: "new-host", name: "New host" }],
         }
       },
       async queryStreamApps(hostUuid: string) {
@@ -190,7 +190,7 @@ describe("resolved Moonlight bridge path", () => {
     expect(calls).toEqual(["new-host"])
     expect(discovery.streams).toEqual([
       {
-        host: { uuid: "new-host", name: "New host", paired: false },
+        host: { uuid: "new-host", name: "New host" },
         apps: { _tag: "StreamApps", items: [] },
       },
     ])
@@ -214,7 +214,7 @@ describe("resolved Moonlight bridge path", () => {
       async queryStreamHosts() {
         return {
           _tag: "StreamHosts",
-          items: [{ uuid: "h1", name: "Office", paired: true }],
+          items: [{ uuid: "h1", name: "Office" }],
         }
       },
       async queryStreamApps() {
@@ -311,7 +311,7 @@ describe("createKorriNativeLauncherBridge", () => {
     queryStreamHosts: () =>
       JSON.stringify({
         _tag: "StreamHosts",
-        items: [{ uuid: "h1", name: "Office", paired: true }],
+        items: [{ uuid: "h1", name: "Office" }],
       }),
     queryStreamApps: () =>
       JSON.stringify({
@@ -411,7 +411,7 @@ describe("createKorriNativeLauncherBridge", () => {
     )
     expect(await bridge.queryStreamHosts()).toEqual({
       _tag: "StreamHosts",
-      items: [{ uuid: "h1", name: "Office", paired: true }],
+      items: [{ uuid: "h1", name: "Office" }],
     })
     expect(await bridge.queryStreamApps("h1")).toEqual({
       _tag: "StreamApps",

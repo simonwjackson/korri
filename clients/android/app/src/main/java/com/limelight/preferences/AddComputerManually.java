@@ -344,8 +344,8 @@ public class AddComputerManually extends AppCompatActivity {
             }
 
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
-            builder.setTitle(R.string.pair_pc_confirm_title);
-            builder.setMessage(getString(R.string.pair_pc_confirm_message, hostName));
+            builder.setTitle(R.string.add_pc_confirm_title);
+            builder.setMessage(getString(R.string.add_pc_confirm_message, hostName));
 
             builder.setPositiveButton(getString(R.string.proceed), (dialog, which) -> {
                 dialog.dismiss();

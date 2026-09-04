@@ -7,7 +7,7 @@ import com.limelight.computers.ComputerManagerService;
 import com.limelight.nvstream.http.ComputerDetails;
 import com.limelight.nvstream.http.NvApp;
 import com.limelight.nvstream.http.NvHTTP;
-import com.limelight.nvstream.http.PairingManager;
+import com.limelight.nvstream.http.HostCertificateState;
 import com.limelight.utils.ServerHelper;
 import com.simonwjackson.korri.korrid.KorridServer;
 
@@ -108,7 +108,7 @@ final class KorriMoonlightProvisioning {
     }
 
     interface Attestor {
-        boolean isPaired(ComputerDetails computer, X509Certificate serverCertificate)
+        boolean isAccepted(ComputerDetails computer, X509Certificate serverCertificate)
                 throws Exception;
     }
 
@@ -193,7 +193,7 @@ final class KorriMoonlightProvisioning {
                 },
                 (computer, serverCertificate) -> http(
                         application, uniqueId, computer, serverCertificate).getPairState()
-                        == PairingManager.PairState.PAIRED,
+                        == HostCertificateState.ACCEPTED,
                 (computer, serverCertificate) -> {
                     String raw = http(application, uniqueId, computer, serverCertificate)
                             .getAppListRaw();
@@ -333,9 +333,9 @@ final class KorriMoonlightProvisioning {
                             "ProvisioningFailed", "server certificate is unavailable");
                 }
                 if (!guard.current()) throw cancelled();
-                if (!attestor.isPaired(snapshot.computer, serverCertificate)) {
+                if (!attestor.isAccepted(snapshot.computer, serverCertificate)) {
                     throw new Failure(
-                            "HostNotPaired", "host did not accept the provisioned certificate");
+                            "HostCertificateRejected", "host did not accept the provisioned certificate");
                 }
                 AppList appList = appListSource.fetch(snapshot.computer, serverCertificate);
                 if (appList == null || appList.raw == null || appList.apps == null) {
@@ -383,7 +383,7 @@ final class KorriMoonlightProvisioning {
             message = "certificate provisioning failed";
         }
         return new Failure(
-                "automatic pairing state requires repair".equals(message)
+                "automatic trust state requires repair".equals(message)
                         ? "ProvisioningRepairRequired"
                         : "ProvisioningFailed",
                 message);

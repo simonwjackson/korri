@@ -1,8 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Shortcut strings -->
-    <string name="scut_not_paired">PC not paired</string>
-
     <string name="menu_button">Menu</string>
     <string name="configuration_mode_move_buttons">Move buttons mode</string>
     <string name="configuration_mode_resize_buttons">Resize buttons mode</string>
@@ -19,8 +16,6 @@
     <string name="pcview_menu_header_offline">Offline</string>
     <string name="pcview_menu_header_unknown">Refreshing</string>
     <string name="pcview_menu_app_list">View All Apps</string>
-    <string name="pcview_menu_pair_pc">Legacy Pair</string>
-    <string name="pcview_menu_pair_pc_otp">OTP Pair</string>
     <string name="pcview_menu_send_wol">Send Wake-On-LAN request</string>
     <string name="pcview_menu_delete_pc">Delete PC</string>
     <string name="pcview_menu_test_network">Test Network Connection</string>
@@ -37,23 +32,9 @@
     <string name="nettest_text_failure">Your device\'s current network connection seems to be blocking Artemis. Streaming over the Internet may not work while connected to this network.\n\nThe following network ports were blocked:\n</string>
     <string name="nettest_text_blocked">Your device\'s current network connection is blocking Artemis. Streaming over the Internet may not work while connected to this network.</string>
 
-    <!-- Pair messages -->
-    <string name="pairing">Pairing…</string>
-    <string name="pair_pc_confirm_title">Pair PC</string>
-    <string name="pair_pc_confirm_message">Do you really want to pair with %s? Please do not pair with any unfamiliar computers.</string>
-    <string name="pair_pc_offline">Computer is offline</string>
-    <string name="pair_pc_ingame">Computer is currently in a game. You must close the game before pairing.</string>
-    <string name="pair_pairing_title">Pairing</string>
-    <string name="pair_pairing_msg">Please enter the following PIN on the target PC:</string>
-    <string name="pair_pairing_help">If your host PC is running Sunshine, navigate to the Sunshine web UI to enter the PIN.</string>
-    <string name="pair_otp_pairing_msg">Pairing, please wait…</string>
-    <string name="pair_otp_pairing_help">OTP pairing is only available with Apollo, enter the PIN you just provided on the web UI manually if you\'re using other host software.</string>
-    <string name="pair_incorrect_pin">Incorrect PIN or Passphrase</string>
-    <string name="pair_fail">Pairing failed</string>
-    <string name="pair_already_in_progress">Pairing already in progress</string>
-    <string name="pair_passphrase_hint">Passphrase</string>
-    <string name="pair_pin_length_msg">Pin must be 4 digits long</string>
-    <string name="pair_passphrase_length_msg">Passphrase must be at least 4 characters long</string>
+    <!-- Add-device confirmation -->
+    <string name="add_pc_confirm_title">Add streaming device</string>
+    <string name="add_pc_confirm_message">Do you want to add %s? Do not add an unfamiliar device.</string>
 
     <!-- WOL messages -->
     <string name="wol_pc_online">Computer is online</string>
@@ -62,12 +43,6 @@
 	    If it doesn\'t, make sure it\'s configured properly for Wake-On-LAN.
     </string>
     <string name="wol_fail">Failed to send Wake-On-LAN packets</string>
-
-    <!-- Unpair messages -->
-    <string name="unpairing">Unpairing…</string>
-    <string name="unpair_success">Unpaired successfully</string>
-    <string name="unpair_fail">Failed to unpair</string>
-    <string name="unpair_error">Device was not paired</string>
 
     <!-- Errors -->
     <string name="error_pc_offline">Computer is offline</string>

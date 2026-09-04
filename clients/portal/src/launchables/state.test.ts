@@ -21,7 +21,7 @@ const nowPlayingEntry = (state: State): PortalEntry => {
   return entry
 }
 
-const officeHost = { uuid: "h1", name: "Office PC", paired: true } as const
+const officeHost = { uuid: "h1", name: "Office PC" } as const
 
 const officeApps = {
   host: officeHost,
@@ -280,14 +280,14 @@ describe("LaunchablesState stream targets", () => {
   }
   const streamSources = [
     {
-      host: { uuid: "aka-uuid", name: "aka", paired: true },
+      host: { uuid: "aka-uuid", name: "aka" },
       apps: {
         _tag: "StreamApps" as const,
         items: [{ id: 10, name: "Moonlight-owned Sunshine app" }],
       },
     },
     {
-      host: { uuid: "zao-uuid", name: "zao", paired: true },
+      host: { uuid: "zao-uuid", name: "zao" },
       apps: {
         _tag: "StreamApps" as const,
         items: [{ id: 20, name: "Moonlight-owned Sunshine app" }],
@@ -355,12 +355,14 @@ describe("LaunchablesState action results", () => {
     const streamFailed = LaunchablesState.withStartStreamResult(
       LaunchablesState.beginLaunching(ready, "Desktop"),
       {
-      _tag: "StreamFailed",
-      reason: "NotPaired",
-      message: "pair first",
+        _tag: "StreamFailed",
+        reason: "HostCertificateRejected",
+        message: "host rejected certificate",
       },
     )
-    expect(streamFailed).toMatchObject({ notice: { message: "NotPaired: pair first" } })
+    expect(streamFailed).toMatchObject({
+      notice: { message: "HostCertificateRejected: host rejected certificate" },
+    })
 
     const prepareFailed = LaunchablesState.withPrepareOutcome(
       LaunchablesState.beginPreparing(ready, "Skate 3"),

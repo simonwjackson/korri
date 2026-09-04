@@ -140,19 +140,20 @@ describe("settingsFrom", () => {
     ).toBe("Unknown")
   })
 
-  it("counts provisioned streaming devices and names them", () => {
+  it("counts available streaming devices and names them", () => {
     const streaming = group(
       {
         hosts: [
-          { uuid: "a", name: "zao", paired: true },
-          { uuid: "b", name: "stranger", paired: false },
+          { uuid: "a", name: "zao" },
+          { uuid: "b", name: "stranger" },
         ],
       },
       "Streaming",
     )
     expect(streaming?.items.map(item => [item.label, item.value])).toEqual([
-      ["Trusted streaming devices", "1 device"],
-      ["zao", "Provisioned"],
+      ["Streaming devices", "2 devices"],
+      ["zao", "Known"],
+      ["stranger", "Known"],
     ])
   })
 

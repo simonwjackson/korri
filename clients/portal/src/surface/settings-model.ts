@@ -90,7 +90,7 @@ const discoveryStateLabel = (snapshot: DiscoverySnapshot | undefined): string =>
 }
 
 export function settingsFrom(facts: DeviceFacts): readonly SurfaceSettingGroup[] {
-  const provisioned = facts.hosts?.filter(host => host.paired) ?? []
+  const streamHosts = facts.hosts ?? []
   const android =
     facts.systemInfo?._tag === "SystemInfo"
       ? facts.systemInfo.payload
@@ -195,17 +195,17 @@ export function settingsFrom(facts: DeviceFacts): readonly SurfaceSettingGroup[]
       facts.hosts === undefined
         ? undefined
         : {
-            id: "trusted-stream-devices",
-            label: "Trusted streaming devices",
+            id: "stream-devices",
+            label: "Streaming devices",
             value:
-              provisioned.length === 0
+              streamHosts.length === 0
                 ? "None"
-                : countLabel(provisioned.length, "device"),
+                : countLabel(streamHosts.length, "device"),
           },
-      ...provisioned.map(host => ({
+      ...streamHosts.map(host => ({
         id: `host:${host.uuid}`,
         label: host.name,
-        value: "Provisioned",
+        value: "Known",
       })),
     ]),
     group("Permissions", [

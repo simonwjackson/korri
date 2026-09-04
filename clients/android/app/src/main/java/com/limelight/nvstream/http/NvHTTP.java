@@ -45,7 +45,6 @@ import org.xmlpull.v1.XmlPullParserFactory;
 import com.limelight.BuildConfig;
 import com.limelight.LimeLog;
 import com.limelight.nvstream.ConnectionContext;
-import com.limelight.nvstream.http.PairingManager.PairState;
 import com.limelight.nvstream.jni.MoonBridge;
 import com.limelight.utils.DeviceUtils;
 
@@ -61,7 +60,6 @@ import okhttp3.ResponseBody;
 public class NvHTTP {
     private String uniqueId;
     private String deviceName;
-    private PairingManager pm;
 
     private static final int DEFAULT_HTTPS_PORT = 47984;
     public static final int DEFAULT_HTTP_PORT = 47989;
@@ -84,10 +82,6 @@ public class NvHTTP {
     private X509TrustManager trustManager;
     private X509KeyManager keyManager;
     private X509Certificate serverCert;
-
-    void setServerCert(X509Certificate serverCert) {
-        this.serverCert = serverCert;
-    }
 
     private static X509TrustManager getDefaultTrustManager() {
         try {
@@ -134,12 +128,12 @@ public class NvHTTP {
             }
             public void checkServerTrusted(X509Certificate[] certs, String authType) throws CertificateException {
                 try {
-                    // Try the default trust manager first to allow pairing with certificates
-                    // that chain up to a trusted root CA. This will raise CertificateException
+                    // Try the default trust manager first for certificates that chain up
+                    // to a trusted root CA. This will raise CertificateException
                     // if the certificate is not trusted (expected for GFE's self-signed certs).
                     defaultTrustManager.checkServerTrusted(certs, authType);
                 } catch (CertificateException e) {
-                    // Check the server certificate if we've paired to this host
+                    // Check the exact server certificate provisioned by korrid
                     if (certs.length == 1 && NvHTTP.this.serverCert != null) {
                         if (!certs[0].equals(NvHTTP.this.serverCert)) {
                             throw new CertificateException("Certificate mismatch");
@@ -232,7 +226,6 @@ public class NvHTTP {
             throw new IOException(e);
         }
 
-        this.pm = new PairingManager(this, cryptoProvider);
     }
 
     static String getXmlString(Reader r, String tagname, boolean throwIfMissing) throws XmlPullParserException, IOException {
@@ -319,7 +312,7 @@ public class NvHTTP {
                     // Detect if we failed due to a server cert mismatch
                     if (e.getCause() instanceof CertificateException) {
                         // Jump to the GfeHttpResponseException exception handler to retry
-                        // over HTTP which will allow us to pair again to update the cert
+                        // over HTTP so korrid can repair a changed certificate
                         throw new HostHttpResponseException(401, "Server certificate mismatch");
                     }
                     else {
@@ -328,7 +321,7 @@ public class NvHTTP {
                 }
 
                 // This will throw an exception if the request came back with a failure status.
-                // We want this because it will throw us into the HTTP case if the client is unpaired.
+                // This enters the HTTP fallback when the provisioned certificate is rejected.
                 getServerVersion(resp);
             }
             catch (HostHttpResponseException e) {
@@ -388,7 +381,7 @@ public class NvHTTP {
         details.externalPort = getExternalPort(serverInfo);
         details.remoteAddress = makeTuple(getXmlString(serverInfo, "ExternalIP", false), details.externalPort);
 
-        details.pairState = getPairState(serverInfo);
+        details.certificateState = getPairState(serverInfo);
         details.runningGameId = getCurrentGame(serverInfo);
         details.runningGameUUID = getCurrentGameUUID(serverInfo);
 
@@ -435,8 +428,6 @@ public class NvHTTP {
 
     // Read timeout should be enabled for any HTTP query that requires no outside action
     // on the GFE server. Examples of queries that DO require outside action are launch, resume, and quit.
-    // The initial pair query does require outside action (user entering a PIN) but subsequent pairing
-    // queries do not.
     private ResponseBody openHttpConnection(OkHttpClient client, HttpUrl baseUrl, String path, String query, RequestBody requestBody) throws IOException {
         HttpUrl completeUrl = getCompleteUrl(baseUrl, path, query);
         Request.Builder _builder = new Request.Builder().url(completeUrl);
@@ -499,14 +490,14 @@ public class NvHTTP {
         return getXmlString(serverInfo, "appversion", true);
     }
 
-    public PairingManager.PairState getPairState() throws IOException, XmlPullParserException {
+    public HostCertificateState getPairState() throws IOException, XmlPullParserException {
         return getPairState(getServerInfo(true));
     }
 
-    public PairingManager.PairState getPairState(String serverInfo) throws IOException, XmlPullParserException {
+    public HostCertificateState getPairState(String serverInfo) throws IOException, XmlPullParserException {
         // appversion is present in all supported GFE versions
         return NvHTTP.getXmlString(serverInfo, "PairStatus", true).equals("1") ?
-                PairState.PAIRED : PairState.NOT_PAIRED;
+                HostCertificateState.ACCEPTED : HostCertificateState.REJECTED;
     }
     
     public long getMaxLumaPixelsH264(String serverInfo) throws XmlPullParserException, IOException {
@@ -640,10 +631,6 @@ public class NvHTTP {
         return null;
     }
 
-    public PairingManager getPairingManager() {
-        return pm;
-    }
-    
     public static LinkedList<NvApp> getAppListByReader(Reader r) throws XmlPullParserException, IOException {
         XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
         factory.setNamespaceAware(true);
@@ -726,20 +713,6 @@ public class NvHTTP {
         }
     }
 
-    String executePairingCommand(String additionalArguments, boolean enableReadTimeout) throws HostHttpResponseException, IOException {
-        return openHttpConnectionToString(enableReadTimeout ? httpClientLongConnectTimeout : httpClientLongConnectNoReadTimeout,
-                baseUrlHttp, "pair", "updateState=1&" + additionalArguments);
-    }
-
-    String executePairingChallenge() throws HostHttpResponseException, IOException {
-        return openHttpConnectionToString(httpClientLongConnectTimeout, getHttpsUrl(true),
-                "pair", "updateState=1&phrase=pairchallenge");
-    }
-
-    public void unpair() throws IOException {
-        openHttpConnectionToString(httpClientLongConnectTimeout, baseUrlHttp, "unpair");
-    }
-    
     public InputStream getBoxArt(NvApp app) throws IOException {
         ResponseBody resp = openHttpConnection(httpClientLongConnectTimeout, getHttpsUrl(true), "appasset", "appid=" + app.getAppId() + "&AssetType=2&AssetIdx=0", null);
         return resp.byteStream();

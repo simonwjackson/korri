@@ -100,7 +100,6 @@ const activeSession = (overrides: Partial<ActiveSession> = {}): ActiveSession =>
 const streamHost = (name = "zao", uuid = `${name}-uuid`): StreamHost => ({
   uuid,
   name,
-  paired: true,
 })
 
 const streamApps = (id = 44): QueryStreamAppsResult => ({
@@ -293,7 +292,7 @@ describe("useLaunchables load and core effects", () => {
   test("loads every source and queries apps for pinned and unpinned stream hosts", async () => {
     const hosts: QueryStreamHostsResult = {
       _tag: "StreamHosts",
-      items: [streamHost("zao"), { uuid: "aka-uuid", name: "aka", paired: false }],
+      items: [streamHost("zao"), { uuid: "aka-uuid", name: "aka" }],
     }
     const queriedHosts: string[] = []
     const bridge = buildBridge({

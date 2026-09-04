@@ -39,7 +39,7 @@ import com.limelight.nvstream.http.HostHttpResponseException;
 import com.limelight.nvstream.http.LimelightCryptoProvider;
 import com.limelight.nvstream.http.NvApp;
 import com.limelight.nvstream.http.NvHTTP;
-import com.limelight.nvstream.http.PairingManager;
+import com.limelight.nvstream.http.HostCertificateState;
 import com.limelight.nvstream.input.MouseButtonPacket;
 import com.limelight.nvstream.jni.MoonBridge;
 
@@ -240,8 +240,8 @@ public class NvConnection {
         // May be missing for older servers
         context.serverGfeVersion = h.getGfeVersion(serverInfo);
                 
-        if (h.getPairState(serverInfo) != PairingManager.PairState.PAIRED) {
-            context.connListener.displayMessage("Device not paired with computer");
+        if (h.getPairState(serverInfo) != HostCertificateState.ACCEPTED) {
+            context.connListener.displayMessage("Host did not accept this device certificate");
             return false;
         }
 

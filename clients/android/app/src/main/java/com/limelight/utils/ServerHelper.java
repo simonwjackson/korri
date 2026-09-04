@@ -420,7 +420,7 @@ public class ServerHelper {
             ComputerManagerService.ComputerManagerBinder managerBinder
     ) {
         if (computer.state == ComputerDetails.State.OFFLINE || computer.activeAddress == null) {
-            Toast.makeText(parent, parent.getString(R.string.pair_pc_offline), Toast.LENGTH_SHORT).show();
+            Toast.makeText(parent, parent.getString(R.string.error_pc_offline), Toast.LENGTH_SHORT).show();
             return;
         }
 

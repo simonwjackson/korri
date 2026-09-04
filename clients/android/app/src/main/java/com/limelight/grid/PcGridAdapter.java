@@ -10,7 +10,6 @@ import android.widget.TextView;
 import com.limelight.PcView;
 import com.limelight.R;
 import com.limelight.nvstream.http.ComputerDetails;
-import com.limelight.nvstream.http.PairingManager;
 import com.limelight.preferences.PreferenceConfiguration;
 
 import java.util.Collections;
@@ -77,14 +76,6 @@ public class PcGridAdapter extends GenericGridAdapter<PcView.ComputerObject> {
         if (obj.details.state == ComputerDetails.State.OFFLINE) {
             overlayView.setImageResource(R.drawable.ic_pc_offline);
             overlayView.setAlpha(0.4f);
-            overlayView.setVisibility(View.VISIBLE);
-        }
-        // We must check if the status is exactly online and unpaired
-        // to avoid colliding with the loading spinner when status is unknown
-        else if (obj.details.state == ComputerDetails.State.ONLINE &&
-                obj.details.pairState == PairingManager.PairState.NOT_PAIRED) {
-            overlayView.setImageResource(R.drawable.ic_lock);
-            overlayView.setAlpha(1.0f);
             overlayView.setVisibility(View.VISIBLE);
         }
         else {

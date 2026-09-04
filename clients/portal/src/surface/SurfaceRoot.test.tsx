@@ -90,7 +90,6 @@ const remoteGame = (host: string, id = "wl4"): Game => ({
 const streamHost = (name: string, uuid = `${name}-uuid`): StreamHost => ({
   uuid,
   name,
-  paired: true,
 })
 
 const streamApps = (id: number): QueryStreamAppsResult => ({

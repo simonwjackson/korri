@@ -18,7 +18,7 @@ import com.limelight.korri.overlay.KorriOverlayHostExclusion;
  *
  * The web page owns all presentation; this class owns lifecycle, input
  * gating (nothing leaks to the stream while the overlay is up), and a
- * narrow action bridge. Pairing material and protocol state never enter
+ * narrow action bridge. Certificate material and protocol state never enter
  * JavaScript.
  */
 public class KorriGameOverlay implements KorriOverlayHostExclusion.LegacyHost {

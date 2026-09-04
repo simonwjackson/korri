@@ -25,7 +25,7 @@ import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.http.ComputerDetails;
 import com.limelight.nvstream.http.NvApp;
 import com.limelight.nvstream.http.NvHTTP;
-import com.limelight.nvstream.http.PairingManager;
+import com.limelight.nvstream.http.HostCertificateState;
 import com.limelight.nvstream.mdns.MdnsComputer;
 import com.limelight.nvstream.mdns.MdnsDiscoveryListener;
 import com.limelight.utils.CacheHelper;
@@ -382,7 +382,7 @@ public class ComputerManagerService extends Service {
                         }
                     } catch (IOException | RuntimeException repairFailure) {
                         IOException fatal = new IOException(
-                                "automatic pairing state requires repair", error);
+                                "automatic trust state requires repair", error);
                         fatal.addSuppressed(repairFailure);
                         throw fatal;
                     }
@@ -651,7 +651,7 @@ public class ComputerManagerService extends Service {
                 }
             }
 
-            // Poll again, possibly with the pinned cert, to get accurate pairing information.
+            // Poll again with the pinned cert to get accurate certificate acceptance state.
             // This will insert the host into the database too.
             runPoll(fakeDetails, true, 0);
         }
@@ -1022,9 +1022,9 @@ public class ComputerManagerService extends Service {
                 public void run() {
                     int emptyAppListResponses = 0;
                     do {
-                        // Can't poll if it's not online or paired
+                        // Poll only after the host accepts this device certificate.
                         if (computer.state != ComputerDetails.State.ONLINE ||
-                                computer.pairState != PairingManager.PairState.PAIRED) {
+                                computer.certificateState != HostCertificateState.ACCEPTED) {
                             if (listener != null) {
                                 listener.notifyComputerUpdated(computer);
                             }

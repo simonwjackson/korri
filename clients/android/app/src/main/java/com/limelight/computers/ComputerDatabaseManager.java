@@ -160,7 +160,7 @@ public class ComputerDatabaseManager {
             e.printStackTrace();
         }
 
-        // This signifies we don't have dynamic state (like pair state)
+        // This record does not contain live protocol state.
         details.state = ComputerDetails.State.UNKNOWN;
 
         return details;

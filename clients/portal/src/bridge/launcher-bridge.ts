@@ -294,7 +294,7 @@ export interface InMemoryLauncherBridgeConfig {
 }
 
 const sampleHosts: readonly StreamHost[] = [
-  { uuid: "host-1", name: "Office PC", paired: true },
+  { uuid: "host-1", name: "Office PC" },
 ]
 
 const sampleApps: Readonly<Record<string, readonly StreamApp[]>> = {

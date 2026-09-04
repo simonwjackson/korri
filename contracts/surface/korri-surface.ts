@@ -124,7 +124,7 @@ export type SurfaceSettingInteraction =
 export interface SurfaceSettingItem {
   readonly id: string
   readonly label: string
-  /** Current state as display text: "usu", "Granted", "2 paired". */
+  /** Current state as display text: "usu", "Granted", "2 devices". */
   readonly value?: string
   /** One-line explanation. Surfaces may show it or not. */
   readonly description?: string

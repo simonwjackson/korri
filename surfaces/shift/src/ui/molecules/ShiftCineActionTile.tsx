@@ -1,6 +1,5 @@
 import {
   KeyRound,
-  Link2,
   type LucideIcon,
   Settings,
   Square,
@@ -12,8 +11,8 @@ import {
 } from "../../shift-design-parts"
 
 /**
- * A trailing non-game rail entry for a host-declared action (pair a device,
- * grant storage access, stop the running game). It is the Library tile's twin:
+ * A trailing non-game rail entry for a host-declared action (grant storage
+ * access or stop the running game). It is the Library tile's twin:
  * the same `.shift-cine-tile` skin, focus lift, and `data-cine-index` centering
  * math, with a motif and label instead of cover art.
  *
@@ -22,7 +21,6 @@ import {
  * in the rail without a surface change.
  */
 const ACTION_ICONS: Record<string, LucideIcon> = {
-  pairing: Link2,
   "storage-access": KeyRound,
   "background-notice": Settings,
   "shift:settings": Settings,

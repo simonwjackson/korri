@@ -11,7 +11,7 @@ import com.limelight.utils.ServerHelper;
 
 import java.util.List;
 
-/** Refreshes the paired host's Artemis app list and resolves only the app
+/** Refreshes the trusted host's Artemis app list and resolves only the app
  * identity carried by korrid's signed Moonlight launch instruction. */
 final class KorriMoonlightAppResolver {
     interface AppListQuery {

@@ -392,7 +392,7 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         }).start();
     }
 
-    private void doAppList(ComputerDetails computer, boolean newlyPaired, boolean showHiddenGames) {
+    private void doAppList(ComputerDetails computer, boolean showHiddenGames) {
         if (computer.state == ComputerDetails.State.OFFLINE) {
             Toast.makeText(PcView.this, getResources().getString(R.string.error_pc_offline), Toast.LENGTH_SHORT).show();
             return;
@@ -405,7 +405,6 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         Intent i = new Intent(this, AppView.class);
         i.putExtra(AppView.NAME_EXTRA, computer.name);
         i.putExtra(AppView.UUID_EXTRA, computer.uuid);
-        i.putExtra(AppView.NEW_PAIR_EXTRA, newlyPaired);
         i.putExtra(AppView.SHOW_HIDDEN_APPS_EXTRA, showHiddenGames);
         startActivity(i);
     }
@@ -437,7 +436,7 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
                 return true;
 
             case FULL_APP_LIST_ID:
-                doAppList(computer.details, false, true);
+                doAppList(computer.details, true);
                 return true;
 
             case RESUME_ID:
@@ -566,7 +565,7 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
                     // Open the context menu if a PC is offline or refreshing
                     openContextMenu(arg1);
                 } else {
-                    doAppList(computer.details, false, false);
+                    doAppList(computer.details, false);
                 }
             }
         });

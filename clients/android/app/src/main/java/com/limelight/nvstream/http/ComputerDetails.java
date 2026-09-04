@@ -75,7 +75,7 @@ public class ComputerDetails {
     public AddressTuple activeAddress;
     public int httpsPort;
     public int externalPort;
-    public PairingManager.PairState pairState;
+    public HostCertificateState certificateState;
     public int runningGameId;
     public String runningGameUUID;
     public String rawAppList;
@@ -84,6 +84,7 @@ public class ComputerDetails {
     public ComputerDetails() {
         // Use defaults
         state = State.UNKNOWN;
+        certificateState = HostCertificateState.UNKNOWN;
     }
 
     public ComputerDetails(ComputerDetails details) {
@@ -147,7 +148,7 @@ public class ComputerDetails {
         }
         this.externalPort = details.externalPort;
         this.httpsPort = details.httpsPort;
-        this.pairState = details.pairState;
+        this.certificateState = details.certificateState;
         this.runningGameId = details.runningGameId;
         this.runningGameUUID = details.runningGameUUID;
         this.nvidiaServer = details.nvidiaServer;
@@ -204,7 +205,7 @@ public class ComputerDetails {
                 "IPv6 Address: " + ipv6Address + "\n" +
                 "Manual Address: " + manualAddress + "\n" +
                 "MAC Address: " + macAddress + "\n" +
-                "Pair State: " + pairState + "\n" +
+                "Certificate State: " + certificateState + "\n" +
                 "Running Game ID: " + runningGameId + "\n" +
                 "Running Game UUID: " + runningGameUUID + "\n" +
                 "HTTPS Port: " + httpsPort + "\n";

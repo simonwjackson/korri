@@ -11,7 +11,6 @@ import com.limelight.grid.AppGridAdapter;
 import com.limelight.nvstream.http.ComputerDetails;
 import com.limelight.nvstream.http.NvApp;
 import com.limelight.nvstream.http.NvHTTP;
-import com.limelight.nvstream.http.PairingManager;
 import com.limelight.preferences.PreferenceConfiguration;
 import com.limelight.ui.AdapterFragment;
 import com.limelight.ui.AdapterFragmentCallbacks;
@@ -72,7 +71,6 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
 
     public final static String NAME_EXTRA = "Name";
     public final static String UUID_EXTRA = "UUID";
-    public final static String NEW_PAIR_EXTRA = "NewPair";
     public final static String SHOW_HIDDEN_APPS_EXTRA = "ShowHiddenApps";
 
     private ComputerManagerService.ComputerManagerBinder managerBinder;
@@ -199,20 +197,6 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
                         public void run() {
                             // Display a toast to the user and quit the activity
                             Toast.makeText(AppView.this, R.string.lost_connection, Toast.LENGTH_SHORT).show();
-                            finish();
-                        }
-                    });
-
-                    return;
-                }
-
-                // Close immediately if the PC is no longer paired
-                if (details.state == ComputerDetails.State.ONLINE && details.pairState != PairingManager.PairState.PAIRED) {
-                    AppView.this.runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            // Display a toast to the user and quit the activity
-                            Toast.makeText(AppView.this, R.string.scut_not_paired, Toast.LENGTH_SHORT).show();
                             finish();
                         }
                     });

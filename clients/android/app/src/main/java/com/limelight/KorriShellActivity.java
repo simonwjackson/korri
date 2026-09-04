@@ -37,7 +37,6 @@ import com.limelight.computers.ComputerManagerService;
 import com.limelight.nvstream.http.ComputerDetails;
 import com.limelight.nvstream.http.NvApp;
 import com.limelight.nvstream.http.NvHTTP;
-import com.limelight.nvstream.http.PairingManager;
 import com.limelight.utils.CacheHelper;
 import com.limelight.utils.ServerHelper;
 import com.limelight.korri.overlay.KorriActiveLaunch;
@@ -483,7 +482,7 @@ public class KorriShellActivity extends AppCompatActivity {
     /**
      * Narrow spike contract between the Korri web surface and the Android
      * runtime. Deals in Korri-shaped concepts (hosts, apps, launch requests),
-     * never in raw intent extras or pairing material.
+     * never in raw intent extras or certificate material.
      */
     private class KorriNativeBridge {
 
@@ -494,7 +493,7 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public int bridgeVersion() {
             // Mirrors BRIDGE_VERSION in contracts/bridge/korri-native-bridge.ts.
-            return 17;
+            return 18;
         }
 
         @JavascriptInterface
@@ -937,10 +936,6 @@ public class KorriShellActivity extends AppCompatActivity {
                         JSONObject host = new JSONObject();
                         host.put("uuid", details.uuid);
                         host.put("name", details.name);
-                        // DB rows never carry live pairState (stays UNKNOWN).
-                        // A stored server certificate is the durable signal that
-                        // korrid provisioned this streaming host.
-                        host.put("paired", details.serverCert != null);
                         items.put(host);
                     }
                 } finally {
