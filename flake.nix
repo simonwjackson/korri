@@ -30,6 +30,7 @@
       proseql,
     }:
     let
+      rg353m = import ./nix/rg353m { inherit nixpkgs; };
       nixosModules = {
         korri-bundle = import ./services/inputd/nix/korri-bundle-module.nix { korri = self; };
         korri-input = import ./services/inputd/nix/korri-input.nix { korri = self; };
@@ -39,6 +40,7 @@
     in
     {
       inherit nixosModules;
+      nixosConfigurations.rg353m = rg353m.configuration;
     }
     // flake-utils.lib.eachDefaultSystem (
       system:
@@ -94,7 +96,11 @@
           korrid = korridPackage;
           default = self.packages.${system}.korrid;
         }
-        // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux inputplumber.packages;
+        // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux inputplumber.packages
+        // pkgs.lib.optionalAttrs (system == "aarch64-linux") {
+          rg353m-sd-image = rg353m.sdImage;
+          rg353m-uboot = rg353m.uboot;
+        };
         checks = pkgs.lib.optionalAttrs pkgs.stdenv.isLinux inputplumber.checks;
       }
     );
