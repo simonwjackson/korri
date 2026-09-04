@@ -19,7 +19,17 @@ in
 
   boot = {
     consoleLogLevel = 7;
-    initrd.kernelModules = [ "mmc_block" ];
+    # The stock kernel builds the RG353 panel path as modules. Load the DSI
+    # PHY, DSI bridge, panel, and backlight in the initrd so the framebuffer
+    # console appears before the root filesystem mounts.
+    initrd.kernelModules = [
+      "mmc_block"
+      "phy-rockchip-inno-dsidphy"
+      "dw-mipi-dsi"
+      "rockchipdrm"
+      "panel-sitronix-st7703"
+      "pwm_bl"
+    ];
     # Start with the stock mainline kernel. It contains the RG353P device tree
     # and the RK3566 storage, display, RK817 audio, and RTL8821CS WiFi drivers.
     kernelPackages = pkgs.linuxPackages_latest;
