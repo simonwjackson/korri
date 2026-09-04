@@ -295,9 +295,6 @@ function buildBridge(sources: Sources, calls: Calls): LauncherBridge {
     async openStorageAccessSettings() {
       return { _tag: "Opened" as const }
     },
-    async openPairing() {
-      return { _tag: "Opened" as const }
-    },
     // The gameplay overlay grant is Android-owned; this fixture only reports it.
     async overlayPermission() {
       return { _tag: "RestrictedOrUnavailable" as const }

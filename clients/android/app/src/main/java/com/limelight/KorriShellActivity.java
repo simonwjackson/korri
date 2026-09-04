@@ -75,8 +75,11 @@ public class KorriShellActivity extends AppCompatActivity {
     private WebView webView;
     private int korridPort = -1;
     private String korridCapability = "";
-    private ComputerManagerService.ComputerManagerBinder managerBinder;
+    private volatile ComputerManagerService.ComputerManagerBinder managerBinder;
     private boolean computerManagerBound;
+    private volatile boolean destroyed;
+    private volatile KorriMoonlightProvisioning moonlightProvisioning;
+    private volatile KorriMoonlightDiscovery moonlightDiscovery;
     private KorriGameAssetPathHandler gameAssetPathHandler;
     private final CountDownLatch binderReady = new CountDownLatch(1);
     private final KorriGameFolderPickerState gameFolderPicker = new KorriGameFolderPickerState();
@@ -87,7 +90,9 @@ public class KorriShellActivity extends AppCompatActivity {
                     (ComputerManagerService.ComputerManagerBinder) binder;
             new Thread(() -> {
                 localBinder.waitForReady();
+                if (destroyed) return;
                 managerBinder = localBinder;
+                installMoonlightDiscovery(localBinder);
                 binderReady.countDown();
             }).start();
         }
@@ -347,6 +352,12 @@ public class KorriShellActivity extends AppCompatActivity {
         // the process. Detach before destroy, revoke the Shell-only authority,
         // and clear our field before WebView teardown can re-enter lifecycle
         // code. The foreground brain remains owned by KorriBrainService.
+        destroyed = true;
+        KorriMoonlightDiscovery ownedDiscovery = moonlightDiscovery;
+        moonlightDiscovery = null;
+        moonlightProvisioning = null;
+        if (ownedDiscovery != null) ownedDiscovery.close();
+
         final WebView ownedWebView = webView;
         webView = null;
         if (ownedWebView != null) {
@@ -485,7 +496,7 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public int bridgeVersion() {
             // Mirrors BRIDGE_VERSION in contracts/bridge/korri-native-bridge.ts.
-            return 16;
+            return 17;
         }
 
         @JavascriptInterface
@@ -568,24 +579,6 @@ public class KorriShellActivity extends AppCompatActivity {
                         android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS);
                 intent.putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName());
                 startActivityOnUiThread(intent, "notification settings start timed out");
-                return "{\"_tag\":\"Opened\"}";
-            } catch (Exception error) {
-                return "{\"_tag\":\"Unavailable\",\"message\":"
-                        + JSONObject.quote(String.valueOf(error.getMessage())) + "}";
-            }
-        }
-
-        /**
-         * Open the native pairing surface. Pairing exchanges a PIN and stores
-         * certificates, which stays out of the portal; this only gets the user
-         * there.
-         */
-        @JavascriptInterface
-        public String openPairing() {
-            try {
-                startActivityOnUiThread(
-                        new Intent(KorriShellActivity.this, PcView.class),
-                        "pairing screen start timed out");
                 return "{\"_tag\":\"Opened\"}";
             } catch (Exception error) {
                 return "{\"_tag\":\"Unavailable\",\"message\":"
@@ -946,9 +939,9 @@ public class KorriShellActivity extends AppCompatActivity {
                         JSONObject host = new JSONObject();
                         host.put("uuid", details.uuid);
                         host.put("name", details.name);
-                        // DB rows never carry live pairState (stays UNKNOWN);
-                        // a stored server certificate exists only after a
-                        // successful pairing, so it is the durable signal.
+                        // DB rows never carry live pairState (stays UNKNOWN).
+                        // A stored server certificate is the durable signal that
+                        // korrid provisioned this streaming host.
                         host.put("paired", details.serverCert != null);
                         items.put(host);
                     }
@@ -968,9 +961,16 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public String queryStreamApps(String hostUuid) {
             try {
+                // Return only current local cache state on the JavaScript bridge
+                // thread. Provision, attestation, and HTTPS refresh run on the
+                // bounded Android discovery executor and become visible on a
+                // later portal poll.
+                KorriMoonlightDiscovery discovery = moonlightDiscovery;
+                List<NvApp> current = discovery == null
+                        ? cachedAppList(getApplicationContext(), hostUuid)
+                        : discovery.query(hostUuid);
                 JSONArray items = new JSONArray();
-                // Empty cache is a normal state before the host was ever browsed.
-                for (NvApp app : cachedAppList(hostUuid)) {
+                for (NvApp app : current) {
                     JSONObject entry = new JSONObject();
                     entry.put("id", app.getAppId());
                     entry.put("name", app.getAppName());
@@ -992,51 +992,27 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public String startStream(String specJson) {
             try {
-                String authorization = KorridServer.authorizeMoonlightLaunchSpec(specJson);
-                if (!"Authorized".equals(authorization)) {
-                    return streamFailed("StartFailed",
-                            "Moonlight launch instruction rejected: " + authorization);
-                }
-                KorriMoonlightLaunchSpec spec = KorriMoonlightLaunchSpec.parse(specJson);
                 ComputerManagerService.ComputerManagerBinder binder = awaitBinder(10);
                 if (binder == null) {
                     return streamFailed("StartFailed", "computer manager not ready");
                 }
-
-                ComputerDetails computer = awaitOnlineComputer(binder, spec.hostUuid, 12);
-                if (computer == null) {
-                    return streamFailed("HostUnreachable", "host is not reachable");
-                }
-                if (computer.pairState != PairingManager.PairState.PAIRED) {
-                    return streamFailed("NotPaired",
-                            "host is not paired — pair once in Artemis setup");
-                }
-
-                NvApp app = KorriMoonlightAppResolver
-                        .artemis(KorriShellActivity.this, binder, computer)
-                        .refreshExpected(spec);
-
-                final Intent intent = ServerHelper.createStartIntent(
-                        KorriShellActivity.this, app, computer, binder);
-                // Korri-initiated: the stream Activity narrates its lifecycle
-                // through the web overlay instead of the native spinner.
-                intent.putExtra(Game.EXTRA_KORRI_SESSION, true);
-                intent.putExtra(Game.EXTRA_KORRI_LAUNCH_ID, spec.launchId);
-                startActivityOnUiThread(intent, "Moonlight Activity start timed out");
-                // Artemis names itself at the Android edge. Rust signed only
-                // the artemis-game rule; it never manufactures Java classes.
-                KorriBrainService.publishMoonlightActiveLaunch(
-                        spec,
-                        specJson,
-                        getPackageName(),
-                        Game.class.getName());
-                if (Game.instance != null) {
-                    KorriBrainService.claimActiveLaunch(spec.launchId, Game.instance);
-                }
+                moonlightFlow(
+                        binder,
+                        (authorizedSpecJson, spec, app, computer) -> {
+                            final Intent intent = ServerHelper.createStartIntent(
+                                    KorriShellActivity.this, app, computer, binder);
+                            // Korri-initiated: the stream Activity narrates its lifecycle
+                            // through the web overlay instead of the native spinner.
+                            intent.putExtra(Game.EXTRA_KORRI_SESSION, true);
+                            intent.putExtra(Game.EXTRA_KORRI_LAUNCH_ID, spec.launchId);
+                            startActivityOnUiThread(
+                                    intent, "Moonlight Activity start timed out");
+                            if (Game.instance != null) {
+                                KorriBrainService.claimActiveLaunch(spec.launchId, Game.instance);
+                            }
+                        }, this).startStream(specJson);
                 return "{\"_tag\":\"StreamStarted\"}";
-            } catch (KorriMoonlightLaunchSpec.Invalid error) {
-                return streamFailed("StartFailed", error.getMessage());
-            } catch (KorriMoonlightAppResolver.Failure error) {
+            } catch (KorriMoonlightShellFlow.Failure error) {
                 return streamFailed(error.reason, error.getMessage());
             } catch (Exception e) {
                 return streamFailed("StartFailed",
@@ -1070,6 +1046,71 @@ public class KorriShellActivity extends AppCompatActivity {
         }
 
 
+    }
+
+    private synchronized void installMoonlightDiscovery(
+            ComputerManagerService.ComputerManagerBinder binder) {
+        if (destroyed || managerBinder != binder) return;
+        KorriMoonlightDiscovery previous = moonlightDiscovery;
+        if (previous != null) previous.close();
+        android.content.Context application = getApplicationContext();
+        java.lang.ref.WeakReference<KorriShellActivity> shell =
+                new java.lang.ref.WeakReference<>(this);
+        KorriMoonlightProvisioning provisioning = KorriMoonlightProvisioning.artemis(
+                application, binder);
+        moonlightProvisioning = provisioning;
+        moonlightDiscovery = new KorriMoonlightDiscovery(
+                hostUuid -> cachedAppList(application, hostUuid),
+                (hostUuid, cached) -> {
+                    ComputerManagerService.ComputerManagerBinder.MoonlightHostSnapshot snapshot =
+                            binder.snapshotMoonlightHost(hostUuid);
+                    return snapshot != null
+                            && (snapshot.computer.serverCert == null
+                            || !hasCachedAppList(application, hostUuid));
+                },
+                (hostUuid, guard) -> provisioning.repairAndLoadApps(hostUuid, guard),
+                hostUuid -> {
+                    KorriShellActivity activity = shell.get();
+                    if (activity != null) activity.notifyStreamAppsChanged();
+                });
+    }
+
+    private void notifyStreamAppsChanged() {
+        runOnUiThread(() -> {
+            if (destroyed || webView == null) return;
+            webView.evaluateJavascript(
+                    "window.dispatchEvent(new Event('korri-stream-apps-changed'))", null);
+        });
+    }
+
+    private KorriMoonlightShellFlow moonlightFlow(
+            ComputerManagerService.ComputerManagerBinder binder,
+            KorriMoonlightShellFlow.GameStarter gameStarter,
+            Object launchOwner) {
+        KorriMoonlightProvisioning provisioning = moonlightProvisioning;
+        if (provisioning == null) {
+            provisioning = KorriMoonlightProvisioning.artemis(
+                    getApplicationContext(), binder);
+            moonlightProvisioning = provisioning;
+        }
+        KorriMoonlightProvisioning exactProvisioning = provisioning;
+        return new KorriMoonlightShellFlow(
+                KorridServer::authorizeMoonlightLaunchSpec,
+                hostUuid -> awaitOnlineComputer(binder, hostUuid, 12),
+                exactProvisioning::repairAndLoadApps,
+                (specJson, spec) -> {
+                    KorriActiveLaunch launch =
+                            KorriBrainService.reserveMoonlightActiveLaunch(
+                                    launchOwner,
+                                    specJson,
+                                    spec.launchId,
+                                    getPackageName(),
+                                    Game.class.getName());
+                    if (launch == null) return null;
+                    return () -> KorriBrainService.clearActiveLaunch(
+                            launchOwner, spec.launchId);
+                },
+                gameStarter);
     }
 
     private ComputerManagerService.ComputerManagerBinder awaitBinder(int seconds) {
@@ -1123,9 +1164,19 @@ public class KorriShellActivity extends AppCompatActivity {
         return resolved[0];
     }
 
-    private List<NvApp> cachedAppList(String hostUuid) throws Exception {
+    private static boolean hasCachedAppList(
+            android.content.Context context, String hostUuid) {
+        return CacheHelper.cacheFileExists(context.getCacheDir(), "applist", hostUuid);
+    }
+
+    private static List<NvApp> cachedAppList(
+            android.content.Context context, String hostUuid) throws Exception {
+        if (!hasCachedAppList(context, hostUuid)) {
+            return java.util.Collections.emptyList();
+        }
         String rawAppList = CacheHelper.readInputStreamToString(
-                CacheHelper.openCacheFileForInput(getCacheDir(), "applist", hostUuid));
+                CacheHelper.openCacheFileForInput(
+                        context.getCacheDir(), "applist", hostUuid));
         if (rawAppList.isEmpty()) return java.util.Collections.emptyList();
         return NvHTTP.getAppListByReader(new StringReader(rawAppList));
     }

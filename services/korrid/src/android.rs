@@ -6,7 +6,8 @@ use crate::{
     authorize_platform_instruction, clear_active_android_launch, clear_moonlight_executor_state,
     issue_folder_selection_receipt, korrid_version, local_server_capability,
     publish_local_active_launch, publish_moonlight_active_launch, publish_moonlight_executor_state,
-    start_embedded_android_server, stop_local_server, MoonlightLaunchAuthorization,
+    start_embedded_android_server, stop_local_server, MoonlightCertificateProvisionOutcome,
+    MoonlightCertificateProvisionRequest, MoonlightLaunchAuthorization, RpcRequest, RpcResponse,
 };
 use jni::{
     objects::{JClass, JObject, JString, JValue},
@@ -112,6 +113,116 @@ pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_issueFol
             let _ = env.throw_new("java/lang/IllegalStateException", error.to_string());
             ptr::null_mut()
         }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_provisionMoonlightCertificate(
+    mut env: JNIEnv,
+    _class: JClass,
+    host_uuid: JString,
+    public_client_certificate: JString,
+) -> jstring {
+    let host_uuid: String = match env.get_string(&host_uuid) {
+        Ok(value) => value.into(),
+        Err(_) => return provision_result(&mut env, "InvalidRequest", None),
+    };
+    let public_client_certificate: String = match env.get_string(&public_client_certificate) {
+        Ok(value) => value.into(),
+        Err(_) => return provision_result(&mut env, "InvalidRequest", None),
+    };
+    if crate::host::moonlight_certificate::validate_host_uuid(&host_uuid).is_err()
+        || crate::host::moonlight_certificate::validate_single_pem(&public_client_certificate)
+            .is_err()
+    {
+        return provision_result(&mut env, "InvalidRequest", None);
+    }
+
+    let Some(port) = crate::local_server_port() else {
+        return provision_result(&mut env, "ServerUnavailable", None);
+    };
+    let Some(capability) = crate::local_server_capability() else {
+        return provision_result(&mut env, "ServerUnavailable", None);
+    };
+    let request = RpcRequest::MoonlightCertificateProvision(MoonlightCertificateProvisionRequest {
+        host_uuid,
+        client_certificate: public_client_certificate,
+    });
+    let outcome = std::thread::Builder::new()
+        .name("korrid-moonlight-provision".into())
+        .spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|_| "ServerUnavailable")?;
+            runtime.block_on(async move {
+                // The broker owns one deadline across peer selection and provision.
+                // Keep the localhost caller alive longer than that complete operation.
+                let client = reqwest::Client::builder()
+                    .timeout(crate::upstreams::MOONLIGHT_CERTIFICATE_CALLER_TIMEOUT)
+                    .redirect(reqwest::redirect::Policy::none())
+                    .build()
+                    .map_err(|_| "ServerUnavailable")?;
+                let response = client
+                    .post(format!("http://127.0.0.1:{port}/rpc"))
+                    .bearer_auth(capability)
+                    .json(&request)
+                    .send()
+                    .await
+                    .map_err(|_| "PeerUnavailable")?;
+                if !response.status().is_success() {
+                    return Err("PeerUnavailable");
+                }
+                let response = response
+                    .json::<RpcResponse>()
+                    .await
+                    .map_err(|_| "InvalidResponse")?;
+                match response {
+                    RpcResponse::MoonlightCertificateProvision(
+                        MoonlightCertificateProvisionOutcome::Ok(provisioned),
+                    ) => Ok(provisioned.server_certificate),
+                    RpcResponse::MoonlightCertificateProvision(
+                        MoonlightCertificateProvisionOutcome::Err(failure),
+                    ) => Err(match failure.code.as_str() {
+                        "MoonlightHostNotFound" => "HostNotFound",
+                        "MoonlightHostAmbiguous" => "HostAmbiguous",
+                        "MoonlightCertificatePeerUnavailable" => "PeerUnavailable",
+                        "MoonlightCertificateInvalid" => "InvalidCertificate",
+                        _ => "ProvisioningFailed",
+                    }),
+                    _ => Err("InvalidResponse"),
+                }
+            })
+        })
+        .map_err(|_| "ServerUnavailable")
+        .and_then(|thread| thread.join().unwrap_or(Err("ServerUnavailable")));
+
+    match outcome {
+        Ok(server_certificate) => {
+            provision_result(&mut env, "Provisioned", Some(server_certificate.as_str()))
+        }
+        Err(code) => provision_result(&mut env, code, None),
+    }
+}
+
+fn provision_result(
+    env: &mut JNIEnv,
+    tag_or_code: &str,
+    server_certificate: Option<&str>,
+) -> jstring {
+    let json = match server_certificate {
+        Some(certificate) => serde_json::json!({
+            "_tag": tag_or_code,
+            "serverCertificate": certificate,
+        }),
+        None => serde_json::json!({
+            "_tag": "Failed",
+            "code": tag_or_code,
+        }),
+    };
+    match env.new_string(json.to_string()) {
+        Ok(value) => value.into_raw(),
+        Err(_) => ptr::null_mut(),
     }
 }
 

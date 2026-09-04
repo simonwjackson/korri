@@ -10,6 +10,7 @@
  */
 import {
   SHELL_RESUMED_EVENT,
+  STREAM_APPS_CHANGED_EVENT,
   type GameFolderPickerSnapshot,
 } from "@contracts/bridge/korri-native-bridge"
 import type { SurfaceSettingsStatus } from "@contracts/surface/korri-surface"
@@ -384,14 +385,20 @@ export function useLaunchables(
     }
   }, [checkFolderPicker, load])
 
-  // Returning from a stream, Android picker, or settings: state may be stale.
+  // Returning from a stream, Android picker, settings, or a completed
+  // background app-list repair means the launchable view may be stale.
   useEffect(() => {
     const onResumed = () => {
       void load()
       void checkFolderPicker()
     }
+    const onStreamAppsChanged = () => void load()
     window.addEventListener(SHELL_RESUMED_EVENT, onResumed)
-    return () => window.removeEventListener(SHELL_RESUMED_EVENT, onResumed)
+    window.addEventListener(STREAM_APPS_CHANGED_EVENT, onStreamAppsChanged)
+    return () => {
+      window.removeEventListener(SHELL_RESUMED_EVENT, onResumed)
+      window.removeEventListener(STREAM_APPS_CHANGED_EVENT, onStreamAppsChanged)
+    }
   }, [checkFolderPicker, load])
 
   useEffect(() => {
@@ -434,8 +441,8 @@ export function useLaunchables(
     const resolution = moonlightRef.current
     if (resolution._tag === "Unavailable") return resolution.payload.message
     return hostName === undefined
-      ? `no "${resolution.payload.sunshineApp}" app on a paired host`
-      : `no "${resolution.payload.sunshineApp}" app on paired host ${hostName}`
+      ? `no "${resolution.payload.sunshineApp}" app on a provisioned host`
+      : `no "${resolution.payload.sunshineApp}" app on provisioned host ${hostName}`
   }, [])
 
   const noticeOnReady = useCallback(
@@ -450,14 +457,6 @@ export function useLaunchables(
 
   const runDeviceAction = useCallback(
     (actionId: string) => {
-      if (actionId === "pairing") {
-        void bridge.openPairing().then(result => {
-          if (result._tag === "Unavailable") {
-            settingsProblem(actionId, result.message)
-          }
-        })
-        return
-      }
       if (actionId === "storage-access") {
         void bridge.openStorageAccessSettings().then(result => {
           if (result._tag === "Unavailable") {
@@ -671,16 +670,6 @@ export function useLaunchables(
       // the model rather than by a nullable flag convention.
       if (current._tag !== "Ready") return
       const operation = ++actionSeq.current
-
-      if (entry.kind === "pairing") {
-        // Native owns pairing: it exchanges a PIN and stores certificates.
-        void bridge.openPairing().then(result => {
-          if (result._tag === "Unavailable") {
-            noticeOnReady(operation, `cannot open pairing: ${result.message}`)
-          }
-        })
-        return
-      }
 
       if (entry.kind === "background-notice") {
         // Turning it on is a prompt Korri may show; turning it off is not

@@ -172,6 +172,30 @@ describe("resolved Moonlight bridge path", () => {
     ])
   })
 
+  it("queries apps for a newly discovered host with no stored server pin", async () => {
+    const calls: string[] = []
+    const discovery = await discoverResolvedMoonlight(available, {
+      async queryStreamHosts() {
+        return {
+          _tag: "StreamHosts" as const,
+          items: [{ uuid: "new-host", name: "New host", paired: false }],
+        }
+      },
+      async queryStreamApps(hostUuid: string) {
+        calls.push(hostUuid)
+        return { _tag: "StreamApps" as const, items: [] }
+      },
+    })
+
+    expect(calls).toEqual(["new-host"])
+    expect(discovery.streams).toEqual([
+      {
+        host: { uuid: "new-host", name: "New host", paired: false },
+        apps: { _tag: "StreamApps", items: [] },
+      },
+    ])
+  })
+
   it("preserves native discovery and signing failure tags unchanged", async () => {
     const hostFailure = { _tag: "QueryFailed" as const, message: "db locked" }
     expect(
@@ -301,7 +325,6 @@ describe("createKorriNativeLauncherBridge", () => {
     openStorageAccessSettings: () => JSON.stringify({ _tag: "Opened" }),
     overlayPermission: () => JSON.stringify({ _tag: "Enabled" }),
     openOverlaySettings: () => JSON.stringify({ _tag: "Opened" }),
-    openPairing: () => JSON.stringify({ _tag: "Opened" }),
     backgroundNotice: () => JSON.stringify({ _tag: "Visible" }),
     requestBackgroundNotice: () => JSON.stringify({ _tag: "Granted" }),
     openNotificationSettings: () => JSON.stringify({ _tag: "Opened" }),
@@ -326,7 +349,7 @@ describe("createKorriNativeLauncherBridge", () => {
       }),
     acknowledgeGameFolderPicker: () =>
       JSON.stringify({ _tag: "Acknowledged", generation: "picker-2" }),
-    bridgeVersion: () => 16,
+    bridgeVersion: () => 17,
     ...overrides,
   })
 
@@ -472,16 +495,6 @@ describe("createKorriNativeLauncherBridge", () => {
       )
       expect(await bridge.openNotificationSettings()).toEqual(expected)
     }
-
-    for (const expected of [
-      { _tag: "Opened" },
-      { _tag: "Unavailable", message: "no pairing screen" },
-    ] as const) {
-      const bridge = createKorriNativeLauncherBridge(
-        surface({ openPairing: () => JSON.stringify(expected) }),
-      )
-      expect(await bridge.openPairing()).toEqual(expected)
-    }
   })
 
   it("decodes the receipt-based game folder picker contract", async () => {
@@ -626,7 +639,6 @@ describe("createKorriNativeLauncherBridge", () => {
         backgroundNotice: () => JSON.stringify({ _tag: "Granted" }),
         requestBackgroundNotice: () => JSON.stringify({ _tag: "Visible" }),
         openNotificationSettings: () => JSON.stringify({ _tag: "Denied" }),
-        openPairing: () => JSON.stringify({ _tag: "Denied" }),
       }),
     )
 
@@ -647,7 +659,6 @@ describe("createKorriNativeLauncherBridge", () => {
     expect(await bridge.openNotificationSettings()).toMatchObject({
       _tag: "Unavailable",
     })
-    expect(await bridge.openPairing()).toMatchObject({ _tag: "Unavailable" })
   })
 
   it("rejects missing fields in shell-state bridge payloads", async () => {
@@ -658,7 +669,6 @@ describe("createKorriNativeLauncherBridge", () => {
           JSON.stringify({ _tag: "Unavailable" }),
         openNotificationSettings: () =>
           JSON.stringify({ _tag: "Unavailable" }),
-        openPairing: () => JSON.stringify({ _tag: "Unavailable" }),
       }),
     )
 
@@ -669,6 +679,5 @@ describe("createKorriNativeLauncherBridge", () => {
     expect(await bridge.openNotificationSettings()).toMatchObject({
       _tag: "Unavailable",
     })
-    expect(await bridge.openPairing()).toMatchObject({ _tag: "Unavailable" })
   })
 })

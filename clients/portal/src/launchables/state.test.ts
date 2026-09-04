@@ -72,7 +72,6 @@ describe("LaunchablesState.fromSources", () => {
       "local-game",
       "game",
       "game",
-      "pairing",
       "background-notice",
     ])
     expect(state.entries[0]).toMatchObject({
@@ -141,8 +140,6 @@ describe("LaunchablesState.fromSources", () => {
     expect(ready.entries.map(e => e.kind)).toEqual([
       "game",
       "game",
-      // Pairing closes every list: it is how a device joins at all.
-      "pairing",
       "background-notice",
     ])
     expect(ready.notice).toBeNull()
@@ -238,7 +235,7 @@ describe("LaunchablesState.fromSources", () => {
     expect(state).toMatchObject({ _tag: "Ready", notice: null })
   })
 
-  it("keeps pairing reachable when every source failed", () => {
+  it("keeps the background setting reachable when every source failed", () => {
     const state = LaunchablesState.fromSources(
       [
         {
@@ -248,12 +245,10 @@ describe("LaunchablesState.fromSources", () => {
       ],
       gamesErr,
     )
-    // A fresh install fails every source — which is exactly when pairing
-    // matters most. The list stays usable instead of collapsing into an
-    // error screen the user cannot act on.
+    // A fresh install can fail every source. The list stays usable instead of
+    // collapsing into an error screen the user cannot act on.
     if (state._tag !== "Ready") throw new Error("unreachable")
     expect(state.entries.map(entry => entry.kind)).toEqual([
-      "pairing",
       "background-notice",
     ])
     expect(state.notice?.message).toBe("games: UpstreamUnreachable")
@@ -300,7 +295,7 @@ describe("LaunchablesState stream targets", () => {
     },
   ]
 
-  it("selects the paired stream host named by the game", () => {
+  it("selects the provisioned stream host named by the game", () => {
     expect(
       LaunchablesState.korriStreamTarget(
         resolvedMoonlight,

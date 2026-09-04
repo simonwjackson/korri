@@ -51,6 +51,11 @@ final class KorriMoonlightAppResolver {
                             ? error.getMessage()
                             : error.getClass().getSimpleName()));
         }
+        return resolveExpected(spec, current);
+    }
+
+    static NvApp resolveExpected(KorriMoonlightLaunchSpec spec, List<NvApp> current)
+            throws Failure {
         NvApp expected = spec.selectExpectedApp(current);
         if (expected == null) {
             throw new Failure(

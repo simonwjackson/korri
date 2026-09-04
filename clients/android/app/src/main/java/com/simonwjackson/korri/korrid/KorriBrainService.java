@@ -67,6 +67,25 @@ public final class KorriBrainService extends Service {
                         signedSpecJson, applicationPackage, gameClassName)));
     }
 
+    /** Reserve the one process-wide launch before Android can start its Activity. */
+    public static synchronized KorriActiveLaunch reserveMoonlightActiveLaunch(
+            Object owner,
+            String signedSpecJson,
+            String launchId,
+            String applicationPackage,
+            String gameClassName) throws Exception {
+        if (activeLaunch != null) return null;
+        try {
+            return publishMoonlightActiveLaunch(
+                    owner, signedSpecJson, applicationPackage, gameClassName);
+        } catch (Exception error) {
+            // Native publication can precede Java decoding. Clear only the exact
+            // attempted launch so a malformed result cannot leave an invisible lease.
+            KorridServer.clearActiveLaunch(launchId);
+            throw error;
+        }
+    }
+
     private static KorriActiveLaunch installActiveLaunch(
             Object owner, KorriActiveLaunch launch) {
         activeLaunch = launch;

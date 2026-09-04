@@ -20,6 +20,9 @@ public final class KorridServer {
     private static native int start(
             String allowedOrigin, String localStorageRoot, String privateStateRoot);
     public static native String capability();
+    /** Provision this process's public Moonlight certificate through the embedded brain. */
+    public static native String provisionMoonlightCertificate(
+            String hostUuid, String publicClientCertificate);
     /** Tagged authorization result; a valid Moonlight launch is consumed once. */
     public static native String authorizeMoonlightLaunchSpec(String specJson);
     public static final int LOCAL_LAUNCH_REJECTED = 0;

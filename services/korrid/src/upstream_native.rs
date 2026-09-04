@@ -11,6 +11,7 @@ use std::time::Duration;
 use crate::upstreams::UpstreamError;
 
 const MAX_NATIVE_RPC_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
+pub(crate) const NATIVE_RPC_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone)]
 pub struct NativeClient {
@@ -21,7 +22,7 @@ pub struct NativeClient {
 impl NativeClient {
     pub fn new(base_url: String) -> Self {
         let http = reqwest::Client::builder()
-            .timeout(Duration::from_secs(5))
+            .timeout(NATIVE_RPC_TIMEOUT)
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .expect("construct native upstream client");

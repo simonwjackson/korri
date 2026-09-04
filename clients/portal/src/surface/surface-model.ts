@@ -30,22 +30,11 @@ const SECTION_THIS_DEVICE = "This device"
 
 /** Non-game entries become rail actions rather than games. */
 export function isActionEntry(entry: PortalEntry): boolean {
-  return (
-    entry.kind === "pairing" ||
-    entry.kind === "storage-access" ||
-    entry.kind === "background-notice"
-  )
+  return entry.kind === "storage-access" || entry.kind === "background-notice"
 }
 
 function actionFromEntry(entry: PortalEntry): SurfaceAction | null {
   switch (entry.kind) {
-    case "pairing":
-      return {
-        id: entryKey(entry),
-        label: "Pair a device",
-        description: "Connect another device to stream from or play on.",
-        enabled: true,
-      }
     case "storage-access":
       return {
         id: entryKey(entry),

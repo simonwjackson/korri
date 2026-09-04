@@ -16,14 +16,6 @@ const group = (facts: DeviceFacts, title: string) =>
   settingsFrom(facts).find(candidate => candidate.title === title)
 
 describe("settingsFrom", () => {
-  it("always provides the native pairing entry point", () => {
-    const pairing = group({}, "Streaming")?.items.at(-1)
-    expect(pairing).toMatchObject({
-      label: "Pair or manage devices",
-      interaction: { kind: "action", actionId: "pairing" },
-    })
-  })
-
   it("makes the device name a bounded text setting", () => {
     expect(group({ settings: configuration }, "Device")?.items[0]).toMatchObject({
       id: "device-name",
@@ -148,7 +140,7 @@ describe("settingsFrom", () => {
     ).toBe("Unknown")
   })
 
-  it("counts paired devices, names them, and keeps management last", () => {
+  it("counts provisioned streaming devices and names them", () => {
     const streaming = group(
       {
         hosts: [
@@ -159,9 +151,8 @@ describe("settingsFrom", () => {
       "Streaming",
     )
     expect(streaming?.items.map(item => [item.label, item.value])).toEqual([
-      ["Paired devices", "1 device"],
-      ["zao", "Paired"],
-      ["Pair or manage devices", undefined],
+      ["Trusted streaming devices", "1 device"],
+      ["zao", "Provisioned"],
     ])
   })
 

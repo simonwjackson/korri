@@ -35,9 +35,7 @@ const nowPlaying: PortalEntry = {
 
 describe("surfaceModelFrom", () => {
   test("publishes only playable things as games", () => {
-    const model = surfaceModelFrom(
-      ready([{ kind: "pairing" }, localGame, hostGame]),
-    )
+    const model = surfaceModelFrom(ready([localGame, hostGame]))
 
     expect(model.catalog._tag).toBe("Ready")
     if (model.catalog._tag !== "Ready") return
@@ -156,7 +154,6 @@ describe("surfaceModelFrom", () => {
     const model = surfaceModelFrom(
       ready([
         { kind: "storage-access" },
-        { kind: "pairing" },
         { kind: "background-notice", visible: false },
       ]),
     )
@@ -164,7 +161,6 @@ describe("surfaceModelFrom", () => {
     expect(model.catalog._tag).toBe("Empty")
     expect(model.actions.map(action => action.label)).toEqual([
       "Allow file access",
-      "Pair a device",
       "Show Korri running",
     ])
     expect(model.actions.every(action => action.enabled)).toBe(true)

@@ -78,6 +78,105 @@ public class KorriShellActivityLifecycleContractTest {
     }
 
     @Test
+    public void streamAppDiscoveryReturnsCacheAndOnlySchedulesNetworkRefresh() throws Exception {
+        String source = source();
+        String query = method(source, "public String queryStreamApps(String hostUuid)",
+                "/**\n         * JSON-encoded StartStreamResult");
+        String cache = method(source,
+                "private static List<NvApp> cachedAppList(", "\n    }\n}");
+
+        assertOrdered(query,
+                "discovery.query(hostUuid)",
+                "for (NvApp app : current)");
+        assertFalse(query.contains("awaitBinder("));
+        assertFalse(query.contains("awaitOnlineComputer("));
+        assertFalse(query.contains("repairAndLoadApps("));
+        assertFalse(query.contains("new NvHTTP"));
+        assertFalse(query.contains("ServerHelper.createStartIntent"));
+        assertTrue(cache.contains("hasCachedAppList(context, hostUuid)"));
+        assertTrue(cache.contains("java.util.Collections.emptyList()"));
+    }
+
+    @Test
+    public void completedBackgroundAppRepairSignalsTheLivePortalOnly() throws Exception {
+        String source = source();
+        String install = method(source,
+                "private synchronized void installMoonlightDiscovery(",
+                "private void notifyStreamAppsChanged()");
+        String notify = method(source,
+                "private void notifyStreamAppsChanged()",
+                "private KorriMoonlightShellFlow moonlightFlow(");
+        String onDestroy = method(source, "protected void onDestroy()",
+                "protected void onResume()");
+
+        assertTrue(install.contains("getApplicationContext()"));
+        assertTrue(install.contains("WeakReference<KorriShellActivity>"));
+        assertTrue(install.contains("provisioning.repairAndLoadApps(hostUuid, guard)"));
+        assertTrue(notify.contains("if (destroyed || webView == null) return;"));
+        assertTrue(notify.contains("korri-stream-apps-changed"));
+        assertOrdered(onDestroy,
+                "ownedDiscovery.close()",
+                "unbindService(serviceConnection)",
+                "managerBinder = null");
+    }
+
+    @Test
+    public void streamLaunchDelegatesToTheExecutableProvisioningFlow() throws Exception {
+        String source = source();
+        String startStream = method(source, "public String startStream(String specJson)",
+                "private String queryFailed(Exception e)");
+        String flow = method(source,
+                "private KorriMoonlightShellFlow moonlightFlow(",
+                "private ComputerManagerService.ComputerManagerBinder awaitBinder(int seconds)");
+
+        assertOrdered(startStream,
+                "awaitBinder(10)",
+                "moonlightFlow(",
+                "ServerHelper.createStartIntent(",
+                ").startStream(specJson)",
+                "return \"{\\\"_tag\\\":\\\"StreamStarted\\\"}\"");
+        assertTrue(startStream.contains("catch (KorriMoonlightShellFlow.Failure error)"));
+        assertFalse(startStream.contains("PairingManager.PairState"));
+        assertFalse(startStream.contains("streamFailed(\"NotPaired\""));
+        assertTrue(flow.contains("exactProvisioning::repairAndLoadApps"));
+        assertTrue(flow.contains("reserveMoonlightActiveLaunch"));
+        assertTrue(flow.contains("clearActiveLaunch"));
+        assertTrue(flow.contains("gameStarter"));
+    }
+
+    @Test
+    public void failedNativeMoonlightPublicationClearsOnlyTheAttemptedLaunch() throws Exception {
+        String service = new String(Files.readAllBytes(Path.of(
+                "src/main/java/com/simonwjackson/korri/korrid/KorriBrainService.java")),
+                StandardCharsets.UTF_8);
+        String reserve = method(service,
+                "public static synchronized KorriActiveLaunch reserveMoonlightActiveLaunch(",
+                "private static KorriActiveLaunch installActiveLaunch(");
+        assertOrdered(reserve,
+                "if (activeLaunch != null) return null;",
+                "publishMoonlightActiveLaunch(",
+                "KorridServer.clearActiveLaunch(launchId)",
+                "throw error;");
+    }
+
+    @Test
+    public void jniUsesTheProvenDeadlineThatOutlivesTheWholeBroker() throws Exception {
+        String androidRust = new String(Files.readAllBytes(
+                Path.of("../../../services/korrid/src/android.rs")),
+                StandardCharsets.UTF_8);
+        String upstreams = new String(Files.readAllBytes(
+                Path.of("../../../services/korrid/src/upstreams.rs")),
+                StandardCharsets.UTF_8);
+
+        assertTrue(androidRust.contains("MOONLIGHT_CERTIFICATE_CALLER_TIMEOUT"));
+        assertTrue(upstreams.contains("MOONLIGHT_CERTIFICATE_BROKER_TIMEOUT"));
+        assertTrue(upstreams.contains(
+                "timeout(MOONLIGHT_CERTIFICATE_BROKER_TIMEOUT, async"));
+        assertTrue(upstreams.contains(
+                "MOONLIGHT_CERTIFICATE_CALLER_TIMEOUT > MOONLIGHT_CERTIFICATE_BROKER_TIMEOUT"));
+    }
+
+    @Test
     public void serviceBindingIsReleasedByBindingOwnershipRatherThanCallbackTiming() throws Exception {
         String source = source();
         String onCreate = method(source, "protected void onCreate(Bundle savedInstanceState)",
@@ -86,6 +185,7 @@ public class KorriShellActivityLifecycleContractTest {
 
         assertTrue(source.contains("private boolean computerManagerBound;"));
         assertTrue(onCreate.contains("computerManagerBound = bindService("));
+        assertTrue(onDestroy.contains("ownedDiscovery.close()"));
         assertTrue(onDestroy.contains("if (computerManagerBound)"));
         assertOrdered(onDestroy,
                 "computerManagerBound = false;",

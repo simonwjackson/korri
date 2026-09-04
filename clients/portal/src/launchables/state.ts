@@ -41,12 +41,6 @@ export type PortalEntry =
    * game safe, so this exists to be seen and switched, not fixed.
    */
   | { readonly kind: "background-notice"; readonly visible: boolean }
-  /**
-   * Reaching the native pairing screen. Always present: pairing is how a
-   * device joins the federation at all, so it must not be hidden behind
-   * already having a device to show.
-   */
-  | { readonly kind: "pairing" }
   | { readonly kind: "now-playing"; readonly session: ActiveSession }
   | {
       readonly kind: "local-game"
@@ -59,7 +53,7 @@ export type PortalEntry =
       readonly alternatives?: readonly PortalGameCopy[]
     }
 
-/** One paired host's app-query outcome, as gathered by the Root. */
+/** One provisioned host's app-query outcome, as gathered by the Root. */
 export interface StreamSource {
   readonly host: StreamHost
   readonly apps: QueryStreamAppsResult
@@ -141,8 +135,6 @@ export const entryKey = (entry: PortalEntry): string => {
       return "background-notice"
     case "storage-access":
       return "storage-access"
-    case "pairing":
-      return "pairing"
     case "now-playing":
       return `now-playing:${entry.session.launchId}`
     case "local-game":
@@ -162,8 +154,6 @@ export const entryLabel = (entry: PortalEntry): string =>
     :
   entry.kind === "storage-access"
     ? "Korri needs file access — open settings"
-    : entry.kind === "pairing"
-      ? "Pair a device"
     : entry.kind === "now-playing"
     ? (entry.session.title ?? entry.session.gameId ?? "Current session")
     : entry.game.title
@@ -173,8 +163,8 @@ export const LaunchablesState = {
 
   /**
    * Fold Korri-owned game sources into one state. Sunshine discovery remains
-   * available to launch routing and pairing, but its app catalog and query
-   * failures do not become home-screen content.
+   * available to launch routing, but its app catalog and query failures do not
+   * become home-screen content.
    */
   fromSources: (
     _streams: readonly StreamSource[],
@@ -240,10 +230,6 @@ export const LaunchablesState = {
     } else {
       failures.push(`games: ${korrid.payload.code}`)
     }
-
-    // Pairing is always reachable. It is how a device joins at all, so
-    // it cannot be conditional on already having something to show.
-    entries.push({ kind: "pairing" })
 
     // Korri keeps its brain running after you leave, and the user is
     // entitled to see that and switch it off. Always present, and last:

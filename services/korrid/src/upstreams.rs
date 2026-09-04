@@ -2,7 +2,7 @@
 
 use crate::{
     upstream::{UpstreamClient, UpstreamConfig, UpstreamSessionStatus, UpstreamSessionStop},
-    upstream_native::NativeClient,
+    upstream_native::{NativeClient, NATIVE_RPC_TIMEOUT},
     CatalogHostFailure, CatalogSnapshot, Game, MoonlightCertificateProvisioned,
     MoonlightCertificateRevoked, SessionPrepared,
 };
@@ -19,6 +19,11 @@ use std::{
 use tokio::time::timeout;
 
 const CATALOG_HOST_TIMEOUT: Duration = Duration::from_secs(5);
+pub(crate) const MOONLIGHT_CERTIFICATE_BROKER_TIMEOUT: Duration =
+    Duration::from_secs(NATIVE_RPC_TIMEOUT.as_secs() * 2 + 1);
+#[cfg(any(target_os = "android", test))]
+pub(crate) const MOONLIGHT_CERTIFICATE_CALLER_TIMEOUT: Duration =
+    Duration::from_secs(MOONLIGHT_CERTIFICATE_BROKER_TIMEOUT.as_secs() + 1);
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum UpstreamError {
@@ -367,10 +372,14 @@ impl UpstreamRegistry {
         host_uuid: &str,
         client_certificate: &str,
     ) -> Result<MoonlightCertificateProvisioned, UpstreamError> {
-        self.moonlight_native_peer(host_uuid)
-            .await?
-            .moonlight_certificate_provision(host_uuid, client_certificate)
-            .await
+        timeout(MOONLIGHT_CERTIFICATE_BROKER_TIMEOUT, async {
+            self.moonlight_native_peer(host_uuid)
+                .await?
+                .moonlight_certificate_provision(host_uuid, client_certificate)
+                .await
+        })
+        .await
+        .map_err(|_| UpstreamError::MoonlightCertificatePeerUnavailable)?
     }
 
     pub async fn moonlight_certificate_revoke(
@@ -531,6 +540,12 @@ mod tests {
                 .with_state(state),
         )
         .await
+    }
+
+    #[test]
+    fn certificate_caller_deadline_outlives_the_complete_broker_budget() {
+        assert!(MOONLIGHT_CERTIFICATE_BROKER_TIMEOUT > NATIVE_RPC_TIMEOUT * 2);
+        assert!(MOONLIGHT_CERTIFICATE_CALLER_TIMEOUT > MOONLIGHT_CERTIFICATE_BROKER_TIMEOUT);
     }
 
     #[tokio::test]

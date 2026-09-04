@@ -262,7 +262,7 @@ export interface SurfaceModel {
   readonly status: SurfaceStatus
   /** Preformatted local time. Absent when the surface should show no clock. */
   readonly clockLabel?: string
-  /** Device-level actions (pairing, permissions, stop). May be empty. */
+  /** Device-level actions for permissions and session control. May be empty. */
   readonly actions: readonly SurfaceAction[]
   /** Device facts and settings, grouped. Empty when Korri can state nothing. */
   readonly settings: readonly SurfaceSettingGroup[]

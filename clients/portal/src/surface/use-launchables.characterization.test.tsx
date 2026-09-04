@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { act, useEffect } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { SHELL_RESUMED_EVENT } from "@contracts/bridge/korri-native-bridge"
+import {
+  SHELL_RESUMED_EVENT,
+  STREAM_APPS_CHANGED_EVENT,
+} from "@contracts/bridge/korri-native-bridge"
 import {
   LaunchDisposition,
   LaunchForegroundKind,
@@ -287,7 +290,7 @@ async function renderUseLaunchables(
 }
 
 describe("useLaunchables load and core effects", () => {
-  test("loads every source and queries apps only for paired stream hosts", async () => {
+  test("loads every source and queries apps for pinned and unpinned stream hosts", async () => {
     const hosts: QueryStreamHostsResult = {
       _tag: "StreamHosts",
       items: [streamHost("zao"), { uuid: "aka-uuid", name: "aka", paired: false }],
@@ -322,7 +325,7 @@ describe("useLaunchables load and core effects", () => {
     expect(["Loading", "Ready"]).toContain(view.current().state._tag)
     await waitForReady(view)
 
-    expect(queriedHosts).toEqual(["zao-uuid"])
+    expect(queriedHosts).toEqual(["zao-uuid", "aka-uuid"])
     const current = view.current()
     expect(current.facts).toMatchObject({
       version: "korrid-in-memory",
@@ -335,7 +338,6 @@ describe("useLaunchables load and core effects", () => {
     expect(current.state.entries.map(entry => entry.kind)).toEqual([
       "local-game",
       "game",
-      "pairing",
       "background-notice",
     ])
   })
@@ -451,6 +453,62 @@ describe("useLaunchables load and core effects", () => {
     )
   })
 
+  test("background stream-app completion makes an empty first poll visible", async () => {
+    let appsReady = false
+    const calls: string[] = []
+    const bridge = buildBridge({
+      async queryStreamHosts() {
+        return { _tag: "StreamHosts", items: [streamHost("zao")] }
+      },
+      async queryStreamApps() {
+        return appsReady ? streamApps(9) : { _tag: "StreamApps", items: [] }
+      },
+      async startStream(spec) {
+        calls.push(`stream:${spec.hostUuid}:${spec.appId}`)
+        return { _tag: "StreamStarted" }
+      },
+    })
+    const base = createInMemoryKorridClient({
+      games: [remoteGame("zao")],
+      moonlight: availableMoonlight,
+    })
+    const korrid = buildKorrid(
+      {
+        async sessionPrepare(gameId, host) {
+          calls.push(`prepare:${host}:${gameId}`)
+          return base.sessionPrepare(gameId, host)
+        },
+      },
+      { games: [remoteGame("zao")], moonlight: availableMoonlight },
+    )
+    const view = await renderUseLaunchables(bridge, korrid)
+    await waitForReady(view)
+
+    await act(async () => {
+      view.current().confirmEntry(findGameEntry(view.current().state))
+    })
+    await waitFor(
+      () => expect(view.current().state).toMatchObject({
+        _tag: "Ready",
+        notice: { message: expect.stringContaining("NoStreamTarget") },
+      }),
+      "expected empty first stream poll",
+    )
+
+    appsReady = true
+    await act(async () => {
+      window.dispatchEvent(new Event(STREAM_APPS_CHANGED_EVENT))
+    })
+    await waitForReady(view)
+    await act(async () => {
+      view.current().confirmEntry(findGameEntry(view.current().state))
+    })
+    await waitFor(
+      () => expect(calls).toEqual(["prepare:zao:wl4", "stream:zao-uuid:9"]),
+      "expected background completion to publish route",
+    )
+  })
+
   test("does not prepare a hosted game when its exact stream host is absent", async () => {
     let prepareCalls = 0
     let streamCalls = 0
@@ -491,7 +549,7 @@ describe("useLaunchables load and core effects", () => {
         expect(view.current().state).toMatchObject({
           _tag: "Ready",
           notice: {
-            message: 'NoStreamTarget: no "Korri Stream" app on paired host zao',
+            message: 'NoStreamTarget: no "Korri Stream" app on provisioned host zao',
           },
         }),
       "expected no stream target notice",
@@ -554,11 +612,8 @@ describe("useLaunchables load and core effects", () => {
     expect(requests).toBe(0)
   })
 
-  test("publishes unavailable device action results as notices or settings problems", async () => {
+  test("publishes unavailable device action results as settings problems", async () => {
     const bridge = buildBridge({
-      async openPairing() {
-        return { _tag: "Unavailable", message: "no pairing screen" }
-      },
       async openStorageAccessSettings() {
         return { _tag: "Unavailable", message: "no storage settings" }
       },
@@ -571,18 +626,6 @@ describe("useLaunchables load and core effects", () => {
     })
     const view = await renderUseLaunchables(bridge, createInMemoryKorridClient({ games: [] }))
     await waitForReady(view)
-
-    await act(async () => {
-      view.current().confirmEntry(findEntry(view.current().state, "pairing"))
-    })
-    await waitFor(
-      () =>
-        expect(view.current().state).toMatchObject({
-          _tag: "Ready",
-          notice: { message: "cannot open pairing: no pairing screen" },
-        }),
-      "expected pairing notice",
-    )
 
     await act(async () => {
       view.current().runDeviceAction("storage-access")

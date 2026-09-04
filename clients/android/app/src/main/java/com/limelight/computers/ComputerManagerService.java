@@ -1,11 +1,16 @@
 package com.limelight.computers;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
+import java.io.InputStream;
 import java.io.StringReader;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.security.cert.X509Certificate;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -39,6 +44,7 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.SystemClock;
+import android.util.AtomicFile;
 
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -290,6 +296,131 @@ public class ComputerManagerService extends Service {
             return null;
         }
 
+        public final class MoonlightHostSnapshot {
+            public final ComputerDetails computer;
+            public final long generation;
+
+            private MoonlightHostSnapshot(ComputerDetails computer, long generation) {
+                this.computer = computer;
+                this.generation = generation;
+            }
+        }
+
+        public final class MoonlightHostCommit {
+            public final boolean committed;
+            public final boolean stale;
+            public final ComputerDetails computer;
+
+            private MoonlightHostCommit(
+                    boolean committed, boolean stale, ComputerDetails computer) {
+                this.committed = committed;
+                this.stale = stale;
+                this.computer = computer;
+            }
+        }
+
+        /** Snapshot the exact live record and its app-list generation. */
+        public MoonlightHostSnapshot snapshotMoonlightHost(String uuid) {
+            PollingTuple tuple = findPollingTuple(uuid);
+            if (tuple == null) return null;
+            synchronized (tuple.networkLock) {
+                if (!isCurrentTuple(tuple)) return null;
+                return new MoonlightHostSnapshot(
+                        new ComputerDetails(tuple.computer), tuple.appListGeneration);
+            }
+        }
+
+        /**
+         * Atomically publish a provisioned pin and app list if no newer poll won.
+         * The cache and database rollback remain under the same per-host lock.
+         */
+        public MoonlightHostCommit commitMoonlightHost(
+                String uuid,
+                long expectedGeneration,
+                X509Certificate serverCertificate,
+                String rawAppList) throws IOException {
+            PollingTuple tuple = findPollingTuple(uuid);
+            if (tuple == null) return new MoonlightHostCommit(false, false, null);
+            synchronized (tuple.networkLock) {
+                if (!isCurrentTuple(tuple)) {
+                    return new MoonlightHostCommit(false, false, null);
+                }
+                if (tuple.appListGeneration != expectedGeneration) {
+                    return new MoonlightHostCommit(
+                            false, true, new ComputerDetails(tuple.computer));
+                }
+                if (!getLocalDatabaseReference()) {
+                    return new MoonlightHostCommit(false, false, null);
+                }
+                byte[] previousCache = readAppListCache(uuid);
+                X509Certificate previousCertificate = tuple.computer.serverCert;
+                String previousRawAppList = tuple.computer.rawAppList;
+                try {
+                    writeAppListCache(uuid, rawAppList);
+                    tuple.computer.serverCert = serverCertificate;
+                    tuple.computer.rawAppList = rawAppList;
+                    if (!dbManager.updateComputer(tuple.computer)) {
+                        throw new IOException("computer disappeared during provisioning");
+                    }
+                    tuple.appListGeneration++;
+                    return new MoonlightHostCommit(true, false, tuple.computer);
+                } catch (IOException | RuntimeException error) {
+                    tuple.computer.serverCert = previousCertificate;
+                    tuple.computer.rawAppList = previousRawAppList;
+                    try {
+                        writeAppListCache(uuid, previousCache);
+                        if (!dbManager.updateComputer(tuple.computer)) {
+                            throw new IOException("could not restore computer after provisioning");
+                        }
+                    } catch (IOException | RuntimeException repairFailure) {
+                        IOException fatal = new IOException(
+                                "automatic pairing state requires repair", error);
+                        fatal.addSuppressed(repairFailure);
+                        throw fatal;
+                    }
+                    if (error instanceof IOException) throw (IOException) error;
+                    throw error;
+                } finally {
+                    releaseLocalDatabaseReference();
+                }
+            }
+        }
+
+        private PollingTuple findPollingTuple(String uuid) {
+            synchronized (pollingTuples) {
+                for (PollingTuple tuple : pollingTuples) {
+                    if (uuid.equals(tuple.computer.uuid)) return tuple;
+                }
+            }
+            return null;
+        }
+
+        private boolean isCurrentTuple(PollingTuple expected) {
+            synchronized (pollingTuples) {
+                return pollingTuples.contains(expected);
+            }
+        }
+
+        /** Persist an exact server pin without allowing a concurrent poll to overwrite it. */
+        public boolean updateServerCertificate(String uuid, X509Certificate serverCertificate) {
+            PollingTuple tuple = findPollingTuple(uuid);
+            if (tuple == null) return false;
+            synchronized (tuple.networkLock) {
+                if (!isCurrentTuple(tuple) || !getLocalDatabaseReference()) return false;
+                X509Certificate previous = tuple.computer.serverCert;
+                try {
+                    tuple.computer.serverCert = serverCertificate;
+                    if (!dbManager.updateComputer(tuple.computer)) {
+                        tuple.computer.serverCert = previous;
+                        return false;
+                    }
+                    return true;
+                } finally {
+                    releaseLocalDatabaseReference();
+                }
+            }
+        }
+
         public void invalidateStateForComputer(String uuid) {
             synchronized (pollingTuples) {
                 for (PollingTuple tuple : pollingTuples) {
@@ -302,6 +433,48 @@ public class ComputerManagerService extends Service {
                     }
                 }
             }
+        }
+    }
+
+    private byte[] readAppListCache(String uuid) throws IOException {
+        File target = CacheHelper.openPath(false, getCacheDir(), "applist", uuid);
+        if (!target.exists()) return null;
+        try (InputStream input = new FileInputStream(target);
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[4096];
+            int count;
+            while ((count = input.read(buffer)) != -1) {
+                output.write(buffer, 0, count);
+            }
+            return output.toByteArray();
+        }
+    }
+
+    private void writeAppListCache(String uuid, String rawAppList) throws IOException {
+        writeAppListCache(
+                uuid,
+                rawAppList == null
+                        ? null
+                        : rawAppList.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private void writeAppListCache(String uuid, byte[] rawAppList) throws IOException {
+        File target = CacheHelper.openPath(rawAppList != null, getCacheDir(), "applist", uuid);
+        if (rawAppList == null) {
+            if (target.exists() && !target.delete()) {
+                throw new IOException("could not restore app-list cache");
+            }
+            return;
+        }
+        AtomicFile atomicFile = new AtomicFile(target);
+        FileOutputStream output = null;
+        try {
+            output = atomicFile.startWrite();
+            output.write(rawAppList);
+            atomicFile.finishWrite(output);
+        } catch (IOException | RuntimeException error) {
+            if (output != null) atomicFile.failWrite(output);
+            throw error;
         }
     }
 
@@ -870,56 +1043,17 @@ public class ComputerManagerService extends Service {
                             NvHTTP http = new NvHTTP(ServerHelper.getCurrentAddressFromComputer(computer), computer.httpsPort, idManager.getUniqueId(),
                                     computer.serverCert, PlatformBinding.getCryptoProvider(ComputerManagerService.this));
 
-                            String appList;
                             if (tuple != null) {
-                                // If we're polling this machine too, grab the network lock
-                                // while doing the app list request to prevent other requests
-                                // from being issued in the meantime.
+                                // Fetch and publish under one exact per-computer lock. Automatic
+                                // provisioning uses the same lock and a generation CAS.
                                 synchronized (tuple.networkLock) {
-                                    appList = http.getAppListRaw();
+                                    emptyAppListResponses = fetchAndCommitAppList(
+                                            http, tuple, emptyAppListResponses);
                                 }
                             }
                             else {
-                                // No polling is happening now, so we just call it directly
-                                appList = http.getAppListRaw();
-                            }
-
-                            List<NvApp> list = NvHTTP.getAppListByReader(new StringReader(appList));
-                            if (list.isEmpty()) {
-                                LimeLog.warning("Empty app list received from "+computer.uuid);
-
-                                // The app list might actually be empty, so if we get an empty response a few times
-                                // in a row, we'll go ahead and believe it.
-                                emptyAppListResponses++;
-                            }
-                            if (!appList.isEmpty() &&
-                                    (!list.isEmpty() || emptyAppListResponses >= EMPTY_LIST_THRESHOLD)) {
-                                // Open the cache file
-                                try (final OutputStream cacheOut = CacheHelper.openCacheFileForOutput(
-                                        getCacheDir(), "applist", computer.uuid)
-                                ) {
-                                    CacheHelper.writeStringToOutputStream(cacheOut, appList);
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                }
-
-                                // Reset empty count if it wasn't empty this time
-                                if (!list.isEmpty()) {
-                                    emptyAppListResponses = 0;
-                                }
-
-                                // Update the computer
-                                computer.rawAppList = appList;
-                                receivedAppList = true;
-
-                                // Notify that the app list has been updated
-                                // and ensure that the thread is still active
-                                if (listener != null && thread != null) {
-                                    listener.notifyComputerUpdated(computer);
-                                }
-                            }
-                            else if (appList.isEmpty()) {
-                                LimeLog.warning("Null app list received from "+computer.uuid);
+                                emptyAppListResponses = fetchAndCommitAppList(
+                                        http, null, emptyAppListResponses);
                             }
                         } catch (IOException e) {
                             e.printStackTrace();
@@ -931,6 +1065,31 @@ public class ComputerManagerService extends Service {
             };
             thread.setName("App list polling thread for " + computer.name);
             thread.start();
+        }
+
+        private int fetchAndCommitAppList(
+                NvHTTP http, PollingTuple tuple, int emptyResponses)
+                throws IOException, XmlPullParserException {
+            String appList = http.getAppListRaw();
+            List<NvApp> list = NvHTTP.getAppListByReader(new StringReader(appList));
+            if (list.isEmpty()) {
+                LimeLog.warning("Empty app list received from " + computer.uuid);
+                emptyResponses++;
+            }
+            if (!appList.isEmpty()
+                    && (!list.isEmpty() || emptyResponses >= EMPTY_LIST_THRESHOLD)) {
+                writeAppListCache(computer.uuid, appList);
+                if (!list.isEmpty()) emptyResponses = 0;
+                computer.rawAppList = appList;
+                receivedAppList = true;
+                if (tuple != null) tuple.appListGeneration++;
+                if (listener != null && thread != null) {
+                    listener.notifyComputerUpdated(computer);
+                }
+            } else if (appList.isEmpty()) {
+                LimeLog.warning("Null app list received from " + computer.uuid);
+            }
+            return emptyResponses;
         }
 
         public void stop() {
@@ -950,6 +1109,7 @@ class PollingTuple {
     public final ComputerDetails computer;
     public final Object networkLock;
     public long lastSuccessfulPollMs;
+    public long appListGeneration;
 
     public PollingTuple(ComputerDetails computer, Thread thread) {
         this.computer = computer;

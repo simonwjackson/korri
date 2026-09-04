@@ -11,7 +11,6 @@ import type {
   BackgroundNoticeResult,
   RequestBackgroundNoticeResult,
   OpenOverlaySettingsResult,
-  OpenPairingResult,
   OpenStorageSettingsResult,
   OverlayPermissionResult,
   QueryStreamAppsResult,
@@ -56,8 +55,6 @@ export interface LauncherBridge {
   requestBackgroundNotice(): Promise<RequestBackgroundNoticeResult>
   /** Take the user to the system screen where the notice is shown or hidden. */
   openNotificationSettings(): Promise<OpenNotificationSettingsResult>
-  /** Take the user to the native pairing screen. */
-  openPairing(): Promise<OpenPairingResult>
   /** Android and app identity for System information. */
   systemInfo(): Promise<SystemInfoResult>
   /** Open Android's asynchronous folder picker. */
@@ -95,12 +92,10 @@ export async function discoverResolvedMoonlight(
     return { resolution, streams: [], hostsResult }
   }
   const streams = await Promise.all(
-    hostsResult.items
-      .filter(host => host.paired)
-      .map(async host => ({
-        host,
-        apps: await bridge.queryStreamApps(host.uuid),
-      })),
+    hostsResult.items.map(async host => ({
+      host,
+      apps: await bridge.queryStreamApps(host.uuid),
+    })),
   )
   return { resolution, streams, hostsResult }
 }
@@ -235,13 +230,6 @@ export function createKorriNativeLauncherBridge(
         return decodeOpenNotificationSettings(
           JSON.parse(surface.openNotificationSettings()),
         )
-      } catch (error) {
-        return { _tag: "Unavailable", message: describe(error) }
-      }
-    },
-    async openPairing() {
-      try {
-        return decodeOpenPairing(JSON.parse(surface.openPairing()))
       } catch (error) {
         return { _tag: "Unavailable", message: describe(error) }
       }
@@ -415,13 +403,6 @@ export function createInMemoryLauncherBridge(
         _tag: "Unavailable",
         message: "no accessibility settings in browser dev",
       }
-    },
-    async openPairing() {
-      await delay()
-      // Browser dev has no native pairing screen to reach.
-      return behavior === "storage-settings-unavailable"
-        ? { _tag: "Unavailable", message: "no pairing screen in browser dev" }
-        : { _tag: "Opened" }
     },
     async backgroundNotice() {
       await delay()
@@ -626,18 +607,6 @@ function decodeSystemInfo(value: unknown): SystemInfoResult {
       sdk,
       appVersion: stringField(payload, "appVersion"),
     },
-  }
-}
-
-function decodeOpenPairing(value: unknown): OpenPairingResult {
-  const payload = record(value, "OpenPairingResult")
-  switch (payload._tag) {
-    case "Opened":
-      return { _tag: payload._tag }
-    case "Unavailable":
-      return { _tag: payload._tag, message: stringField(payload, "message") }
-    default:
-      throw new Error("malformed OpenPairingResult")
   }
 }
 

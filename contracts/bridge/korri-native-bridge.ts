@@ -32,8 +32,9 @@ import type {
 // Moonlight startup behind korrid's signed, one-use launch instruction. 13 adds
 // the honest gameplay-overlay accessibility grant/settings seam. 14 adds the
 // receipt-based asynchronous game-folder picker. 15 adds opaque local cover
-// asset URL resolution. 16 adds picker single-flight Busy results.
-export const BRIDGE_VERSION = 16
+// asset URL resolution. 16 adds picker single-flight Busy results. 17 removes
+// the manual Moonlight pairing surface after korrid-owned provisioning.
+export const BRIDGE_VERSION = 17
 
 // ── Local launches (JS -> Kotlin) ───────────────────────────────────────
 
@@ -257,15 +258,6 @@ export interface KorriNativeBridgeSurface {
   /** Open Android's accessibility details. Opened never means granted. */
   openOverlaySettings(): string
   /**
-   * Open the screen where the user pairs with another device, returning a
-   * JSON-encoded `OpenPairingResult`.
-   *
-   * Pairing still lives in native UI: it involves a PIN exchange and
-   * certificate storage the portal has no business holding. This is the
-   * portal's way to reach it, not to replace it.
-   */
-  openPairing(): string
-  /**
    * Whether the user can see that Korri is running in the background.
    * Returns a JSON-encoded `BackgroundNoticeResult`.
    *
@@ -398,14 +390,6 @@ export type StorageAccessResult =
   | { readonly _tag: "Denied" }
   | { readonly _tag: "QueryFailed"; readonly message: string }
 
-/**
- * Result of asking the shell to open the pairing screen. `Opened` means the
- * screen was shown, never that a device was paired.
- */
-export type OpenPairingResult =
-  | { readonly _tag: "Opened" }
-  | { readonly _tag: "Unavailable"; readonly message: string }
-
 /** Result of asking the shell to open the grant screen. */
 export type OpenStorageSettingsResult =
   /** The settings screen was opened. The user may still decline. */
@@ -537,3 +521,6 @@ export interface KorriSessionBridgeSurface {
  * The portal treats this as "your state may be stale; re-query".
  */
 export const SHELL_RESUMED_EVENT = "korri-shell-resumed"
+
+/** Android completed a background Moonlight app-list repair. */
+export const STREAM_APPS_CHANGED_EVENT = "korri-stream-apps-changed"

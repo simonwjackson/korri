@@ -90,7 +90,7 @@ const discoveryStateLabel = (snapshot: DiscoverySnapshot | undefined): string =>
 }
 
 export function settingsFrom(facts: DeviceFacts): readonly SurfaceSettingGroup[] {
-  const paired = facts.hosts?.filter(host => host.paired) ?? []
+  const provisioned = facts.hosts?.filter(host => host.paired) ?? []
   const android =
     facts.systemInfo?._tag === "SystemInfo"
       ? facts.systemInfo.payload
@@ -195,24 +195,18 @@ export function settingsFrom(facts: DeviceFacts): readonly SurfaceSettingGroup[]
       facts.hosts === undefined
         ? undefined
         : {
-            id: "paired-devices",
-            label: "Paired devices",
+            id: "trusted-stream-devices",
+            label: "Trusted streaming devices",
             value:
-              paired.length === 0
+              provisioned.length === 0
                 ? "None"
-                : countLabel(paired.length, "device"),
+                : countLabel(provisioned.length, "device"),
           },
-      ...paired.map(host => ({
+      ...provisioned.map(host => ({
         id: `host:${host.uuid}`,
         label: host.name,
-        value: "Paired",
+        value: "Provisioned",
       })),
-      {
-        id: "manage-pairing",
-        label: "Pair or manage devices",
-        description: "Opens Moonlight's secure pairing screen",
-        interaction: { kind: "action" as const, actionId: "pairing" },
-      },
     ]),
     group("Permissions", [
       facts.overlay === undefined

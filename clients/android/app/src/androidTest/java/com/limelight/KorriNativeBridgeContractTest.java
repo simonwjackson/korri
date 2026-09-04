@@ -48,7 +48,6 @@ public class KorriNativeBridgeContractTest {
             "korridCapability",
             "storageAccess",
             "openStorageAccessSettings",
-            "openPairing",
             "backgroundNotice",
             "requestBackgroundNotice",
             "openNotificationSettings",

@@ -30,7 +30,6 @@ public class KorriTrustedPortalWebViewPolicyTest {
             "openGameFolderPicker",
             "openNotificationSettings",
             "openOverlaySettings",
-            "openPairing",
             "openStorageAccessSettings",
             "queryStreamApps",
             "queryStreamHosts",

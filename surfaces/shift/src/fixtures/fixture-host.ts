@@ -113,14 +113,7 @@ export const fixtureModel: SurfaceModel = {
   status: { _tag: "Browsing" },
   settingsStatus: { _tag: "Idle" },
   clockLabel: "4:24 PM",
-  actions: [
-    {
-      id: "pairing",
-      label: "Pair a device",
-      description: "Connect another device to stream from or play on.",
-      enabled: true,
-    },
-  ],
+  actions: [],
   settings: [
     {
       title: "Device",
